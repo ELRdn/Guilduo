@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#232b31" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="QuestForge" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>QuestForge Prototype</title>
+    <script>
+      (() => {
+        const storageKey = "questforge-appearance-mode";
+        let storedMode = null;
+        try {
+          storedMode = localStorage.getItem(storageKey);
+        } catch {
+          // Continue with the system preference when private storage is unavailable.
+        }
+        const mode = ["light", "dark", "system"].includes(storedMode) ? storedMode : "system";
+        const resolved = mode === "system"
+          ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : mode;
+        document.documentElement.dataset.appearanceMode = mode;
+        document.documentElement.dataset.colorMode = resolved;
+        document.documentElement.style.colorScheme = resolved;
+      })();
+    </script>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/assets/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-theme="soft" data-motion="on">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">QF</div>
+          <div>
+            <h1>QuestForge</h1>
+            <p id="brandTagline">Soft Ops Companion</p>
+          </div>
+          <button class="mobile-menu-button" type="button" id="mobileMenuButton" aria-label="メニューを開く" aria-expanded="false">≡</button>
+        </div>
+
+        <nav class="nav-list" aria-label="Primary">
+          <button class="nav-item active" type="button" data-view="tasks">クエスト</button>
+          <button class="nav-item" type="button" data-view="bosses">ボス</button>
+          <button class="nav-item" type="button" data-view="battle">バトル</button>
+          <button class="nav-item" type="button" data-view="character">相棒</button>
+          <button class="nav-item" type="button" data-view="shop">Gem店</button>
+          <button class="nav-item" type="button" data-view="party">パーティ</button>
+          <button class="nav-item" type="button" data-view="inventory">所持品</button>
+          <button class="nav-item" type="button" data-view="integrations">開発</button>
+        </nav>
+
+        <section class="profile-panel">
+          <div class="avatar-stage" aria-label="Avatar preview">
+            <div class="avatar-stack compact float-calm" id="avatarStack">
+              <span class="avatar-part part-tail" data-item-layer="ranger-tail"></span>
+              <span class="avatar-part part-cloak" data-item-layer="cloak-sage"></span>
+              <img id="avatarImage" class="avatar-image" src="./assets/avatar-masc-48.webp" alt="Astra avatar" decoding="async" />
+              <span class="avatar-part part-brooch" data-item-layer="gem-brooch"></span>
+              <span class="avatar-part part-journal" data-item-layer="journal"></span>
+              <span class="avatar-part part-headset" data-item-layer="operator-headset"></span>
+              <span class="avatar-part part-arm" data-item-layer="clockwork-arm"></span>
+            </div>
+            <div class="avatar-equip-chips" id="avatarEquipChips" aria-label="装備中アイテム"></div>
+          </div>
+          <div class="profile-text">
+            <strong id="characterName">Astra</strong>
+            <span id="characterClass">Level 3 Sentinel</span>
+          </div>
+          <div class="stat-grid">
+            <div>
+              <span>HP</span>
+              <strong id="hpValue">47/50</strong>
+            </div>
+            <div>
+              <span>XP</span>
+              <strong id="xpValue">72/100</strong>
+            </div>
+            <div>
+              <span>Gem</span>
+              <strong id="gemValue">128</strong>
+            </div>
+            <div>
+              <span>Streak</span>
+              <strong id="streakValue">5</strong>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="currentDateLabel">2026-06-29</p>
+            <h2 id="viewTitle">今日のクエスト</h2>
+          </div>
+          <div class="topbar-actions">
+            <div class="sync-panel" id="syncPanel" data-sync-state="local">
+              <span class="sync-dot" aria-hidden="true"></span>
+              <span id="syncStatus" aria-live="polite">Firebase確認中</span>
+              <button type="button" id="syncSignInButton">Google同期</button>
+              <button type="button" id="syncSignOutButton" aria-label="Firebaseからログアウト" hidden>退出</button>
+            </div>
+            <div class="theme-switcher" aria-label="Taste options">
+              <button class="theme-option" type="button" data-theme-option="arcane">
+                <span>A</span>
+                Arcane
+              </button>
+              <button class="theme-option active" type="button" data-theme-option="soft">
+                <span>B</span>
+                Soft Ops
+              </button>
+              <button class="theme-option" type="button" data-theme-option="retro">
+                <span>C</span>
+                Retro
+              </button>
+            </div>
+            <div class="appearance-control" id="appearanceControl">
+              <button class="secondary-button appearance-button" type="button" id="appearanceButton" aria-haspopup="menu" aria-expanded="false" aria-controls="appearanceMenu" title="表示モードを変更" aria-label="表示モードを変更。現在はシステム設定">
+                <span id="appearanceIcon" class="appearance-icon" aria-hidden="true">◐</span>
+                <span class="appearance-button-label">表示</span>
+              </button>
+              <div class="appearance-menu" id="appearanceMenu" role="menu" aria-label="表示モード" hidden>
+                <button type="button" role="menuitemradio" aria-checked="false" data-appearance-option="light">
+                  <span class="appearance-option-icon" aria-hidden="true">☀</span>
+                  <span>ライト</span>
+                </button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-appearance-option="dark">
+                  <span class="appearance-option-icon" aria-hidden="true">☾</span>
+                  <span>ダーク</span>
+                </button>
+                <button type="button" role="menuitemradio" aria-checked="true" data-appearance-option="system">
+                  <span class="appearance-option-icon system-icon" aria-hidden="true">▣</span>
+                  <span>システム設定</span>
+                </button>
+              </div>
+            </div>
+            <button class="secondary-button install-app-button" type="button" id="installAppButton" hidden>アプリをインストール</button>
+            <button class="secondary-button feedback-settings-button" type="button" id="feedbackSettingsButton" title="音と演出の設定" aria-label="音と演出の設定">
+              <span aria-hidden="true">♪</span>
+              <span>音・演出</span>
+            </button>
+            <button class="icon-button" type="button" id="importButton" title="バックアップJSONを読み込む" aria-label="バックアップJSONを読み込む">読込</button>
+            <button class="icon-button" type="button" id="exportButton" title="バックアップJSONを保存する" aria-label="バックアップJSONを保存する">保存</button>
+            <button class="primary-button" type="button" id="newTaskButton">追加</button>
+          </div>
+        </header>
+
+        <section class="view active" id="tasksView" data-view-panel="tasks">
+          <div class="hero-strip">
+            <div>
+              <p class="theme-kicker" id="themeKicker">B / Soft Ops Companion</p>
+              <h3 id="themeHeroTitle">Deskside Companion</h3>
+              <p id="themeHeroCopy">小さな相棒AIと一緒に、今日の生活タスクを静かに整理します。ゲーム感は残しつつ、普段使いの道具に近い見た目です。</p>
+            </div>
+            <div class="boss-wrap" aria-label="Quest boss">
+              <img id="bossImage" class="boss-image" src="./assets/boss-h3-transparent.webp" alt="Quest boss" decoding="async" />
+              <span class="boss-hit-text" id="bossHitText" aria-live="polite"></span>
+              <div class="boss-caption">
+                <strong id="bossName">Compact Deadline Wraith</strong>
+                <span id="bossReward">Reward 18 Gem</span>
+              </div>
+              <div class="boss-meter"><span id="bossMeter"></span></div>
+            </div>
+          </div>
+
+          <div class="rollover-panel" aria-label="Daily quest refresh">
+            <div>
+              <strong>日付更新</strong>
+              <span id="rolloverStatus">今日のクエストを確認中</span>
+            </div>
+            <button class="secondary-button" type="button" id="runRolloverButton">今日に更新</button>
+          </div>
+
+          <div class="task-summary-row" id="taskSummaryRow" aria-label="Task summary"></div>
+
+          <div class="board-toolbar" aria-label="Task board controls">
+            <div class="task-filter" aria-label="Task filters">
+              <button type="button" class="filter-option active" data-task-filter="all">全部</button>
+              <button type="button" class="filter-option" data-task-filter="today">今日</button>
+              <button type="button" class="filter-option" data-task-filter="overdue">期限切れ</button>
+              <button type="button" class="filter-option" data-task-filter="upcoming">近日</button>
+              <button type="button" class="filter-option" data-task-filter="undone">未完了</button>
+            </div>
+            <button class="secondary-button archive-button" type="button" id="archiveButton">
+              アーカイブ <span id="archiveCount">0</span>
+            </button>
+            <label>
+              並び替え
+              <select id="sortMode">
+                <option value="created">追加順</option>
+                <option value="dueDate">日付が近い順</option>
+                <option value="name">名前順</option>
+                <option value="difficulty">重い順</option>
+                <option value="undone">未完了を上</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="task-board">
+            <section class="task-column">
+              <div class="column-header">
+                <div>
+                  <h3>習慣ログ</h3>
+                  <span>良い/悪い行動を記録</span>
+                </div>
+                <button type="button" data-add-kind="habit" title="習慣ログを追加" aria-label="習慣ログを追加">+</button>
+              </div>
+              <div class="task-list" id="habitList"></div>
+            </section>
+
+            <section class="task-column">
+              <div class="column-header">
+                <div>
+                  <h3>今日の約束</h3>
+                  <span>日付で復活する予定</span>
+                </div>
+                <button type="button" data-add-kind="daily" title="毎日の約束を追加" aria-label="毎日の約束を追加">+</button>
+              </div>
+              <div class="task-list" id="dailyList"></div>
+            </section>
+
+            <section class="task-column">
+              <div class="column-header">
+                <div>
+                  <h3>一回だけ</h3>
+                  <span>期限つきの単発</span>
+                </div>
+                <button type="button" data-add-kind="todo" title="一回だけのタスクを追加" aria-label="一回だけのタスクを追加">+</button>
+              </div>
+              <div class="task-list" id="todoList"></div>
+            </section>
+
+            <section class="task-column rewards-column">
+              <div class="column-header">
+                <div>
+                  <h3>ごほうび</h3>
+                  <span>Gemで交換する休憩</span>
+                </div>
+                <button type="button" data-add-kind="reward" title="ごほうびを追加" aria-label="ごほうびを追加">+</button>
+              </div>
+              <div class="task-list" id="rewardList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="bossesView" data-view-panel="bosses">
+          <div class="boss-layout">
+            <section class="section-band boss-focus-panel">
+              <div class="section-heading">
+                <h3>現在のボス</h3>
+                <span class="gem-balance"><strong id="bossDefeatCount">0</strong> 撃破</span>
+              </div>
+              <div class="boss-focus">
+                <div class="boss-focus-stage">
+                  <img id="bossPreviewImage" class="boss-preview-image" src="./assets/boss-h3-transparent.webp" alt="Boss preview" loading="lazy" decoding="async" />
+                </div>
+                <div class="boss-focus-copy">
+                  <span class="pill" id="bossThreatLabel">締切</span>
+                  <h3 id="bossPreviewName">Compact Deadline Wraith</h3>
+                  <p id="bossPreviewDescription">時間と未完了ログをまとった影。</p>
+                  <div class="boss-stat-row">
+                    <span>HP <strong id="bossHpText">71/100</strong></span>
+                    <span>報酬 <strong id="bossRewardText">18 Gem</strong></span>
+                  </div>
+                  <div class="boss-actions">
+                    <button class="secondary-button" type="button" id="randomBossButton">ランダム</button>
+                    <button class="primary-button" type="button" id="lockBossButton">このボスに挑戦</button>
+                  </div>
+                  <div class="battle-log">
+                    <strong>戦闘ログ</strong>
+                    <div class="battle-log-list" id="battleLogList"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section-band">
+              <div class="section-heading">
+                <h3>ボス図鑑</h3>
+                <span class="pill" id="bossRotationStatus">ローテーション中</span>
+              </div>
+              <div class="boss-grid" id="bossGrid"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="battleView" data-view-panel="battle">
+          <div class="command-battle-layout">
+            <section class="jrpg-game-screen" aria-label="MP command battle">
+              <header class="jrpg-topline">
+                <div>
+                  <p>Command Battle</p>
+                  <h3>タスクでMPをためて、コマンドで戦う</h3>
+                </div>
+                <div class="jrpg-actions">
+                  <button class="secondary-button" type="button" id="battleRandomBossButton">ボス変更</button>
+                  <button class="secondary-button" type="button" id="battleResetButton">戦闘リセット</button>
+                </div>
+              </header>
+
+              <section class="jrpg-field">
+                <div class="jrpg-enemy-row">
+                  <article class="jrpg-status-window enemy">
+                    <div class="jrpg-status-head">
+                      <strong id="battleBossName">Deadline Wraith</strong>
+                      <span>Rage <b id="battleBossRageText">0</b></span>
+                    </div>
+                    <div class="jrpg-meter-row">
+                      <span>HP</span>
+                      <em id="battleBossHpText">100/100</em>
+                      <div class="jrpg-meter boss"><i id="battleBossHpBar"></i></div>
+                    </div>
+                    <div class="jrpg-status-pills" id="battleBossStatusRow"></div>
+                  </article>
+                  <div class="jrpg-enemy-stage">
+                    <img id="battleBossSprite" class="jrpg-boss-sprite" src="./assets/boss-h3-transparent.webp" alt="Battle boss" loading="lazy" decoding="async" />
+                    <span class="battle-float-text damage" id="battleDamageText" aria-live="polite"></span>
+                  </div>
+                </div>
+
+                <div class="jrpg-player-row">
+                  <div class="jrpg-player-stage">
+                    <img id="battlePlayerSprite" class="jrpg-player-sprite" src="./assets/avatar-role-sentinel.webp" alt="Player avatar" loading="lazy" decoding="async" />
+                    <span class="battle-float-text resource" id="battleResourceText" aria-live="polite"></span>
+                    <span class="battle-float-text player-damage" id="battlePlayerDamageText" aria-live="polite"></span>
+                  </div>
+                  <article class="jrpg-status-window player">
+                    <div class="jrpg-status-head">
+                      <strong id="battlePlayerName">Astra / Sentinel</strong>
+                      <span>Turn <b id="battleTurnValue">1</b></span>
+                    </div>
+                    <div class="jrpg-meter-row">
+                      <span>HP</span>
+                      <em id="battlePlayerHpText">47/50</em>
+                      <div class="jrpg-meter"><i id="battlePlayerHpBar"></i></div>
+                    </div>
+                    <div class="jrpg-meter-row">
+                      <span>MP</span>
+                      <em id="battlePlayerMpText">12/80</em>
+                      <div class="jrpg-meter mp"><i id="battlePlayerMpBar"></i></div>
+                    </div>
+                    <div class="jrpg-status-pills" id="battlePlayerStatusRow"></div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="jrpg-console">
+                <article class="jrpg-message-window">
+                  <p id="battleMainMessage">タスクでMPをためて、コマンドで戦います。</p>
+                  <div class="jrpg-combat-log" id="battleCombatLog" aria-live="polite"></div>
+                </article>
+
+                <article class="jrpg-command-window">
+                  <div class="jrpg-window-title">
+                    <strong>COMMAND</strong>
+                    <span id="battleResultText">進行中</span>
+                  </div>
+                  <div class="jrpg-command-grid">
+                    <button type="button" data-battle-command="attack">
+                      <strong>たたかう</strong>
+                      <span>0 MP</span>
+                    </button>
+                    <button type="button" data-battle-command="skill">
+                      <strong id="battleSkillCommandName">Aegis Break</strong>
+                      <span id="battleSkillCommandCost">18 MP</span>
+                    </button>
+                    <button type="button" data-battle-command="guard">
+                      <strong>まもる</strong>
+                      <span>6 MP</span>
+                    </button>
+                    <button type="button" data-battle-command="heal">
+                      <strong>かいふく</strong>
+                      <span>14 MP</span>
+                    </button>
+                    <button type="button" data-battle-command="burst">
+                      <strong>バースト</strong>
+                      <span>40 MP</span>
+                    </button>
+                  </div>
+                </article>
+              </section>
+            </section>
+
+            <aside class="battle-side-panel">
+              <section class="section-band battle-task-panel">
+                <div class="section-heading">
+                  <h3>MPに変換するクエスト</h3>
+                  <span class="pill">actual tasks</span>
+                </div>
+                <div class="battle-task-queue" id="battleTaskQueue"></div>
+              </section>
+
+              <section class="section-band battle-class-panel">
+                <div class="section-heading">
+                  <h3>役職コマンド</h3>
+                  <span class="pill" id="battleClassSkillText">Aegis Break</span>
+                </div>
+                <div class="battle-class-grid" id="battleClassGrid"></div>
+              </section>
+
+              <section class="section-band battle-contract-panel">
+                <div class="section-heading">
+                  <h3>戦闘データ</h3>
+                  <span class="pill">contract</span>
+                </div>
+                <pre id="battleContractPreview"></pre>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="characterView" data-view-panel="character">
+          <div class="character-layout">
+            <section class="section-band avatar-lab">
+              <div class="section-heading">
+                <h3>キャラカスタム</h3>
+                <span class="gem-balance"><strong id="gemBalance">128</strong> Gem</span>
+              </div>
+              <div class="avatar-workbench">
+                <div class="avatar-preview-stage">
+                  <div class="avatar-stack large float-calm" id="avatarPreviewStack">
+                    <span class="avatar-part part-tail" data-item-layer="ranger-tail"></span>
+                    <span class="avatar-part part-cloak" data-item-layer="cloak-sage"></span>
+                    <img id="characterPreviewImage" class="avatar-image" src="./assets/avatar-masc-48.webp" alt="Character preview" loading="lazy" decoding="async" />
+                    <span class="avatar-part part-brooch" data-item-layer="gem-brooch"></span>
+                    <span class="avatar-part part-journal" data-item-layer="journal"></span>
+                    <span class="avatar-part part-headset" data-item-layer="operator-headset"></span>
+                    <span class="avatar-part part-arm" data-item-layer="clockwork-arm"></span>
+                  </div>
+                  <div class="avatar-equip-chips large" id="previewEquipChips" aria-label="装備中アイテム"></div>
+                </div>
+                <div class="avatar-controls">
+                  <label>
+                    ベース
+                    <select id="variantSelect"></select>
+                  </label>
+                  <label>
+                    役職
+                    <select id="classSelect"></select>
+                  </label>
+                  <label>
+                    MBTI
+                    <select id="personalitySelect"></select>
+                  </label>
+                  <label>
+                    待機モーション
+                    <select id="motionSelect"></select>
+                  </label>
+                </div>
+                <div class="equipment-calibrator" id="equipmentCalibrator">
+                  <div class="equipment-calibrator-head">
+                    <strong>装備位置</strong>
+                    <label class="inline-toggle">
+                      <input id="equipmentDragToggle" type="checkbox" />
+                      ドラッグ調整
+                    </label>
+                  </div>
+                  <label>
+                    装備
+                    <select id="equipmentAdjustSelect"></select>
+                  </label>
+                  <div class="equipment-slider-grid">
+                    <label>
+                      X補正
+                      <input id="equipmentOffsetX" type="range" min="-30" max="30" step="1" value="0" />
+                    </label>
+                    <label>
+                      Y補正
+                      <input id="equipmentOffsetY" type="range" min="-30" max="30" step="1" value="0" />
+                    </label>
+                    <label>
+                      拡大率
+                      <input id="equipmentScale" type="range" min="-25" max="40" step="1" value="0" />
+                    </label>
+                  </div>
+                  <div class="equipment-calibrator-actions">
+                    <button class="secondary-button" type="button" id="equipmentResetButton">リセット</button>
+                    <button class="secondary-button" type="button" id="equipmentResetAllButton">全リセット</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section-band">
+              <div class="section-heading">
+                <h3>役職プレビュー</h3>
+                <button class="secondary-button" type="button" id="randomizeCharacter">おまかせ</button>
+              </div>
+              <img id="classLineupImage" class="class-lineup" src="./assets/class-lineup-48.webp" alt="Six QuestForge class pixel avatar concepts" loading="lazy" decoding="async" />
+              <div class="class-grid" id="classGrid"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="shopView" data-view-panel="shop">
+          <div class="section-band">
+            <div class="section-heading">
+              <h3>Gemショップ</h3>
+              <span class="gem-balance"><strong id="shopGemBalance">128</strong> Gem</span>
+            </div>
+            <div class="shop-grid" id="shopGrid"></div>
+          </div>
+        </section>
+
+        <section class="view" id="partyView" data-view-panel="party">
+          <div class="section-band">
+            <div class="section-heading">
+              <h3>パーティ</h3>
+              <button class="secondary-button" type="button">招待リンク</button>
+            </div>
+            <div class="party-grid" id="partyGrid"></div>
+          </div>
+          <div class="section-band">
+            <div class="section-heading">
+              <h3>チャレンジ</h3>
+              <button class="secondary-button" type="button">作成</button>
+            </div>
+            <div class="challenge-row">
+              <span class="challenge-badge">7 days</span>
+              <div>
+                <strong>Morning Forge</strong>
+                <p>朝の3タスクを7日続ける共同チャレンジ。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="inventoryView" data-view-panel="inventory">
+          <div class="section-band">
+            <div class="section-heading">
+              <h3>装備</h3>
+              <button class="secondary-button" type="button">自動装備</button>
+            </div>
+            <div class="inventory-grid" id="inventoryGrid"></div>
+          </div>
+        </section>
+
+        <section class="view" id="integrationsView" data-view-panel="integrations">
+          <div class="section-band">
+            <div class="section-heading">
+              <h3>連携ハブ / API / MCP</h3>
+              <span class="gateway-status" id="apiGatewayStatus" data-status="offline">Gateway未接続</span>
+            </div>
+            <div class="integration-console">
+              <section class="integration-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h4>外部サービス</h4>
+                    <p>Gateway接続後は実サービスをプレビューし、確認してから同期します。</p>
+                  </div>
+                  <span class="pill" id="integrationModeLabel">ローカルモック</span>
+                </div>
+                <div class="integration-hub-grid" id="integrationHubGrid"></div>
+              </section>
+
+              <section class="integration-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h4>同期ルール</h4>
+                    <p>サービスごとの取り込み方とQuestForge内の変換先。</p>
+                  </div>
+                </div>
+                <div class="sync-controls">
+                  <label>
+                    サービス
+                    <select id="syncServiceSelect"></select>
+                  </label>
+                  <label>
+                    同期方向
+                    <select id="syncDirectionSelect">
+                      <option value="import">インポート</option>
+                      <option value="export">エクスポート</option>
+                      <option value="bidirectional">双方向</option>
+                    </select>
+                  </label>
+                  <button class="secondary-button" type="button" id="previewLiveSyncButton">実データ確認</button>
+                  <button class="primary-button" type="button" id="runLiveSyncButton" disabled>確認して同期</button>
+                  <button class="primary-button" type="button" id="runMockSyncButton">モック同期</button>
+                </div>
+                <div class="sync-rule-summary" id="syncRuleSummary"></div>
+              </section>
+            </div>
+
+            <div class="sync-preview-layout">
+              <section class="integration-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h4>同期プレビュー</h4>
+                    <p>外部データをQuestForgeのクエスト/ログへ変換した結果。</p>
+                  </div>
+                </div>
+                <div class="sync-preview-list" id="syncPreviewList"></div>
+              </section>
+              <section class="integration-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h4>同期ログ</h4>
+                    <p>モック同期の作成/更新/スキップ結果。</p>
+                  </div>
+                </div>
+                <div class="sync-log-list" id="syncLogList"></div>
+              </section>
+            </div>
+
+            <div class="developer-summary">
+              <article>
+                <span>OpenAPI</span>
+                <strong>タスク/スコア/報酬をREST化</strong>
+              </article>
+              <article>
+                <span>MCP</span>
+                <strong>AIが今日のクエストを操作</strong>
+              </article>
+              <article>
+                <span>Plugin</span>
+                <strong>権限付きでUIと同期処理を追加</strong>
+              </article>
+            </div>
+            <div class="integration-grid">
+              <article class="integration-card">
+                <strong>REST API</strong>
+                <p>OAuth付きでタスク、スコア、報酬、イベントを操作。</p>
+                <code>GET /v1/quests</code>
+              </article>
+              <article class="integration-card">
+                <strong>MCP Server</strong>
+                <p>AIエージェントが今日のタスク確認や完了記録を実行。</p>
+                <code>tool: score_quest</code>
+              </article>
+              <article class="integration-card">
+                <strong>Plugin Manifest</strong>
+                <p>権限付きで画面カード、Webhook、同期処理を追加。</p>
+                <code>permissions: quests:write</code>
+              </article>
+              <article class="integration-card">
+                <strong>Webhooks</strong>
+                <p>スコア、作成、報酬交換、レベルアップを外部通知。</p>
+                <code>event: quest.scored</code>
+              </article>
+            </div>
+            <div class="developer-spec-grid">
+              <article class="spec-card">
+                <h4>OpenAPI Surface</h4>
+                <code>GET /v1/quests?due=today</code>
+                <code>POST /v1/quests</code>
+                <code>PATCH /v1/quests/{questId}</code>
+                <code>POST /v1/quests/{questId}/score</code>
+                <code>GET /v1/events</code>
+              </article>
+              <article class="spec-card">
+                <h4>MCP Tools</h4>
+                <code>list_today_quests</code>
+                <code>create_quest</code>
+                <code>score_quest</code>
+                <code>get_character_state</code>
+                <code>buy_reward</code>
+              </article>
+              <article class="spec-card">
+                <h4>Plugin Manifest</h4>
+                <pre>{
+  "name": "questforge-calendar-sync",
+  "permissions": ["quests:read", "quests:write"],
+  "events": ["quest.scored", "quest.rolled_over"],
+  "uiSlots": ["quest.detail", "dashboard.sidecar"]
+}</pre>
+              </article>
+            </div>
+
+            <div class="developer-runtime-grid">
+              <section class="integration-panel runtime-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h4>API / MCP Gateway</h4>
+                    <p>Cloudflare WorkerのURLを登録すると、Firebaseログインで接続確認します。</p>
+                  </div>
+                </div>
+                <label class="runtime-field">
+                  Gateway URL
+                  <input id="gatewayUrlInput" type="url" placeholder="https://questforge-gateway.example.workers.dev" />
+                </label>
+                <div class="runtime-actions">
+                  <button class="primary-button" type="button" id="saveGatewayButton">保存して接続確認</button>
+                  <a class="secondary-link" id="openMcpEndpointLink" href="#" target="_blank" rel="noreferrer">MCP endpoint</a>
+                </div>
+                <pre class="runtime-output" id="gatewayOutput" aria-live="polite">Gateway URLを設定してください。</pre>
+              </section>
+
+              <section class="integration-panel runtime-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h4>Webhook</h4>
+                    <p>イベントをHMAC署名付きでHTTPS URLへ送信します。</p>
+                  </div>
+                </div>
+                <label class="runtime-field">
+                  送信先URL
+                  <input id="webhookUrlInput" type="url" placeholder="https://example.com/webhooks/questforge" />
+                </label>
+                <label class="runtime-field">
+                  イベント
+                  <select id="webhookEventSelect">
+                    <option value="quest.scored">クエスト完了</option>
+                    <option value="quest.created">クエスト作成</option>
+                    <option value="quest.updated">クエスト更新</option>
+                    <option value="integration.sync_completed">同期完了</option>
+                  </select>
+                </label>
+                <button class="primary-button" type="button" id="createWebhookButton">Webhookを登録</button>
+                <div class="runtime-list" id="webhookList"></div>
+              </section>
+
+              <section class="integration-panel runtime-panel plugin-runtime-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h4>拡張機能</h4>
+                    <p>権限を検証し、UIはsandbox内だけで実行します。</p>
+                  </div>
+                </div>
+                <label class="runtime-field">
+                  Plugin Manifest JSON
+                  <textarea id="pluginManifestInput" rows="9" spellcheck="false" placeholder='{"manifestVersion":"0.1","id":"my-plugin","name":"My Plugin","permissions":["quests:read"]}'></textarea>
+                </label>
+                <button class="primary-button" type="button" id="installPluginButton">検証してインストール</button>
+                <div class="runtime-list" id="pluginList"></div>
+              </section>
+            </div>
+            <section class="plugin-slot-band" id="pluginDashboardSlot" data-plugin-slot="dashboard.sidecar" hidden>
+              <h4>拡張サイドパネル</h4>
+              <div class="plugin-slot-content"></div>
+            </section>
+            <section class="plugin-slot-band" id="pluginIntegrationSlot" data-plugin-slot="integration.settings" hidden>
+              <h4>拡張連携設定</h4>
+              <div class="plugin-slot-content"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <nav class="mobile-tabbar" aria-label="モバイルナビゲーション">
+        <button class="active" type="button" data-view="tasks">クエスト</button>
+        <button type="button" data-view="bosses">ボス</button>
+        <button type="button" data-view="battle">バトル</button>
+        <button type="button" data-view="character">相棒</button>
+        <button type="button" id="mobileMoreButton" aria-label="その他の画面を開く">その他</button>
+      </nav>
+    </div>
+
+    <dialog class="task-dialog" id="taskDialog">
+      <form id="taskForm">
+        <h3 id="dialogTitle">タスク追加</h3>
+        <input id="editingTaskId" name="editingTaskId" type="hidden" />
+        <label>
+          分類
+          <select id="taskKind" name="kind">
+            <option value="habit">習慣ログ（いつでも良い/悪いを記録）</option>
+            <option value="daily">今日の約束（日付で復活）</option>
+            <option value="todo">一回クエスト（期限つき単発）</option>
+            <option value="reward">ごほうび交換（Gemで休憩）</option>
+          </select>
+        </label>
+        <label>
+          タイトル
+          <input id="taskTitle" name="title" required maxlength="80" />
+        </label>
+        <label>
+          メモ
+          <textarea id="taskNotes" name="notes" rows="3" maxlength="180"></textarea>
+        </label>
+        <label>
+          日付 / 期限
+          <input id="taskDueDate" name="dueDate" type="date" />
+        </label>
+        <label>
+          繰り返し
+          <select id="taskRepeat" name="repeat">
+            <option value="none">なし</option>
+            <option value="daily">毎日</option>
+            <option value="weekdays">平日</option>
+            <option value="weekly">毎週</option>
+            <option value="monthly">毎月</option>
+          </select>
+        </label>
+        <label>
+          タグ
+          <input id="taskTags" name="tags" maxlength="80" placeholder="学習, 仕事" />
+        </label>
+        <label>
+          重さ / ごほうび価格
+          <select id="taskDifficulty" name="difficulty">
+            <option value="trivial">軽い</option>
+            <option value="easy">易しい</option>
+            <option value="medium">普通</option>
+            <option value="hard">重い</option>
+          </select>
+        </label>
+        <div class="plugin-slot-inline" id="pluginQuestDetailSlot" data-plugin-slot="quest.detail" hidden></div>
+        <div class="dialog-actions">
+          <button type="button" class="danger-button" id="deleteTaskButton">削除</button>
+          <span class="dialog-spacer"></span>
+          <button type="button" class="secondary-button" id="cancelDialog">閉じる</button>
+          <button type="submit" class="primary-button">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="task-dialog archive-dialog" id="archiveDialog" aria-labelledby="archiveDialogTitle">
+      <section class="archive-dialog-content">
+        <div class="dialog-heading">
+          <h3 id="archiveDialogTitle">アーカイブ</h3>
+          <button class="edit-button" type="button" id="closeArchiveDialog" aria-label="アーカイブを閉じる">×</button>
+        </div>
+        <div class="archive-list" id="archiveList"></div>
+      </section>
+    </dialog>
+
+    <dialog class="task-dialog feedback-dialog" id="feedbackDialog" aria-labelledby="feedbackDialogTitle">
+      <section class="feedback-dialog-content">
+        <div class="dialog-heading">
+          <h3 id="feedbackDialogTitle">音と演出</h3>
+          <button class="edit-button" type="button" id="closeFeedbackDialog" aria-label="音と演出の設定を閉じる">×</button>
+        </div>
+        <label class="preference-row" for="soundEnabledToggle">
+          <span>効果音</span>
+          <input id="soundEnabledToggle" type="checkbox" role="switch" />
+        </label>
+        <label class="preference-row" for="motionEnabledToggle">
+          <span>モーション</span>
+          <input id="motionEnabledToggle" type="checkbox" role="switch" />
+        </label>
+        <div class="feedback-preview" id="feedbackPreview" aria-live="polite">
+          <div class="feedback-preview-card" id="feedbackPreviewCard">
+            <span class="feedback-preview-check" aria-hidden="true">✓</span>
+            <div>
+              <strong>クエスト完了</strong>
+              <span>アーカイブへ格納</span>
+            </div>
+          </div>
+          <div class="feedback-preview-actions">
+            <button class="secondary-button" type="button" id="previewSoundButton" data-feedback-silent>SEを試す</button>
+            <button class="primary-button" type="button" id="previewMotionButton" data-feedback-silent>完了演出を試す</button>
+          </div>
+        </div>
+        <section class="audio-diagnostic" aria-labelledby="audioDiagnosticTitle">
+          <div>
+            <h4 id="audioDiagnosticTitle">音声診断</h4>
+            <p id="audioDiagnosticStatus" aria-live="polite">まだ診断していません。</p>
+          </div>
+          <div class="feedback-preview-actions">
+            <button class="secondary-button" type="button" id="testWebAudioButton" data-feedback-silent>Web Audioテスト</button>
+            <button class="secondary-button" type="button" id="testMediaAudioButton" data-feedback-silent>メディア音テスト</button>
+          </div>
+        </section>
+      </section>
+    </dialog>
+
+    <input id="importFileInput" type="file" accept="application/json,.json" hidden />
+    <div class="undo-toast" id="undoToast" role="status" aria-live="polite" hidden>
+      <span id="undoToastMessage"></span>
+      <button type="button" id="undoDeleteButton">元に戻す</button>
+      <button type="button" id="toastActionButton" hidden>更新</button>
+      <button class="undo-toast-close" type="button" id="closeToastButton" aria-label="通知を閉じる">×</button>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

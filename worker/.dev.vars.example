@@ -1,0 +1,13 @@
+DEV_BEARER_TOKEN=replace-with-a-long-random-value
+DEV_USER_ID=your-firebase-uid
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@example.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Optional external integrations
+GOOGLE_ACCESS_TOKEN=
+TOGGL_API_TOKEN=
+TODOIST_ACCESS_TOKEN=
+NOTION_ACCESS_TOKEN=
+NOTION_DATABASE_ID=
+CHAT_WEBHOOK_URL=
+

@@ -1,0 +1,104 @@
+{
+  "version": "0.1.0",
+  "rules": [
+    {
+      "id": "calendar-event-to-time-block-quest",
+      "service": "google-calendar",
+      "direction": "import",
+      "source": "calendar.event",
+      "target": "quest",
+      "mapping": {
+        "summary": "title",
+        "description": "notes",
+        "start.dateTime": "timeBlock.start",
+        "end.dateTime": "timeBlock.end",
+        "recurrence": "repeat",
+        "id": "externalLinks[].externalId"
+      },
+      "defaultQuest": {
+        "kind": "todo",
+        "difficulty": "medium",
+        "tags": ["calendar"]
+      }
+    },
+    {
+      "id": "calendar-recurring-event-to-daily",
+      "service": "google-calendar",
+      "direction": "import",
+      "source": "calendar.recurring_event",
+      "target": "quest",
+      "mapping": {
+        "summary": "title",
+        "start.date": "dueDate",
+        "recurrence": "repeat"
+      },
+      "defaultQuest": {
+        "kind": "daily",
+        "difficulty": "easy",
+        "tags": ["calendar", "routine"]
+      }
+    },
+    {
+      "id": "google-task-to-todo-quest",
+      "service": "google-tasks",
+      "direction": "bidirectional",
+      "source": "tasks.task",
+      "target": "quest",
+      "mapping": {
+        "title": "title",
+        "notes": "notes",
+        "due": "dueDate",
+        "status": "done",
+        "id": "externalLinks[].externalId"
+      },
+      "defaultQuest": {
+        "kind": "todo",
+        "difficulty": "medium",
+        "tags": ["google-tasks"]
+      },
+      "limitations": [
+        "Due time is not preserved because Google Tasks API stores date only."
+      ]
+    },
+    {
+      "id": "toggl-time-entry-to-focus-log",
+      "service": "toggl-track",
+      "direction": "import",
+      "source": "toggl.time_entry",
+      "target": "focusLog",
+      "mapping": {
+        "description": "title",
+        "duration": "durationMinutes",
+        "project_id": "tags[]",
+        "tag_ids": "tags[]",
+        "id": "externalLinks[].externalId"
+      },
+      "rewardFormula": {
+        "xp": "round(durationMinutes / 2)",
+        "gems": "max(1, round(durationMinutes / 15))",
+        "bossDamage": "max(4, round(durationMinutes / 5))"
+      }
+    },
+    {
+      "id": "questforge-daily-summary-to-notion",
+      "service": "notion",
+      "direction": "export",
+      "source": "questforge.daily_summary",
+      "target": "notion.page",
+      "mapping": {
+        "date": "properties.Date",
+        "completedQuests": "children.completed",
+        "bossLog": "children.boss",
+        "earnedGems": "properties.Gems"
+      }
+    }
+  ],
+  "conflictPolicy": {
+    "default": "newest_updated_at_wins",
+    "manualReviewWhen": [
+      "bothSidesChangedTitle",
+      "externalDeletedButQuestCompleted",
+      "recurrenceChanged"
+    ]
+  }
+}

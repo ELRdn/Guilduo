@@ -1,0 +1,23 @@
+{
+  "name": "questforge-prototype",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/*.test.js",
+    "check": "node --check app.js && node --check questforge-core.js && node --check service-worker.js && node --check worker/src/index.mjs && node --check mcp-local/questforge-mcp.mjs",
+    "deploy": "firebase deploy --only hosting,database",
+    "worker:dev": "wrangler dev --port 8787",
+    "worker:deploy": "wrangler deploy",
+    "mcp:local": "node mcp-local/questforge-mcp.mjs"
+  },
+  "dependencies": {
+    "firebase": "^12.16.0"
+  },
+  "devDependencies": {
+    "vite": "^8.1.4",
+    "wrangler": "^4.26.0"
+  }
+}

@@ -1,0 +1,11 @@
+firebase-config.js
+dist/
+.firebase/
+firebase-debug.log
+node_modules/
+.dev.vars
+worker/.dev.vars
+.wrangler/
+.tmp-worker*/
+__pycache__/
+*.py[cod]

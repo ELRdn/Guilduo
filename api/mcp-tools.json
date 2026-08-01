@@ -1,0 +1,110 @@
+{
+  "serverName": "questforge-mcp",
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "list_today_quests",
+      "description": "List today's active QuestForge quests, including overdue and recurring items.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "includeDone": { "type": "boolean", "default": false },
+          "kind": { "type": "string", "enum": ["habit", "daily", "todo", "reward", "all"], "default": "all" }
+        }
+      }
+    },
+    {
+      "name": "create_quest",
+      "description": "Create a quest with repeat, due date, difficulty, and tags.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["kind", "title"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["habit", "daily", "todo", "reward"] },
+          "title": { "type": "string" },
+          "notes": { "type": "string" },
+          "dueDate": { "type": "string", "format": "date" },
+          "repeat": { "type": "string", "enum": ["none", "daily", "weekdays", "weekly", "monthly"], "default": "none" },
+          "difficulty": { "type": "string", "enum": ["trivial", "easy", "medium", "hard"], "default": "easy" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "score_quest",
+      "description": "Score a quest up or down and return character, reward, and boss battle changes.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["questId", "direction"],
+        "properties": {
+          "questId": { "type": "string" },
+          "direction": { "type": "string", "enum": ["up", "down"] }
+        }
+      }
+    },
+    {
+      "name": "get_character_state",
+      "description": "Return the player's current HP, XP, gems, level, avatar role, MBTI, and equipped parts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "buy_reward",
+      "description": "Redeem a reward quest with gems.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["questId"],
+        "properties": {
+          "questId": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "list_integrations",
+      "description": "List available QuestForge integration adapters and their connection status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "preview_external_sync",
+      "description": "Preview how external records will map into QuestForge quests, focus logs, or exports.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["service"],
+        "properties": {
+          "service": { "type": "string", "enum": ["google-calendar", "google-tasks", "toggl-track", "todoist", "notion"] },
+          "direction": { "type": "string", "enum": ["import", "export", "bidirectional"], "default": "import" }
+        }
+      }
+    },
+    {
+      "name": "sync_external_service",
+      "description": "Run an external service sync. Use dryRun by default until credentials and conflict policy are configured.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["service", "direction"],
+        "properties": {
+          "service": { "type": "string", "enum": ["google-calendar", "google-tasks", "toggl-track", "todoist", "notion"] },
+          "direction": { "type": "string", "enum": ["import", "export", "bidirectional"] },
+          "dryRun": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  ],
+  "events": [
+    "quest.created",
+    "quest.updated",
+    "quest.scored",
+    "quest.rolled_over",
+    "integration.connected",
+    "integration.sync_completed",
+    "integration.sync_failed",
+    "reward.redeemed",
+    "boss.defeated",
+    "character.level_up"
+  ]
+}

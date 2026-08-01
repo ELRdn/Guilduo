@@ -1,0 +1,27 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "questforge-gateway",
+	"main": "worker/src/index.mjs",
+	"compatibility_date": "2026-07-31",
+	"workers_dev": true,
+	"vars": {
+		"FIREBASE_PROJECT_ID": "replace-with-firebase-project-id",
+		"FIREBASE_DATABASE_URL": "https://replace-with-firebase-database-url",
+		"FIREBASE_API_KEY": "replace-with-firebase-api-key",
+		"FIREBASE_AUTH_DOMAIN": "replace-with-firebase-auth-domain",
+		"WEB_APP_URL": "http://localhost:5173",
+		"ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173"
+	},
+	"triggers": {
+		"crons": [
+			"*/5 * * * *"
+		]
+	},
+	"kv_namespaces": [
+		{
+			"binding": "QUESTFORGE_KV",
+			"id": "replace-with-kv-namespace-id",
+			"remote": true
+		}
+	]
+}

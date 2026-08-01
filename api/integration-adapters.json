@@ -1,0 +1,62 @@
+{
+  "version": "0.1.0",
+  "adapters": [
+    {
+      "id": "google-calendar",
+      "name": "Google Calendar",
+      "auth": "oauth2",
+      "minimumScopes": [
+        "https://www.googleapis.com/auth/calendar.events.readonly"
+      ],
+      "writeScopes": [
+        "https://www.googleapis.com/auth/calendar.events"
+      ],
+      "capabilities": ["import", "export", "watch"],
+      "resources": ["events", "calendars"],
+      "recommendedMvp": "import"
+    },
+    {
+      "id": "google-tasks",
+      "name": "Google Tasks",
+      "auth": "oauth2",
+      "minimumScopes": [
+        "https://www.googleapis.com/auth/tasks.readonly"
+      ],
+      "writeScopes": [
+        "https://www.googleapis.com/auth/tasks"
+      ],
+      "capabilities": ["import", "export", "bidirectional"],
+      "resources": ["tasklists", "tasks"],
+      "recommendedMvp": "bidirectional",
+      "limitations": [
+        "Google Tasks due dates discard time-of-day values through the API."
+      ]
+    },
+    {
+      "id": "toggl-track",
+      "name": "Toggl Track",
+      "auth": "basic_api_token",
+      "minimumScopes": [],
+      "capabilities": ["import", "timer_read", "timer_write"],
+      "resources": ["workspaces", "projects", "tags", "time_entries"],
+      "recommendedMvp": "import",
+      "syncStrategy": "polling_modified_since"
+    },
+    {
+      "id": "todoist",
+      "name": "Todoist",
+      "auth": "oauth2",
+      "capabilities": ["import", "export", "bidirectional", "webhooks"],
+      "resources": ["projects", "tasks", "comments"],
+      "recommendedMvp": "import"
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "auth": "bearer_or_oauth2",
+      "capabilities": ["export", "import"],
+      "resources": ["pages", "databases", "webhooks"],
+      "recommendedMvp": "export"
+    }
+  ]
+}

@@ -1,0 +1,410 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "QuestForge Prototype API",
+    "version": "1.0.0",
+    "description": "QuestForge REST API for quests, character progression, integrations, plugins, and signed webhooks."
+  },
+  "servers": [
+    { "url": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev", "description": "Cloudflare Worker" },
+    { "url": "http://127.0.0.1:8787", "description": "Local Wrangler" }
+  ],
+  "security": [{ "oauth2": [] }, { "bearerAuth": [] }],
+  "paths": {
+    "/v1/quests": {
+      "get": {
+        "summary": "List quests",
+        "parameters": [
+          {
+            "name": "due",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["today", "overdue", "upcoming", "all"] }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["habit", "daily", "todo", "reward"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quest list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "quests": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Quest" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a quest",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuestInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created quest",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Quest" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}": {
+      "patch": {
+        "summary": "Update a quest",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuestInput" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated quest",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Quest" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}/score": {
+      "post": {
+        "summary": "Score a quest and apply character/boss effects",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["direction"],
+                "properties": {
+                  "direction": { "type": "string", "enum": ["up", "down"] },
+                  "source": { "type": "string", "examples": ["web", "mcp", "plugin"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Score result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "quest": { "$ref": "#/components/schemas/Quest" },
+                    "character": { "$ref": "#/components/schemas/CharacterState" },
+                    "bossDamage": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations": {
+      "get": {
+        "summary": "List integration adapters and connection status",
+        "responses": {
+          "200": {
+            "description": "Integration adapters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "integrations": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Integration" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/{integrationId}/sync": {
+      "post": {
+        "summary": "Run an integration sync",
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["direction"],
+                "properties": {
+                  "direction": { "type": "string", "enum": ["import", "export", "bidirectional"] },
+                  "dryRun": { "type": "boolean", "default": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SyncEvent" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sync-events": {
+      "get": {
+        "summary": "List integration sync events",
+        "responses": {
+          "200": {
+            "description": "Sync event list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/SyncEvent" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events": {
+      "get": {
+        "summary": "List automation events",
+        "responses": {
+          "200": {
+            "description": "Event stream page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Event" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/character": {
+      "get": {
+        "summary": "Get character, MP, equipment, and boss state",
+        "responses": { "200": { "description": "Character state" } }
+      }
+    },
+    "/v1/webhooks": {
+      "get": {
+        "summary": "List signed webhook subscriptions",
+        "responses": { "200": { "description": "Webhook list" } }
+      },
+      "post": {
+        "summary": "Create a signed webhook subscription",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["url", "events"], "properties": { "url": { "type": "string", "format": "uri" }, "events": { "type": "array", "items": { "type": "string" } } } } } },
+        "responses": { "201": { "description": "Webhook and one-time signing secret" } }
+      }
+    },
+    "/v1/webhooks/{webhookId}": {
+      "delete": {
+        "summary": "Delete a webhook subscription",
+        "parameters": [{ "name": "webhookId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "204": { "description": "Deleted" } }
+      }
+    },
+    "/v1/plugins": {
+      "get": { "summary": "List installed sandboxed plugins", "responses": { "200": { "description": "Plugin list" } } },
+      "post": {
+        "summary": "Validate and install a plugin manifest",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "201": { "description": "Installed plugin" } }
+      }
+    },
+    "/v1/plugins/validate": {
+      "post": {
+        "summary": "Validate a plugin manifest without installing it",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Validation result" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/oauth/authorize",
+            "tokenUrl": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/oauth/token",
+            "scopes": {
+              "quests:read": "Read quests",
+              "quests:write": "Create, edit, and score quests",
+              "character:read": "Read character and battle state",
+              "rewards:write": "Buy rewards",
+              "integrations:read": "Preview integrations",
+              "integrations:sync": "Run integration sync",
+              "events:read": "Read automation events",
+              "webhooks:manage": "Manage webhooks",
+              "plugins:manage": "Manage sandboxed plugins"
+            }
+          }
+        }
+      },
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "Firebase ID token" }
+    },
+    "schemas": {
+      "QuestInput": {
+        "type": "object",
+        "required": ["kind", "title"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["habit", "daily", "todo", "reward"] },
+          "title": { "type": "string", "maxLength": 80 },
+          "notes": { "type": "string", "maxLength": 180 },
+          "dueDate": { "type": "string", "format": "date" },
+          "repeat": { "type": "string", "enum": ["none", "daily", "weekdays", "weekly", "monthly"] },
+          "difficulty": { "type": "string", "enum": ["trivial", "easy", "medium", "hard"] },
+          "tags": { "type": "array", "items": { "type": "string" }, "maxItems": 6 }
+        }
+      },
+      "Quest": {
+        "allOf": [
+          { "$ref": "#/components/schemas/QuestInput" },
+          {
+            "type": "object",
+            "required": ["id", "createdAt"],
+            "properties": {
+              "id": { "type": "string" },
+              "createdAt": { "type": "string", "format": "date-time" },
+              "done": { "type": "boolean" },
+              "streak": { "type": "integer" },
+              "cost": { "type": "integer" },
+              "lastCompletedDate": { "type": "string", "format": "date" },
+              "externalLinks": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/ExternalLink" }
+              }
+            }
+          }
+        ]
+      },
+      "ExternalLink": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string", "examples": ["google-calendar", "toggl-track"] },
+          "externalId": { "type": "string" },
+          "sourceType": { "type": "string", "examples": ["calendar.event", "toggl.time_entry"] },
+          "direction": { "type": "string", "enum": ["import", "export", "bidirectional"] },
+          "syncedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Integration": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "auth": { "type": "string" },
+          "status": { "type": "string", "enum": ["not_connected", "connected", "mock_ready"] },
+          "capabilities": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["import", "export", "bidirectional", "watch", "timer_read", "timer_write"] }
+          }
+        }
+      },
+      "SyncEvent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "integrationId": { "type": "string" },
+          "direction": { "type": "string", "enum": ["import", "export", "bidirectional"] },
+          "created": { "type": "integer" },
+          "updated": { "type": "integer" },
+          "skipped": { "type": "integer" },
+          "dryRun": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CharacterState": {
+        "type": "object",
+        "properties": {
+          "level": { "type": "integer" },
+          "hp": { "type": "integer" },
+          "xp": { "type": "integer" },
+          "gems": { "type": "integer" },
+          "equippedItems": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "examples": ["quest.scored", "quest.rolled_over"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "payload": { "type": "object" }
+        }
+      }
+    }
+  }
+}
+}
