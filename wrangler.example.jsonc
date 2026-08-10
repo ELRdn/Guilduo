@@ -1,27 +1,23 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "questforge-gateway",
-	"main": "worker/src/index.mjs",
-	"compatibility_date": "2026-07-31",
-	"workers_dev": true,
-	"vars": {
-		"FIREBASE_PROJECT_ID": "replace-with-firebase-project-id",
-		"FIREBASE_DATABASE_URL": "https://replace-with-firebase-database-url",
-		"FIREBASE_API_KEY": "replace-with-firebase-api-key",
-		"FIREBASE_AUTH_DOMAIN": "replace-with-firebase-auth-domain",
-		"WEB_APP_URL": "http://localhost:5173",
-		"ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173"
-	},
-	"triggers": {
-		"crons": [
-			"*/5 * * * *"
-		]
-	},
-	"kv_namespaces": [
-		{
-			"binding": "QUESTFORGE_KV",
-			"id": "replace-with-kv-namespace-id",
-			"remote": true
-		}
-	]
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "questforge-gateway",
+  "main": "worker/src/index.mjs",
+  "compatibility_date": "2026-07-31",
+  "workers_dev": true,
+  "vars": {
+    "FIREBASE_PROJECT_ID": "your-firebase-project-id",
+    "FIREBASE_DATABASE_URL": "https://your-firebase-project-id-default-rtdb.REGION.firebasedatabase.app",
+    "FIREBASE_API_KEY": "your-public-firebase-web-api-key",
+    "FIREBASE_AUTH_DOMAIN": "your-firebase-project-id.firebaseapp.com",
+    "PUBLIC_BASE_URL": "https://your-questforge-worker.example.workers.dev",
+    "WEB_APP_URL": "https://your-firebase-project-id.web.app",
+    "ALLOWED_ORIGINS": "https://your-firebase-project-id.web.app,http://localhost:5173,http://127.0.0.1:5173"
+  },
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "d1_databases": [
+    { "binding": "QUESTFORGE_DB", "database_name": "questforge-data", "database_id": "your-d1-database-id" }
+  ],
+  "kv_namespaces": [
+    { "binding": "QUESTFORGE_KV", "id": "your-kv-namespace-id", "remote": true }
+  ]
 }

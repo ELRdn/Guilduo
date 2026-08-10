@@ -1,29 +1,147 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "QuestForge Prototype API",
-    "version": "1.0.0",
-    "description": "QuestForge REST API for quests, character progression, integrations, plugins, and signed webhooks."
+    "title": "QuestForge API",
+    "version": "2.2.0",
+    "description": "QuestForge REST API for quests, assignees, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks."
   },
   "servers": [
-    { "url": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev", "description": "Cloudflare Worker" },
-    { "url": "http://127.0.0.1:8787", "description": "Local Wrangler" }
+    {
+      "url": "https://your-questforge-worker.example.workers.dev",
+      "description": "Cloudflare Worker"
+    },
+    {
+      "url": "http://127.0.0.1:8787",
+      "description": "Local Wrangler"
+    }
   ],
-  "security": [{ "oauth2": [] }, { "bearerAuth": [] }],
+  "security": [
+    {
+      "oauth2": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
   "paths": {
     "/v1/quests": {
       "get": {
         "summary": "List quests",
         "parameters": [
           {
-            "name": "due",
+            "name": "view",
             "in": "query",
-            "schema": { "type": "string", "enum": ["today", "overdue", "upcoming", "all"] }
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "future",
+                "backlog",
+                "completed",
+                "archive",
+                "all"
+              ],
+              "default": "all"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
           },
           {
             "name": "kind",
             "in": "query",
-            "schema": { "type": "string", "enum": ["habit", "daily", "todo", "reward"] }
+            "schema": {
+              "type": "string",
+              "enum": [
+                "habit",
+                "daily",
+                "todo",
+                "reward"
+              ]
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planningState",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "scheduled",
+                "backlog"
+              ]
+            }
+          },
+          {
+            "name": "lifecycleState",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "completed",
+                "archived"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -36,7 +154,21 @@
                   "properties": {
                     "quests": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Quest" }
+                      "items": {
+                        "$ref": "#/components/schemas/Quest"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   }
                 }
@@ -51,7 +183,17 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/QuestInput" }
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/QuestInput"
+                  }
+                ],
+                "required": [
+                  "kind",
+                  "title"
+                ]
+              }
             }
           }
         },
@@ -60,9 +202,68 @@
             "description": "Created quest",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Quest" }
+                "schema": {
+                  "$ref": "#/components/schemas/Quest"
+                }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/quests/batch-update": {
+      "post": {
+        "summary": "Preview or atomically update up to 100 quests",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchQuestUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch preview or result"
+          }
+        }
+      }
+    },
+    "/v1/quests/archive": {
+      "post": {
+        "summary": "Preview or archive completed one-off todo quests",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "questIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100
+                  },
+                  "throughDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Archive preview or result"
           }
         }
       }
@@ -75,14 +276,18 @@
             "name": "questId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/QuestInput" }
+              "schema": {
+                "$ref": "#/components/schemas/QuestInput"
+              }
             }
           }
         },
@@ -91,7 +296,9 @@
             "description": "Updated quest",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Quest" }
+                "schema": {
+                  "$ref": "#/components/schemas/Quest"
+                }
               }
             }
           }
@@ -106,7 +313,9 @@
             "name": "questId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -115,10 +324,25 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
-                  "direction": { "type": "string", "enum": ["up", "down"] },
-                  "source": { "type": "string", "examples": ["web", "mcp", "plugin"] }
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "up",
+                      "down"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "examples": [
+                      "web",
+                      "mcp",
+                      "plugin"
+                    ]
+                  }
                 }
               }
             }
@@ -132,13 +356,49 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "quest": { "$ref": "#/components/schemas/Quest" },
-                    "character": { "$ref": "#/components/schemas/CharacterState" },
-                    "bossDamage": { "type": "integer" }
+                    "quest": {
+                      "$ref": "#/components/schemas/Quest"
+                    },
+                    "character": {
+                      "$ref": "#/components/schemas/CharacterState"
+                    },
+                    "bossDamage": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}/external-links": {
+      "post": {
+        "summary": "Link an external record to a quest",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalLink"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Linked external record"
           }
         }
       }
@@ -156,12 +416,232 @@
                   "properties": {
                     "integrations": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Integration" }
+                      "items": {
+                        "$ref": "#/components/schemas/Integration"
+                      }
                     }
                   }
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/integrations/{integrationId}/connect": {
+      "post": {
+        "summary": "Start a per-user Google or Notion OAuth connection",
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google-calendar",
+                "google-tasks",
+                "notion"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider authorization URL"
+          }
+        }
+      }
+    },
+    "/v1/integrations/{integrationId}/resources": {
+      "get": {
+        "summary": "List calendars, task lists, or Notion parent pages available to the connected user",
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Selectable provider resources"
+          }
+        }
+      }
+    },
+    "/v1/integrations/{integrationId}": {
+      "patch": {
+        "summary": "Configure selected resources and 15-minute automatic sync",
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "autoSync": {
+                    "type": "boolean"
+                  },
+                  "calendarIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "taskListId": {
+                    "type": "string"
+                  },
+                  "parentPageId": {
+                    "type": "string"
+                  },
+                  "createDatabase": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated integration settings"
+          }
+        }
+      }
+    },
+    "/v1/integrations/{integrationId}/disconnect": {
+      "post": {
+        "summary": "Revoke and remove a user's provider connection without deleting quests",
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disconnected provider services"
+          }
+        }
+      }
+    },
+    "/v1/calendar/schedule": {
+      "get": {
+        "summary": "List cached read-only Calendar schedule blocks for one day",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Calendar schedule"
+          }
+        }
+      }
+    },
+    "/v1/calendar/events/{eventId}/convert": {
+      "post": {
+        "summary": "Explicitly convert one cached Calendar event into a linked quest",
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created linked quest"
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}/google-tasks": {
+      "post": {
+        "summary": "Explicitly export one local To Do quest to the selected Google Tasks list",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created and linked Google Task"
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}/google-tasks/resolve": {
+      "post": {
+        "summary": "Resolve a Google Tasks conflict by explicitly choosing the local or remote version",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "strategy"
+                ],
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": [
+                      "local",
+                      "remote"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resolved linked quest"
           }
         }
       }
@@ -174,7 +654,9 @@
             "name": "integrationId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -183,10 +665,22 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
-                  "direction": { "type": "string", "enum": ["import", "export", "bidirectional"] },
-                  "dryRun": { "type": "boolean", "default": true }
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "import",
+                      "export",
+                      "bidirectional"
+                    ]
+                  },
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  }
                 }
               }
             }
@@ -197,7 +691,9 @@
             "description": "Sync result",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SyncEvent" }
+                "schema": {
+                  "$ref": "#/components/schemas/SyncEvent"
+                }
               }
             }
           }
@@ -217,7 +713,9 @@
                   "properties": {
                     "events": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/SyncEvent" }
+                      "items": {
+                        "$ref": "#/components/schemas/SyncEvent"
+                      }
                     }
                   }
                 }
@@ -240,7 +738,9 @@
                   "properties": {
                     "events": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Event" }
+                      "items": {
+                        "$ref": "#/components/schemas/Event"
+                      }
                     }
                   }
                 }
@@ -253,40 +753,576 @@
     "/v1/character": {
       "get": {
         "summary": "Get character, MP, equipment, and boss state",
-        "responses": { "200": { "description": "Character state" } }
+        "responses": {
+          "200": {
+            "description": "Character state"
+          }
+        }
       }
     },
     "/v1/webhooks": {
       "get": {
         "summary": "List signed webhook subscriptions",
-        "responses": { "200": { "description": "Webhook list" } }
+        "responses": {
+          "200": {
+            "description": "Webhook list"
+          }
+        }
       },
       "post": {
         "summary": "Create a signed webhook subscription",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["url", "events"], "properties": { "url": { "type": "string", "format": "uri" }, "events": { "type": "array", "items": { "type": "string" } } } } } },
-        "responses": { "201": { "description": "Webhook and one-time signing secret" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url",
+                  "events"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Webhook and one-time signing secret"
+            }
+          }
+        }
+      },
+      "/v1/webhooks/{webhookId}": {
+        "delete": {
+          "summary": "Delete a webhook subscription",
+          "parameters": [
+            {
+              "name": "webhookId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "Deleted"
+            }
+          }
+        }
+      },
+      "/v1/plugins": {
+        "get": {
+          "summary": "List installed sandboxed plugins",
+          "responses": {
+            "200": {
+              "description": "Plugin list"
+            }
+          }
+        },
+        "post": {
+          "summary": "Validate and install a plugin manifest",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Installed plugin"
+            }
+          }
+        }
+      },
+      "/v1/plugins/validate": {
+        "post": {
+          "summary": "Validate a plugin manifest without installing it",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Validation result"
+            }
+          }
+        }
       }
     },
-    "/v1/webhooks/{webhookId}": {
+    "/v1/profile": {
+      "get": {
+        "summary": "Get the authenticated user's profile",
+        "responses": {
+          "200": {
+            "description": "Own profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/OwnProfile"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Create or update the authenticated user's profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/OwnProfile"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{handle}": {
+      "get": {
+        "summary": "Find a public profile by exact @handle",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/PublicProfile"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/friends": {
+      "get": {
+        "summary": "List accepted friends",
+        "responses": {
+          "200": {
+            "description": "Friend list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "friends": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PublicProfile"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/friends/{friendUid}": {
       "delete": {
-        "summary": "Delete a webhook subscription",
-        "parameters": [{ "name": "webhookId", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": { "204": { "description": "Deleted" } }
+        "summary": "Remove a friendship",
+        "parameters": [
+          {
+            "name": "friendUid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Friendship removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
       }
     },
-    "/v1/plugins": {
-      "get": { "summary": "List installed sandboxed plugins", "responses": { "200": { "description": "Plugin list" } } },
+    "/v1/friend-requests": {
+      "get": {
+        "summary": "List pending friend requests",
+        "responses": {
+          "200": {
+            "description": "Friend request list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requests": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FriendRequest"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
-        "summary": "Validate and install a plugin manifest",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
-        "responses": { "201": { "description": "Installed plugin" } }
+        "summary": "Send a friend request",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "receiverUid"
+                ],
+                "properties": {
+                  "receiverUid": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Friend request created"
+          }
+        }
       }
     },
-    "/v1/plugins/validate": {
+    "/v1/friend-requests/{requestId}/{decision}": {
       "post": {
-        "summary": "Validate a plugin manifest without installing it",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
-        "responses": { "200": { "description": "Validation result" } }
+        "summary": "Accept or decline an incoming friend request",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "decision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "accept",
+                "decline"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Friend request updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/party": {
+      "get": {
+        "summary": "Get the active party",
+        "responses": {
+          "200": {
+            "description": "Active party",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "party": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/Party"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a party",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Party created"
+          }
+        }
+      }
+    },
+    "/v1/party/invites": {
+      "post": {
+        "summary": "Create a seven-day party invite",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inviteeUid": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invite created; raw token is returned once"
+          }
+        }
+      }
+    },
+    "/v1/party/invites/accept": {
+      "post": {
+        "summary": "Accept a party invite",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "inviteId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Party joined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/party/leave": {
+      "post": {
+        "summary": "Leave the active party",
+        "responses": {
+          "200": {
+            "description": "Party left",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/party/members/{memberUid}": {
+      "delete": {
+        "summary": "Remove a party member as owner",
+        "parameters": [
+          {
+            "name": "memberUid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Member removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/battle/session": {
+      "get": {
+        "summary": "Get the current command battle session",
+        "responses": {
+          "200": {
+            "description": "Battle session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "$ref": "#/components/schemas/BattleSession"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/battle/commands": {
+      "post": {
+        "summary": "Preview or execute one command battle turn",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BattleCommandInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Battle command result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale turn, reused command ID, ended battle, or insufficient MP"
+          }
+        }
       }
     }
   },
@@ -296,8 +1332,8 @@
         "type": "oauth2",
         "flows": {
           "authorizationCode": {
-            "authorizationUrl": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/oauth/authorize",
-            "tokenUrl": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/oauth/token",
+            "authorizationUrl": "https://your-questforge-worker.example.workers.dev/oauth/authorize",
+            "tokenUrl": "https://your-questforge-worker.example.workers.dev/oauth/token",
             "scopes": {
               "quests:read": "Read quests",
               "quests:write": "Create, edit, and score quests",
@@ -307,43 +1343,201 @@
               "integrations:sync": "Run integration sync",
               "events:read": "Read automation events",
               "webhooks:manage": "Manage webhooks",
-              "plugins:manage": "Manage sandboxed plugins"
+              "plugins:manage": "Manage sandboxed plugins",
+              "profiles:read": "Read public profile data",
+              "profiles:write": "Create and update the user's public profile",
+              "friends:read": "Read friends and pending requests",
+              "friends:write": "Send, respond to, and remove friend connections",
+              "parties:read": "Read the active party and public members",
+              "parties:write": "Create, invite, join, leave, and manage a party",
+              "battle:read": "Read command battle state",
+              "battle:write": "Preview and execute command battle turns"
             }
           }
         }
       },
-      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "Firebase ID token" }
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Firebase ID token"
+      }
     },
     "schemas": {
       "QuestInput": {
         "type": "object",
-        "required": ["kind", "title"],
         "properties": {
-          "kind": { "type": "string", "enum": ["habit", "daily", "todo", "reward"] },
-          "title": { "type": "string", "maxLength": 80 },
-          "notes": { "type": "string", "maxLength": 180 },
-          "dueDate": { "type": "string", "format": "date" },
-          "repeat": { "type": "string", "enum": ["none", "daily", "weekdays", "weekly", "monthly"] },
-          "difficulty": { "type": "string", "enum": ["trivial", "easy", "medium", "hard"] },
-          "tags": { "type": "array", "items": { "type": "string" }, "maxItems": 6 }
+          "kind": {
+            "type": "string",
+            "enum": [
+              "habit",
+              "daily",
+              "todo",
+              "reward"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "planningState": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "backlog"
+            ]
+          },
+          "lifecycleState": {
+            "type": "string",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          },
+          "planningMode": {
+            "type": "string",
+            "enum": [
+              "on_date",
+              "until_due"
+            ]
+          },
+          "scheduledDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "scheduledTime": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily",
+              "weekdays",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "trivial",
+              "easy",
+              "medium",
+              "hard"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6
+          },
+          "estimatedMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actualMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "completionCriteria": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "nextAction": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "isBlockingOthers": {
+            "type": "boolean"
+          },
+          "dependencyIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/Assignee"
+          }
         }
       },
       "Quest": {
         "allOf": [
-          { "$ref": "#/components/schemas/QuestInput" },
+          {
+            "$ref": "#/components/schemas/QuestInput"
+          },
           {
             "type": "object",
-            "required": ["id", "createdAt"],
+            "required": [
+              "id",
+              "createdAt"
+            ],
             "properties": {
-              "id": { "type": "string" },
-              "createdAt": { "type": "string", "format": "date-time" },
-              "done": { "type": "boolean" },
-              "streak": { "type": "integer" },
-              "cost": { "type": "integer" },
-              "lastCompletedDate": { "type": "string", "format": "date" },
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "done": {
+                "type": "boolean"
+              },
+              "streak": {
+                "type": "integer"
+              },
+              "cost": {
+                "type": "integer"
+              },
+              "manualActualMinutes": {
+                "type": "integer"
+              },
+              "togglActualMinutes": {
+                "type": "integer"
+              },
+              "rolloverCount": {
+                "type": "integer"
+              },
+              "completedAt": {
+                "type": "string"
+              },
+              "archivedAt": {
+                "type": "string"
+              },
+              "lastCompletedDate": {
+                "type": "string",
+                "format": "date"
+              },
               "externalLinks": {
                 "type": "array",
-                "items": { "$ref": "#/components/schemas/ExternalLink" }
+                "items": {
+                  "$ref": "#/components/schemas/ExternalLink"
+                }
               }
             }
           }
@@ -352,59 +1546,468 @@
       "ExternalLink": {
         "type": "object",
         "properties": {
-          "service": { "type": "string", "examples": ["google-calendar", "toggl-track"] },
-          "externalId": { "type": "string" },
-          "sourceType": { "type": "string", "examples": ["calendar.event", "toggl.time_entry"] },
-          "direction": { "type": "string", "enum": ["import", "export", "bidirectional"] },
-          "syncedAt": { "type": "string", "format": "date-time" }
+          "service": {
+            "type": "string",
+            "examples": [
+              "google-calendar",
+              "toggl-track"
+            ]
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "sourceType": {
+            "type": "string",
+            "examples": [
+              "calendar.event",
+              "toggl.time_entry"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "examples": [
+              "event",
+              "time_entry"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export",
+              "bidirectional"
+            ]
+          },
+          "syncedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BatchQuestUpdate": {
+        "type": "object",
+        "required": [
+          "questIds"
+        ],
+        "properties": {
+          "questIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "patch": {
+            "$ref": "#/components/schemas/QuestInput"
+          },
+          "postponeDays": {
+            "type": "integer",
+            "minimum": -365,
+            "maximum": 365
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
         }
       },
       "Integration": {
         "type": "object",
         "properties": {
-          "id": { "type": "string" },
-          "name": { "type": "string" },
-          "auth": { "type": "string" },
-          "status": { "type": "string", "enum": ["not_connected", "connected", "mock_ready"] },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "auth": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_connected",
+              "connected",
+              "mock_ready"
+            ]
+          },
           "capabilities": {
             "type": "array",
-            "items": { "type": "string", "enum": ["import", "export", "bidirectional", "watch", "timer_read", "timer_write"] }
+            "items": {
+              "type": "string",
+              "enum": [
+                "import",
+                "export",
+                "bidirectional",
+                "watch",
+                "timer_read",
+                "timer_write"
+              ]
+            }
           }
         }
       },
       "SyncEvent": {
         "type": "object",
         "properties": {
-          "id": { "type": "string" },
-          "integrationId": { "type": "string" },
-          "direction": { "type": "string", "enum": ["import", "export", "bidirectional"] },
-          "created": { "type": "integer" },
-          "updated": { "type": "integer" },
-          "skipped": { "type": "integer" },
-          "dryRun": { "type": "boolean" },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "string"
+          },
+          "integrationId": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export",
+              "bidirectional"
+            ]
+          },
+          "created": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "CharacterState": {
         "type": "object",
         "properties": {
-          "level": { "type": "integer" },
-          "hp": { "type": "integer" },
-          "xp": { "type": "integer" },
-          "gems": { "type": "integer" },
-          "equippedItems": { "type": "array", "items": { "type": "string" } }
+          "level": {
+            "type": "integer"
+          },
+          "hp": {
+            "type": "integer"
+          },
+          "xp": {
+            "type": "integer"
+          },
+          "gems": {
+            "type": "integer"
+          },
+          "equippedItems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       },
       "Event": {
         "type": "object",
         "properties": {
-          "id": { "type": "string" },
-          "type": { "type": "string", "examples": ["quest.scored", "quest.rolled_over"] },
-          "createdAt": { "type": "string", "format": "date-time" },
-          "payload": { "type": "object" }
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "examples": [
+              "quest.scored",
+              "quest.rolled_over"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "payload": {
+            "type": "object"
+          }
+        }
+      },
+      "Assignee": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "label",
+          "handoffState"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "self",
+              "human",
+              "agent"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "handoffState": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready"
+            ]
+          }
+        }
+      },
+      "ProfileInput": {
+        "type": "object",
+        "required": [
+          "displayName",
+          "handle"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "handle": {
+            "type": "string",
+            "pattern": "^@?[A-Za-z0-9_]{3,20}$"
+          },
+          "bio": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "avatarRole": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "avatarVariant": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "PublicProfile": {
+        "type": "object",
+        "required": [
+          "uid",
+          "displayName",
+          "handle",
+          "bio",
+          "avatarRole",
+          "avatarVariant",
+          "level"
+        ],
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "handle": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "avatarRole": {
+            "type": "string"
+          },
+          "avatarVariant": {
+            "type": "string"
+          },
+          "level": {
+            "type": "integer"
+          }
+        }
+      },
+      "OwnProfile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PublicProfile"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "handleChangedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        ]
+      },
+      "FriendRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "incoming",
+              "outgoing"
+            ]
+          },
+          "senderUid": {
+            "type": "string"
+          },
+          "receiverUid": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/PublicProfile"
+          }
+        }
+      },
+      "Party": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerUid": {
+            "type": "string"
+          },
+          "maxMembers": {
+            "type": "integer",
+            "maximum": 4
+          },
+          "members": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/PublicProfile"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "member"
+                      ]
+                    },
+                    "joinedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "BattleCommandInput": {
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "attack",
+              "skill",
+              "guard",
+              "heal",
+              "burst"
+            ]
+          },
+          "expectedTurn": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "commandId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "BattleSession": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "character",
+          "boss",
+          "battle",
+          "quests",
+          "commands"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "character": {
+            "type": "object"
+          },
+          "boss": {
+            "type": "object"
+          },
+          "battle": {
+            "type": "object"
+          },
+          "quests": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
         }
       }
     }
   }
-}
 }

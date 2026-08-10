@@ -1,11 +1,28 @@
 firebase-config.js
+runtime-config.js
+.firebaserc
+wrangler.jsonc
 dist/
 .firebase/
 firebase-debug.log
 node_modules/
+.agents/
+.claude/
 .dev.vars
 worker/.dev.vars
 .wrangler/
 .tmp-worker*/
-__pycache__/
-*.py[cod]
+screenshots/
+
+# Unity Battle Lab is intentionally pending and excluded from the public web release.
+unity-battle-prototype/
+
+# Unity-generated files for the offline battle prototype
+unity-battle-prototype/[Ll]ibrary/
+unity-battle-prototype/[Tt]emp/
+unity-battle-prototype/[Oo]bj/
+unity-battle-prototype/[Bb]uild/
+unity-battle-prototype/[Bb]uilds/
+unity-battle-prototype/[Ll]ogs/
+unity-battle-prototype/[Uu]serSettings/
+unity-battle-prototype/webgl-build/

@@ -44,10 +44,18 @@ test("task events keep newest entries and respect the history limit", () => {
   assert.deepEqual(events.map((event) => event.id), ["new", "old"]);
 });
 
-test("only completed one-off and daily tasks are archive candidates", () => {
-  assert.equal(core.isArchivedTask({ kind: "todo", done: true }), true);
-  assert.equal(core.isArchivedTask({ kind: "daily", done: true }), true);
-  assert.equal(core.isArchivedTask({ kind: "habit", done: true }), false);
-  assert.equal(core.isArchivedTask({ kind: "reward", done: true }), false);
-  assert.equal(core.isArchivedTask({ kind: "todo", done: false }), false);
+test("completed and archived lifecycle states remain distinct", () => {
+  assert.equal(core.isCompletedTask({ lifecycleState: "completed" }), true);
+  assert.equal(core.isArchivedTask({ lifecycleState: "archived" }), true);
+  assert.equal(core.isArchivedTask({ lifecycleState: "completed" }), false);
+  assert.equal(core.isArchivedTask({ kind: "todo", done: true }), false);
+});
+
+test("battle eligibility ignores optional notes and excludes inactive quests", () => {
+  assert.equal(core.isBattleTaskEligible({ kind: "todo", title: "メモなし", notes: "", done: false, lifecycleState: "active" }), true);
+  assert.equal(core.isBattleTaskEligible({ kind: "daily", title: "日課", notes: "", done: false, lifecycleState: "active" }), true);
+  assert.equal(core.isBattleTaskEligible({ kind: "todo", title: "完了済み", notes: "", done: true, lifecycleState: "completed" }), false);
+  assert.equal(core.isBattleTaskEligible({ kind: "todo", title: "保管済み", notes: "", done: false, lifecycleState: "archived" }), false);
+  assert.equal(core.isBattleTaskEligible({ kind: "reward", title: "ごほうび", notes: "", done: false, lifecycleState: "active" }), false);
+  assert.equal(core.isBattleTaskEligible({ kind: "habit", title: "マイナス習慣", notes: "", negativeOnly: true, lifecycleState: "active" }), false);
 });

@@ -1,0 +1,126 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = path.join(__dirname, "..");
+
+const localeFiles = Object.freeze({
+  ja: "ja.mjs",
+  en: "en.mjs",
+  es: "es.mjs",
+  "pt-BR": "pt-BR.mjs",
+  fr: "fr.mjs",
+  de: "de.mjs",
+  ko: "ko.mjs",
+  "zh-Hans": "zh-Hans.mjs",
+  ru: "ru.mjs",
+});
+
+function placeholderNames(message) {
+  return [...String(message).matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]).sort();
+}
+
+test("i18n supports nine locales with BCP 47 resolution and Intl formatting", async () => {
+  const i18n = await import("../i18n.mjs");
+  assert.deepEqual(i18n.SUPPORTED_LOCALES, Object.keys(localeFiles));
+  assert.equal(i18n.resolveLocale("es-MX"), "es");
+  assert.equal(i18n.resolveLocale("pt_br"), "pt-BR");
+  assert.equal(i18n.resolveLocale("ko-KR"), "ko");
+  assert.equal(i18n.resolveLocale("zh-CN"), "zh-Hans");
+  assert.equal(i18n.resolveLocale("zh-TW"), null);
+
+  i18n.setLocale("en");
+  assert.equal(i18n.t("nav.tasks"), "Quests");
+  assert.match(i18n.formatDate("2026-08-09"), /2026/);
+  assert.equal(i18n.compareText("Quest 2", "Quest 10") < 0, true);
+  i18n.setLocale("es-MX");
+  assert.equal(i18n.getLocale(), "es");
+  assert.equal(i18n.t("nav.tasks"), "Misiones");
+  for (const locale of Object.keys(localeFiles)) {
+    i18n.setLocale(locale);
+    assert.notEqual(i18n.t("view.integrations"), "view.integrations", locale);
+    assert.match(i18n.formatDate("2026-08-09"), /2026/, locale);
+  }
+  i18n.setLocale("ja");
+  assert.equal(i18n.t("nav.tasks"), "クエスト");
+});
+
+test("all locale catalogs have complete keys, placeholders, and valid ICU messages", async () => {
+  const { IntlMessageFormat } = await import("intl-messageformat");
+  const english = (await import("../locales/en.mjs")).default;
+  const englishKeys = Object.keys(english);
+  assert.equal(englishKeys.length, 429);
+
+  for (const [locale, filename] of Object.entries(localeFiles)) {
+    const catalog = (await import(`../locales/${filename}`)).default;
+    assert.deepEqual(Object.keys(catalog), englishKeys, `${locale} key order`);
+    for (const key of englishKeys) {
+      const expectedNames = placeholderNames(english[key]);
+      const actualNames = placeholderNames(catalog[key]);
+      assert.deepEqual(actualNames, expectedNames, `${locale}:${key} placeholders`);
+      const values = Object.fromEntries(actualNames.map((name) => [name, 1]));
+      assert.doesNotThrow(() => new IntlMessageFormat(catalog[key], locale).format(values), `${locale}:${key} ICU`);
+    }
+  }
+});
+
+test("locale preference is device-local and PWA fallback manifests are available", async () => {
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+  const i18n = await import("../i18n.mjs");
+  const englishManifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.en.webmanifest"), "utf8"));
+  const japaneseManifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
+  assert.match(html, /id="localeSelect"/);
+  for (const locale of i18n.SUPPORTED_LOCALES) assert.match(html, new RegExp(`value="${locale}"`), locale);
+  assert.match(app, /QuestForgeI18n/);
+  assert.equal(englishManifest.lang, "en");
+  assert.equal(japaneseManifest.lang, "ja");
+  assert.equal(englishManifest.id, japaneseManifest.id);
+  assert.equal(i18n.LOCALE_METADATA.ja.manifest, "/manifest.webmanifest");
+  for (const locale of i18n.SUPPORTED_LOCALES.filter((value) => value !== "ja")) {
+    assert.equal(i18n.LOCALE_METADATA[locale].manifest, "/manifest.en.webmanifest", locale);
+  }
+});
+
+test("release metadata, license, public docs, and CI are present", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  assert.equal(packageJson.version, "0.3.0-social-beta");
+  assert.equal(packageJson.license, "AGPL-3.0-only");
+  assert.match(fs.readFileSync(path.join(root, "LICENSE"), "utf8"), /GNU AFFERO GENERAL PUBLIC LICENSE/);
+  for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", ".github/workflows/ci.yml"]) {
+    assert.equal(fs.existsSync(path.join(root, file)), true, file);
+  }
+});
+
+test("public examples omit local absolute paths and private deployment identifiers", () => {
+  const files = [
+    "README.md", "API_MCP_SETUP.md", "mcp-local/client-configs.md", "runtime-config.example.js",
+    "wrangler.example.jsonc", ".firebaserc.example", "api/openapi.json",
+  ];
+  const content = files.map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
+  assert.doesNotMatch(content, /C:\\Users\\hiron|C:\/Users\/hiron/i);
+  assert.doesNotMatch(content, /guangchuannaito|questforge-cb6ba|AIzaSyAs44|5a8a50b8|98241f88/i);
+  const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
+  for (const ignored of ["runtime-config.js", ".firebaserc", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("generated contracts expose social, assignee, and battle operations", () => {
+  const openapi = JSON.parse(fs.readFileSync(path.join(root, "api/openapi.json"), "utf8"));
+  const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8"));
+  assert.equal(openapi.info.version, "2.2.0");
+  assert.equal(mcp.tools.length, 29);
+  for (const pathName of ["/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands"]) assert.ok(openapi.paths[pathName], pathName);
+  assert.ok(openapi.components.schemas.Assignee);
+  assert.ok(mcp.tools.some((tool) => tool.name === "battle_command"));
+  assert.ok(mcp.tools.some((tool) => tool.name === "find_profile_by_handle"));
+});
+
+test("QuestForge workflow skill covers safe reviews, social actions, and battles", () => {
+  const skill = fs.readFileSync(path.join(root, "skills/questforge-workflows/SKILL.md"), "utf8");
+  assert.match(skill, /dryRun/);
+  assert.match(skill, /Weekly Review/);
+  assert.match(skill, /exact `@handle`/);
+  assert.match(skill, /get_battle_session/);
+  assert.match(skill, /battle_command/);
+});

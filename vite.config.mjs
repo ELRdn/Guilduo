@@ -26,6 +26,7 @@ const copyQuestForgeRuntime = {
   closeBundle() {
     const dist = join(root, "dist");
     cpSync(join(root, "manifest.webmanifest"), join(dist, "manifest.webmanifest"));
+    cpSync(join(root, "manifest.en.webmanifest"), join(dist, "manifest.en.webmanifest"));
     cpSync(join(root, "service-worker.js"), join(dist, "service-worker.js"));
     cpSync(join(root, "api"), join(dist, "api"), { recursive: true });
     copyRuntimeAssets(join(root, "assets"), join(dist, "assets"));

@@ -37,11 +37,11 @@ test("all three tastes define dedicated dark palettes and a readable battle stag
   assert.match(css, /background: var\(--panel\);/);
 });
 
-test("PWA cache and app version are bumped for the appearance release", () => {
+test("PWA cache and app version are bumped for the i18n beta release", () => {
   const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
   const worker = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
 
-  assert.match(app, /const appVersion = "2026\.07\.31-dark\.1"/);
-  assert.match(worker, /const APP_VERSION = "2026\.07\.31-dark\.1"/);
-  assert.match(worker, /CACHE_PREFIX}v9/);
+  assert.match(app, /const appVersion = "2026\.08\.10-i18n-beta"/);
+  assert.match(worker, /const APP_VERSION = "2026\.08\.10-i18n-beta"/);
+  assert.match(worker, /CACHE_PREFIX}v15/);
 });

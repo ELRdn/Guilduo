@@ -15,6 +15,14 @@ export const ALL_SCOPES = [
   "events:read",
   "webhooks:manage",
   "plugins:manage",
+  "profiles:read",
+  "profiles:write",
+  "friends:read",
+  "friends:write",
+  "parties:read",
+  "parties:write",
+  "battle:read",
+  "battle:write",
 ];
 
 export function getKv(env) {
@@ -102,7 +110,7 @@ export async function verifyFirebaseIdToken(token, env) {
     encoder.encode(`${encodedHeader}.${encodedPayload}`),
   );
   if (!valid) throw new Error("Invalid Firebase token signature");
-  return { uid: payload.sub, email: payload.email || "", scopes: ALL_SCOPES, authType: "firebase" };
+  return { uid: payload.sub, email: payload.email || "", scopes: ALL_SCOPES, authType: "firebase", firebaseIdToken: token };
 }
 
 export async function authenticateRequest(request, env) {
@@ -160,4 +168,3 @@ export async function getFirebaseServiceAccessToken(env) {
   serviceAccessTokenExpiresAt = Date.now() + Number(result.expires_in || 3600) * 1000;
   return serviceAccessToken;
 }
-

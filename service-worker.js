@@ -1,10 +1,11 @@
-const APP_VERSION = "2026.07.31-dark.1";
+const APP_VERSION = "2026.08.10-i18n-beta";
 const CACHE_PREFIX = "questforge-pwa-";
-const CACHE_VERSION = `${CACHE_PREFIX}v9`;
+const CACHE_VERSION = `${CACHE_PREFIX}v15`;
 const NAVIGATION_FALLBACK = "/index.html";
 
 const APP_SHELL = [
   "/manifest.webmanifest",
+  "/manifest.en.webmanifest",
   "/assets/icons/icon-192.png",
   "/assets/icons/icon-512.png",
   "/assets/icons/icon-maskable-512.png",

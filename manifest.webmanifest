@@ -2,6 +2,7 @@
   "name": "QuestForge Prototype",
   "short_name": "QuestForge",
   "description": "Task RPG companion for habits, dailies, todos, rewards, and command battles.",
+  "lang": "ja",
   "id": "/index.html",
   "start_url": "/",
   "scope": "/",

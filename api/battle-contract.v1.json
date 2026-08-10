@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questforge.example/contracts/battle/v1",
+  "title": "QuestForge Battle Session",
+  "description": "Offline battle fixture and future /v1/battle/session response contract.",
+  "type": "object",
+  "required": ["schemaVersion", "character", "boss", "battle", "quests"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "character": {
+      "type": "object",
+      "required": ["id", "name", "role", "hp", "maxHp"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "hp": { "type": "integer", "minimum": 0 },
+        "maxHp": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "boss": {
+      "type": "object",
+      "required": ["id", "name", "hp", "maxHp"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "hp": { "type": "integer", "minimum": 0 },
+        "maxHp": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "battle": {
+      "type": "object",
+      "required": ["turn", "mp", "maxMp", "focus"],
+      "properties": {
+        "turn": { "type": "integer", "minimum": 1 },
+        "mp": { "type": "integer", "minimum": 0 },
+        "maxMp": { "type": "integer", "minimum": 1 },
+        "focus": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "mpCost"],
+        "properties": {
+          "id": { "type": "string", "enum": ["attack", "skill", "guard", "heal", "burst"] },
+          "mpCost": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "quests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "notes", "difficulty", "mpGain", "eligible"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "notes": { "type": "string" },
+          "difficulty": { "type": "string", "enum": ["trivial", "easy", "medium", "hard"] },
+          "mpGain": { "type": "integer", "minimum": 0 },
+          "eligible": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

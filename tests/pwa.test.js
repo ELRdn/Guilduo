@@ -14,6 +14,13 @@ test("manifest has a stable root-scoped PWA identity", () => {
   assert.deepEqual(manifest.shortcuts.map((shortcut) => shortcut.url), ["/#tasks", "/#battle"]);
 });
 
+test("English manifest keeps the same PWA identity and localized shortcuts", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.en.webmanifest"), "utf8"));
+  assert.equal(manifest.lang, "en");
+  assert.equal(manifest.id, "/index.html");
+  assert.deepEqual(manifest.shortcuts.map((shortcut) => shortcut.name), ["Quests", "Battle"]);
+});
+
 test("service worker uses the root navigation fallback", () => {
   const worker = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
 

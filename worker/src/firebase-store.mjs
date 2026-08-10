@@ -2,24 +2,33 @@ import { getFirebaseServiceAccessToken } from "./security.mjs";
 
 const localStates = new Map();
 
-function databaseUrl(env, uid) {
+function normalizeIdentity(identity) {
+  return typeof identity === "string" ? { uid: identity } : identity;
+}
+
+function databaseUrl(env, identity) {
+  const { uid } = normalizeIdentity(identity);
   const base = String(env.FIREBASE_DATABASE_URL || "").replace(/\/$/, "");
   return `${base}/users/${encodeURIComponent(uid)}/state/current.json`;
 }
 
-async function authUrl(env, uid) {
-  const token = await getFirebaseServiceAccessToken(env);
-  const url = new URL(databaseUrl(env, uid));
-  if (token) url.searchParams.set("access_token", token);
+async function authUrl(env, identity, targetUrl) {
+  const normalized = normalizeIdentity(identity);
+  const url = new URL(targetUrl || databaseUrl(env, normalized));
+  if (normalized.firebaseIdToken) {
+    url.searchParams.set("auth", normalized.firebaseIdToken);
+    return url;
+  }
+  const serviceToken = await getFirebaseServiceAccessToken(env);
+  if (serviceToken) url.searchParams.set("access_token", serviceToken);
   return url;
 }
 
-async function mirrorStateEntities(env, uid, state) {
+async function mirrorStateEntities(env, identity, state) {
   if (!env.FIREBASE_DATABASE_URL) return;
-  const token = await getFirebaseServiceAccessToken(env);
+  const { uid } = normalizeIdentity(identity);
   const base = String(env.FIREBASE_DATABASE_URL).replace(/\/$/, "");
-  const url = new URL(`${base}/users/${encodeURIComponent(uid)}/entities.json`);
-  if (token) url.searchParams.set("access_token", token);
+  const url = await authUrl(env, identity, `${base}/users/${encodeURIComponent(uid)}/entities.json`);
   const quests = Object.fromEntries((state.tasks || []).map((task) => [task.id, task]));
   const taskEvents = Object.fromEntries((state.taskEvents || []).map((event) => [event.id, event]));
   const syncEvents = Object.fromEntries((state.syncEvents || []).map((event) => [event.id, event]));
@@ -48,17 +57,19 @@ function localPayload(uid) {
   return localStates.get(uid);
 }
 
-export async function readState(env, uid) {
+export async function readState(env, identity) {
+  const { uid } = normalizeIdentity(identity);
   if (!env.FIREBASE_DATABASE_URL) {
     const local = localPayload(uid);
     return { payload: structuredClone(local.value), etag: local.etag };
   }
-  const response = await fetch(await authUrl(env, uid), { headers: { "X-Firebase-ETag": "true" } });
+  const response = await fetch(await authUrl(env, identity), { headers: { "X-Firebase-ETag": "true" } });
   if (!response.ok) throw new Error(`Firebase read failed: ${response.status}`);
   return { payload: await response.json(), etag: response.headers.get("etag") };
 }
 
-export async function writeState(env, uid, payload, etag) {
+export async function writeState(env, identity, payload, etag) {
+  const { uid } = normalizeIdentity(identity);
   if (!env.FIREBASE_DATABASE_URL) {
     const local = localPayload(uid);
     if (etag && etag !== local.etag) return false;
@@ -67,7 +78,7 @@ export async function writeState(env, uid, payload, etag) {
     local.value = structuredClone(payload);
     return true;
   }
-  const response = await fetch(await authUrl(env, uid), {
+  const response = await fetch(await authUrl(env, identity), {
     method: "PUT",
     headers: {
       "content-type": "application/json",
@@ -80,9 +91,9 @@ export async function writeState(env, uid, payload, etag) {
   return true;
 }
 
-export async function mutateState(env, uid, mutator) {
+export async function mutateState(env, identity, mutator) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const { payload, etag } = await readState(env, uid);
+    const { payload, etag } = await readState(env, identity);
     if (!payload?.state) {
       const error = new Error("QuestForge state has not been synchronized yet.");
       error.status = 409;
@@ -99,8 +110,8 @@ export async function mutateState(env, uid, mutator) {
       state,
       serverUpdatedAt: { ".sv": "timestamp" },
     };
-    if (await writeState(env, uid, nextPayload, etag)) {
-      await mirrorStateEntities(env, uid, state);
+    if (await writeState(env, identity, nextPayload, etag)) {
+      await mirrorStateEntities(env, identity, state);
       return { state, result };
     }
   }

@@ -1,17 +1,15 @@
 {
-  "version": "0.1.0",
+  "version": "1.0.0",
   "adapters": [
     {
       "id": "google-calendar",
       "name": "Google Calendar",
       "auth": "oauth2",
       "minimumScopes": [
-        "https://www.googleapis.com/auth/calendar.events.readonly"
+        "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly"
       ],
-      "writeScopes": [
-        "https://www.googleapis.com/auth/calendar.events"
-      ],
-      "capabilities": ["import", "export", "watch"],
+      "capabilities": ["import", "convert_to_quest"],
       "resources": ["events", "calendars"],
       "recommendedMvp": "import"
     },
@@ -20,9 +18,6 @@
       "name": "Google Tasks",
       "auth": "oauth2",
       "minimumScopes": [
-        "https://www.googleapis.com/auth/tasks.readonly"
-      ],
-      "writeScopes": [
         "https://www.googleapis.com/auth/tasks"
       ],
       "capabilities": ["import", "export", "bidirectional"],
@@ -39,23 +34,15 @@
       "minimumScopes": [],
       "capabilities": ["import", "timer_read", "timer_write"],
       "resources": ["workspaces", "projects", "tags", "time_entries"],
-      "recommendedMvp": "import",
+      "recommendedMvp": "phase_2",
       "syncStrategy": "polling_modified_since"
-    },
-    {
-      "id": "todoist",
-      "name": "Todoist",
-      "auth": "oauth2",
-      "capabilities": ["import", "export", "bidirectional", "webhooks"],
-      "resources": ["projects", "tasks", "comments"],
-      "recommendedMvp": "import"
     },
     {
       "id": "notion",
       "name": "Notion",
-      "auth": "bearer_or_oauth2",
-      "capabilities": ["export", "import"],
-      "resources": ["pages", "databases", "webhooks"],
+      "auth": "oauth2",
+      "capabilities": ["export"],
+      "resources": ["pages", "databases", "data_sources"],
       "recommendedMvp": "export"
     }
   ]

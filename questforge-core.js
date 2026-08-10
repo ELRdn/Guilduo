@@ -7,7 +7,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createQuestForgeCore() {
   "use strict";
 
-  const CURRENT_SCHEMA_VERSION = 3;
+  const CURRENT_SCHEMA_VERSION = 5;
   const TASK_EVENT_LIMIT = 250;
 
   function difficultyScale(difficulty) {
@@ -63,7 +63,18 @@
   }
 
   function isArchivedTask(task) {
-    return Boolean(task && task.done && (task.kind === "daily" || task.kind === "todo"));
+    return Boolean(task && task.lifecycleState === "archived");
+  }
+
+  function isCompletedTask(task) {
+    return Boolean(task && task.lifecycleState === "completed");
+  }
+
+  function isBattleTaskEligible(task) {
+    if (!task || !["habit", "daily", "todo"].includes(task.kind)) return false;
+    if (task.negativeOnly) return false;
+    if (["completed", "archived"].includes(task.lifecycleState)) return false;
+    return task.kind === "habit" || !task.done;
   }
 
   function battleCommandCost(command, skillCost = 0) {
@@ -141,7 +152,9 @@
     claimCompletion,
     completionClaimKey,
     difficultyScale,
+    isBattleTaskEligible,
     isArchivedTask,
+    isCompletedTask,
     nextDueDateForTask,
     taskRewardDelta,
   };

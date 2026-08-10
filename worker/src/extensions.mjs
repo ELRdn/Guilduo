@@ -2,7 +2,7 @@ import { createId } from "../../server/questforge-domain.mjs";
 import { getKv, randomToken } from "./security.mjs";
 
 const PERMISSIONS = new Set(["quests:read", "quests:write", "character:read", "rewards:write", "integrations:read", "integrations:sync", "events:read", "events:subscribe", "webhooks:manage", "ui:mount"]);
-const EVENTS = new Set(["quest.created", "quest.updated", "quest.scored", "quest.failed", "quest.reopened", "quest.rolled_over", "integration.sync_completed", "integration.sync_failed", "reward.purchased"]);
+const EVENTS = new Set(["quest.created", "quest.updated", "quest.scored", "quest.failed", "quest.reopened", "quest.archived", "quest.external_linked", "quest.rolled_over", "integration.sync_completed", "integration.sync_failed", "reward.purchased"]);
 const UI_SLOTS = new Set(["dashboard.sidecar", "quest.detail", "integration.settings"]);
 
 export function validateManifest(manifest) {
@@ -95,4 +95,3 @@ export async function retryDeliveries(env) {
     await deliverEvent(env, delivery.uid, delivery.event);
   }
 }
-

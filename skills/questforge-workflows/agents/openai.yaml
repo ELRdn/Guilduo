@@ -1,0 +1,4 @@
+interface:
+  display_name: "QuestForge Workflows"
+  short_description: "Plan quests, reviews, parties, integrations, and MP battles"
+  default_prompt: "Use $questforge-workflows to inspect my QuestForge state, preview the safest useful action, and execute only after any required confirmation."

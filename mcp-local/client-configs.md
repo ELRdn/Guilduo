@@ -7,7 +7,7 @@ Set `QUESTFORGE_MCP_URL` to the deployed Worker `/mcp` URL and `QUESTFORGE_TOKEN
 ```toml
 [mcp_servers.questforge]
 command = "node"
-args = ["C:/Users/hiron/Documents/codex-test/questforge-prototype/mcp-local/questforge-mcp.mjs"]
+args = ["<absolute-path-to-questforge>/mcp-local/questforge-mcp.mjs"]
 env_vars = ["QUESTFORGE_MCP_URL", "QUESTFORGE_TOKEN"]
 default_tools_approval_mode = "writes"
 ```
@@ -28,7 +28,7 @@ default_tools_approval_mode = "writes"
   "mcpServers": {
     "questforge": {
       "command": "node",
-      "args": ["C:/Users/hiron/Documents/codex-test/questforge-prototype/mcp-local/questforge-mcp.mjs"],
+      "args": ["<absolute-path-to-questforge>/mcp-local/questforge-mcp.mjs"],
       "env": {
         "QUESTFORGE_MCP_URL": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp",
         "QUESTFORGE_TOKEN": "development-token-only"
@@ -51,4 +51,3 @@ gemini mcp add --transport http questforge https://questforge-gateway.YOUR-SUBDO
 ```bash
 copilot mcp add --transport http questforge https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp
 ```
-

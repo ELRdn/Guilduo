@@ -28,6 +28,7 @@ const syncPanel = document.querySelector("#syncPanel");
 const syncStatus = document.querySelector("#syncStatus");
 const syncSignInButton = document.querySelector("#syncSignInButton");
 const syncSignOutButton = document.querySelector("#syncSignOutButton");
+const i18n = globalThis.QuestForgeI18n;
 
 let currentUser = null;
 let currentStateRef = null;
@@ -35,6 +36,7 @@ let stopStateSubscription = null;
 let uploadTimer = null;
 let lastUploadedAt = "";
 let lastEntityFingerprints = new Map();
+let currentSyncMessageKey = "sync.local";
 
 globalThis.QuestForgeFirebase = {
   async getIdToken(forceRefresh = false) {
@@ -49,17 +51,18 @@ function getBridge() {
   return globalThis.QuestForgeBridge;
 }
 
-function setSyncUi(status, message) {
+function setSyncUi(status, messageKey) {
   syncPanel.dataset.syncState = status;
-  syncStatus.textContent = message;
+  currentSyncMessageKey = messageKey;
+  syncStatus.textContent = i18n?.t?.(messageKey) || messageKey;
 }
 
 function describeFirebaseError(error) {
-  if (error?.code === "auth/popup-closed-by-user") return "ログインをキャンセルしました";
-  if (error?.code === "auth/popup-blocked") return "ポップアップがブロックされました";
-  if (error?.code === "auth/unauthorized-domain") return "このURLを承認済みドメインへ追加してください";
-  if (error?.code === "PERMISSION_DENIED" || error?.code === "permission-denied") return "Databaseルールまたはログイン権限を確認してください";
-  return "Firebaseへ接続できませんでした";
+  if (error?.code === "auth/popup-closed-by-user") return "sync.error.cancelled";
+  if (error?.code === "auth/popup-blocked") return "sync.error.popupBlocked";
+  if (error?.code === "auth/unauthorized-domain") return "sync.error.domain";
+  if (error?.code === "PERMISSION_DENIED" || error?.code === "permission-denied") return "sync.error.permission";
+  return "sync.error.connection";
 }
 
 function cloudUpdatedAt(payload) {
@@ -69,7 +72,7 @@ function cloudUpdatedAt(payload) {
 async function uploadState(state) {
   if (!currentUser || !currentStateRef || !state) return;
   if (state.updatedAt && state.updatedAt === lastUploadedAt) return;
-  setSyncUi("syncing", "同期中");
+  setSyncUi("syncing", "sync.syncing");
   await set(currentStateRef, {
     schemaVersion: state.schemaVersion || 1,
     clientUpdatedAt: state.updatedAt || new Date().toISOString(),
@@ -79,7 +82,7 @@ async function uploadState(state) {
   });
   await mirrorStateEntities(state);
   lastUploadedAt = state.updatedAt || "";
-  setSyncUi("synced", "同期済み");
+  setSyncUi("synced", "sync.synced");
 }
 
 function entityFingerprint(value) {
@@ -142,7 +145,7 @@ function applyCloudState(payload) {
   if (!bridge || !payload?.state) return;
   bridge.applyCloudState(payload.state);
   lastUploadedAt = payload.state.updatedAt || payload.clientUpdatedAt || "";
-  setSyncUi("synced", "同期済み");
+  setSyncUi("synced", "sync.synced");
 }
 
 async function startStateSync(user) {
@@ -166,7 +169,7 @@ async function startStateSync(user) {
       await uploadState(local.state);
     } else {
       lastUploadedAt = localDate;
-      setSyncUi("synced", "同期済み");
+      setSyncUi("synced", "sync.synced");
     }
   }
 
@@ -179,7 +182,7 @@ async function startStateSync(user) {
     if (remoteDate > localDate && remoteDate !== lastUploadedAt) {
       applyCloudState(remote);
     } else {
-      setSyncUi("synced", "同期済み");
+      setSyncUi("synced", "sync.synced");
     }
   }, (error) => {
     console.warn("QuestForge Firebase subscription failed:", error);
@@ -188,7 +191,7 @@ async function startStateSync(user) {
 }
 
 syncSignInButton.addEventListener("click", async () => {
-  setSyncUi("syncing", "Googleへ接続中");
+  setSyncUi("syncing", "sync.connecting");
   syncSignInButton.disabled = true;
   try {
     await signInWithPopup(auth, provider);
@@ -231,14 +234,14 @@ setPersistence(auth, browserLocalPersistence)
         syncSignInButton.hidden = false;
         syncSignOutButton.hidden = true;
         syncSignOutButton.title = "";
-        setSyncUi("local", "この端末のみ");
+        setSyncUi("local", "sync.local");
         return;
       }
 
       syncSignInButton.hidden = true;
       syncSignOutButton.hidden = false;
-      syncSignOutButton.title = user.email || user.displayName || "ログアウト";
-      setSyncUi("syncing", "初回同期中");
+      syncSignOutButton.title = user.email || user.displayName || i18n.t("sync.signOut");
+      setSyncUi("syncing", "sync.initial");
       try {
         await startStateSync(user);
       } catch (error) {
@@ -251,3 +254,7 @@ setPersistence(auth, browserLocalPersistence)
     console.warn("QuestForge Firebase persistence failed:", error);
     setSyncUi("error", describeFirebaseError(error));
   });
+
+window.addEventListener("questforge:locale-changed", () => {
+  setSyncUi(syncPanel.dataset.syncState || "local", currentSyncMessageKey);
+});
