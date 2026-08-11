@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "character": {
+    "id": "astra",
+    "name": "Astra",
+    "role": "sentinel",
+    "hp": 47,
+    "maxHp": 50,
+    "spriteKey": "avatar-femme-48",
+    "variant": "femme"
+  },
+  "boss": {
+    "id": "h3",
+    "name": "Compact Deadline Wraith",
+    "label": "Compact Deadline Wraith",
+    "threat": "継続",
+    "weakKind": "daily",
+    "spriteKey": "boss-h3-transparent",
+    "hp": 100,
+    "maxHp": 100
+  },
+  "battle": {
+    "turn": 1,
+    "mp": 12,
+    "maxMp": 80,
+    "focus": 0,
+    "guard": 0,
+    "shield": 0,
+    "rage": 0,
+    "vulnerable": 0,
+    "poison": 0,
+    "ended": false,
+    "log": [
+      { "kind": "system", "text": "タスクでMPをためて、コマンドで戦います。" }
+    ]
+  },
+  "quests": [
+    {
+      "id": "quest-empty-notes",
+      "title": "メモなしTo Do",
+      "notes": "",
+      "kind": "todo",
+      "difficulty": "medium",
+      "mpGain": 34,
+      "eligible": true
+    },
+    {
+      "id": "quest-with-notes",
+      "title": "メモありTo Do",
+      "notes": "確認して完了",
+      "kind": "todo",
+      "difficulty": "easy",
+      "mpGain": 20,
+      "eligible": true
+    },
+    {
+      "id": "quest-due-today",
+      "title": "期限付き日課",
+      "notes": "今日中に確認",
+      "kind": "daily",
+      "difficulty": "easy",
+      "dueDate": "2026-08-03",
+      "mpGain": 18,
+      "eligible": true
+    },
+    {
+      "id": "reward-not-a-quest",
+      "title": "ショップ報酬",
+      "notes": "",
+      "kind": "reward",
+      "difficulty": "medium",
+      "mpGain": 0,
+      "eligible": true
+    },
+    {
+      "id": "negative-only-not-a-quest",
+      "title": "罰則専用",
+      "notes": "",
+      "kind": "todo",
+      "difficulty": "hard",
+      "negativeOnly": true,
+      "mpGain": 0,
+      "eligible": true
+    }
+  ],
+  "commands": [
+    { "id": "attack", "displayName": "たたかう", "mpCost": 0, "description": "通常攻撃", "role": "sentinel" },
+    { "id": "skill", "displayName": "Aegis Break", "mpCost": 18, "description": "攻撃 + Guard", "role": "sentinel" },
+    { "id": "guard", "displayName": "まもる", "mpCost": 6, "description": "次の被ダメージを半減", "role": "sentinel" },
+    { "id": "heal", "displayName": "かいふく", "mpCost": 14, "description": "HPを最大22回復", "role": "sentinel" },
+    { "id": "burst", "displayName": "バースト", "mpCost": 40, "description": "Focusを消費して大ダメージ", "role": "sentinel" }
+  ]
+}
