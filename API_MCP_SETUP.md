@@ -90,6 +90,12 @@ npm run worker:deploy
 
 `PUBLIC_BASE_URL` and `WEB_APP_URL` stay as non-secret Wrangler variables. Verify `/health` reports `integrationStorage: d1`, then connect Google and Notion from the app.
 
+## MCP v2.3 connection check
+
+The normal OAuth endpoint is `https://your-questforge-worker.example.workers.dev/mcp`. It provides all 36 QuestForge tools. After a Worker update, remove and reconnect a client only when it has cached an older tool list.
+
+`https://your-questforge-worker.example.workers.dev/mcp-next` is the SDK v2 Streamable HTTP lane. It provides the same tools plus Resources and Prompts for `plan_today`, `review_day`, `review_week`, `capture_quest`, and `process_agent_handoffs`. Use `/mcp-next` first for clients that support modern MCP discovery, then keep `/mcp` as the normal compatibility endpoint.
+
 Toggl Track remains phase 2. Do not add one global Toggl token to the Worker.
 
 ## Local development

@@ -105,15 +105,21 @@ test("public examples omit local absolute paths and private deployment identifie
   for (const ignored of ["runtime-config.js", ".firebaserc", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("generated contracts expose social, assignee, and battle operations", () => {
+test("generated contracts expose social, assignee, battle, and MCP v2.3 work-management operations", () => {
   const openapi = JSON.parse(fs.readFileSync(path.join(root, "api/openapi.json"), "utf8"));
   const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8"));
-  assert.equal(openapi.info.version, "2.2.0");
-  assert.equal(mcp.tools.length, 29);
+  assert.equal(openapi.info.version, "2.3.0");
+  assert.equal(mcp.version, "2.3.0");
+  assert.equal(mcp.tools.length, 36);
   for (const pathName of ["/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands"]) assert.ok(openapi.paths[pathName], pathName);
   assert.ok(openapi.components.schemas.Assignee);
   assert.ok(mcp.tools.some((tool) => tool.name === "battle_command"));
   assert.ok(mcp.tools.some((tool) => tool.name === "find_profile_by_handle"));
+  for (const name of ["get_daily_brief", "get_review_summary", "list_agent_handoffs", "list_activity_events", "get_calendar_schedule", "convert_calendar_event_to_quest"]) {
+    const tool = mcp.tools.find((candidate) => candidate.name === name);
+    assert.ok(tool, name);
+    assert.ok(tool.outputSchema, `${name} output schema`);
+  }
 });
 
 test("QuestForge workflow skill covers safe reviews, social actions, and battles", () => {

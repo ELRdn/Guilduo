@@ -76,7 +76,7 @@ test("MCP advertises v2 quest, social, and battle tools and calls the same REST 
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
   const tools = await toolsResponse.json();
-  assert.equal(tools.result.tools.length, 29);
+  assert.equal(tools.result.tools.length, 36);
   assert.ok(tools.result.tools.some((tool) => tool.name === "create_quest"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "list_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "batch_update_quests"));
@@ -84,6 +84,12 @@ test("MCP advertises v2 quest, social, and battle tools and calls the same REST 
   assert.ok(tools.result.tools.some((tool) => tool.name === "find_profile_by_handle"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_party"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "battle_command"));
+  for (const name of ["get_quest", "get_daily_brief", "get_review_summary", "list_agent_handoffs", "list_activity_events", "get_calendar_schedule", "convert_calendar_event_to_quest"]) {
+    const tool = tools.result.tools.find((candidate) => candidate.name === name);
+    assert.ok(tool, name);
+    assert.ok(tool.title, `${name} title`);
+    assert.ok(tool.outputSchema, `${name} output schema`);
+  }
 
   const createResponse = await call("/mcp", {
     method: "POST",
@@ -92,6 +98,49 @@ test("MCP advertises v2 quest, social, and battle tools and calls the same REST 
   const result = await createResponse.json();
   assert.equal(result.result.structuredContent.quest.title, "水を飲む");
   assert.equal(result.result.isError, false);
+});
+
+function parseMcpSse(text) {
+  const line = text.split("\n").find((item) => item.startsWith("data: "));
+  assert.ok(line, "MCP SSE response contains a data line");
+  return JSON.parse(line.slice(6));
+}
+
+test("MCP v2.3 SDK lane exposes tool schemas, resources, and workflow prompts", async () => {
+  const headers = { host: "worker.test", accept: "application/json, text/event-stream" };
+  const mcpCall = async (method) => {
+    const response = await call("/mcp-next", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id: method, method, params: {} }),
+    });
+    assert.equal(response.status, 200, method);
+    assert.match(response.headers.get("content-type") || "", /text\/event-stream/);
+    return parseMcpSse(await response.text()).result;
+  };
+
+  const tools = await mcpCall("tools/list");
+  assert.equal(tools.tools.length, 36);
+  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 36);
+
+  const resources = await mcpCall("resources/list");
+  assert.deepEqual(resources.resources.map((resource) => resource.uri).sort(), [
+    "questforge://activity",
+    "questforge://character",
+    "questforge://quests/backlog",
+    "questforge://quests/today",
+  ]);
+  const templates = await mcpCall("resources/templates/list");
+  assert.ok(templates.resourceTemplates.some((resource) => resource.uriTemplate === "questforge://quest/{questId}"));
+
+  const prompts = await mcpCall("prompts/list");
+  assert.deepEqual(prompts.prompts.map((prompt) => prompt.name).sort(), [
+    "capture_quest",
+    "plan_today",
+    "process_agent_handoffs",
+    "review_day",
+    "review_week",
+  ]);
 });
 
 test("REST v2 supports views, dry-run batches, archives, external links, and no quest deletion", async () => {

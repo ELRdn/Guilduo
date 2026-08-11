@@ -14,6 +14,7 @@ import {
   listQuests,
   patchQuest,
   scoreQuest,
+  todayText,
 } from "../../server/questforge-domain.mjs";
 import { mutateState, readState } from "./firebase-store.mjs";
 import { authenticateRequest } from "./security.mjs";
@@ -38,6 +39,7 @@ import {
 } from "./integrations.mjs";
 import { listDueIntegrationAccounts } from "./integration-store.mjs";
 import { beginIntegrationConnect, disconnectIntegration, handleProviderCallback } from "./provider-oauth.mjs";
+import { handleMcpNext } from "./mcp-server.mjs";
 import {
   createWebhook,
   deleteWebhook,
@@ -98,36 +100,115 @@ const LIST_QUEST_PROPERTIES = {
   limit: { type: "integer", minimum: 1, maximum: 200, default: 100 }, cursor: { type: "string" },
 };
 
+const READ_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const IDEMPOTENT_WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const DESTRUCTIVE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
+const DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+const OPEN_WORLD_READ_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+const OPEN_WORLD_WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+const OPEN_WORLD_IDEMPOTENT_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+
+const QUEST_OBJECT = { type: "object" };
+const QUEST_LIST_PAGE_OUTPUT = {
+  type: "object",
+  properties: { quests: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } },
+  additionalProperties: false,
+};
+const QUEST_AND_EVENT_OUTPUT = {
+  type: "object",
+  properties: { quest: QUEST_OBJECT, event: QUEST_OBJECT, events: { type: "array", items: QUEST_OBJECT } },
+  additionalProperties: false,
+};
+const BATCH_OUTPUT = {
+  type: "object",
+  properties: { dryRun: { type: "boolean" }, count: { type: "integer" }, quests: { type: "array", items: QUEST_OBJECT }, events: { type: "array", items: QUEST_OBJECT } },
+  additionalProperties: false,
+};
+const CHARACTER_OUTPUT = { type: "object", properties: { character: QUEST_OBJECT }, additionalProperties: false };
+const SCORE_OUTPUT = {
+  type: "object",
+  properties: { quest: QUEST_OBJECT, reward: QUEST_OBJECT, rewardGranted: { type: "boolean" }, character: QUEST_OBJECT, battle: QUEST_OBJECT, event: QUEST_OBJECT },
+  additionalProperties: false,
+};
+const REWARD_OUTPUT = { type: "object", properties: { quest: QUEST_OBJECT, cost: { type: "integer" }, character: QUEST_OBJECT, event: QUEST_OBJECT }, additionalProperties: false };
+const SYNC_OUTPUT = {
+  type: "object",
+  properties: {
+    service: { type: "string" }, direction: { type: "string" }, dryRun: { type: "boolean" },
+    created: { type: "integer" }, updated: { type: "integer" }, skipped: { type: "integer" }, conflicts: { type: "integer" },
+    preview: { type: "array", items: QUEST_OBJECT },
+  },
+  additionalProperties: false,
+};
+const GENERIC_OBJECT_OUTPUT = { type: "object", additionalProperties: true };
+const DAILY_BRIEF_OUTPUT = {
+  type: "object",
+  properties: { date: { type: "string" }, quests: QUEST_LIST_PAGE_OUTPUT, character: QUEST_OBJECT, calendar: GENERIC_OBJECT_OUTPUT },
+  additionalProperties: false,
+};
+const REVIEW_SUMMARY_OUTPUT = {
+  type: "object",
+  properties: {
+    period: { type: "string", enum: ["day", "week"] }, anchorDate: { type: "string" }, from: { type: "string" },
+    questsCompleted: { type: "integer" }, questsCreated: { type: "integer" }, questsFailed: { type: "integer" },
+    rewardsEarned: { type: "integer" }, eventsLogged: { type: "integer" }, focusMinutes: { type: "integer" },
+    topTags: { type: "array", items: QUEST_OBJECT }, character: QUEST_OBJECT,
+  },
+  additionalProperties: false,
+};
+const PAGED_EVENTS_OUTPUT = {
+  type: "object",
+  properties: { events: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } },
+  additionalProperties: false,
+};
+const CALENDAR_OVERRIDE_PROPERTIES = {
+  title: QUEST_INPUT_PROPERTIES.title, notes: QUEST_INPUT_PROPERTIES.notes, category: QUEST_INPUT_PROPERTIES.category,
+  dueDate: QUEST_INPUT_PROPERTIES.dueDate, scheduledDate: QUEST_INPUT_PROPERTIES.scheduledDate,
+  scheduledTime: QUEST_INPUT_PROPERTIES.scheduledTime, repeat: QUEST_INPUT_PROPERTIES.repeat,
+  difficulty: QUEST_INPUT_PROPERTIES.difficulty, tags: QUEST_INPUT_PROPERTIES.tags,
+  estimatedMinutes: QUEST_INPUT_PROPERTIES.estimatedMinutes, actualMinutes: QUEST_INPUT_PROPERTIES.actualMinutes,
+  completionCriteria: QUEST_INPUT_PROPERTIES.completionCriteria, nextAction: QUEST_INPUT_PROPERTIES.nextAction,
+  impact: QUEST_INPUT_PROPERTIES.impact, isBlockingOthers: QUEST_INPUT_PROPERTIES.isBlockingOthers,
+};
+
 const MCP_TOOLS = [
-  { name: "list_today_quests", description: "List active scheduled QuestForge quests visible today, including overdue work.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } } }, annotations: { readOnlyHint: true } },
-  { name: "list_quests", description: "List QuestForge quests by today, week, future, backlog, completed, archive, or all views.", inputSchema: { type: "object", properties: LIST_QUEST_PROPERTIES }, annotations: { readOnlyHint: true } },
-  { name: "create_quest", description: "Create a QuestForge habit, daily, todo, or reward with planning and priority details.", inputSchema: { type: "object", required: ["kind", "title"], properties: QUEST_INPUT_PROPERTIES }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "update_quest", description: "Edit one QuestForge quest. Moving a scheduled date later increments rolloverCount.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, ...QUEST_INPUT_PROPERTIES } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "batch_update_quests", description: "Preview or atomically update up to 100 quests, including postponing or moving them to backlog.", inputSchema: { type: "object", required: ["questIds"], properties: { questIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 }, patch: { type: "object", properties: QUEST_INPUT_PROPERTIES }, postponeDays: { type: "integer", minimum: -365, maximum: 365 }, dryRun: { type: "boolean", default: true } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "archive_quests", description: "Preview or archive completed one-off todo quests. Archived quests are retained permanently.", inputSchema: { type: "object", properties: { questIds: { type: "array", items: { type: "string" }, maxItems: 100 }, throughDate: { type: "string", format: "date" }, dryRun: { type: "boolean", default: true } } }, annotations: { readOnlyHint: false, destructiveHint: true } },
-  { name: "link_external_record", description: "Link a Google Calendar, Toggl, or other external record to a quest.", inputSchema: { type: "object", required: ["questId", "service", "externalId"], properties: { questId: { type: "string" }, service: { type: "string" }, externalId: { type: "string" }, type: { type: "string" }, url: { type: "string", format: "uri" }, projectId: { type: "string" }, durationMinutes: { type: "integer", minimum: 0 }, syncedAt: { type: "string" } } }, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true } },
-  { name: "score_quest", description: "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects.", inputSchema: { type: "object", required: ["questId", "direction"], properties: { questId: { type: "string" }, direction: { type: "string", enum: ["up", "down"] } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "get_character_state", description: "Return the current character, MP, equipment, and boss state.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
-  { name: "buy_reward", description: "Redeem a reward quest using Gems.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" } } }, annotations: { readOnlyHint: false, destructiveHint: true } },
-  { name: "list_integrations", description: "List per-user integration connection, configuration, and reconnect status without exposing provider tokens.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
-  { name: "preview_external_sync", description: "Preview connected Google Calendar, Google Tasks, or Notion changes without saving them.", inputSchema: { type: "object", required: ["service"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] } } }, annotations: { readOnlyHint: true, openWorldHint: true } },
-  { name: "sync_external_service", description: "Run a configured external sync. dryRun defaults to true and provider writes require explicit execution.", inputSchema: { type: "object", required: ["service", "direction"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] }, dryRun: { type: "boolean", default: true } } }, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true } },
-  { name: "get_my_profile", description: "Get the authenticated user's QuestForge public profile settings.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
-  { name: "find_profile_by_handle", description: "Find one QuestForge public profile by an exact @handle.", inputSchema: { type: "object", required: ["handle"], properties: { handle: { type: "string", minLength: 3, maxLength: 21 } } }, annotations: { readOnlyHint: true } },
-  { name: "update_profile", description: "Create or update the authenticated user's public QuestForge profile.", inputSchema: { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 40 }, handle: { type: "string", minLength: 3, maxLength: 21 }, bio: { type: "string", maxLength: 160 }, avatarRole: { type: "string", maxLength: 40 }, avatarVariant: { type: "string", maxLength: 40 }, level: { type: "integer", minimum: 1 } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "list_friends", description: "List accepted friends using minimal public profile fields.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
-  { name: "list_friend_requests", description: "List pending incoming and outgoing friend requests.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
-  { name: "send_friend_request", description: "Send a friend request to a stable QuestForge user ID after exact-handle lookup.", inputSchema: { type: "object", required: ["receiverUid"], properties: { receiverUid: { type: "string" } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "respond_friend_request", description: "Accept or decline a pending incoming friend request.", inputSchema: { type: "object", required: ["requestId", "decision"], properties: { requestId: { type: "string" }, decision: { type: "string", enum: ["accept", "decline"] } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "remove_friend", description: "Remove an existing friendship for both users.", inputSchema: { type: "object", required: ["friendUid"], properties: { friendUid: { type: "string" } } }, annotations: { readOnlyHint: false, destructiveHint: true } },
-  { name: "get_party", description: "Get the authenticated user's active party and minimal member profiles.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
-  { name: "create_party", description: "Create a party with the authenticated user as owner. One active party per user, four members maximum.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string", minLength: 1, maxLength: 40 } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "invite_party_member", description: "Create a seven-day party invite. Only the party owner can use this tool.", inputSchema: { type: "object", properties: { inviteeUid: { type: "string" } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "accept_party_invite", description: "Accept a party invite using its one-time token or invite ID.", inputSchema: { type: "object", properties: { token: { type: "string" }, inviteId: { type: "string" } } }, annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: "leave_party", description: "Leave the active party. Ownership transfers to the earliest remaining member.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: false, destructiveHint: true } },
-  { name: "remove_party_member", description: "Remove a party member. Only the owner can use this tool.", inputSchema: { type: "object", required: ["memberUid"], properties: { memberUid: { type: "string" } } }, annotations: { readOnlyHint: false, destructiveHint: true } },
-  { name: "get_battle_session", description: "Get the current QuestForge command battle state, available commands, and MP-generating quests.", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
-  { name: "battle_command", description: "Preview or execute one deterministic command battle turn. Execution requires the current turn and a unique commandId.", inputSchema: { type: "object", required: ["command"], properties: { command: { type: "string", enum: ["attack", "skill", "guard", "heal", "burst"] }, expectedTurn: { type: "integer", minimum: 1 }, commandId: { type: "string", maxLength: 120 }, dryRun: { type: "boolean", default: true } } }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true } },
+  { name: "list_today_quests", title: "List Today's Quests", description: "List active scheduled QuestForge quests visible today, including overdue work.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "list_quests", title: "List Quests", description: "List QuestForge quests by today, week, future, backlog, completed, archive, or all views.", inputSchema: { type: "object", properties: LIST_QUEST_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "create_quest", title: "Create Quest", description: "Create a QuestForge habit, daily, todo, or reward with planning and priority details.", inputSchema: { type: "object", required: ["kind", "title"], properties: QUEST_INPUT_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: WRITE_ANNOTATIONS },
+  { name: "update_quest", title: "Update Quest", description: "Edit one QuestForge quest. Moving a scheduled date later increments rolloverCount.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, ...QUEST_INPUT_PROPERTIES }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "batch_update_quests", title: "Batch Update Quests", description: "Preview or atomically update up to 100 quests, including postponing or moving them to backlog.", inputSchema: { type: "object", required: ["questIds"], properties: { questIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 }, patch: { type: "object", properties: QUEST_INPUT_PROPERTIES }, postponeDays: { type: "integer", minimum: -365, maximum: 365 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "archive_quests", title: "Archive Quests", description: "Preview or archive completed one-off todo quests. Archived quests are retained permanently.", inputSchema: { type: "object", properties: { questIds: { type: "array", items: { type: "string" }, maxItems: 100 }, throughDate: { type: "string", format: "date" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_OUTPUT, annotations: DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS },
+  { name: "link_external_record", title: "Link External Record", description: "Link a Google Calendar, Toggl, or other external record to a quest.", inputSchema: { type: "object", required: ["questId", "service", "externalId"], properties: { questId: { type: "string" }, service: { type: "string" }, externalId: { type: "string" }, type: { type: "string" }, url: { type: "string", format: "uri" }, projectId: { type: "string" }, durationMinutes: { type: "integer", minimum: 0 }, syncedAt: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { quest: QUEST_OBJECT, link: QUEST_OBJECT, event: QUEST_OBJECT }, additionalProperties: false }, annotations: OPEN_WORLD_IDEMPOTENT_ANNOTATIONS },
+  { name: "score_quest", title: "Score Quest", description: "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects.", inputSchema: { type: "object", required: ["questId", "direction"], properties: { questId: { type: "string" }, direction: { type: "string", enum: ["up", "down"] } }, additionalProperties: false }, outputSchema: SCORE_OUTPUT, annotations: WRITE_ANNOTATIONS },
+  { name: "get_character_state", title: "Get Character State", description: "Return the current character, MP, equipment, and boss state.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: CHARACTER_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "buy_reward", title: "Buy Reward", description: "Redeem a reward quest using Gems.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" } }, additionalProperties: false }, outputSchema: REWARD_OUTPUT, annotations: DESTRUCTIVE_ANNOTATIONS },
+  { name: "list_integrations", title: "List Integrations", description: "List per-user integration connection, configuration, and reconnect status without exposing provider tokens.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { integrations: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "preview_external_sync", title: "Preview External Sync", description: "Preview connected Google Calendar, Google Tasks, or Notion changes without saving them.", inputSchema: { type: "object", required: ["service"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] } }, additionalProperties: false }, outputSchema: SYNC_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
+  { name: "sync_external_service", title: "Sync External Service", description: "Run a configured external sync. dryRun defaults to true and provider writes require explicit execution.", inputSchema: { type: "object", required: ["service", "direction"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: SYNC_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
+  { name: "get_my_profile", title: "Get My Profile", description: "Get the authenticated user's QuestForge public profile settings.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "find_profile_by_handle", title: "Find Profile by Handle", description: "Find one QuestForge public profile by an exact @handle.", inputSchema: { type: "object", required: ["handle"], properties: { handle: { type: "string", minLength: 3, maxLength: 21 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "update_profile", title: "Update Profile", description: "Create or update the authenticated user's public QuestForge profile.", inputSchema: { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 40 }, handle: { type: "string", minLength: 3, maxLength: 21 }, bio: { type: "string", maxLength: 160 }, avatarRole: { type: "string", maxLength: 40 }, avatarVariant: { type: "string", maxLength: 40 }, level: { type: "integer", minimum: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "list_friends", title: "List Friends", description: "List accepted friends using minimal public profile fields.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { friends: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "list_friend_requests", title: "List Friend Requests", description: "List pending incoming and outgoing friend requests.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { requests: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "send_friend_request", title: "Send Friend Request", description: "Send a friend request to a stable QuestForge user ID after exact-handle lookup.", inputSchema: { type: "object", required: ["receiverUid"], properties: { receiverUid: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { request: QUEST_OBJECT }, additionalProperties: false }, annotations: WRITE_ANNOTATIONS },
+  { name: "respond_friend_request", title: "Respond to Friend Request", description: "Accept or decline a pending incoming friend request.", inputSchema: { type: "object", required: ["requestId", "decision"], properties: { requestId: { type: "string" }, decision: { type: "string", enum: ["accept", "decline"] } }, additionalProperties: false }, outputSchema: QUEST_OBJECT, annotations: WRITE_ANNOTATIONS },
+  { name: "remove_friend", title: "Remove Friend", description: "Remove an existing friendship for both users.", inputSchema: { type: "object", required: ["friendUid"], properties: { friendUid: { type: "string" } }, additionalProperties: false }, outputSchema: QUEST_OBJECT, annotations: DESTRUCTIVE_ANNOTATIONS },
+  { name: "get_party", title: "Get Party", description: "Get the authenticated user's active party and minimal member profiles.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { party: { type: ["object", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "create_party", title: "Create Party", description: "Create a party with the authenticated user as owner. One active party per user, four members maximum.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string", minLength: 1, maxLength: 40 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { party: QUEST_OBJECT }, additionalProperties: false }, annotations: WRITE_ANNOTATIONS },
+  { name: "invite_party_member", title: "Invite Party Member", description: "Create a seven-day party invite. Only the party owner can use this tool.", inputSchema: { type: "object", properties: { inviteeUid: { type: "string" } }, additionalProperties: false }, outputSchema: QUEST_OBJECT, annotations: WRITE_ANNOTATIONS },
+  { name: "accept_party_invite", title: "Accept Party Invite", description: "Accept a party invite using its one-time token or invite ID.", inputSchema: { type: "object", properties: { token: { type: "string" }, inviteId: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { party: QUEST_OBJECT }, additionalProperties: false }, annotations: WRITE_ANNOTATIONS },
+  { name: "leave_party", title: "Leave Party", description: "Leave the active party. Ownership transfers to the earliest remaining member.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: QUEST_OBJECT, annotations: DESTRUCTIVE_ANNOTATIONS },
+  { name: "remove_party_member", title: "Remove Party Member", description: "Remove a party member. Only the owner can use this tool.", inputSchema: { type: "object", required: ["memberUid"], properties: { memberUid: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { party: QUEST_OBJECT }, additionalProperties: false }, annotations: DESTRUCTIVE_ANNOTATIONS },
+  { name: "get_battle_session", title: "Get Battle Session", description: "Get the current QuestForge command battle state, available commands, and MP-generating quests.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { session: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "battle_command", title: "Battle Command", description: "Preview or execute one deterministic command battle turn. Execution requires the current turn and a unique commandId.", inputSchema: { type: "object", required: ["command"], properties: { command: { type: "string", enum: ["attack", "skill", "guard", "heal", "burst"] }, expectedTurn: { type: "integer", minimum: 1 }, commandId: { type: "string", maxLength: 120 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: QUEST_OBJECT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "get_quest", title: "Get One Quest", description: "Read one QuestForge quest by ID.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string", minLength: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { quest: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "get_daily_brief", title: "Get Daily Brief", description: "Return today's quests, character state, and an optional cached Calendar schedule.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" }, includeCalendar: { type: "boolean", default: false } }, additionalProperties: false }, outputSchema: DAILY_BRIEF_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
+  { name: "get_review_summary", title: "Get Review Summary", description: "Summarize completed work and activity for one day or a rolling seven-day review window.", inputSchema: { type: "object", properties: { period: { type: "string", enum: ["day", "week"], default: "day" }, anchorDate: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: REVIEW_SUMMARY_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned QuestForge handoffs, optionally filtered by assignee and readiness.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["ready", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "list_activity_events", title: "List Activity Events", description: "Paginate QuestForge activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "get_calendar_schedule", title: "Get Calendar Schedule", description: "Read the cached Google Calendar schedule for a date. Connect and sync Calendar first.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { schedule: GENERIC_OBJECT_OUTPUT }, additionalProperties: false }, annotations: OPEN_WORLD_READ_ANNOTATIONS },
+  { name: "convert_calendar_event_to_quest", title: "Convert Calendar Event to Quest", description: "Create a QuestForge quest from a cached Calendar event and optional safe task-field overrides.", inputSchema: { type: "object", required: ["eventId"], properties: { eventId: { type: "string", minLength: 1 }, calendarId: { type: "string", minLength: 1 }, overrides: { type: "object", properties: CALENDAR_OVERRIDE_PROPERTIES, additionalProperties: false } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
 ];
 
 function json(value, status = 200, headers = {}) {
@@ -154,6 +235,16 @@ function withCors(response, request, env) {
   next.headers.set("access-control-allow-headers", "authorization,content-type,mcp-protocol-version");
   next.headers.set("access-control-allow-methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
   return next;
+}
+
+function validDateValue(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
+}
+
+function addDaysText(dateText, amount) {
+  const date = new Date(`${dateText}T00:00:00`);
+  date.setDate(date.getDate() + amount);
+  return todayText(date);
 }
 
 async function stateFor(env, identity) {
@@ -359,6 +450,83 @@ async function routeApi(request, env, context, identity, path) {
   return json({ error: { code: "not_found", message: "Endpoint not found." } }, 404);
 }
 
+const SAFE_QUEST_OVERRIDE_KEYS = new Set([
+  "title", "notes", "category", "dueDate", "scheduledDate", "scheduledTime", "repeat", "difficulty", "tags",
+  "estimatedMinutes", "actualMinutes", "completionCriteria", "nextAction", "impact", "isBlockingOthers",
+]);
+
+function safeQuestOverrides(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const safe = {};
+  for (const key of Object.keys(input)) {
+    if (SAFE_QUEST_OVERRIDE_KEYS.has(key) && input[key] !== undefined) safe[key] = input[key];
+  }
+  return safe;
+}
+
+function reviewSummary(state, period, anchorDate) {
+  const from = period === "week" ? addDaysText(anchorDate, -6) : anchorDate;
+  const inRange = (text) => {
+    const day = String(text || "").slice(0, 10);
+    return day >= from && day <= anchorDate;
+  };
+  const events = state.taskEvents || [];
+  const completed = (state.tasks || []).filter((task) => inRange(task.completedAt) || inRange(task.lastCompletedDate));
+  const created = (state.tasks || []).filter((task) => inRange(task.createdAt));
+  const scored = events.filter((event) => inRange(event.at) && event.type === "quest.scored" && event.details?.rewardGranted === true);
+  const failed = events.filter((event) => inRange(event.at) && event.type === "quest.failed");
+  const focusMinutes = completed.reduce((sum, task) => sum + Number(task.actualMinutes || 0), 0);
+  const tagCounts = {};
+  for (const task of completed) for (const tag of task.tags || []) tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+  return {
+    period,
+    anchorDate,
+    from,
+    questsCompleted: completed.length,
+    questsCreated: created.length,
+    questsFailed: failed.length,
+    rewardsEarned: scored.length,
+    eventsLogged: events.filter((event) => inRange(event.at)).length,
+    focusMinutes,
+    topTags: Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([tag, count]) => ({ tag, count })),
+    character: { level: Number(state.character?.level || 1), xp: Number(state.character?.xp || 0), gems: Number(state.character?.gems || 0) },
+  };
+}
+
+async function calendarBrief(env, identity, date) {
+  try {
+    assertScope(identity.scopes, "integrations:read");
+    return { requested: true, available: true, schedule: await calendarSchedule(env, identity, date) };
+  } catch (error) {
+    const missingScope = error.code === "insufficient_scope";
+    return {
+      requested: true,
+      available: false,
+      code: error.code || "integration_unavailable",
+      reason: missingScope ? "missing_scope" : "integration_unavailable",
+      action: missingScope
+        ? "Connect with the integrations:read scope to include your Calendar schedule."
+        : "Connect Google Calendar in QuestForge settings, run a calendar sync, then try again.",
+    };
+  }
+}
+
+async function convertCalendarEventWithOverrides(env, identity, state, args) {
+  if (args.calendarId) {
+    const schedule = await calendarSchedule(env, identity, todayText());
+    const event = schedule.events.find((item) => item.externalId === args.eventId && item.calendarId === args.calendarId);
+    if (!event) throw new DomainError(404, "calendar_event_not_found", "Calendar event is not available in today's schedule cache for the requested calendar.");
+  }
+  const overrides = safeQuestOverrides(args.overrides);
+  const converted = await convertCalendarEvent(env, identity, state, args.eventId);
+  const events = [converted.event];
+  if (Object.keys(overrides).length) {
+    converted.quest = patchQuest(state, converted.quest.id, overrides, { source: "mcp", countRollover: false, returnEvent: false });
+    events.push(state.taskEvents[0]);
+  }
+  return { ...converted, events };
+}
+
 async function callMcpTool(name, args, env, context, identity) {
   if (name === "get_my_profile") { assertScope(identity.scopes, "profiles:read"); return { profile: await getOwnProfile(env, identity.uid) }; }
   if (name === "find_profile_by_handle") { assertScope(identity.scopes, "profiles:read"); return { profile: await findProfileByHandle(env, args.handle) }; }
@@ -419,6 +587,66 @@ async function callMcpTool(name, args, env, context, identity) {
     if (args.dryRun !== false) return syncIntegration(env, identity, await stateFor(env, identity), args.service, args.direction || "import", true);
     return mutateAndNotify(env, identity, context, (state) => syncIntegration(env, identity, state, args.service, args.direction || "import", false));
   }
+  if (name === "get_quest") {
+    assertScope(identity.scopes, "quests:read");
+    const quest = (await stateFor(env, identity)).tasks.find((task) => task.id === args.questId);
+    if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
+    return { quest };
+  }
+  if (name === "get_daily_brief") {
+    assertScope(identity.scopes, "quests:read");
+    assertScope(identity.scopes, "character:read");
+    const date = validDateValue(args.date) || todayText();
+    const state = await stateFor(env, identity);
+    const brief = {
+      date,
+      quests: listQuestPage(state, { view: "today", date }),
+      character: characterState(state),
+    };
+    brief.calendar = args.includeCalendar
+      ? await calendarBrief(env, identity, date)
+      : { requested: false, available: false, reason: "not_requested", action: "Call get_calendar_schedule or pass includeCalendar to include your Calendar schedule." };
+    return brief;
+  }
+  if (name === "get_review_summary") {
+    assertScope(identity.scopes, "quests:read");
+    assertScope(identity.scopes, "events:read");
+    const period = args.period === "week" ? "week" : "day";
+    const anchorDate = validDateValue(args.anchorDate) || todayText();
+    return reviewSummary(await stateFor(env, identity), period, anchorDate);
+  }
+  if (name === "list_agent_handoffs") {
+    assertScope(identity.scopes, "quests:read");
+    const state = await stateFor(env, identity);
+    const stateFilter = args.state === "ready" ? "ready" : args.state === "pending" ? "pending" : "all";
+    let handoffs = (state.tasks || []).filter((task) => task.assignee?.type === "agent");
+    if (args.assigneeId) handoffs = handoffs.filter((task) => task.assignee.id === args.assigneeId);
+    if (stateFilter === "ready") handoffs = handoffs.filter((task) => task.assignee.handoffState === "ready");
+    if (stateFilter === "pending") handoffs = handoffs.filter((task) => task.assignee.handoffState !== "ready");
+    const total = handoffs.length;
+    const limit = Math.max(1, Math.min(100, Number(args.limit) || 25));
+    const offset = Math.max(0, Number(args.cursor) || 0);
+    return { handoffs: handoffs.slice(offset, offset + limit), total, limit, nextCursor: offset + limit < total ? String(offset + limit) : null };
+  }
+  if (name === "list_activity_events") {
+    assertScope(identity.scopes, "events:read");
+    const state = await stateFor(env, identity);
+    let events = state.taskEvents || [];
+    if (args.eventType) events = events.filter((event) => event.type === args.eventType);
+    const total = events.length;
+    const limit = Math.max(1, Math.min(250, Number(args.limit) || 50));
+    const offset = Math.max(0, Number(args.cursor) || 0);
+    return { events: events.slice(offset, offset + limit), total, limit, nextCursor: offset + limit < total ? String(offset + limit) : null };
+  }
+  if (name === "get_calendar_schedule") {
+    assertScope(identity.scopes, "integrations:read");
+    return { schedule: await calendarSchedule(env, identity, validDateValue(args.date) || undefined) };
+  }
+  if (name === "convert_calendar_event_to_quest") {
+    assertScope(identity.scopes, "quests:write");
+    assertScope(identity.scopes, "integrations:sync");
+    return mutateAndNotify(env, identity, context, (state) => convertCalendarEventWithOverrides(env, identity, state, args));
+  }
   throw new DomainError(404, "tool_not_found", `Unknown MCP tool: ${name}`);
 }
 
@@ -427,7 +655,7 @@ async function handleMcp(request, env, context, identity) {
   const message = await request.json();
   if (message.method === "notifications/initialized") return new Response(null, { status: 202 });
   let result;
-  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "questforge-mcp", version: "2.2.0" }, instructions: "Use QuestForge to organize quests, profiles, friends, parties, and command battles. Use exact @handle lookup before friend requests. Preview batch updates, archives, battle commands, and external sync before execution. Ask for confirmation before destructive actions. Quest deletion is not supported." };
+  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.3.0" }, instructions: "Use QuestForge to organize quests, daily plans, reviews, agent handoffs, profiles, friends, parties, and command battles. Read before writing. Preview batch updates, archives, battle commands, and external sync before execution. Ask for confirmation before destructive actions. Quest deletion is not supported." };
   else if (message.method === "tools/list") result = { tools: MCP_TOOLS };
   else if (message.method === "tools/call") {
     try {
@@ -447,7 +675,7 @@ async function handleMcp(request, env, context, identity) {
 async function handleRequest(request, env, context) {
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.2.0", schemaVersion: 5, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
+  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.3.0", schemaVersion: 5, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
   if (path === "/.well-known/oauth-authorization-server") return json(oauthMetadata(request, env));
   if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return json(protectedResourceMetadata(request, env));
   if (path === "/oauth/register" && request.method === "POST") return registerClient(request, env);
@@ -462,6 +690,7 @@ async function handleRequest(request, env, context) {
   const identity = await authenticateRequest(request, env);
   if (!identity) return json({ error: { code: "unauthorized", message: "A valid OAuth or Firebase bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` });
   if (path === "/mcp") return handleMcp(request, env, context, identity);
+  if (path === "/mcp-next") return handleMcpNext(request, env, context, identity);
   if (path.startsWith("/v1/")) return routeApi(request, env, context, identity, path);
   return json({ error: { code: "not_found", message: "Route not found." } }, 404);
 }
@@ -489,4 +718,4 @@ async function runScheduledIntegrations(env) {
   }
 }
 
-export { MCP_TOOLS, handleMcp, routeApi };
+export { MCP_TOOLS, callMcpTool, handleMcp, routeApi };

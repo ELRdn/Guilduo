@@ -17,8 +17,8 @@ const parameter = (name) => ({ name, in: "path", required: true, schema: { type:
 
 openapi.info = {
   title: "QuestForge API",
-  version: "2.2.0",
-  description: "QuestForge REST API for quests, assignees, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks.",
+  version: "2.3.0",
+  description: "QuestForge REST API for quests, work-management reviews, assignees, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
   { url: "https://your-questforge-worker.example.workers.dev", description: "Cloudflare Worker" },
@@ -123,6 +123,6 @@ schemas.BattleCommandInput = { type: "object", required: ["command"], properties
 schemas.BattleSession = { type: "object", required: ["schemaVersion", "character", "boss", "battle", "quests", "commands"], properties: { schemaVersion: { type: "integer", const: 1 }, character: { type: "object" }, boss: { type: "object" }, battle: { type: "object" }, quests: { type: "array", items: { type: "object" } }, commands: { type: "array", items: { type: "object" } } } };
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
-await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.2.0", tools: MCP_TOOLS }, null, 2)}\n`);
+await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.3.0", tools: MCP_TOOLS }, null, 2)}\n`);
 
 console.log(`Updated OpenAPI and ${MCP_TOOLS.length} MCP tools.`);

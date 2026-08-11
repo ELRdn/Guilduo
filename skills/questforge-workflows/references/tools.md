@@ -2,7 +2,7 @@
 
 ## Quests
 
-- Read: `list_today_quests`, `list_quests`
+- Read: `list_today_quests`, `list_quests`, `get_quest`, `get_daily_brief`, `get_review_summary`, `list_activity_events`
 - Create/edit: `create_quest`, `update_quest`
 - Batch: `batch_update_quests`, `archive_quests`
 - Complete/reopen: `score_quest`
@@ -26,5 +26,10 @@
 - State: `list_integrations`
 - Preview: `preview_external_sync`
 - Execute: `sync_external_service`
+- Calendar: `get_calendar_schedule`, `convert_calendar_event_to_quest`
+
+## Agent Handoffs
+
+- Read ready or pending work: `list_agent_handoffs`
 
 Google Calendar is read-only schedule import. Google Tasks is deletion-free bidirectional sync. Notion exports daily logs. Provider connection and resource selection happen in the QuestForge web UI.

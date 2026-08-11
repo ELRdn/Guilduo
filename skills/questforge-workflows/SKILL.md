@@ -29,22 +29,22 @@ Use `planningState: backlog` for unscheduled one-off work. Use `scheduled` with 
 
 ## Daily Strategy
 
-1. Call `list_quests` with `view: today`.
-2. If needed, also inspect `week`, `backlog`, dependencies, blocking status, impact, and estimates.
+1. Call `get_daily_brief` first. Set `includeCalendar: true` only when a Calendar schedule would help.
+2. If needed, inspect `week`, `backlog`, dependencies, blocking status, impact, estimates, and recent activity with `list_activity_events`.
 3. Propose a small ordered plan; do not silently move tasks.
 4. Preview changes with `batch_update_quests`.
 5. Execute only after confirmation with `dryRun: false`.
 
 ## Daily Review
 
-1. List today's active and completed quests.
+1. Call `get_review_summary` with `period: "day"` and use `list_activity_events` for any detail that needs checking.
 2. Summarize completed work, remaining work, MP, and character state.
 3. Offer to postpone or move unfinished work to backlog using a batch preview.
 4. Keep completed one-off quests in `completed` until a weekly archive review.
 
 ## Weekly Review
 
-1. Read `completed`, `archive`, `week`, and `backlog` views.
+1. Call `get_review_summary` with `period: "week"`, then read `completed`, `archive`, `week`, and `backlog` views as needed.
 2. Present completed one-off quests proposed for archival.
 3. Call `archive_quests` as a preview.
 4. Execute only after confirmation.
@@ -55,6 +55,7 @@ Use `planningState: backlog` for unscheduled one-off work. Use `scheduled` with 
 - Human: resolve a friend or party member and use the stable `uid`.
 - Agent: use a stable agent ID such as `chatgpt`, `codex`, `claude`, `gemini`, `openclaw`, `hermes`, or a user-defined ID.
 - Set `handoffState: ready` only when the user says the task is ready for the agent.
+- Use `list_agent_handoffs` before processing agent work, then read each task with `get_quest`.
 
 ## Friends And Parties
 

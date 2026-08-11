@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.js",
-    "check": "node --check app.js && node --check questforge-core.js && node --check i18n.mjs && node --check service-worker.js && node --check shared/battle-rules.mjs && node --check worker/src/index.mjs && node --check worker/src/security.mjs && node --check worker/src/social-store.mjs && node --check worker/src/oauth.mjs && node --check worker/src/integrations.mjs && node --check worker/src/integration-store.mjs && node --check worker/src/provider-oauth.mjs && node --check mcp-local/questforge-mcp.mjs && node --check tools/update-api-contracts.mjs",
+    "check": "node --check app.js && node --check questforge-core.js && node --check i18n.mjs && node --check service-worker.js && node --check shared/battle-rules.mjs && node --check worker/src/index.mjs && node --check worker/src/mcp-server.mjs && node --check worker/src/security.mjs && node --check worker/src/social-store.mjs && node --check worker/src/oauth.mjs && node --check worker/src/integrations.mjs && node --check worker/src/integration-store.mjs && node --check worker/src/provider-oauth.mjs && node --check mcp-local/questforge-mcp.mjs && node --check tools/update-api-contracts.mjs",
     "deploy": "firebase deploy --only hosting,database",
     "worker:dev": "wrangler dev --port 8787",
     "worker:deploy": "wrangler deploy",
@@ -17,8 +17,11 @@
     "api:generate": "node tools/update-api-contracts.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "agents": "^0.20.1",
     "firebase": "^12.16.0",
-    "intl-messageformat": "^11.2.13"
+    "intl-messageformat": "^11.2.13",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "vite": "^8.1.4",

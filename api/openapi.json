@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "QuestForge API",
-    "version": "2.2.0",
-    "description": "QuestForge REST API for quests, assignees, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks."
+    "version": "2.3.0",
+    "description": "QuestForge REST API for quests, work-management reviews, assignees, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks."
   },
   "servers": [
     {
