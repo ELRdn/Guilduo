@@ -28,8 +28,19 @@
 - Execute: `sync_external_service`
 - Calendar: `get_calendar_schedule`, `convert_calendar_event_to_quest`
 
+## Quest Trees
+
+- Read hierarchy and progress: `get_quest_tree`
+- Create or edit parent relation: `create_quest`, `update_quest` with `parentQuestId`
+- Filter roots or children: `list_quests` with `parentQuestId` or `rootOnly`
+
+Only habits, dailies, and To Dos can be in a tree. A reward cannot be a parent or child, cycles are rejected, and the maximum depth is eight levels.
+
 ## Agent Handoffs
 
-- Read ready or pending work: `list_agent_handoffs`
+- Read work: `list_agent_handoffs`
+- Transition with preview first: `transition_quest_handoff`
+- States: `none`, `ready`, `working`, `blocked`, `review_required`, `accepted`
+- Include `expectedState` when executing a transition to protect against stale updates.
 
 Google Calendar is read-only schedule import. Google Tasks is deletion-free bidirectional sync. Notion exports daily logs. Provider connection and resource selection happen in the QuestForge web UI.

@@ -50,7 +50,7 @@ test("all locale catalogs have complete keys, placeholders, and valid ICU messag
   const { IntlMessageFormat } = await import("intl-messageformat");
   const english = (await import("../locales/en.mjs")).default;
   const englishKeys = Object.keys(english);
-  assert.equal(englishKeys.length, 429);
+  assert.equal(englishKeys.length, 446);
 
   for (const [locale, filename] of Object.entries(localeFiles)) {
     const catalog = (await import(`../locales/${filename}`)).default;
@@ -105,15 +105,17 @@ test("public examples omit local absolute paths and private deployment identifie
   for (const ignored of ["runtime-config.js", ".firebaserc", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("generated contracts expose social, assignee, battle, and MCP v2.3 work-management operations", () => {
+test("generated contracts expose social, Quest Tree, agent handoff, battle, and MCP v2.4 work-management operations", () => {
   const openapi = JSON.parse(fs.readFileSync(path.join(root, "api/openapi.json"), "utf8"));
   const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8"));
-  assert.equal(openapi.info.version, "2.3.0");
-  assert.equal(mcp.version, "2.3.0");
-  assert.equal(mcp.tools.length, 36);
-  for (const pathName of ["/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands"]) assert.ok(openapi.paths[pathName], pathName);
+  assert.equal(openapi.info.version, "2.4.0");
+  assert.equal(mcp.version, "2.4.0");
+  assert.equal(mcp.tools.length, 38);
+  for (const pathName of ["/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands", "/v1/quests/tree", "/v1/agent-handoffs", "/v1/quests/{questId}/handoff"]) assert.ok(openapi.paths[pathName], pathName);
   assert.ok(openapi.components.schemas.Assignee);
   assert.ok(mcp.tools.some((tool) => tool.name === "battle_command"));
+  assert.ok(mcp.tools.some((tool) => tool.name === "get_quest_tree"));
+  assert.ok(mcp.tools.some((tool) => tool.name === "transition_quest_handoff"));
   assert.ok(mcp.tools.some((tool) => tool.name === "find_profile_by_handle"));
   for (const name of ["get_daily_brief", "get_review_summary", "list_agent_handoffs", "list_activity_events", "get_calendar_schedule", "convert_calendar_event_to_quest"]) {
     const tool = mcp.tools.find((candidate) => candidate.name === name);

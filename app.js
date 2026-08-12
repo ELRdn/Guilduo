@@ -1,7 +1,7 @@
 const storageKey = "questforge-prototype-state";
 const appearanceStorageKey = "questforge-appearance-mode";
 const appearanceModes = ["light", "dark", "system"];
-const appVersion = "2026.08.10-i18n-beta";
+const appVersion = "2026.08.12-phase2";
 const productionGatewayUrl = String(globalThis.QuestForgeConfig?.gatewayUrl || "").replace(/\/$/, "");
 const hadLocalStateAtStartup = Boolean(localStorage.getItem(storageKey));
 const core = globalThis.QuestForgeCore;
@@ -326,6 +326,19 @@ const els = {
   taskAssigneeCustomLabel: document.querySelector("#taskAssigneeCustomLabel"),
   taskHandoffRow: document.querySelector("#taskHandoffRow"),
   taskHandoffReady: document.querySelector("#taskHandoffReady"),
+  taskParentQuest: document.querySelector("#taskParentQuest"),
+  taskChildrenList: document.querySelector("#taskChildrenList"),
+  taskChildrenItems: document.querySelector("#taskChildrenItems"),
+  taskHandoffStateRow: document.querySelector("#taskHandoffStateRow"),
+  taskHandoffState: document.querySelector("#taskHandoffState"),
+  taskHandoffDetails: document.querySelector("#taskHandoffDetails"),
+  taskHandoffNote: document.querySelector("#taskHandoffNote"),
+  taskBlockedReason: document.querySelector("#taskBlockedReason"),
+  taskArtifactUrl: document.querySelector("#taskArtifactUrl"),
+  questTreePanel: document.querySelector("#questTreePanel"),
+  questTreeList: document.querySelector("#questTreeList"),
+  questTreeIncludeArchived: document.querySelector("#questTreeIncludeArchived"),
+  refreshQuestTreeButton: document.querySelector("#refreshQuestTreeButton"),
   cancelDialog: document.querySelector("#cancelDialog"),
   archiveTaskButton: document.querySelector("#archiveTaskButton"),
   importButton: document.querySelector("#importButton"),
@@ -1269,6 +1282,14 @@ function normalizeState(nextState) {
       tasks: cloneStateValue(Array.isArray(nextState.tasks) ? nextState.tasks : []),
     };
   }
+  if (previousSchemaVersion < 6 && !nextState.migrationSnapshots.schema5To6) {
+    nextState.migrationSnapshots.schema5To6 = {
+      createdAt: new Date().toISOString(),
+      schemaVersion: previousSchemaVersion,
+      tasks: cloneStateValue(Array.isArray(nextState.tasks) ? nextState.tasks : []),
+      rewardClaims: cloneStateValue(nextState.rewardClaims || {}),
+    };
+  }
   nextState.schemaVersion = currentSchemaVersion;
   nextState.createdAt = nextState.createdAt || new Date().toISOString();
   nextState.updatedAt = nextState.updatedAt || nextState.createdAt;
@@ -1449,10 +1470,12 @@ function normalizeState(nextState) {
       isBlockingOthers: Boolean(task.isBlockingOthers),
       rolloverCount: Math.max(0, Math.round(Number(task.rolloverCount || 0))),
       dependencyIds: Array.isArray(task.dependencyIds) ? [...new Set(task.dependencyIds.map(String))].slice(0, 20) : [],
+      parentQuestId: String(task.parentQuestId || "").trim().slice(0, 120),
       completedAt: task.completedAt || "",
       archivedAt: task.archivedAt || (lifecycleState === "archived" ? task.updatedAt || createdAt : ""),
       externalLinks,
       assignee: normalizeTaskAssignee(task.assignee),
+      handoff: normalizeTaskHandoff(task.handoff),
       assignmentReadyFor: String(task.assignmentReadyFor || "").slice(0, 240),
       createdAt,
       updatedAt: task.updatedAt || createdAt,
@@ -1460,6 +1483,7 @@ function normalizeState(nextState) {
       lastRolledOverDate: task.lastRolledOverDate || "",
     };
   });
+  repairTaskParentLinks(nextState);
   nextState.tasks.filter((task) => task.done && (task.kind === "daily" || task.kind === "todo")).forEach((task) => {
     const claimDate = task.lastCompletedDate || nextState.lastProcessedDate || currentDateText();
     const claimKey = core.completionClaimKey(task, claimDate);
@@ -1476,14 +1500,110 @@ function normalizeTaskAssignee(value) {
     return { type: "self", id: "self", label: "自分", handoffState: "none" };
   }
   const type = value.type;
-  const id = String(value.id || (type === "self" ? "self" : "")).trim().slice(0, 120);
+  const label = String(value.label || (type === "self" ? "自分" : value.id || "Agent")).trim().slice(0, 80);
+  const rawId = String(value.id || (type === "self" ? "self" : "")).trim();
+  const id = type === "agent" && (rawId === "custom" || rawId.startsWith("custom:"))
+    ? normalizeCustomAgentId(rawId, label)
+    : type === "agent" ? normalizeAgentId(rawId, label) : rawId.slice(0, 120);
   if (!id) return { type: "self", id: "self", label: "自分", handoffState: "none" };
   return {
     type,
     id,
-    label: String(value.label || (type === "self" ? "自分" : id)).trim().slice(0, 80),
-    handoffState: value.handoffState === "ready" ? "ready" : "none",
+    label: type === "self" ? "自分" : label,
+    handoffState: ["none", "ready", "working", "blocked", "review_required", "accepted"].includes(value.handoffState) ? value.handoffState : "none",
   };
+}
+
+function normalizeAgentId(value, label = "agent") {
+  const aliases = {
+    "chat-gpt": "chatgpt", gpt: "chatgpt", "gpt-chat": "chatgpt",
+    "gpt-codex": "codex", "openai-codex": "codex", "codex-cli": "codex",
+    "claude-code": "claude", "anthropic-claude": "claude",
+    "gemini-cli": "gemini", "google-gemini": "gemini",
+    "open-claw": "openclaw", "openclaw-agent": "openclaw", "hermes-agent": "hermes",
+  };
+  const slug = String(value || "").trim().toLocaleLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  const customSlug = String(label).trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "agent";
+  return aliases[slug] || slug || `custom:${customSlug}`;
+}
+
+function normalizeCustomAgentId(rawId, label = "agent") {
+  const source = String(rawId || "").trim().toLocaleLowerCase().startsWith("custom:")
+    ? String(rawId).trim().slice(7)
+    : label;
+  const slug = String(source || "agent").trim().toLocaleLowerCase().normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "agent";
+  return `custom:${slug}`;
+}
+
+function normalizeTaskHandoff(value) {
+  const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    note: String(input.note || "").trim().slice(0, 500),
+    blockedReason: String(input.blockedReason || "").trim().slice(0, 500),
+    artifactUrl: String(input.artifactUrl || "").trim().slice(0, 500),
+    startedAt: String(input.startedAt || "").trim().slice(0, 40),
+    reviewRequestedAt: String(input.reviewRequestedAt || "").trim().slice(0, 40),
+    reviewedAt: String(input.reviewedAt || "").trim().slice(0, 40),
+    reviewedBy: String(input.reviewedBy || "").trim().slice(0, 120),
+  };
+}
+
+function taskTreeEligible(task) {
+  return Boolean(task && ["habit", "daily", "todo"].includes(task.kind));
+}
+
+function taskIsDescendant(candidateId, ancestorId, seen = new Set()) {
+  if (!candidateId || seen.has(candidateId)) return false;
+  seen.add(candidateId);
+  const candidate = state.tasks.find((task) => task.id === candidateId);
+  if (!candidate?.parentQuestId) return false;
+  return candidate.parentQuestId === ancestorId || taskIsDescendant(candidate.parentQuestId, ancestorId, seen);
+}
+
+function validParentForTask(task, parentQuestId) {
+  if (!parentQuestId) return true;
+  const parent = state.tasks.find((item) => item.id === parentQuestId);
+  const subtreeHeight = task?.id && task.id !== "__new_quest__" ? taskTreeHeight(task.id) : 1;
+  return Boolean(task && parent && task.id !== parentQuestId && taskTreeEligible(task) && taskTreeEligible(parent)
+    && !taskIsDescendant(parentQuestId, task.id)
+    && taskTreeDepth(parentQuestId) + subtreeHeight <= 8);
+}
+
+function taskTreeDepth(taskId, seen = new Set()) {
+  if (!taskId || seen.has(taskId)) return 9;
+  seen.add(taskId);
+  const task = state.tasks.find((item) => item.id === taskId);
+  return task?.parentQuestId ? taskTreeDepth(task.parentQuestId, seen) + 1 : 1;
+}
+
+function taskTreeHeight(taskId, seen = new Set()) {
+  if (!taskId || seen.has(taskId)) return 9;
+  seen.add(taskId);
+  const children = state.tasks.filter((task) => task.parentQuestId === taskId && taskTreeEligible(task));
+  return children.length ? 1 + Math.max(...children.map((child) => taskTreeHeight(child.id, new Set(seen)))) : 1;
+}
+
+function repairTaskParentLinks(nextState) {
+  const byId = new Map(nextState.tasks.map((task) => [task.id, task]));
+  nextState.tasks.forEach((task) => {
+    if (!task.parentQuestId || !byId.has(task.parentQuestId) || !taskTreeEligible(task) || !taskTreeEligible(byId.get(task.parentQuestId))) {
+      task.parentQuestId = "";
+      return;
+    }
+    const seen = new Set([task.id]);
+    let current = task;
+    let depth = 1;
+    while (current?.parentQuestId) {
+      if (seen.has(current.parentQuestId) || depth >= 8) {
+        task.parentQuestId = "";
+        break;
+      }
+      seen.add(current.parentQuestId);
+      current = byId.get(current.parentQuestId);
+      depth += 1;
+    }
+  });
 }
 
 function normalizeEquipmentOffsets(offsets) {
@@ -2188,7 +2308,7 @@ function rewardCost(difficulty) {
   return Math.round(25 * difficultyScale(difficulty));
 }
 
-function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags = [], assignee = null) {
+function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags = [], assignee = null, parentQuestId = "", handoff = {}) {
   if (!title.trim()) return null;
 
   const timestamp = new Date().toISOString();
@@ -2217,10 +2337,12 @@ function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags 
     isBlockingOthers: false,
     rolloverCount: 0,
     dependencyIds: [],
+    parentQuestId: "",
     completedAt: "",
     archivedAt: "",
     externalLinks: [],
     assignee: normalizeTaskAssignee(assignee),
+    handoff: normalizeTaskHandoff(handoff),
     assignmentReadyFor: "",
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -2236,6 +2358,7 @@ function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags 
     task.cost = rewardCost(difficulty);
   }
 
+  if (parentQuestId && validParentForTask(task, parentQuestId)) task.parentQuestId = parentQuestId;
   state.tasks.push(task);
   recordTaskEvent("task.created", task);
   recordAssignmentReadyEvent(task);
@@ -2249,6 +2372,18 @@ function updateTask(taskId, values) {
 
   const previousKind = task.kind;
   const previousAssignee = normalizeTaskAssignee(task.assignee);
+  const candidate = { ...task, kind: values.kind };
+  if (values.parentQuestId && !validParentForTask(candidate, values.parentQuestId)) {
+    showToast("このQuestは親に設定できません。", { duration: 4200 });
+    return null;
+  }
+  const nextAssignee = normalizeTaskAssignee(values.assignee);
+  const currentHandoff = previousAssignee.type === "agent" ? previousAssignee.handoffState : "none";
+  const nextHandoff = nextAssignee.type === "agent" ? nextAssignee.handoffState : "none";
+  if (nextAssignee.type === "agent" && !canTransitionTaskHandoff(currentHandoff, nextHandoff)) {
+    showToast("Handoffの順番に沿って状態を変更してください。", { duration: 4200 });
+    return null;
+  }
   task.kind = values.kind;
   task.title = values.title.trim();
   task.notes = values.notes.trim();
@@ -2256,7 +2391,9 @@ function updateTask(taskId, values) {
   task.difficulty = values.difficulty;
   task.repeat = values.repeat;
   task.tags = values.tags;
-  task.assignee = normalizeTaskAssignee(values.assignee);
+  task.assignee = nextAssignee;
+  task.parentQuestId = values.parentQuestId || "";
+  task.handoff = normalizeTaskHandoff(values.handoff);
   task.planningState = task.kind === "todo" && !values.dueDate && !task.scheduledDate ? "backlog" : task.planningState || "scheduled";
   task.planningMode = task.planningMode || (values.dueDate ? "until_due" : "on_date");
   task.updatedAt = new Date().toISOString();
@@ -2293,6 +2430,63 @@ function recordAssignmentReadyEvent(task, previousAssignee = null) {
   if (task.assignmentReadyFor === assignmentKey) return;
   task.assignmentReadyFor = assignmentKey;
   recordTaskEvent("quest.assignment.ready", task, { assignee, previousAssignee });
+}
+
+const handoffStateLabels = {
+  none: "未設定",
+  ready: "作業待ち",
+  working: "作業中",
+  blocked: "ブロック中",
+  review_required: "レビュー待ち",
+  accepted: "承認済み",
+};
+
+const handoffTransitions = {
+  none: ["ready"],
+  ready: ["working", "blocked"],
+  working: ["blocked", "review_required"],
+  blocked: ["working", "none"],
+  review_required: ["accepted", "working"],
+  accepted: ["none"],
+};
+
+function canTransitionTaskHandoff(current, next) {
+  return current === next || (handoffTransitions[current] || []).includes(next);
+}
+
+function handoffNextState(current, action) {
+  const transitions = {
+    none: { ready: "ready" },
+    ready: { start: "working", block: "blocked" },
+    working: { review: "review_required", block: "blocked" },
+    blocked: { resume: "working", clear: "none" },
+    review_required: { accept: "accepted", revise: "working" },
+    accepted: { clear: "none" },
+  };
+  return transitions[current]?.[action] || "";
+}
+
+function transitionTaskHandoff(task, nextState, details = {}) {
+  if (!task || task.assignee?.type !== "agent") return false;
+  const current = task.assignee.handoffState || "none";
+  const allowed = {
+    none: ["ready"], ready: ["working", "blocked"], working: ["blocked", "review_required"],
+    blocked: ["working", "none"], review_required: ["accepted", "working"], accepted: ["none"],
+  }[current] || [];
+  if (current !== nextState && !allowed.includes(nextState)) return false;
+  const now = new Date().toISOString();
+  task.assignee.handoffState = nextState;
+  task.handoff = normalizeTaskHandoff({ ...task.handoff, ...details });
+  if (nextState === "working") task.handoff.startedAt ||= now;
+  if (nextState === "review_required") task.handoff.reviewRequestedAt = now;
+  if (nextState === "accepted") {
+    task.handoff.reviewedAt = now;
+    task.handoff.reviewedBy = globalThis.QuestForgeFirebase?.getUser?.()?.uid || "user";
+  }
+  task.assignmentReadyFor = nextState === "ready" ? `agent:${task.assignee.id}` : "";
+  task.updatedAt = now;
+  recordTaskEvent("quest.handoff.transitioned", task, { from: current, to: nextState, handoff: task.handoff });
+  return true;
 }
 
 function archiveTask(taskId) {
@@ -2921,6 +3115,7 @@ function renderTasks() {
     button.classList.toggle("active", button.dataset.taskFilter === state.taskFilter);
   });
   renderTaskSummary();
+  renderQuestTree();
   renderCalendarAgenda();
   renderArchiveDialog();
 
@@ -2936,6 +3131,91 @@ function renderTasks() {
       bucket.appendChild(createEmptyTaskMessage(kind));
     }
   });
+}
+
+function questTreeChildren(taskId, includeArchived) {
+  return state.tasks
+    .filter((task) => task.parentQuestId === taskId && taskTreeEligible(task) && (includeArchived || task.lifecycleState !== "archived"))
+    .sort(compareTasks);
+}
+
+function questTreeSummary(taskId, includeArchived) {
+  const children = questTreeChildren(taskId, includeArchived);
+  const completed = children.filter((task) => ["completed", "archived"].includes(task.lifecycleState) || task.done).length;
+  return { total: children.length, completed, progress: children.length ? Math.round((completed / children.length) * 100) : 0 };
+}
+
+function renderQuestTree() {
+  if (!els.questTreeList) return;
+  const includeArchived = Boolean(els.questTreeIncludeArchived?.checked);
+  const roots = state.tasks
+    .filter((task) => taskTreeEligible(task) && !task.parentQuestId && (includeArchived || task.lifecycleState !== "archived"))
+    .sort(compareTasks);
+  els.questTreeList.innerHTML = "";
+  if (!roots.length) {
+    const empty = document.createElement("p");
+    empty.className = "quest-tree-empty";
+    empty.textContent = "親Questを作ると、ここに目的とサブQuestが表示されます。";
+    els.questTreeList.appendChild(empty);
+    return;
+  }
+  const expanded = new Set(JSON.parse(localStorage.getItem("questforge-tree-expanded") || "[]"));
+  const persistExpanded = () => localStorage.setItem("questforge-tree-expanded", JSON.stringify([...expanded]));
+  const buildNode = (task, depth = 0) => {
+    const children = questTreeChildren(task.id, includeArchived);
+    const summary = questTreeSummary(task.id, includeArchived);
+    const row = document.createElement("div");
+    row.className = "quest-tree-node";
+    row.style.setProperty("--tree-depth", String(Math.min(depth, 7)));
+    const line = document.createElement("div");
+    line.className = "quest-tree-line";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "quest-tree-toggle";
+    toggle.textContent = children.length ? (expanded.has(task.id) ? "−" : "+") : "•";
+    toggle.disabled = !children.length;
+    toggle.setAttribute("aria-label", children.length ? "サブQuestを開閉" : "サブQuestなし");
+    toggle.addEventListener("click", () => {
+      if (expanded.has(task.id)) expanded.delete(task.id); else expanded.add(task.id);
+      persistExpanded();
+      renderQuestTree();
+    });
+    const title = document.createElement("button");
+    title.type = "button";
+    title.className = "quest-tree-title";
+    title.textContent = task.title;
+    title.addEventListener("click", () => openTaskDialog(task));
+    line.append(toggle, title);
+    const meta = document.createElement("span");
+    meta.className = "quest-tree-meta";
+    if (children.length) meta.textContent = `${summary.completed}/${summary.total} 完了`;
+    if (task.assignee?.type === "agent") meta.textContent = `${meta.textContent ? `${meta.textContent} ・ ` : ""}${task.assignee.label} / ${handoffStateLabels[task.assignee.handoffState] || task.assignee.handoffState}`;
+    line.appendChild(meta);
+    if (children.length) {
+      const progress = document.createElement("span");
+      progress.className = "quest-tree-progress";
+      progress.style.setProperty("--progress", `${summary.progress}%`);
+      progress.setAttribute("aria-label", `${summary.progress}%完了`);
+      line.appendChild(progress);
+    }
+    const addChild = document.createElement("button");
+    addChild.type = "button";
+    addChild.className = "quest-tree-add-child";
+    addChild.textContent = "+";
+    addChild.title = "子Questを追加";
+    addChild.setAttribute("aria-label", `${task.title}の子Questを追加`);
+    addChild.addEventListener("click", () => openTaskDialog({ kind: "todo", parentQuestId: task.id }));
+    line.appendChild(addChild);
+    row.appendChild(line);
+    if (children.length && expanded.has(task.id)) {
+      const childList = document.createElement("div");
+      childList.className = "quest-tree-children";
+      children.forEach((child) => childList.appendChild(buildNode(child, depth + 1)));
+      row.appendChild(childList);
+    }
+    return row;
+  };
+  roots.forEach((task) => els.questTreeList.appendChild(buildNode(task)));
 }
 
 function renderCalendarAgenda() {
@@ -3263,6 +3543,15 @@ function createTaskCard(task) {
   if (task.assignee?.type && task.assignee.type !== "self") {
     meta.appendChild(pill(`${i18n.t(task.assignee.type === "agent" ? "task.assignee.agent" : "task.assignee.human")}: ${task.assignee.label}`));
   }
+  if (task.parentQuestId) {
+    const parent = state.tasks.find((item) => item.id === task.parentQuestId);
+    if (parent) meta.appendChild(pill(`親: ${parent.title}`));
+  }
+  if (task.assignee?.type === "agent" && task.assignee.handoffState !== "none") {
+    const handoffPill = pill(handoffStateLabels[task.assignee.handoffState] || task.assignee.handoffState);
+    handoffPill.classList.add(`handoff-${task.assignee.handoffState}`);
+    meta.appendChild(handoffPill);
+  }
   if (task.repeat && task.repeat !== "none") {
     meta.appendChild(pill(localizedTaskLabel("repeat", task.repeat, repeatLabels[task.repeat] || task.repeat)));
   }
@@ -3296,6 +3585,46 @@ function createTaskCard(task) {
     meta.appendChild(linkPill);
   });
   card.appendChild(meta);
+
+  if (task.assignee?.type === "agent") {
+    const handoffActions = document.createElement("div");
+    handoffActions.className = "handoff-actions";
+    const currentHandoff = task.assignee.handoffState || "none";
+    const actions = currentHandoff === "none" ? [["ready", "AIへ渡す"]]
+      : currentHandoff === "ready" ? [["working", "作業開始"]]
+        : currentHandoff === "working" ? [["review_required", "レビューへ返す"]]
+          : currentHandoff === "blocked" ? [["working", "作業を再開"]]
+            : currentHandoff === "review_required" ? [["accepted", "承認"], ["working", "差し戻し"]]
+              : [["none", "引き継ぎを解除"]];
+    actions.forEach(([nextState, label]) => {
+      const handoffButton = document.createElement("button");
+      handoffButton.type = "button";
+      handoffButton.className = "secondary-button task-external-action";
+      handoffButton.textContent = label;
+      handoffButton.addEventListener("click", () => {
+        const details = nextState === "working" && currentHandoff === "review_required"
+          ? { note: "人間がレビュー後に差し戻しました。" }
+          : {};
+        if (transitionTaskHandoff(task, nextState, details)) {
+          playInteractionCue("success");
+          render();
+          showToast(`「${task.title}」を${handoffStateLabels[nextState]}にしました。`, { duration: 3200 });
+        }
+      });
+      handoffActions.appendChild(handoffButton);
+    });
+    if (currentHandoff === "working") {
+      const blockButton = document.createElement("button");
+      blockButton.type = "button";
+      blockButton.className = "secondary-button task-external-action";
+      blockButton.textContent = "ブロック";
+      blockButton.addEventListener("click", () => {
+        if (transitionTaskHandoff(task, "blocked", { blockedReason: "画面からブロック" })) render();
+      });
+      handoffActions.appendChild(blockButton);
+    }
+    card.appendChild(handoffActions);
+  }
 
   const tasksConnected = gatewayRuntime.integrations?.some((item) => item.id === "google-tasks" && item.status === "connected");
   const googleTasksLink = (task.externalLinks || []).find((link) => link.service === "google-tasks");
@@ -4203,7 +4532,7 @@ els.taskForm.addEventListener("submit", (event) => {
   const values = getFormValues();
   const task = els.editingTaskId.value
     ? updateTask(els.editingTaskId.value, values)
-    : addTask(values.kind, values.title, values.notes, values.dueDate, values.difficulty, values.repeat, values.tags, values.assignee);
+    : addTask(values.kind, values.title, values.notes, values.dueDate, values.difficulty, values.repeat, values.tags, values.assignee, values.parentQuestId, values.handoff);
   if (!task) {
     els.taskTitle.focus();
     return;
@@ -4590,26 +4919,55 @@ function getFormValues() {
     tags: parseTags(els.taskTags.value),
     difficulty: els.taskDifficulty.value,
     assignee: taskAssigneeFromForm(),
+    parentQuestId: els.taskParentQuest?.value || "",
+    handoff: normalizeTaskHandoff({
+      note: els.taskHandoffNote?.value || "",
+      blockedReason: els.taskBlockedReason?.value || "",
+      artifactUrl: els.taskArtifactUrl?.value || "",
+    }),
   };
 }
 
 function taskAssigneeFromForm() {
-  const [type = "self", id = "self"] = String(els.taskAssignee?.value || "self:self").split(":");
+  const [type = "self", ...idParts] = String(els.taskAssignee?.value || "self:self").split(":");
+  const id = idParts.join(":") || "self";
   const option = els.taskAssignee?.selectedOptions?.[0];
   const customLabel = String(els.taskAssigneeCustomLabel?.value || "").trim();
+  const handoffState = els.taskHandoffState?.value || (els.taskHandoffReady?.checked ? "ready" : "none");
   return normalizeTaskAssignee({
     type,
     id,
-    label: type === "agent" && id === "custom" ? customLabel || "カスタムAI" : option?.textContent || "自分",
-    handoffState: type === "agent" && els.taskHandoffReady?.checked ? "ready" : "none",
+    label: type === "agent" && (id === "custom" || id.startsWith("custom:")) ? customLabel || "カスタムAI" : option?.textContent || "自分",
+    handoffState: type === "agent" ? handoffState : "none",
   });
 }
 
 function refreshTaskAssigneeFields() {
   if (!els.taskAssignee) return;
-  const [type, id] = els.taskAssignee.value.split(":");
+  const [type, ...idParts] = els.taskAssignee.value.split(":");
+  const id = idParts.join(":");
   els.taskHandoffRow.hidden = type !== "agent";
-  els.taskAssigneeCustomRow.hidden = !(type === "agent" && id === "custom");
+  els.taskHandoffStateRow.hidden = type !== "agent";
+  els.taskHandoffDetails.hidden = type !== "agent";
+  els.taskAssigneeCustomRow.hidden = !(type === "agent" && (id === "custom" || id.startsWith("custom:")));
+  if (type === "agent" && els.taskHandoffState && els.taskHandoffReady) {
+    els.taskHandoffReady.checked = els.taskHandoffState.value === "ready";
+  }
+}
+
+function populateTaskParentOptions(selectedTask = null) {
+  if (!els.taskParentQuest) return;
+  const currentId = selectedTask?.id || "";
+  const candidate = selectedTask?.id ? selectedTask : { id: "__new_quest__", kind: els.taskKind?.value || "todo" };
+  els.taskParentQuest.innerHTML = "";
+  els.taskParentQuest.appendChild(new Option("ルートQuest（親なし）", ""));
+  state.tasks.filter((task) => taskTreeEligible(task)
+    && task.id !== currentId
+    && task.lifecycleState !== "archived"
+    && validParentForTask(candidate, task.id))
+    .sort(compareTasks)
+    .forEach((task) => els.taskParentQuest.appendChild(new Option(task.title, task.id)));
+  els.taskParentQuest.value = selectedTask?.parentQuestId || "";
 }
 
 function populateTaskAssigneeOptions(selectedAssignee = null) {
@@ -4633,10 +4991,11 @@ function populateTaskAssigneeOptions(selectedAssignee = null) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = current.label;
-    els.taskHumanOptions.appendChild(option);
+    const targetGroup = current.type === "agent" ? document.querySelector("#taskAgentOptions") : els.taskHumanOptions;
+    targetGroup?.appendChild(option);
   }
   els.taskAssignee.value = [...els.taskAssignee.options].some((option) => option.value === value) ? value : "self:self";
-  els.taskAssigneeCustomLabel.value = current.type === "agent" && current.id === "custom" ? current.label : "";
+  els.taskAssigneeCustomLabel.value = current.type === "agent" && (current.id === "custom" || current.id.startsWith("custom:")) ? current.label : "";
   els.taskHandoffReady.checked = current.handoffState === "ready";
   refreshTaskAssigneeFields();
 }
@@ -4653,7 +5012,17 @@ function openTaskDialog(task = {}) {
   els.taskRepeat.value = task.repeat || (task.kind === "daily" ? "daily" : "none");
   els.taskTags.value = (task.tags || []).join(", ");
   els.taskDifficulty.value = task.difficulty || "easy";
+  populateTaskParentOptions(task);
+  renderTaskChildren(task);
   populateTaskAssigneeOptions(task.assignee);
+  const handoff = normalizeTaskHandoff(task.handoff);
+  const handoffState = task.assignee?.type === "agent" ? task.assignee.handoffState || "none" : "none";
+  els.taskHandoffState.value = handoffState;
+  els.taskHandoffNote.value = handoff.note;
+  els.taskBlockedReason.value = handoff.blockedReason;
+  els.taskArtifactUrl.value = handoff.artifactUrl;
+  els.taskHandoffStateRow.hidden = task.assignee?.type !== "agent";
+  els.taskHandoffDetails.hidden = task.assignee?.type !== "agent";
   els.archiveTaskButton.hidden = !isEditing;
 
   if (typeof els.taskDialog.showModal === "function") {
@@ -4664,7 +5033,33 @@ function openTaskDialog(task = {}) {
   requestAnimationFrame(() => els.taskTitle.focus());
 }
 
+function renderTaskChildren(task = {}) {
+  if (!els.taskChildrenList || !els.taskChildrenItems) return;
+  const children = task.id ? questTreeChildren(task.id, true) : [];
+  els.taskChildrenItems.innerHTML = "";
+  els.taskChildrenList.hidden = !children.length;
+  children.forEach((child) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "task-child-link";
+    button.textContent = child.title;
+    button.addEventListener("click", () => {
+      closeTaskDialog();
+      openTaskDialog(child);
+    });
+    els.taskChildrenItems.appendChild(button);
+  });
+}
+
 els.taskAssignee?.addEventListener("change", refreshTaskAssigneeFields);
+els.taskHandoffState?.addEventListener("change", () => {
+  if (els.taskHandoffReady) els.taskHandoffReady.checked = els.taskHandoffState.value === "ready";
+});
+els.taskHandoffReady?.addEventListener("change", () => {
+  if (els.taskHandoffState) els.taskHandoffState.value = els.taskHandoffReady.checked ? "ready" : "none";
+});
+els.questTreeIncludeArchived?.addEventListener("change", renderQuestTree);
+els.refreshQuestTreeButton?.addEventListener("click", renderQuestTree);
 els.localeSelect?.addEventListener("change", () => i18n?.setLocale?.(els.localeSelect.value));
 window.addEventListener("questforge:locale-changed", () => {
   i18n?.applyDocumentTranslations?.();

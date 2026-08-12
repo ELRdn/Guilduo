@@ -7,7 +7,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createQuestForgeCore() {
   "use strict";
 
-  const CURRENT_SCHEMA_VERSION = 5;
+  const CURRENT_SCHEMA_VERSION = 6;
   const TASK_EVENT_LIMIT = 250;
 
   function difficultyScale(difficulty) {

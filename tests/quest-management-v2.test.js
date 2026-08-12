@@ -27,7 +27,7 @@ test("schema v3 migration preserves history and separates planning from lifecycl
 
   migrateState(state, "2026-08-01");
 
-  assert.equal(state.schemaVersion, 5);
+  assert.equal(state.schemaVersion, 6);
   assert.equal(state.migrationSnapshots.schema3To4.tasks.length, 4);
   assert.deepEqual(state.rewardClaims, {});
   assert.equal(state.tasks.find((task) => task.id === "due").planningMode, "until_due");
@@ -35,6 +35,9 @@ test("schema v3 migration preserves history and separates planning from lifecycl
   assert.equal(state.tasks.find((task) => task.id === "backlog").planningState, "backlog");
   assert.equal(state.tasks.find((task) => task.id === "finished").lifecycleState, "archived");
   assert.equal(state.tasks.find((task) => task.id === "daily").lifecycleState, "active");
+  assert.equal(state.tasks.every((task) => task.parentQuestId === ""), true);
+  assert.equal(state.tasks.every((task) => task.handoff && task.handoff.note === ""), true);
+  assert.equal(state.migrationSnapshots.schema5To6.schemaVersion, 3);
 });
 
 test("quest views distinguish today, week, future, backlog, completed, and archive", async () => {
@@ -95,4 +98,84 @@ test("Toggl time entries override manual actual minutes", async () => {
   const second = linkExternalRecord(state, quest.id, { service: "toggl-track", externalId: "te-2", type: "time_entry", durationMinutes: 10 });
   assert.equal(second.quest.actualMinutes, 52);
   assert.equal(second.quest.manualActualMinutes, 15);
+});
+
+test("Quest Tree validates parents, reports progress, and keeps the parent active", async () => {
+  const { archiveQuests, createQuest, getQuestTree, patchQuest, scoreQuest } = await import("../server/questforge-domain.mjs");
+  const state = legacyState();
+  const parent = createQuest(state, { kind: "todo", title: "公開準備" });
+  const child = createQuest(state, { kind: "todo", title: "READMEを更新", parentQuestId: parent.id });
+  const secondChild = createQuest(state, { kind: "daily", title: "毎日レビュー", parentQuestId: parent.id });
+
+  let tree = getQuestTree(state);
+  assert.equal(tree.total, 3);
+  assert.equal(tree.roots.length, 1);
+  assert.equal(tree.roots[0].children.length, 2);
+  assert.deepEqual(tree.summary, { childrenTotal: 2, childrenCompleted: 0, progressPercent: 0 });
+
+  scoreQuest(state, child.id, "up", { date: "2026-08-01" });
+  tree = getQuestTree(state);
+  assert.equal(tree.summary.childrenCompleted, 1);
+  assert.equal(tree.summary.progressPercent, 50);
+  assert.equal(state.tasks.find((task) => task.id === parent.id).lifecycleState, "active");
+
+  archiveQuests(state, { questIds: [child.id], dryRun: false });
+  assert.equal(getQuestTree(state).summary.childrenTotal, 1);
+  assert.equal(getQuestTree(state, { includeArchived: true }).summary.childrenTotal, 2);
+  assert.throws(() => patchQuest(state, parent.id, { parentQuestId: secondChild.id }), /cycle|circular/i);
+  assert.throws(() => patchQuest(state, parent.id, { parentQuestId: parent.id }), /own parent|own/i);
+  const reward = createQuest(state, { kind: "reward", title: "休憩" });
+  assert.throws(() => patchQuest(state, reward.id, { parentQuestId: parent.id }), /Only habit, daily, and todo/);
+});
+
+test("Agent Handoff transitions support dry-run, expected state, and normalized aliases", async () => {
+  const { createQuest, listAgentHandoffs, transitionQuestHandoff } = await import("../server/questforge-domain.mjs");
+  const state = legacyState();
+  const created = createQuest(state, {
+    kind: "todo",
+    title: "エージェント作業",
+    assignee: { type: "agent", id: "OpenAI-Codex", label: "Codex", handoffState: "ready" },
+  });
+  assert.equal(created.assignee.id, "codex");
+
+  const preview = transitionQuestHandoff(state, created.id, { state: "working" });
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.quest.assignee.handoffState, "working");
+  assert.equal(state.tasks[0].assignee.handoffState, "ready");
+
+  transitionQuestHandoff(state, created.id, { state: "working", dryRun: false, expectedState: "ready" }, { source: "test" });
+  transitionQuestHandoff(state, created.id, { state: "review_required", dryRun: false, expectedState: "working", artifactUrl: "https://example.com/result" }, { source: "test" });
+  assert.equal(state.tasks[0].handoff.artifactUrl, "https://example.com/result");
+  assert.throws(() => transitionQuestHandoff(state, created.id, { state: "accepted", dryRun: false, expectedState: "working" }), /changed before|stale/i);
+  transitionQuestHandoff(state, created.id, { state: "accepted", dryRun: false, expectedState: "review_required" }, { source: "test", reviewedBy: "human" });
+  assert.equal(state.tasks[0].handoff.reviewedBy, "human");
+  assert.equal(listAgentHandoffs(state, { state: "accepted" }).total, 1);
+  transitionQuestHandoff(state, created.id, { state: "none", dryRun: false, expectedState: "accepted" }, { source: "test" });
+  assert.equal(state.tasks[0].assignee.handoffState, "none");
+});
+
+test("Quest input persists handoff metadata and rejects invalid tree depth or transitions", async () => {
+  const { createQuest, patchQuest } = await import("../server/questforge-domain.mjs");
+  const state = legacyState();
+  const root = createQuest(state, { kind: "todo", title: "深いツリーの根" });
+  let parent = root;
+  for (let depth = 2; depth <= 8; depth += 1) {
+    parent = createQuest(state, { kind: "todo", title: `階層${depth}`, parentQuestId: parent.id });
+  }
+  assert.throws(() => createQuest(state, { kind: "todo", title: "9階層目", parentQuestId: parent.id }), /depth cannot exceed/i);
+
+  const assigned = createQuest(state, {
+    kind: "todo",
+    title: "成果物付き",
+    assignee: { type: "agent", id: "codex", label: "Codex", handoffState: "ready" },
+    handoff: { note: "最初のメモ", artifactUrl: "https://example.com/initial" },
+  });
+  assert.equal(assigned.handoff.note, "最初のメモ");
+  const patched = patchQuest(state, assigned.id, { handoff: { blockedReason: "入力待ち" } });
+  assert.equal(patched.handoff.note, "最初のメモ");
+  assert.equal(patched.handoff.blockedReason, "入力待ち");
+  assert.throws(() => patchQuest(state, assigned.id, { handoff: { artifactUrl: "http://example.com/insecure" } }), /HTTPS/i);
+  assert.throws(() => patchQuest(state, assigned.id, { assignee: { type: "agent", id: "codex", label: "Codex", handoffState: "accepted" } }), /Cannot move handoff/i);
+  const { transitionQuestHandoff } = await import("../server/questforge-domain.mjs");
+  assert.throws(() => transitionQuestHandoff(state, assigned.id, { state: "accepted", dryRun: false }), /Cannot move handoff/i);
 });

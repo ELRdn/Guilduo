@@ -77,11 +77,11 @@ The standard remote endpoint is:
 https://<your-worker>/mcp
 ```
 
-Use OAuth for normal users. Version 2.3 exposes 36 tools, including daily briefs, day/week reviews, agent handoffs, activity history, and Calendar-to-Quest conversion. Clients that cache tool lists may need one disconnect/reconnect after an update.
+Use OAuth for normal users. Version 2.4 exposes 38 tools, including Quest Trees, daily briefs, day/week reviews, agent handoffs, activity history, and Calendar-to-Quest conversion. Clients that cache tool lists may need one disconnect/reconnect after an update.
 
-`/mcp-next` is the SDK v2 Streamable HTTP compatibility lane. It exposes the same 36 tools plus MCP Resources and workflow Prompts. Use it to test a client before moving its standard connection to the newer transport behavior.
+`/mcp-next` is the SDK v2 Streamable HTTP compatibility lane. It exposes the same 38 tools plus MCP Resources for Quest Trees and Agent Handoffs and workflow Prompts. Use it to test a client before moving its standard connection to the newer transport behavior.
 
-The local stdio bridge in `mcp-local/` is a development compatibility path. The bundled [QuestForge workflow skill](skills/questforge-workflows/SKILL.md) teaches an AI client to preview batch changes, use exact handles, archive instead of delete, plan reviews, process agent handoffs, and execute battle turns safely.
+The local stdio bridge in `mcp-local/` is a development compatibility path. The bundled [QuestForge workflow skill](skills/questforge-workflows/SKILL.md) teaches an AI client to preview batch changes, inspect Quest Trees, use exact handles, archive instead of delete, process Agent Handoffs with stale-state protection, plan reviews, and execute battle turns safely.
 
 ## Integration Status
 

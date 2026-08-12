@@ -4335,3 +4335,252 @@ body[data-theme="retro"] .column-header button {
     transition-duration: 1ms !important;
   }
 }
+
+.quest-tree-panel {
+  margin: 18px 0 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.quest-tree-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quest-tree-heading h3 {
+  margin: 3px 0 4px;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.quest-tree-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quest-tree-actions,
+.compact-check,
+.handoff-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compact-check {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quest-tree-list {
+  display: grid;
+  gap: 1px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+.quest-tree-node {
+  min-width: 0;
+  background: var(--panel);
+}
+
+.quest-tree-line {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto minmax(48px, 100px) 28px;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 6px 10px 6px calc(10px + min(var(--tree-depth) * 18px, 126px));
+}
+
+.quest-tree-toggle,
+.quest-tree-title {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.quest-tree-toggle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: var(--green);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.quest-tree-toggle:not(:disabled):hover,
+.quest-tree-toggle:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.quest-tree-title {
+  min-width: 0;
+  padding: 5px 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.quest-tree-title:hover,
+.quest-tree-title:focus-visible {
+  color: var(--green);
+  text-decoration: underline;
+}
+
+.quest-tree-meta {
+  max-width: 260px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quest-tree-progress {
+  display: block;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.quest-tree-progress::before {
+  display: block;
+  width: var(--progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  content: "";
+}
+
+.quest-tree-add-child {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  color: var(--green);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.quest-tree-add-child:hover,
+.quest-tree-add-child:focus-visible {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, var(--panel-soft));
+}
+
+.quest-tree-children {
+  border-left: 1px solid color-mix(in srgb, var(--green) 32%, var(--line));
+  margin-left: 28px;
+}
+
+.quest-tree-empty {
+  margin: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.handoff-actions {
+  margin-top: 8px;
+}
+
+.handoff-actions .task-external-action {
+  margin: 0;
+}
+
+.handoff-review_required,
+.handoff-blocked {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+}
+
+.handoff-working {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--line));
+}
+
+.handoff-accepted {
+  border-color: color-mix(in srgb, var(--gold) 55%, var(--line));
+}
+
+.handoff-details {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-soft) 70%, transparent);
+}
+
+.task-children-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-soft) 70%, transparent);
+}
+
+.task-children-list > strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+#taskChildrenItems {
+  display: grid;
+  gap: 4px;
+}
+
+.task-child-link {
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .quest-tree-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .quest-tree-actions {
+    justify-content: space-between;
+  }
+
+  .quest-tree-line {
+    grid-template-columns: 28px minmax(0, 1fr) minmax(42px, 72px) 28px;
+    padding-left: calc(6px + min(var(--tree-depth) * 12px, 72px));
+  }
+
+  .quest-tree-meta {
+    font-size: 10px;
+  }
+
+  .quest-tree-progress {
+    display: none;
+  }
+
+  .quest-tree-children {
+    margin-left: 20px;
+  }
+}

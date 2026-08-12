@@ -1,6 +1,6 @@
 {
   "serverName": "questforge-mcp",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "tools": [
     {
       "name": "list_today_quests",
@@ -100,6 +100,14 @@
               "completed",
               "archived"
             ]
+          },
+          "parentQuestId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "rootOnly": {
+            "type": "boolean",
+            "default": false
           },
           "from": {
             "type": "string",
@@ -281,6 +289,43 @@
             },
             "maxItems": 20
           },
+          "parentQuestId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "handoff": {
+            "type": "object",
+            "properties": {
+              "note": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "blockedReason": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "artifactUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reviewRequestedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reviewedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reviewedBy": {
+                "type": "string",
+                "maxLength": 120
+              }
+            }
+          },
           "assignee": {
             "type": "object",
             "required": [
@@ -311,7 +356,11 @@
                 "type": "string",
                 "enum": [
                   "none",
-                  "ready"
+                  "ready",
+                  "working",
+                  "blocked",
+                  "review_required",
+                  "accepted"
                 ],
                 "default": "none"
               }
@@ -473,6 +522,43 @@
             },
             "maxItems": 20
           },
+          "parentQuestId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "handoff": {
+            "type": "object",
+            "properties": {
+              "note": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "blockedReason": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "artifactUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reviewRequestedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reviewedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reviewedBy": {
+                "type": "string",
+                "maxLength": 120
+              }
+            }
+          },
           "assignee": {
             "type": "object",
             "required": [
@@ -503,7 +589,11 @@
                 "type": "string",
                 "enum": [
                   "none",
-                  "ready"
+                  "ready",
+                  "working",
+                  "blocked",
+                  "review_required",
+                  "accepted"
                 ],
                 "default": "none"
               }
@@ -673,6 +763,43 @@
                 },
                 "maxItems": 20
               },
+              "parentQuestId": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "handoff": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "blockedReason": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "artifactUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "startedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "reviewRequestedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "reviewedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "reviewedBy": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                }
+              },
               "assignee": {
                 "type": "object",
                 "required": [
@@ -703,7 +830,11 @@
                     "type": "string",
                     "enum": [
                       "none",
-                      "ready"
+                      "ready",
+                      "working",
+                      "blocked",
+                      "review_required",
+                      "accepted"
                     ],
                     "default": "none"
                   }
@@ -1665,7 +1796,7 @@
     {
       "name": "get_quest",
       "title": "Get One Quest",
-      "description": "Read one QuestForge quest by ID.",
+      "description": "Read one QuestForge quest by ID, including child progress.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -1684,6 +1815,72 @@
         "properties": {
           "quest": {
             "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_quest_tree",
+      "title": "Get Quest Tree",
+      "description": "Read the parent Quest and nested child Quests with progress summaries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rootQuestId": {
+            "type": "string"
+          },
+          "includeArchived": {
+            "type": "boolean",
+            "default": false
+          },
+          "maxDepth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "default": 8
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "roots": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "childrenTotal": {
+                "type": "integer"
+              },
+              "childrenCompleted": {
+                "type": "integer"
+              },
+              "progressPercent": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false
@@ -1838,7 +2035,7 @@
     {
       "name": "list_agent_handoffs",
       "title": "List Agent Handoffs",
-      "description": "List agent-assigned QuestForge handoffs, optionally filtered by assignee and readiness.",
+      "description": "List agent-assigned QuestForge handoffs by lifecycle state.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1849,7 +2046,12 @@
           "state": {
             "type": "string",
             "enum": [
+              "none",
               "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted",
               "pending",
               "all"
             ],
@@ -1893,6 +2095,89 @@
       },
       "annotations": {
         "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "transition_quest_handoff",
+      "title": "Transition Quest Handoff",
+      "description": "Preview or transition an agent-assigned Quest between none, ready, working, blocked, review_required, and accepted.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "questId",
+          "state"
+        ],
+        "properties": {
+          "questId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
+            ]
+          },
+          "expectedState": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "blockedReason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "artifactUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "quest": {
+            "type": "object"
+          },
+          "event": {
+            "type": "object"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": true,
         "openWorldHint": false

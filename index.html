@@ -196,6 +196,24 @@
 
           <div class="task-summary-row" id="taskSummaryRow" aria-label="Task summary"></div>
 
+          <section class="quest-tree-panel" id="questTreePanel" aria-labelledby="questTreeTitle">
+            <div class="quest-tree-heading">
+              <div>
+                <span class="theme-kicker" data-i18n="questTree.kicker">QUEST TREE</span>
+                <h3 id="questTreeTitle" data-i18n="questTree.title">目的とサブQuest</h3>
+                <p data-i18n="questTree.copy">大きな目的を、親Questと小さな行動に分けて見渡します。</p>
+              </div>
+              <div class="quest-tree-actions">
+                <label class="compact-check">
+                  <input type="checkbox" id="questTreeIncludeArchived" />
+                  <span data-i18n="questTree.includeArchived">完了・アーカイブも表示</span>
+                </label>
+                <button class="secondary-button" type="button" id="refreshQuestTreeButton" data-i18n="questTree.refresh">更新</button>
+              </div>
+            </div>
+            <div class="quest-tree-list" id="questTreeList" aria-live="polite"></div>
+          </section>
+
           <section class="calendar-agenda" id="calendarAgenda" aria-labelledby="calendarAgendaTitle" hidden>
             <div class="calendar-agenda-heading">
               <div>
@@ -921,6 +939,16 @@
             <option value="hard">重い</option>
           </select>
         </label>
+          <label id="taskParentQuestRow">
+            <span data-i18n="task.parentQuest">親Quest</span>
+            <select id="taskParentQuest" name="parentQuestId">
+              <option value="" data-i18n="task.rootQuest">ルートQuest（親なし）</option>
+            </select>
+          </label>
+          <div id="taskChildrenList" class="task-children-list" hidden>
+            <strong data-i18n="questTree.title">目的とサブQuest</strong>
+            <div id="taskChildrenItems"></div>
+          </div>
         <label>
           <span data-i18n="task.assignee">担当</span>
           <select id="taskAssignee" name="assignee">
@@ -945,6 +973,31 @@
           <input id="taskHandoffReady" name="handoffReady" type="checkbox" />
           <span data-i18n="task.handoff">AIへ渡せる状態にする</span>
         </label>
+        <label id="taskHandoffStateRow" hidden>
+          <span data-i18n="task.handoffState">引き継ぎ状態</span>
+          <select id="taskHandoffState" name="handoffState">
+            <option value="none" data-i18n="task.handoffStates.none">未設定</option>
+            <option value="ready" data-i18n="task.handoffStates.ready">作業待ち</option>
+            <option value="working" data-i18n="task.handoffStates.working">作業中</option>
+            <option value="blocked" data-i18n="task.handoffStates.blocked">ブロック中</option>
+            <option value="review_required" data-i18n="task.handoffStates.review_required">レビュー待ち</option>
+            <option value="accepted" data-i18n="task.handoffStates.accepted">承認済み</option>
+          </select>
+        </label>
+        <div id="taskHandoffDetails" class="handoff-details" hidden>
+          <label>
+            <span data-i18n="task.handoffNote">引き継ぎメモ</span>
+            <textarea id="taskHandoffNote" rows="2" maxlength="500"></textarea>
+          </label>
+          <label>
+            <span data-i18n="task.blockedReason">ブロック理由</span>
+            <textarea id="taskBlockedReason" rows="2" maxlength="500"></textarea>
+          </label>
+          <label>
+            <span data-i18n="task.artifactUrl">成果物URL</span>
+            <input id="taskArtifactUrl" type="url" maxlength="500" placeholder="https://..." />
+          </label>
+        </div>
         <div class="plugin-slot-inline" id="pluginQuestDetailSlot" data-plugin-slot="quest.detail" hidden></div>
         <div class="dialog-actions">
           <button type="button" class="secondary-button" id="archiveTaskButton" data-i18n="task.archive">アーカイブ</button>

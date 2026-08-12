@@ -3,7 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { callMcpTool, MCP_TOOLS } from "./index.mjs";
 
-const SERVER_INFO = { name: "questforge-mcp-next", version: "2.3.0" };
+const SERVER_INFO = { name: "questforge-mcp-next", version: "2.4.0" };
 const ROUTE = "/mcp-next";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TEXT_LENGTH = 8000;
@@ -88,6 +88,12 @@ function registerResources(server, env, context, identity) {
     (uri) => readSafe(uri, () => callMcpTool("list_quests", { view: "backlog" }, env, context, identity)),
   );
   server.registerResource(
+    "questforge-tree",
+    "questforge://quests/tree",
+    { title: "Quest Tree", mimeType: "application/json", description: "QuestForge parent quests, child quests, and progress summaries." },
+    (uri) => readSafe(uri, () => callMcpTool("get_quest_tree", {}, env, context, identity)),
+  );
+  server.registerResource(
     "questforge-quest-by-id",
     new ResourceTemplate("questforge://quest/{questId}", {
       list: async () => {
@@ -111,6 +117,12 @@ function registerResources(server, env, context, identity) {
     "questforge://activity",
     { title: "Activity Events", mimeType: "application/json", description: "Recent QuestForge quest activity events." },
     (uri) => readSafe(uri, () => callMcpTool("list_activity_events", { limit: 100 }, env, context, identity)),
+  );
+  server.registerResource(
+    "questforge-agent-handoffs",
+    "questforge://agent-handoffs",
+    { title: "Agent Handoffs", mimeType: "application/json", description: "Agent-assigned quests and their current handoff state." },
+    (uri) => readSafe(uri, () => callMcpTool("list_agent_handoffs", { state: "all" }, env, context, identity)),
   );
 }
 
@@ -212,10 +224,12 @@ function registerPrompts(server) {
         "Read first:",
         `1. Call list_agent_handoffs (state: "ready"${assigneeId ? `, assigneeId: "${assigneeId}"` : ""}).`,
         "2. For each handoff, read the quest with get_quest to understand its context.",
+        "3. Call get_quest_tree when the quest has child work that affects the review.",
         "",
         "Then propose per-quest next actions.",
         "Only write after I confirm:",
-        "- update_quest to edit notes, nextAction, or assignee details",
+        "- transition_quest_handoff with dryRun first, then review_required when the agent returns work",
+        "- update_quest to edit notes, nextAction, parentQuestId, or assignee details",
         "- score_quest to complete work",
         "Do not remove assignments or archive quests without explicit confirmation.",
       ].join("\n"));

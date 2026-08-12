@@ -1,6 +1,6 @@
 ---
 name: questforge-workflows
-description: Operate a connected QuestForge account through its MCP tools for quest capture, daily planning, reviews, assignees, friends, parties, integrations, rewards, and MP command battles. Use when a user asks to read, create, organize, complete, archive, delegate, or battle with QuestForge data.
+description: Operate a connected QuestForge account through its MCP tools for quest capture, Quest Trees, daily planning, reviews, agent handoffs, friends, parties, integrations, rewards, and MP command battles. Use when a user asks to read, create, organize, complete, archive, delegate, review, or battle with QuestForge data.
 ---
 
 # QuestForge Workflows
@@ -17,6 +17,8 @@ Use the QuestForge MCP server as the source of truth. Never invent quest IDs, us
 - Do not claim an external integration is active until `list_integrations` reports it connected.
 - For battle execution, refresh the session, use its current turn, and generate one unique `commandId` per intended command. Reuse that same ID only when retrying the same command.
 - An `agent` assignee is metadata. `handoffState: ready` emits an event but does not prove that work was delivered to that agent.
+- Handoff writes must include `dryRun: true` first. Use `expectedState` on execution so a stale agent update returns a conflict instead of overwriting newer work.
+- Never use `delete`; archive quests and preserve their history.
 
 ## Quest Capture
 
@@ -30,10 +32,11 @@ Use `planningState: backlog` for unscheduled one-off work. Use `scheduled` with 
 ## Daily Strategy
 
 1. Call `get_daily_brief` first. Set `includeCalendar: true` only when a Calendar schedule would help.
-2. If needed, inspect `week`, `backlog`, dependencies, blocking status, impact, estimates, and recent activity with `list_activity_events`.
-3. Propose a small ordered plan; do not silently move tasks.
-4. Preview changes with `batch_update_quests`.
-5. Execute only after confirmation with `dryRun: false`.
+2. Call `get_quest_tree` when a task has a parent or when the user is planning a large goal.
+3. If needed, inspect `week`, `backlog`, dependencies, blocking status, impact, estimates, and recent activity with `list_activity_events`.
+4. Propose a small ordered plan; do not silently move tasks.
+5. Preview changes with `batch_update_quests`.
+6. Execute only after confirmation with `dryRun: false`.
 
 ## Daily Review
 
@@ -55,7 +58,19 @@ Use `planningState: backlog` for unscheduled one-off work. Use `scheduled` with 
 - Human: resolve a friend or party member and use the stable `uid`.
 - Agent: use a stable agent ID such as `chatgpt`, `codex`, `claude`, `gemini`, `openclaw`, `hermes`, or a user-defined ID.
 - Set `handoffState: ready` only when the user says the task is ready for the agent.
-- Use `list_agent_handoffs` before processing agent work, then read each task with `get_quest`.
+- Use `list_agent_handoffs` before processing agent work, then read each task with `get_quest` and `get_quest_tree` when it has children.
+- Allowed flow: `none -> ready -> working -> review_required -> accepted -> none`; use `blocked` when work cannot continue and return to `working` or `none` after resolution.
+- When an agent returns work, transition to `review_required` with a concise note and an HTTPS artifact URL when available.
+- A human reviewer moves `review_required` to `accepted`, or back to `working` with a reason. Handoff state is separate from Quest completion.
+
+## Quest Trees
+
+1. Call `get_quest_tree` before changing a parent or child relationship.
+2. Only `habit`, `daily`, and `todo` quests can participate; rewards stay outside the tree.
+3. Propose parent and child Quest titles to the user. Do not auto-decompose a Quest.
+4. Create or update children one at a time with `parentQuestId` after confirmation.
+5. Use the returned `summary` for progress. Completing a child never auto-completes its parent.
+6. Archived children are omitted by default; pass `includeArchived: true` for review and archival decisions.
 
 ## Friends And Parties
 

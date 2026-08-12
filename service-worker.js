@@ -1,6 +1,6 @@
-const APP_VERSION = "2026.08.10-i18n-beta";
+const APP_VERSION = "2026.08.12-phase2";
 const CACHE_PREFIX = "questforge-pwa-";
-const CACHE_VERSION = `${CACHE_PREFIX}v15`;
+const CACHE_VERSION = `${CACHE_PREFIX}v16`;
 const NAVIGATION_FALLBACK = "/index.html";
 
 const APP_SHELL = [

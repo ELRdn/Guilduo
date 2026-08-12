@@ -76,11 +76,13 @@ test("MCP advertises v2 quest, social, and battle tools and calls the same REST 
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
   const tools = await toolsResponse.json();
-  assert.equal(tools.result.tools.length, 36);
+  assert.equal(tools.result.tools.length, 38);
   assert.ok(tools.result.tools.some((tool) => tool.name === "create_quest"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "list_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "batch_update_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "archive_quests"));
+  assert.ok(tools.result.tools.some((tool) => tool.name === "get_quest_tree"));
+  assert.ok(tools.result.tools.some((tool) => tool.name === "transition_quest_handoff"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "find_profile_by_handle"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_party"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "battle_command"));
@@ -106,7 +108,7 @@ function parseMcpSse(text) {
   return JSON.parse(line.slice(6));
 }
 
-test("MCP v2.3 SDK lane exposes tool schemas, resources, and workflow prompts", async () => {
+test("MCP v2.4 SDK lane exposes tool schemas, resources, and workflow prompts", async () => {
   const headers = { host: "worker.test", accept: "application/json, text/event-stream" };
   const mcpCall = async (method) => {
     const response = await call("/mcp-next", {
@@ -120,15 +122,17 @@ test("MCP v2.3 SDK lane exposes tool schemas, resources, and workflow prompts", 
   };
 
   const tools = await mcpCall("tools/list");
-  assert.equal(tools.tools.length, 36);
-  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 36);
+  assert.equal(tools.tools.length, 38);
+  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 38);
 
   const resources = await mcpCall("resources/list");
   assert.deepEqual(resources.resources.map((resource) => resource.uri).sort(), [
     "questforge://activity",
+    "questforge://agent-handoffs",
     "questforge://character",
     "questforge://quests/backlog",
     "questforge://quests/today",
+    "questforge://quests/tree",
   ]);
   const templates = await mcpCall("resources/templates/list");
   assert.ok(templates.resourceTemplates.some((resource) => resource.uriTemplate === "questforge://quest/{questId}"));
@@ -194,6 +198,50 @@ test("REST v2 supports views, dry-run batches, archives, external links, and no 
 
   const deleteResponse = await call(`/v1/quests/${created.quest.id}`, { method: "DELETE" });
   assert.equal(deleteResponse.status, 404);
+});
+
+test("REST and MCP share Quest Tree and Agent Handoff state transitions", async () => {
+  const root = await (await call("/v1/quests", {
+    method: "POST",
+    body: JSON.stringify({ kind: "todo", title: "Phase 2 parent", assignee: { type: "agent", id: "OpenAI-Codex", label: "Codex", handoffState: "ready" } }),
+  })).json();
+  const child = await (await call("/v1/quests", {
+    method: "POST",
+    body: JSON.stringify({ kind: "todo", title: "Phase 2 child", parentQuestId: root.quest.id }),
+  })).json();
+
+  const treeResponse = await call("/v1/quests/tree");
+  const tree = await treeResponse.json();
+  assert.equal(tree.roots[0].quest.id, root.quest.id);
+  assert.equal(tree.roots[0].children[0].quest.id, child.quest.id);
+
+  const mcpTreeResponse = await call("/mcp", {
+    method: "POST",
+    body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_quest_tree", arguments: {} } }),
+  });
+  const mcpTree = await mcpTreeResponse.json();
+  assert.deepEqual(mcpTree.result.structuredContent.summary, tree.summary);
+
+  const preview = await (await call(`/v1/quests/${root.quest.id}/handoff`, {
+    method: "POST",
+    body: JSON.stringify({ state: "working" }),
+  })).json();
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.quest.assignee.handoffState, "working");
+
+  const applied = await (await call(`/v1/quests/${root.quest.id}/handoff`, {
+    method: "POST",
+    body: JSON.stringify({ state: "working", expectedState: "ready", dryRun: false }),
+  })).json();
+  assert.equal(applied.quest.assignee.handoffState, "working");
+
+  const mcpHandoffResponse = await call("/mcp", {
+    method: "POST",
+    body: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "transition_quest_handoff", arguments: { questId: root.quest.id, state: "review_required", expectedState: "working" } } }),
+  });
+  const mcpHandoff = await mcpHandoffResponse.json();
+  assert.equal(mcpHandoff.result.structuredContent.quest.assignee.handoffState, "review_required");
+  assert.equal(mcpHandoff.result.structuredContent.dryRun, true);
 });
 
 test("gateway rejects unauthenticated API and publishes OAuth metadata", async () => {

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "QuestForge API",
-    "version": "2.3.0",
-    "description": "QuestForge REST API for quests, work-management reviews, assignees, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks."
+    "version": "2.4.0",
+    "description": "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks."
   },
   "servers": [
     {
@@ -141,6 +141,22 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "parentQuestId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "rootOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
             }
           }
         ],
@@ -1324,6 +1340,149 @@
           }
         }
       }
+    },
+    "/v1/quests/tree": {
+      "get": {
+        "summary": "List parent and child quests as a Quest Tree",
+        "parameters": [
+          {
+            "name": "rootQuestId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "maxDepth",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "default": 8
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quest Tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestTree"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-handoffs": {
+      "get": {
+        "summary": "List agent-assigned Quest handoffs",
+        "parameters": [
+          {
+            "name": "assigneeId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "none",
+                "ready",
+                "working",
+                "blocked",
+                "review_required",
+                "accepted",
+                "pending",
+                "all"
+              ],
+              "default": "all"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent handoffs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentHandoffPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}/handoff": {
+      "post": {
+        "summary": "Preview or transition an agent handoff",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoffTransitionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Handoff transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffTransitionResult"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1483,6 +1642,13 @@
           },
           "assignee": {
             "$ref": "#/components/schemas/Assignee"
+          },
+          "parentQuestId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "handoff": {
+            "$ref": "#/components/schemas/Handoff"
           }
         }
       },
@@ -1538,6 +1704,12 @@
                 "items": {
                   "$ref": "#/components/schemas/ExternalLink"
                 }
+              },
+              "handoff": {
+                "$ref": "#/components/schemas/Handoff"
+              },
+              "childrenSummary": {
+                "type": "object"
               }
             }
           }
@@ -1770,7 +1942,11 @@
             "type": "string",
             "enum": [
               "none",
-              "ready"
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
             ]
           }
         }
@@ -2004,6 +2180,162 @@
             "type": "array",
             "items": {
               "type": "object"
+            }
+          }
+        }
+      },
+      "Handoff": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "blockedReason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "artifactUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewRequestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewedBy": {
+            "type": "string",
+            "maxLength": 120
+          }
+        }
+      },
+      "HandoffTransitionInput": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
+            ]
+          },
+          "expectedState": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "blockedReason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "artifactUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "HandoffTransitionResult": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "quest": {
+            "$ref": "#/components/schemas/Quest"
+          },
+          "event": {
+            "type": "object"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "AgentHandoffPage": {
+        "type": "object",
+        "properties": {
+          "handoffs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Quest"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "QuestTree": {
+        "type": "object",
+        "properties": {
+          "roots": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Quest"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "childrenTotal": {
+                "type": "integer"
+              },
+              "childrenCompleted": {
+                "type": "integer"
+              },
+              "progressPercent": {
+                "type": "integer"
+              }
             }
           }
         }

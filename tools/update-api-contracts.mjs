@@ -15,10 +15,22 @@ const ok = (description, schema = { type: "object" }) => ({ "200": { description
 const body = (schema) => ({ required: true, ...jsonContent(schema) });
 const parameter = (name) => ({ name, in: "path", required: true, schema: { type: "string" } });
 
+const questListPath = openapi.paths["/v1/quests"];
+if (questListPath?.get) {
+  questListPath.get.parameters ||= [];
+  const existingParameters = new Set(questListPath.get.parameters.map((item) => item.name));
+  for (const item of [
+    { name: "parentQuestId", in: "query", schema: { type: "string", maxLength: 120 } },
+    { name: "rootOnly", in: "query", schema: { type: "boolean", default: false } },
+  ]) {
+    if (!existingParameters.has(item.name)) questListPath.get.parameters.push(item);
+  }
+}
+
 openapi.info = {
   title: "QuestForge API",
-  version: "2.3.0",
-  description: "QuestForge REST API for quests, work-management reviews, assignees, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks.",
+  version: "2.4.0",
+  description: "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
   { url: "https://your-questforge-worker.example.workers.dev", description: "Cloudflare Worker" },
@@ -68,6 +80,24 @@ Object.assign(openapi.paths, {
   "/v1/battle/commands": {
     post: { summary: "Preview or execute one command battle turn", requestBody: body({ $ref: "#/components/schemas/BattleCommandInput" }), responses: { ...ok("Battle command result"), "409": { description: "Stale turn, reused command ID, ended battle, or insufficient MP" } } },
   },
+  "/v1/quests/tree": {
+    get: { summary: "List parent and child quests as a Quest Tree", parameters: [
+      { name: "rootQuestId", in: "query", schema: { type: "string" } },
+      { name: "includeArchived", in: "query", schema: { type: "boolean", default: false } },
+      { name: "maxDepth", in: "query", schema: { type: "integer", minimum: 1, maximum: 8, default: 8 } },
+    ], responses: ok("Quest Tree", { $ref: "#/components/schemas/QuestTree" }) },
+  },
+  "/v1/agent-handoffs": {
+    get: { summary: "List agent-assigned Quest handoffs", parameters: [
+      { name: "assigneeId", in: "query", schema: { type: "string", maxLength: 120 } },
+      { name: "state", in: "query", schema: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"], default: "all" } },
+      { name: "cursor", in: "query", schema: { type: "string" } },
+      { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 25 } },
+    ], responses: ok("Agent handoffs", { $ref: "#/components/schemas/AgentHandoffPage" }) },
+  },
+  "/v1/quests/{questId}/handoff": {
+    post: { summary: "Preview or transition an agent handoff", parameters: [parameter("questId")], requestBody: body({ $ref: "#/components/schemas/HandoffTransitionInput" }), responses: ok("Handoff transition", { $ref: "#/components/schemas/HandoffTransitionResult" }) },
+  },
 });
 
 const scopes = openapi.components.securitySchemes.oauth2.flows.authorizationCode.scopes;
@@ -92,10 +122,36 @@ schemas.Assignee = {
     type: { type: "string", enum: ["self", "human", "agent"] },
     id: { type: "string", minLength: 1, maxLength: 120 },
     label: { type: "string", minLength: 1, maxLength: 80 },
-    handoffState: { type: "string", enum: ["none", "ready"] },
+    handoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] },
   },
 };
+schemas.Handoff = {
+  type: "object",
+  properties: {
+    note: { type: "string", maxLength: 500 }, blockedReason: { type: "string", maxLength: 500 }, artifactUrl: { type: "string", format: "uri" },
+    startedAt: { type: "string", format: "date-time" }, reviewRequestedAt: { type: "string", format: "date-time" }, reviewedAt: { type: "string", format: "date-time" }, reviewedBy: { type: "string", maxLength: 120 },
+  },
+};
+schemas.HandoffTransitionInput = {
+  type: "object", required: ["state"], properties: {
+    state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, expectedState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] },
+    note: { type: "string", maxLength: 500 }, blockedReason: { type: "string", maxLength: 500 }, artifactUrl: { type: "string", format: "uri" }, dryRun: { type: "boolean", default: true },
+  },
+};
+schemas.HandoffTransitionResult = { type: "object", properties: { dryRun: { type: "boolean" }, quest: { $ref: "#/components/schemas/Quest" }, event: { type: "object" }, events: { type: "array", items: { type: "object" } } } };
+schemas.AgentHandoffPage = { type: "object", properties: { handoffs: { type: "array", items: { $ref: "#/components/schemas/Quest" } }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } } };
+schemas.QuestTree = { type: "object", properties: { roots: { type: "array", items: { type: "object" } }, nodes: { type: "array", items: { $ref: "#/components/schemas/Quest" } }, total: { type: "integer" }, summary: { type: "object", properties: { childrenTotal: { type: "integer" }, childrenCompleted: { type: "integer" }, progressPercent: { type: "integer" } } } } };
 schemas.QuestInput.properties.assignee = { $ref: "#/components/schemas/Assignee" };
+schemas.QuestInput.properties.parentQuestId = { type: "string", maxLength: 120 };
+schemas.QuestInput.properties.handoff = { $ref: "#/components/schemas/Handoff" };
+const questOutputProperties = { handoff: { $ref: "#/components/schemas/Handoff" }, childrenSummary: { type: "object" } };
+if (Array.isArray(schemas.Quest.allOf)) {
+  const outputPart = schemas.Quest.allOf.find((part) => part?.properties?.id && part?.properties?.createdAt) || schemas.Quest.allOf[schemas.Quest.allOf.length - 1];
+  outputPart.properties = { ...(outputPart.properties || {}), ...questOutputProperties };
+  delete schemas.Quest.properties;
+} else {
+  schemas.Quest.properties = { ...(schemas.Quest.properties || {}), ...questOutputProperties };
+}
 schemas.ProfileInput = {
   type: "object",
   required: ["displayName", "handle"],
@@ -123,6 +179,6 @@ schemas.BattleCommandInput = { type: "object", required: ["command"], properties
 schemas.BattleSession = { type: "object", required: ["schemaVersion", "character", "boss", "battle", "quests", "commands"], properties: { schemaVersion: { type: "integer", const: 1 }, character: { type: "object" }, boss: { type: "object" }, battle: { type: "object" }, quests: { type: "array", items: { type: "object" } }, commands: { type: "array", items: { type: "object" } } } };
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
-await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.3.0", tools: MCP_TOOLS }, null, 2)}\n`);
+await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.4.0", tools: MCP_TOOLS }, null, 2)}\n`);
 
 console.log(`Updated OpenAPI and ${MCP_TOOLS.length} MCP tools.`);

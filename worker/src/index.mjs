@@ -8,13 +8,17 @@ import {
   characterState,
   createQuest,
   getBattleSession,
+  getQuest,
+  getQuestTree,
   linkExternalRecord,
+  listAgentHandoffs,
   listEvents,
   listQuestPage,
   listQuests,
   patchQuest,
   scoreQuest,
   todayText,
+  transitionQuestHandoff,
 } from "../../server/questforge-domain.mjs";
 import { mutateState, readState } from "./firebase-store.mjs";
 import { authenticateRequest } from "./security.mjs";
@@ -80,6 +84,19 @@ const QUEST_INPUT_PROPERTIES = {
   completionCriteria: { type: "string", maxLength: 300 }, nextAction: { type: "string", maxLength: 180 },
   impact: { type: "string", enum: ["low", "medium", "high"] }, isBlockingOthers: { type: "boolean" },
   dependencyIds: { type: "array", items: { type: "string" }, maxItems: 20 },
+  parentQuestId: { type: "string", maxLength: 120 },
+  handoff: {
+    type: "object",
+    properties: {
+      note: { type: "string", maxLength: 500 },
+      blockedReason: { type: "string", maxLength: 500 },
+      artifactUrl: { type: "string", format: "uri" },
+      startedAt: { type: "string", format: "date-time" },
+      reviewRequestedAt: { type: "string", format: "date-time" },
+      reviewedAt: { type: "string", format: "date-time" },
+      reviewedBy: { type: "string", maxLength: 120 },
+    },
+  },
   assignee: {
     type: "object",
     required: ["type", "id", "label"],
@@ -87,7 +104,7 @@ const QUEST_INPUT_PROPERTIES = {
       type: { type: "string", enum: ["self", "human", "agent"] },
       id: { type: "string", minLength: 1, maxLength: 120 },
       label: { type: "string", minLength: 1, maxLength: 80 },
-      handoffState: { type: "string", enum: ["none", "ready"], default: "none" },
+      handoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"], default: "none" },
     },
   },
 };
@@ -96,6 +113,7 @@ const LIST_QUEST_PROPERTIES = {
   view: { type: "string", enum: ["today", "week", "future", "backlog", "completed", "archive", "all"], default: "all" },
   date: { type: "string", format: "date" }, kind: QUEST_INPUT_PROPERTIES.kind, category: { type: "string" }, tag: { type: "string" },
   planningState: QUEST_INPUT_PROPERTIES.planningState, lifecycleState: QUEST_INPUT_PROPERTIES.lifecycleState,
+  parentQuestId: QUEST_INPUT_PROPERTIES.parentQuestId, rootOnly: { type: "boolean", default: false },
   from: { type: "string", format: "date" }, to: { type: "string", format: "date" }, search: { type: "string" },
   limit: { type: "integer", minimum: 1, maximum: 200, default: 100 }, cursor: { type: "string" },
 };
@@ -162,6 +180,21 @@ const PAGED_EVENTS_OUTPUT = {
   properties: { events: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } },
   additionalProperties: false,
 };
+const QUEST_TREE_OUTPUT = {
+  type: "object",
+  properties: {
+    roots: { type: "array", items: QUEST_OBJECT },
+    nodes: { type: "array", items: QUEST_OBJECT },
+    total: { type: "integer" },
+    summary: { type: "object", properties: { childrenTotal: { type: "integer" }, childrenCompleted: { type: "integer" }, progressPercent: { type: "integer" } }, additionalProperties: false },
+  },
+  additionalProperties: false,
+};
+const HANDOFF_OUTPUT = {
+  type: "object",
+  properties: { dryRun: { type: "boolean" }, quest: QUEST_OBJECT, event: QUEST_OBJECT, events: { type: "array", items: QUEST_OBJECT } },
+  additionalProperties: false,
+};
 const CALENDAR_OVERRIDE_PROPERTIES = {
   title: QUEST_INPUT_PROPERTIES.title, notes: QUEST_INPUT_PROPERTIES.notes, category: QUEST_INPUT_PROPERTIES.category,
   dueDate: QUEST_INPUT_PROPERTIES.dueDate, scheduledDate: QUEST_INPUT_PROPERTIES.scheduledDate,
@@ -202,10 +235,12 @@ const MCP_TOOLS = [
   { name: "remove_party_member", title: "Remove Party Member", description: "Remove a party member. Only the owner can use this tool.", inputSchema: { type: "object", required: ["memberUid"], properties: { memberUid: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { party: QUEST_OBJECT }, additionalProperties: false }, annotations: DESTRUCTIVE_ANNOTATIONS },
   { name: "get_battle_session", title: "Get Battle Session", description: "Get the current QuestForge command battle state, available commands, and MP-generating quests.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { session: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "battle_command", title: "Battle Command", description: "Preview or execute one deterministic command battle turn. Execution requires the current turn and a unique commandId.", inputSchema: { type: "object", required: ["command"], properties: { command: { type: "string", enum: ["attack", "skill", "guard", "heal", "burst"] }, expectedTurn: { type: "integer", minimum: 1 }, commandId: { type: "string", maxLength: 120 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: QUEST_OBJECT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
-  { name: "get_quest", title: "Get One Quest", description: "Read one QuestForge quest by ID.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string", minLength: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { quest: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "get_quest", title: "Get One Quest", description: "Read one QuestForge quest by ID, including child progress.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string", minLength: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { quest: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "get_quest_tree", title: "Get Quest Tree", description: "Read the parent Quest and nested child Quests with progress summaries.", inputSchema: { type: "object", properties: { rootQuestId: { type: "string" }, includeArchived: { type: "boolean", default: false }, maxDepth: { type: "integer", minimum: 1, maximum: 8, default: 8 } }, additionalProperties: false }, outputSchema: QUEST_TREE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_daily_brief", title: "Get Daily Brief", description: "Return today's quests, character state, and an optional cached Calendar schedule.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" }, includeCalendar: { type: "boolean", default: false } }, additionalProperties: false }, outputSchema: DAILY_BRIEF_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "get_review_summary", title: "Get Review Summary", description: "Summarize completed work and activity for one day or a rolling seven-day review window.", inputSchema: { type: "object", properties: { period: { type: "string", enum: ["day", "week"], default: "day" }, anchorDate: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: REVIEW_SUMMARY_OUTPUT, annotations: READ_ANNOTATIONS },
-  { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned QuestForge handoffs, optionally filtered by assignee and readiness.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["ready", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned QuestForge handoffs by lifecycle state.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "transition_quest_handoff", title: "Transition Quest Handoff", description: "Preview or transition an agent-assigned Quest between none, ready, working, blocked, review_required, and accepted.", inputSchema: { type: "object", required: ["questId", "state"], properties: { questId: { type: "string" }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, expectedState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, blockedReason: { type: "string", maxLength: 500 }, artifactUrl: { type: "string", format: "uri" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: HANDOFF_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate QuestForge activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_calendar_schedule", title: "Get Calendar Schedule", description: "Read the cached Google Calendar schedule for a date. Connect and sync Calendar first.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { schedule: GENERIC_OBJECT_OUTPUT }, additionalProperties: false }, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "convert_calendar_event_to_quest", title: "Convert Calendar Event to Quest", description: "Create a QuestForge quest from a cached Calendar event and optional safe task-field overrides.", inputSchema: { type: "object", required: ["eventId"], properties: { eventId: { type: "string", minLength: 1 }, calendarId: { type: "string", minLength: 1 }, overrides: { type: "object", properties: CALENDAR_OVERRIDE_PROPERTIES, additionalProperties: false } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
@@ -345,6 +380,16 @@ async function routeApi(request, env, context, identity, path) {
     const input = await request.json();
     return json(await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { source: "api", returnEvent: true })), 201);
   }
+  if (path === "/v1/quests/tree" && method === "GET") {
+    assertScope(identity.scopes, "quests:read");
+    const query = Object.fromEntries(new URL(request.url).searchParams);
+    return json(getQuestTree(await stateFor(env, identity), query));
+  }
+  if (path === "/v1/agent-handoffs" && method === "GET") {
+    assertScope(identity.scopes, "quests:read");
+    const query = Object.fromEntries(new URL(request.url).searchParams);
+    return json(listAgentHandoffs(await stateFor(env, identity), query));
+  }
   if (path === "/v1/quests/batch-update" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
     const input = await request.json();
@@ -368,6 +413,15 @@ async function routeApi(request, env, context, identity, path) {
     assertScope(identity.scopes, "quests:write");
     const input = await request.json();
     return json(await mutateAndNotify(env, identity, context, (state) => patchQuest(state, decodeURIComponent(questMatch[1]), input, { source: "api", returnEvent: true })));
+  }
+  const handoffMatch = path.match(/^\/v1\/quests\/([^/]+)\/handoff$/);
+  if (handoffMatch && method === "POST") {
+    assertScope(identity.scopes, "quests:write");
+    const input = await request.json();
+    const questId = decodeURIComponent(handoffMatch[1]);
+    const contextWithReviewer = { source: "api", reviewedBy: identity.uid };
+    if (input.dryRun !== false) return json(transitionQuestHandoff(await stateFor(env, identity), questId, input, contextWithReviewer));
+    return json(await mutateAndNotify(env, identity, context, (state) => transitionQuestHandoff(state, questId, input, contextWithReviewer)));
   }
   const scoreMatch = path.match(/^\/v1\/quests\/([^/]+)\/score$/);
   if (scoreMatch && method === "POST") {
@@ -589,9 +643,11 @@ async function callMcpTool(name, args, env, context, identity) {
   }
   if (name === "get_quest") {
     assertScope(identity.scopes, "quests:read");
-    const quest = (await stateFor(env, identity)).tasks.find((task) => task.id === args.questId);
-    if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
-    return { quest };
+    return getQuest(await stateFor(env, identity), args.questId);
+  }
+  if (name === "get_quest_tree") {
+    assertScope(identity.scopes, "quests:read");
+    return getQuestTree(await stateFor(env, identity), args);
   }
   if (name === "get_daily_brief") {
     assertScope(identity.scopes, "quests:read");
@@ -617,16 +673,13 @@ async function callMcpTool(name, args, env, context, identity) {
   }
   if (name === "list_agent_handoffs") {
     assertScope(identity.scopes, "quests:read");
-    const state = await stateFor(env, identity);
-    const stateFilter = args.state === "ready" ? "ready" : args.state === "pending" ? "pending" : "all";
-    let handoffs = (state.tasks || []).filter((task) => task.assignee?.type === "agent");
-    if (args.assigneeId) handoffs = handoffs.filter((task) => task.assignee.id === args.assigneeId);
-    if (stateFilter === "ready") handoffs = handoffs.filter((task) => task.assignee.handoffState === "ready");
-    if (stateFilter === "pending") handoffs = handoffs.filter((task) => task.assignee.handoffState !== "ready");
-    const total = handoffs.length;
-    const limit = Math.max(1, Math.min(100, Number(args.limit) || 25));
-    const offset = Math.max(0, Number(args.cursor) || 0);
-    return { handoffs: handoffs.slice(offset, offset + limit), total, limit, nextCursor: offset + limit < total ? String(offset + limit) : null };
+    return listAgentHandoffs(await stateFor(env, identity), args);
+  }
+  if (name === "transition_quest_handoff") {
+    assertScope(identity.scopes, "quests:write");
+    const input = { ...args, reviewedBy: identity.uid };
+    if (args.dryRun !== false) return transitionQuestHandoff(await stateFor(env, identity), args.questId, input, { source: "mcp", reviewedBy: identity.uid });
+    return mutateAndNotify(env, identity, context, (state) => transitionQuestHandoff(state, args.questId, input, { source: "mcp", reviewedBy: identity.uid }));
   }
   if (name === "list_activity_events") {
     assertScope(identity.scopes, "events:read");
@@ -655,7 +708,7 @@ async function handleMcp(request, env, context, identity) {
   const message = await request.json();
   if (message.method === "notifications/initialized") return new Response(null, { status: 202 });
   let result;
-  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.3.0" }, instructions: "Use QuestForge to organize quests, daily plans, reviews, agent handoffs, profiles, friends, parties, and command battles. Read before writing. Preview batch updates, archives, battle commands, and external sync before execution. Ask for confirmation before destructive actions. Quest deletion is not supported." };
+  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.4.0" }, instructions: "Use QuestForge to organize quests, Quest Trees, daily plans, reviews, agent handoffs, profiles, friends, parties, and command battles. Read before writing. Preview batch updates, archives, handoff transitions, battle commands, and external sync before execution. Ask for confirmation before destructive actions. Quest deletion is not supported." };
   else if (message.method === "tools/list") result = { tools: MCP_TOOLS };
   else if (message.method === "tools/call") {
     try {
@@ -675,7 +728,7 @@ async function handleMcp(request, env, context, identity) {
 async function handleRequest(request, env, context) {
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.3.0", schemaVersion: 5, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
+  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.4.0", schemaVersion: 6, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
   if (path === "/.well-known/oauth-authorization-server") return json(oauthMetadata(request, env));
   if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return json(protectedResourceMetadata(request, env));
   if (path === "/oauth/register" && request.method === "POST") return registerClient(request, env);

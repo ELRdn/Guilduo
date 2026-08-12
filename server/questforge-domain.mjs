@@ -1,6 +1,6 @@
 import { createBattleSession, executeBattleCommand, normalizeBattleState } from "../shared/battle-rules.mjs";
 
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 6;
 const TASK_KINDS = new Set(["habit", "daily", "todo", "reward"]);
 const DIFFICULTIES = new Set(["trivial", "easy", "medium", "hard"]);
 const REPEATS = new Set(["none", "daily", "weekdays", "weekly", "monthly"]);
@@ -10,7 +10,25 @@ const PLANNING_MODES = new Set(["on_date", "until_due"]);
 const IMPACTS = new Set(["low", "medium", "high"]);
 const QUEST_VIEWS = new Set(["today", "week", "future", "backlog", "completed", "archive", "all"]);
 const ASSIGNEE_TYPES = new Set(["self", "human", "agent"]);
-const HANDOFF_STATES = new Set(["none", "ready"]);
+const HANDOFF_STATES = new Set(["none", "ready", "working", "blocked", "review_required", "accepted"]);
+const TREE_KINDS = new Set(["habit", "daily", "todo"]);
+const MAX_TREE_DEPTH = 8;
+const HANDOFF_TRANSITIONS = new Map([
+  ["none", new Set(["ready"])],
+  ["ready", new Set(["working", "blocked"])],
+  ["working", new Set(["blocked", "review_required"])],
+  ["blocked", new Set(["working", "none"])],
+  ["review_required", new Set(["accepted", "working"])],
+  ["accepted", new Set(["none"])],
+]);
+const AGENT_ALIASES = new Map([
+  ["chat-gpt", "chatgpt"], ["gpt", "chatgpt"], ["gpt-chat", "chatgpt"],
+  ["gpt-codex", "codex"], ["openai-codex", "codex"], ["codex-cli", "codex"],
+  ["claude-code", "claude"], ["anthropic-claude", "claude"],
+  ["gemini-cli", "gemini"], ["google-gemini", "gemini"],
+  ["open-claw", "openclaw"], ["openclaw-agent", "openclaw"],
+  ["hermes-agent", "hermes"],
+]);
 
 export class DomainError extends Error {
   constructor(status, code, message, details = undefined) {
@@ -95,17 +113,51 @@ function refreshActualMinutes(task) {
   return task;
 }
 
+function slugAgentId(value, label = "agent") {
+  const raw = String(value || "").trim().toLocaleLowerCase();
+  const slug = raw.normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  const fallbackRaw = String(label || "agent").trim().toLocaleLowerCase();
+  const fallbackSlug = fallbackRaw.normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "agent";
+  return AGENT_ALIASES.get(slug) || slug || `custom-${fallbackSlug}`;
+}
+
+function customAgentId(rawId, label) {
+  const source = String(rawId || "").trim().toLocaleLowerCase().startsWith("custom:")
+    ? String(rawId).trim().slice(7)
+    : label;
+  const slug = String(source || "agent").trim().toLocaleLowerCase().normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "agent";
+  return `custom:${slug}`;
+}
+
+function normalizeHandoff(value) {
+  const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    note: String(input.note || "").trim().slice(0, 500),
+    blockedReason: String(input.blockedReason || "").trim().slice(0, 500),
+    artifactUrl: String(input.artifactUrl || "").trim().slice(0, 500),
+    startedAt: String(input.startedAt || "").trim().slice(0, 40),
+    reviewRequestedAt: String(input.reviewRequestedAt || "").trim().slice(0, 40),
+    reviewedAt: String(input.reviewedAt || "").trim().slice(0, 40),
+    reviewedBy: String(input.reviewedBy || "").trim().slice(0, 120),
+  };
+}
+
 function normalizeAssignee(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) || !ASSIGNEE_TYPES.has(value.type)) {
     return { type: "self", id: "self", label: "自分", handoffState: "none" };
   }
   const type = value.type;
-  const id = String(value.id || (type === "self" ? "self" : "")).trim().slice(0, 120);
+  const label = String(value.label || (type === "self" ? "自分" : value.id || "Agent")).trim().slice(0, 80);
+  const rawId = String(value.id || "").trim();
+  const id = type === "agent"
+    ? (rawId === "custom" || rawId.startsWith("custom:") ? customAgentId(rawId, label) : slugAgentId(rawId, label))
+    : String(value.id || (type === "self" ? "self" : "")).trim().slice(0, 120);
   if (!id) return { type: "self", id: "self", label: "自分", handoffState: "none" };
   return {
     type,
     id,
-    label: String(value.label || (type === "self" ? "自分" : id)).trim().slice(0, 80),
+    label: type === "self" ? "自分" : label,
     handoffState: HANDOFF_STATES.has(value.handoffState) ? value.handoffState : "none",
   };
 }
@@ -151,10 +203,12 @@ function normalizeQuest(task, index, previousVersion, migrationDate) {
     isBlockingOthers: Boolean(task.isBlockingOthers),
     rolloverCount: nonNegativeInteger(task.rolloverCount),
     dependencyIds: Array.isArray(task.dependencyIds) ? [...new Set(task.dependencyIds.map(String).filter(Boolean))].slice(0, 20) : [],
+    parentQuestId: String(task.parentQuestId || "").trim().slice(0, 120),
     completedAt: String(task.completedAt || ""),
     archivedAt: String(task.archivedAt || (lifecycleState === "archived" ? task.updatedAt || createdAt : "")),
     externalLinks,
     assignee: normalizeAssignee(task.assignee),
+    handoff: normalizeHandoff(task.handoff),
     assignmentReadyFor: String(task.assignmentReadyFor || "").slice(0, 240),
     createdAt,
     updatedAt: String(task.updatedAt || createdAt),
@@ -166,6 +220,49 @@ function normalizeQuest(task, index, previousVersion, migrationDate) {
   if (kind === "daily") normalized.streak = nonNegativeInteger(task.streak);
   if (kind === "habit") normalized.value = Number(task.value || 0);
   return refreshActualMinutes(normalized);
+}
+
+function descendantDepth(state, questId, seen = new Set()) {
+  if (seen.has(questId)) return MAX_TREE_DEPTH + 1;
+  seen.add(questId);
+  const children = state.tasks.filter((task) => task.parentQuestId === questId);
+  if (!children.length) return 1;
+  return 1 + Math.max(...children.map((child) => descendantDepth(state, child.id, new Set(seen))));
+}
+
+function validateParentQuest(state, questId, parentQuestId) {
+  const parentId = String(parentQuestId || "").trim();
+  if (!parentId) return;
+  const quest = state.tasks.find((task) => task.id === questId);
+  const parent = state.tasks.find((task) => task.id === parentId);
+  if (!quest || !parent) throw new DomainError(404, "parent_quest_not_found", "Parent quest not found.");
+  if (quest.kind === "reward" || parent.kind === "reward" || !TREE_KINDS.has(quest.kind) || !TREE_KINDS.has(parent.kind)) {
+    throw new DomainError(400, "invalid_parent_quest", "Only habit, daily, and todo quests can participate in a Quest Tree.");
+  }
+  if (questId === parentId) throw new DomainError(400, "circular_parent_quest", "A quest cannot be its own parent.");
+  let current = parent;
+  const visited = new Set([questId]);
+  let parentDepth = 1;
+  while (current) {
+    if (visited.has(current.id)) throw new DomainError(400, "circular_parent_quest", "Quest Tree parents cannot contain a cycle.");
+    visited.add(current.id);
+    parentDepth += 1;
+    current = current.parentQuestId ? state.tasks.find((task) => task.id === current.parentQuestId) : null;
+  }
+  if (parentDepth + descendantDepth(state, questId) - 1 > MAX_TREE_DEPTH) {
+    throw new DomainError(400, "quest_tree_too_deep", `Quest Tree depth cannot exceed ${MAX_TREE_DEPTH}.`);
+  }
+}
+
+function repairParentQuestLinks(state) {
+  for (const task of state.tasks) {
+    if (!task.parentQuestId) continue;
+    try {
+      validateParentQuest(state, task.id, task.parentQuestId);
+    } catch {
+      task.parentQuestId = "";
+    }
+  }
 }
 
 export function migrateState(state, migrationDate = todayText()) {
@@ -195,8 +292,17 @@ export function migrateState(state, migrationDate = todayText()) {
       tasks: clone(state.tasks),
     };
   }
+  if (previousVersion < 6 && !state.migrationSnapshots.schema5To6) {
+    state.migrationSnapshots.schema5To6 = {
+      createdAt: new Date().toISOString(),
+      schemaVersion: previousVersion,
+      tasks: clone(state.tasks),
+      rewardClaims: clone(state.rewardClaims),
+    };
+  }
   state.tasks = state.tasks.filter((task) => task && typeof task === "object" && !Array.isArray(task))
     .map((task, index) => normalizeQuest(task, index, previousVersion, migrationDate));
+  repairParentQuestLinks(state);
   state.character.gems = Number(state.character.gems || 0);
   state.character.xp = Number(state.character.xp || 0);
   state.character.hp = Number(state.character.hp || 0);
@@ -284,6 +390,11 @@ function validateQuestInput(input, partial = false) {
     next.dependencyIds = [...new Set(input.dependencyIds.map(String).filter(Boolean))];
     if (next.dependencyIds.length > 20) throw new DomainError(400, "too_many_dependencies", "A quest can have at most 20 dependencies.");
   }
+  if (Object.hasOwn(input, "parentQuestId")) {
+    const value = input.parentQuestId == null ? "" : String(input.parentQuestId).trim();
+    if (value.length > 120) throw new DomainError(400, "invalid_parent_quest", "parentQuestId must contain at most 120 characters.");
+    next.parentQuestId = value;
+  }
   for (const key of ["estimatedMinutes", "manualActualMinutes", "actualMinutes"]) {
     if (!Object.hasOwn(input, key)) continue;
     const value = Number(input[key]);
@@ -297,15 +408,38 @@ function validateQuestInput(input, partial = false) {
     }
     const type = input.assignee.type;
     if (!ASSIGNEE_TYPES.has(type)) throw new DomainError(400, "invalid_assignee_type", "Unknown assignee type.");
-    const id = String(input.assignee.id || (type === "self" ? "self" : "")).trim();
+    const rawId = String(input.assignee.id || (type === "self" ? "self" : "")).trim();
+    const label = String(input.assignee.label || (type === "self" ? "自分" : rawId)).trim();
+    const id = type === "agent"
+      ? (rawId === "custom" || rawId.startsWith("custom:") ? customAgentId(rawId, label) : slugAgentId(rawId, label))
+      : rawId;
     if (!id || id.length > 120) throw new DomainError(400, "invalid_assignee_id", "assignee.id must contain 1 to 120 characters.");
-    const label = String(input.assignee.label || (type === "self" ? "自分" : id)).trim();
     if (!label || label.length > 80) throw new DomainError(400, "invalid_assignee_label", "assignee.label must contain 1 to 80 characters.");
     const handoffState = input.assignee.handoffState || "none";
     if (!HANDOFF_STATES.has(handoffState)) throw new DomainError(400, "invalid_handoff_state", "Unknown handoffState.");
     next.assignee = { type, id, label, handoffState };
   }
+  if (Object.hasOwn(input, "handoff")) {
+    if (!input.handoff || typeof input.handoff !== "object" || Array.isArray(input.handoff)) {
+      throw new DomainError(400, "invalid_handoff", "handoff must be an object.");
+    }
+    const handoff = normalizeHandoff(input.handoff);
+    if (handoff.artifactUrl && !handoff.artifactUrl.startsWith("https://")) {
+      throw new DomainError(400, "invalid_artifact_url", "artifactUrl must use HTTPS.");
+    }
+    next.handoff = handoff;
+  }
   return next;
+}
+
+function validateHandoffPatch(currentQuest, nextAssignee) {
+  if (!nextAssignee || nextAssignee.type !== "agent") return;
+  const currentState = currentQuest.assignee?.type === "agent" ? currentQuest.assignee.handoffState || "none" : "none";
+  const nextState = nextAssignee.handoffState || "none";
+  if (currentState === nextState) return;
+  if (!HANDOFF_TRANSITIONS.get(currentState)?.has(nextState)) {
+    throw new DomainError(409, "invalid_handoff_transition", `Cannot move handoff from ${currentState} to ${nextState}.`);
+  }
 }
 
 function validateDependencies(state, questId, dependencyIds) {
@@ -325,10 +459,129 @@ function validateDependencies(state, questId, dependencyIds) {
   }
 }
 
-function questOutput(task) {
-  return refreshActualMinutes({ ...task, externalLinks: (task.externalLinks || []).map((link) => ({ ...link })) });
+function childrenSummary(state, questId, includeArchived = false) {
+  const children = state.tasks.filter((task) => task.parentQuestId === questId && (includeArchived || task.lifecycleState !== "archived"));
+  const completed = children.filter((task) => ["completed", "archived"].includes(task.lifecycleState) || task.done).length;
+  return {
+    total: children.length,
+    completed,
+    progressPercent: children.length ? Math.round((completed / children.length) * 100) : 0,
+  };
 }
 
+function questOutput(task, state = null) {
+  const output = refreshActualMinutes({ ...task, externalLinks: (task.externalLinks || []).map((link) => ({ ...link })), handoff: normalizeHandoff(task.handoff) });
+  if (state) output.childrenSummary = childrenSummary(state, task.id);
+  return output;
+}
+
+export function getQuest(state, questId) {
+  ensureState(state);
+  const task = state.tasks.find((item) => item.id === questId);
+  if (!task) throw new DomainError(404, "quest_not_found", "Quest not found.");
+  return { quest: questOutput(task, state) };
+}
+
+function treeSort(a, b) {
+  return relevantDate(a).localeCompare(relevantDate(b))
+    || a.dueDate.localeCompare(b.dueDate)
+    || a.title.localeCompare(b.title)
+    || a.id.localeCompare(b.id);
+}
+
+export function getQuestTree(state, query = {}) {
+  ensureState(state);
+  const includeArchived = query.includeArchived === true || query.includeArchived === "true";
+  const requestedDepth = query.maxDepth === undefined ? MAX_TREE_DEPTH : nonNegativeInteger(query.maxDepth, MAX_TREE_DEPTH);
+  const maxDepth = Math.max(1, Math.min(MAX_TREE_DEPTH, requestedDepth));
+  const rootQuestId = String(query.rootQuestId || "").trim();
+  if (rootQuestId && !state.tasks.some((task) => task.id === rootQuestId)) throw new DomainError(404, "quest_not_found", "Root quest not found.");
+  const candidates = state.tasks.filter((task) => TREE_KINDS.has(task.kind) && (includeArchived || task.lifecycleState !== "archived"));
+  const allowed = new Set(candidates.map((task) => task.id));
+  const children = new Map();
+  candidates.forEach((task) => {
+    const parentId = allowed.has(task.parentQuestId) ? task.parentQuestId : "";
+    if (!children.has(parentId)) children.set(parentId, []);
+    children.get(parentId).push(task);
+  });
+  children.forEach((list) => list.sort(treeSort));
+  const root = rootQuestId ? candidates.find((task) => task.id === rootQuestId) : null;
+  if (rootQuestId && !root) return { roots: [], nodes: [], total: 0, summary: { childrenTotal: 0, childrenCompleted: 0, progressPercent: 0 } };
+  const roots = root ? [root] : (children.get("") || []);
+  const nodes = [];
+  const build = (task, depth) => {
+    const node = { quest: questOutput(task, state), children: [] };
+    nodes.push({ ...questOutput(task, state), depth });
+    if (depth >= maxDepth) return node;
+    node.children = (children.get(task.id) || []).map((child) => build(child, depth + 1));
+    return node;
+  };
+  const nestedRoots = roots.map((task) => build(task, 1));
+  const childNodes = nodes.filter((node) => node.id !== rootQuestId && !(!rootQuestId && node.parentQuestId === ""));
+  const completed = childNodes.filter((task) => ["completed", "archived"].includes(task.lifecycleState) || task.done).length;
+  return {
+    roots: nestedRoots,
+    nodes,
+    total: nodes.length,
+    summary: {
+      childrenTotal: childNodes.length,
+      childrenCompleted: completed,
+      progressPercent: childNodes.length ? Math.round((completed / childNodes.length) * 100) : 0,
+    },
+  };
+}
+
+export function listAgentHandoffs(state, query = {}) {
+  ensureState(state);
+  const filter = String(query.state || "all");
+  const supported = new Set(["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"]);
+  if (!supported.has(filter)) throw new DomainError(400, "invalid_handoff_state", "Unknown handoff filter.");
+  let handoffs = state.tasks.filter((task) => task.assignee?.type === "agent");
+  if (query.assigneeId) {
+    const assigneeId = String(query.assigneeId).trim();
+    const normalizedAssigneeId = assigneeId.startsWith("custom:") ? customAgentId(assigneeId, assigneeId) : slugAgentId(assigneeId);
+    handoffs = handoffs.filter((task) => task.assignee.id === normalizedAssigneeId);
+  }
+  if (filter === "pending") handoffs = handoffs.filter((task) => task.assignee.handoffState !== "ready");
+  else if (filter !== "all") handoffs = handoffs.filter((task) => task.assignee.handoffState === filter);
+  handoffs.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt) || a.id.localeCompare(b.id));
+  const total = handoffs.length;
+  const limit = Math.max(1, Math.min(100, Number(query.limit) || 25));
+  const offset = Math.max(0, nonNegativeInteger(query.cursor));
+  return { handoffs: handoffs.slice(offset, offset + limit).map((task) => questOutput(task, state)), total, limit, nextCursor: offset + limit < total ? String(offset + limit) : null };
+}
+
+export function transitionQuestHandoff(state, questId, input = {}, context = {}) {
+  const dryRun = input.dryRun !== false;
+  const target = dryRun ? clone(state) : state;
+  ensureState(target);
+  const quest = target.tasks.find((item) => item.id === questId);
+  if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
+  if (quest.assignee?.type !== "agent") throw new DomainError(409, "agent_assignee_required", "Only agent-assigned quests can use handoff states.");
+  const nextState = String(input.state || input.handoffState || "");
+  if (!HANDOFF_STATES.has(nextState)) throw new DomainError(400, "invalid_handoff_state", "A handoff transition must target none, ready, working, blocked, review_required, or accepted.");
+  const currentState = quest.assignee.handoffState || "none";
+  if (input.expectedState && input.expectedState !== currentState) throw new DomainError(409, "stale_handoff_state", "The handoff changed before this update was applied.", { expectedState: input.expectedState, actualState: currentState });
+  if (currentState !== nextState && !HANDOFF_TRANSITIONS.get(currentState)?.has(nextState)) {
+    throw new DomainError(409, "invalid_handoff_transition", `Cannot move handoff from ${currentState} to ${nextState}.`);
+  }
+  const artifactUrl = String(input.artifactUrl || quest.handoff?.artifactUrl || "").trim();
+  if (artifactUrl && !artifactUrl.startsWith("https://")) throw new DomainError(400, "invalid_artifact_url", "artifactUrl must use HTTPS.");
+  const now = new Date().toISOString();
+  quest.assignee.handoffState = nextState;
+  quest.handoff = normalizeHandoff({ ...quest.handoff, ...input, artifactUrl });
+  if (nextState === "working") quest.handoff.startedAt ||= now;
+  if (nextState === "review_required") quest.handoff.reviewRequestedAt = now;
+  if (nextState === "accepted") {
+    quest.handoff.reviewedAt = now;
+    quest.handoff.reviewedBy = String(context.reviewedBy || input.reviewedBy || "user").slice(0, 120);
+  }
+  quest.assignmentReadyFor = nextState === "ready" ? `${quest.assignee.type}:${quest.assignee.id}` : "";
+  quest.updatedAt = now;
+  const event = appendEvent(target, "quest.handoff.transitioned", quest, { from: currentState, to: nextState, handoff: clone(quest.handoff) }, context.source || "api");
+  touch(target);
+  return { dryRun, quest: questOutput(quest, target), event, events: [event] };
+}
 function isActiveOpen(task) {
   return task.lifecycleState === "active" && !(task.done && ["daily", "todo"].includes(task.kind));
 }
@@ -379,6 +632,11 @@ export function listQuestPage(state, query = {}) {
   if (query.tag) quests = quests.filter((task) => task.tags.includes(query.tag));
   if (query.planningState) quests = quests.filter((task) => task.planningState === query.planningState);
   if (query.lifecycleState) quests = quests.filter((task) => task.lifecycleState === query.lifecycleState);
+  if (query.parentQuestId !== undefined) {
+    const parentQuestId = String(query.parentQuestId || "").trim();
+    quests = quests.filter((task) => task.parentQuestId === parentQuestId);
+  }
+  if (query.rootOnly === "true" || query.rootOnly === true) quests = quests.filter((task) => !task.parentQuestId);
   if (query.done === "true" || query.done === true) quests = quests.filter((task) => task.done === true);
   if (query.done === "false" || query.done === false) quests = quests.filter((task) => !task.done);
   if (query.from) quests = quests.filter((task) => relevantDate(task) >= query.from);
@@ -391,7 +649,7 @@ export function listQuestPage(state, query = {}) {
   const total = quests.length;
   const limit = Math.max(1, Math.min(200, nonNegativeInteger(query.limit, 100) || 100));
   const offset = Math.max(0, nonNegativeInteger(query.cursor));
-  const page = quests.slice(offset, offset + limit).map(questOutput);
+  const page = quests.slice(offset, offset + limit).map((task) => questOutput(task, state));
   return { quests: page, total, limit, nextCursor: offset + limit < total ? String(offset + limit) : null };
 }
 
@@ -415,23 +673,31 @@ export function createQuest(state, input, context = {}) {
     manualActualMinutes: clean.manualActualMinutes || 0, togglActualMinutes: 0, actualMinutes: clean.manualActualMinutes || 0,
     completionCriteria: clean.completionCriteria || "", nextAction: clean.nextAction || "", impact: clean.impact || "medium",
     isBlockingOthers: Boolean(clean.isBlockingOthers), rolloverCount: 0, dependencyIds: clean.dependencyIds || [],
+    parentQuestId: clean.parentQuestId || "",
     completedAt: "", archivedAt: "", externalLinks: [], createdAt: now, updatedAt: now,
     assignee: clean.assignee || { type: "self", id: "self", label: "自分", handoffState: "none" },
+    handoff: normalizeHandoff(clean.handoff),
     assignmentReadyFor: "",
   };
   validateDependencies(state, quest.id, quest.dependencyIds);
+  state.tasks.push(quest);
+  try {
+    if (quest.parentQuestId) validateParentQuest(state, quest.id, quest.parentQuestId);
+  } catch (error) {
+    state.tasks.pop();
+    throw error;
+  }
   if (quest.kind === "daily" || quest.kind === "todo") quest.done = false;
   if (quest.kind === "daily") quest.streak = 0;
   if (quest.kind === "habit") quest.value = 0;
   if (quest.kind === "reward") quest.cost = Number(input.cost || Math.round(15 * difficultyScale(quest.difficulty)));
-  state.tasks.push(quest);
   const events = [appendEvent(state, "quest.created", quest, {}, context.source || "api")];
   if (quest.assignee.type === "agent" && quest.assignee.handoffState === "ready") {
     quest.assignmentReadyFor = `${quest.assignee.type}:${quest.assignee.id}`;
     events.push(appendEvent(state, "quest.assignment.ready", quest, { assignee: clone(quest.assignee) }, context.source || "api"));
   }
   touch(state);
-  const output = questOutput(quest);
+  const output = questOutput(quest, state);
   return context.returnEvent ? { quest: output, event: events[0], events } : output;
 }
 
@@ -441,6 +707,9 @@ export function patchQuest(state, questId, input, context = {}) {
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
   const clean = validateQuestInput(input, true);
   if (clean.dependencyIds) validateDependencies(state, questId, clean.dependencyIds);
+  if (clean.parentQuestId !== undefined) validateParentQuest(state, questId, clean.parentQuestId);
+  if (clean.assignee) validateHandoffPatch(quest, clean.assignee);
+  if (clean.handoff) clean.handoff = normalizeHandoff({ ...quest.handoff, ...input.handoff });
   const previousScheduledDate = quest.scheduledDate;
   const previousAssignee = clone(quest.assignee);
   Object.assign(quest, clean);
@@ -475,7 +744,7 @@ export function patchQuest(state, questId, input, context = {}) {
     }
   }
   touch(state);
-  const output = questOutput(quest);
+  const output = questOutput(quest, state);
   if (context.returnEvent) return { quest: output, event, events };
   return output;
 }
