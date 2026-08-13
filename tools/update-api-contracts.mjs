@@ -29,7 +29,7 @@ if (questListPath?.get) {
 
 openapi.info = {
   title: "QuestForge API",
-  version: "2.5.0",
+  version: "2.6.0",
   description: "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
@@ -38,6 +38,21 @@ openapi.servers = [
 ];
 
 Object.assign(openapi.paths, {
+  "/v1/agents": {
+    get: { summary: "List the signed-in user's private Agent Registry", parameters: [{ name: "includeArchived", in: "query", schema: { type: "boolean", default: false } }], responses: ok("Agent list", { type: "object", properties: { agents: { type: "array", items: { $ref: "#/components/schemas/RegisteredAgent" } } } }) },
+    post: { summary: "Register an Agent from the Firebase-authenticated web app", requestBody: body({ $ref: "#/components/schemas/RegisteredAgentInput" }), responses: { "201": { description: "Agent registered" } } },
+  },
+  "/v1/agents/{agentId}": {
+    get: { summary: "Get one registered Agent", parameters: [parameter("agentId")], responses: ok("Registered Agent", { type: "object", properties: { agent: { $ref: "#/components/schemas/RegisteredAgent" } } }) },
+    patch: { summary: "Update, disable, or archive an Agent from the Firebase-authenticated web app", parameters: [parameter("agentId")], requestBody: body({ $ref: "#/components/schemas/RegisteredAgentPatch" }), responses: ok("Updated Agent") },
+  },
+  "/v1/agent-connections": {
+    get: { summary: "List OAuth MCP clients and Agent links for the signed-in web user", responses: ok("Agent connections") },
+  },
+  "/v1/agents/{agentId}/connections/{clientId}": {
+    put: { summary: "Link an OAuth MCP client to one Agent", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Linked connection") },
+    delete: { summary: "Revoke and unlink an OAuth MCP client", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Revoked connection") },
+  },
   "/v1/profile": {
     get: { summary: "Get the authenticated user's profile", responses: ok("Own profile", { type: "object", properties: { profile: { anyOf: [{ $ref: "#/components/schemas/OwnProfile" }, { type: "null" }] } } }) },
     patch: { summary: "Create or update the authenticated user's profile", requestBody: body({ $ref: "#/components/schemas/ProfileInput" }), responses: ok("Updated profile", { type: "object", properties: { profile: { $ref: "#/components/schemas/OwnProfile" } } }) },
@@ -140,6 +155,7 @@ const scopes = openapi.components.securitySchemes.oauth2.flows.authorizationCode
 openapi.components.securitySchemes.oauth2.flows.authorizationCode.authorizationUrl = "https://your-questforge-worker.example.workers.dev/oauth/authorize";
 openapi.components.securitySchemes.oauth2.flows.authorizationCode.tokenUrl = "https://your-questforge-worker.example.workers.dev/oauth/token";
 Object.assign(scopes, {
+  "agents:read": "Read registered Agent profiles and the current Agent context",
   "profiles:read": "Read public profile data",
   "profiles:write": "Create and update the user's public profile",
   "friends:read": "Read friends and pending requests",
@@ -151,6 +167,9 @@ Object.assign(scopes, {
 });
 
 const schemas = openapi.components.schemas;
+schemas.RegisteredAgentInput = { type: "object", required: ["agentId", "displayName"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" }, displayName: { type: "string", minLength: 1, maxLength: 40 }, provider: { type: "string", maxLength: 40 }, role: { type: "string", maxLength: 60 }, instructions: { type: "string", maxLength: 4000 }, allowedScopes: { type: "array", items: { type: "string" } }, defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" } }, additionalProperties: false };
+schemas.RegisteredAgentPatch = { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 40 }, provider: { type: "string", maxLength: 40 }, role: { type: "string", maxLength: 60 }, instructions: { type: "string", maxLength: 4000 }, status: { type: "string", enum: ["active", "disabled", "archived"] }, allowedScopes: { type: "array", items: { type: "string" } }, defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" }, expectedUpdatedAt: { type: "string", format: "date-time" } }, additionalProperties: false };
+schemas.RegisteredAgent = { allOf: [{ $ref: "#/components/schemas/RegisteredAgentInput" }, { type: "object", required: ["status", "createdAt", "updatedAt"], properties: { uid: { type: "string" }, status: { type: "string", enum: ["active", "disabled", "archived"] }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } }] };
 schemas.Assignee = {
   type: "object",
   required: ["type", "id", "label", "handoffState"],
@@ -220,6 +239,6 @@ schemas.TogglFocusStopInput = { type: "object", properties: { expectedEntryId: {
 schemas.TogglFocusAttributionInput = { type: "object", properties: { questId: { type: "string" }, entryIds: { type: "array", items: { type: "string" }, maxItems: 100 }, dateFrom: { type: "string", format: "date" }, dateTo: { type: "string", format: "date" }, days: { type: "integer", minimum: 1, maximum: 30, default: 30 }, dryRun: { type: "boolean", default: true } } };
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
-await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.5.0", tools: MCP_TOOLS }, null, 2)}\n`);
+await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.6.0", tools: MCP_TOOLS }, null, 2)}\n`);
 
 console.log(`Updated OpenAPI and ${MCP_TOOLS.length} MCP tools.`);

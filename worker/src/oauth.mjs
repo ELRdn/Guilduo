@@ -128,6 +128,79 @@ export async function approveAuthorization(request, env) {
   return json({ redirect: redirect.toString() });
 }
 
+async function readClientGrantIndex(env, uid, clientId) {
+  return (await getKv(env).get(`user-client:${uid}:${clientId}`, "json")) || null;
+}
+
+async function writeClientGrantIndex(env, grant, tokenHashes) {
+  const kv = getKv(env);
+  const client = await kv.get(`client:${grant.clientId}`, "json");
+  const key = `user-client:${grant.uid}:${grant.clientId}`;
+  const existing = await kv.get(key, "json");
+  const now = new Date().toISOString();
+  await kv.put(key, JSON.stringify({
+    uid: grant.uid,
+    clientId: grant.clientId,
+    clientName: client?.clientName || "QuestForge MCP client",
+    scopes: grant.scopes || [],
+    firstConnectedAt: existing?.firstConnectedAt || now,
+    lastUsedAt: now,
+    revokedAt: "",
+    accessHash: tokenHashes.accessHash,
+    refreshHash: tokenHashes.refreshHash,
+  }), { expirationTtl: 2592000 });
+}
+
+function publicClientGrant(record) {
+  if (!record) return null;
+  return {
+    clientId: record.clientId,
+    clientName: record.clientName,
+    scopes: record.scopes || [],
+    firstConnectedAt: record.firstConnectedAt || "",
+    lastUsedAt: record.lastUsedAt || "",
+    revokedAt: record.revokedAt || null,
+  };
+}
+
+export async function listAuthorizedClients(env, uid) {
+  const kv = getKv(env);
+  const result = await kv.list({ prefix: `user-client:${uid}:` });
+  const records = await Promise.all(result.keys.map((item) => kv.get(item.name, "json")));
+  return records.filter(Boolean).map(publicClientGrant).sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+}
+
+export async function getAuthorizedClient(env, uid, clientId) {
+  const record = await readClientGrantIndex(env, uid, clientId);
+  return record && !record.revokedAt ? publicClientGrant(record) : null;
+}
+
+export async function noteAuthorizedClientUse(env, identity) {
+  if (identity?.authType !== "oauth" || !identity.uid || !identity.clientId) return;
+  const kv = getKv(env);
+  const key = `user-client:${identity.uid}:${identity.clientId}`;
+  const record = await kv.get(key, "json");
+  if (!record || record.revokedAt) return;
+  record.lastUsedAt = new Date().toISOString();
+  await kv.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
+}
+
+export async function revokeAuthorizedClient(env, uid, clientId) {
+  const kv = getKv(env);
+  const key = `user-client:${uid}:${clientId}`;
+  const record = await kv.get(key, "json");
+  if (!record) return null;
+  await Promise.all([
+    record.accessHash ? kv.delete(`access:${record.accessHash}`) : Promise.resolve(),
+    record.refreshHash ? kv.delete(`refresh:${record.refreshHash}`) : Promise.resolve(),
+  ]);
+  record.revokedAt ||= new Date().toISOString();
+  record.accessHash = "";
+  record.refreshHash = "";
+  await kv.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
+  return publicClientGrant(record);
+}
+
 async function refreshFirebaseSession(env, refreshToken) {
   const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(env.FIREBASE_API_KEY || "")}`, {
     method: "POST",
@@ -152,6 +225,7 @@ async function issueTokens(env, grant) {
   const record = { uid: grant.uid, email: grant.email, scopes: grant.scopes, clientId: grant.clientId };
   await kv.put(`access:${accessHash}`, JSON.stringify({ ...record, firebaseIdToken: firebaseSession.firebaseIdToken, refreshHash, expiresAt: Date.now() + expiresIn * 1000 }), { expirationTtl: expiresIn });
   await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, firebaseRefreshToken: firebaseSession.firebaseRefreshToken, accessHash }), { expirationTtl: 2592000 });
+  await writeClientGrantIndex(env, grant, { accessHash, refreshHash });
   return { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: expiresIn, scope: grant.scopes.join(" ") };
 }
 
@@ -192,6 +266,10 @@ export async function revokeToken(request, env) {
     accessRecord?.refreshHash ? kv.delete(`refresh:${accessRecord.refreshHash}`) : Promise.resolve(),
     refreshRecord?.accessHash ? kv.delete(`access:${refreshRecord.accessHash}`) : Promise.resolve(),
   ]);
+  const record = accessRecord || refreshRecord;
+  if (record?.uid && record?.clientId) {
+    await revokeAuthorizedClient(env, record.uid, record.clientId);
+  }
   return new Response(null, { status: 200 });
 }
 

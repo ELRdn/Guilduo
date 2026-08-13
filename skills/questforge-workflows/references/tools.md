@@ -53,4 +53,12 @@ Only habits, dailies, and To Dos can be in a tree. A reward cannot be a parent o
 - States: `none`, `ready`, `working`, `blocked`, `review_required`, `accepted`
 - Include `expectedState` when executing a transition to protect against stale updates.
 
+## Agent Registry
+
+- List active registered Agents: `list_registered_agents`
+- Inspect the current OAuth client's linked Agent: `get_current_agent_context`
+- Preview or assign a Quest: `assign_quest_to_agent`
+- Always preview first. Execution requires `dryRun: false` and the Quest's current `expectedUpdatedAt`.
+- Registry creation, permission changes, archival, and OAuth client linkage are web-only operations. MCP must never request secrets or expand its own permissions.
+
 Google Calendar is read-only schedule import. Google Tasks is deletion-free bidirectional sync. Notion exports daily logs. Provider connection and resource selection happen in the QuestForge web UI.

@@ -26,12 +26,27 @@ import { authenticateRequest } from "./security.mjs";
 import {
   approveAuthorization,
   authorizePage,
+  getAuthorizedClient,
+  listAuthorizedClients,
+  noteAuthorizedClientUse,
   oauthMetadata,
   protectedResourceMetadata,
   registerClient,
+  revokeAuthorizedClient,
   revokeToken,
   tokenEndpoint,
 } from "./oauth.mjs";
+import {
+  createAgent,
+  getAgent,
+  getAgentForClient,
+  linkAgentConnection,
+  listAgentConnections,
+  listAgents,
+  noteAgentConnectionUse,
+  unlinkAgentConnection,
+  updateAgent,
+} from "./agent-store.mjs";
 import {
   calendarSchedule,
   configureIntegration,
@@ -155,6 +170,11 @@ const QUEST_AND_EVENT_OUTPUT = {
   properties: { quest: QUEST_OBJECT, event: QUEST_OBJECT, events: { type: "array", items: QUEST_OBJECT } },
   additionalProperties: false,
 };
+const AGENT_ASSIGNMENT_OUTPUT = {
+  type: "object",
+  properties: { dryRun: { type: "boolean" }, quest: QUEST_OBJECT, event: QUEST_OBJECT, events: { type: "array", items: QUEST_OBJECT } },
+  additionalProperties: false,
+};
 const BATCH_OUTPUT = {
   type: "object",
   properties: { dryRun: { type: "boolean" }, count: { type: "integer" }, quests: { type: "array", items: QUEST_OBJECT }, events: { type: "array", items: QUEST_OBJECT } },
@@ -212,6 +232,24 @@ const HANDOFF_OUTPUT = {
   properties: { dryRun: { type: "boolean" }, quest: QUEST_OBJECT, event: QUEST_OBJECT, events: { type: "array", items: QUEST_OBJECT } },
   additionalProperties: false,
 };
+const AGENT_SCOPES = [
+  "quests:read", "quests:write", "character:read", "rewards:write",
+  "integrations:read", "integrations:sync", "events:read", "webhooks:manage", "plugins:manage", "profiles:read", "profiles:write",
+  "friends:read", "friends:write", "parties:read", "parties:write",
+  "battle:read", "battle:write", "agents:read",
+];
+const AGENT_OBJECT = {
+  type: "object",
+  properties: {
+    uid: { type: "string" }, agentId: { type: "string" }, displayName: { type: "string" }, provider: { type: "string" },
+    role: { type: "string" }, instructions: { type: "string" }, status: { type: "string", enum: ["active", "disabled", "archived"] },
+    allowedScopes: { type: "array", items: { type: "string", enum: AGENT_SCOPES } },
+    defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" },
+    createdAt: { type: "string" }, updatedAt: { type: "string" },
+  },
+  additionalProperties: false,
+};
+const AGENT_LIST_OUTPUT = { type: "object", properties: { agents: { type: "array", items: AGENT_OBJECT } }, additionalProperties: false };
 const CALENDAR_OVERRIDE_PROPERTIES = {
   title: QUEST_INPUT_PROPERTIES.title, notes: QUEST_INPUT_PROPERTIES.notes, category: QUEST_INPUT_PROPERTIES.category,
   dueDate: QUEST_INPUT_PROPERTIES.dueDate, scheduledDate: QUEST_INPUT_PROPERTIES.scheduledDate,
@@ -280,6 +318,9 @@ const MCP_TOOLS = [
   { name: "get_daily_brief", title: "Get Daily Brief", description: "Return today's quests, character state, and an optional cached Calendar schedule.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" }, includeCalendar: { type: "boolean", default: false } }, additionalProperties: false }, outputSchema: DAILY_BRIEF_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "get_review_summary", title: "Get Review Summary", description: "Summarize completed work and activity for one day or a rolling seven-day review window.", inputSchema: { type: "object", properties: { period: { type: "string", enum: ["day", "week"], default: "day" }, anchorDate: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: REVIEW_SUMMARY_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned QuestForge handoffs by lifecycle state.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "list_registered_agents", title: "List Registered Agents", description: "List the authenticated user's private QuestForge Agent Registry profiles.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LIST_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "assign_quest_to_agent", title: "Assign Quest to Agent", description: "Preview or assign one Quest to a registered Agent. Execution requires the Quest's current updatedAt value.", inputSchema: { type: "object", required: ["questId", "agentId"], properties: { questId: { type: "string" }, agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" }, expectedUpdatedAt: { type: "string" }, handoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: AGENT_ASSIGNMENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "transition_quest_handoff", title: "Transition Quest Handoff", description: "Preview or transition an agent-assigned Quest between none, ready, working, blocked, review_required, and accepted.", inputSchema: { type: "object", required: ["questId", "state"], properties: { questId: { type: "string" }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, expectedState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, blockedReason: { type: "string", maxLength: 500 }, artifactUrl: { type: "string", format: "uri" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: HANDOFF_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate QuestForge activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_calendar_schedule", title: "Get Calendar Schedule", description: "Read the cached Google Calendar schedule for a date. Connect and sync Calendar first.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { schedule: GENERIC_OBJECT_OUTPUT }, additionalProperties: false }, annotations: OPEN_WORLD_READ_ANNOTATIONS },
@@ -321,6 +362,50 @@ function assertTogglFocusWebConnection(request, env, identity) {
   }
 }
 
+function assertAgentRegistryWebMutation(request, env, identity) {
+  if (!identity || !["firebase", "dev"].includes(identity.authType)) {
+    throw new DomainError(403, "agent_registry_web_required", "Agent Registry settings can only be changed from the QuestForge web app.");
+  }
+  if (identity.authType === "firebase" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+    throw new DomainError(403, "agent_registry_origin_required", "Open QuestForge in an approved browser origin to change Agent Registry settings.");
+  }
+}
+
+async function identityWithAgentContext(env, identity) {
+  if (identity?.authType !== "oauth" || !identity.clientId) return identity;
+  await noteAuthorizedClientUse(env, identity);
+  const agent = await getAgentForClient(env, identity.uid, identity.clientId);
+  if (!agent || agent.uid !== identity.uid) return identity;
+  await noteAgentConnectionUse(env, identity.uid, identity.clientId).catch(() => undefined);
+  const allowed = new Set(agent.allowedScopes || []);
+  return { ...identity, scopes: (identity.scopes || []).filter((scope) => allowed.has(scope)), agent };
+}
+
+async function assignQuestToAgent(env, identity, context, input) {
+  assertScope(identity.scopes, "quests:write");
+  const agent = await getAgent(env, identity.uid, input.agentId);
+  if (agent.status !== "active") throw new DomainError(409, "agent_inactive", "Only an active registered Agent can receive a Quest.");
+  const state = await stateFor(env, identity);
+  const current = getQuest(state, input.questId).quest;
+  if (input.expectedUpdatedAt && input.expectedUpdatedAt !== current.updatedAt) {
+    throw new DomainError(409, "stale_quest", "The Quest changed before this assignment was applied.", { expectedUpdatedAt: input.expectedUpdatedAt, actualUpdatedAt: current.updatedAt });
+  }
+  const patch = {
+    assignee: { type: "agent", id: agent.agentId, label: agent.displayName, handoffState: input.handoffState || agent.defaultHandoffState || "ready" },
+    handoff: { ...current.handoff, note: input.note || current.handoff?.note || "" },
+  };
+  if (input.dryRun !== false) {
+    const previewState = structuredClone(state);
+    return { dryRun: true, ...patchQuest(previewState, input.questId, patch, { source: "mcp", returnEvent: true }) };
+  }
+  if (!input.expectedUpdatedAt) throw new DomainError(400, "expected_updated_at_required", "expectedUpdatedAt is required when executing an Agent assignment.");
+  return { dryRun: false, ...await mutateAndNotify(env, identity, context, (next) => {
+    const latest = getQuest(next, input.questId).quest;
+    if (latest.updatedAt !== input.expectedUpdatedAt) throw new DomainError(409, "stale_quest", "The Quest changed before this assignment was applied.", { expectedUpdatedAt: input.expectedUpdatedAt, actualUpdatedAt: latest.updatedAt });
+    return patchQuest(next, input.questId, patch, { source: "mcp", returnEvent: true });
+  }) };
+}
+
 function validDateValue(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
 }
@@ -346,6 +431,61 @@ async function mutateAndNotify(env, identity, context, mutation) {
 
 async function routeApi(request, env, context, identity, path) {
   const method = request.method;
+  if (path === "/v1/agents" && method === "GET") {
+    assertScope(identity.scopes, "agents:read");
+    const includeArchived = new URL(request.url).searchParams.get("includeArchived") === "true";
+    return json({ agents: await listAgents(env, identity.uid, { includeArchived }) });
+  }
+  if (path === "/v1/agents" && method === "POST") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    return json({ agent: await createAgent(env, identity.uid, await request.json()) }, 201);
+  }
+  if (path === "/v1/agent-connections" && method === "GET") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const agents = await listAgents(env, identity.uid, { includeArchived: true });
+    const linked = (await Promise.all(agents.map((agent) => listAgentConnections(env, identity.uid, agent.agentId)))).flat();
+    return json({ authorizedClients: await listAuthorizedClients(env, identity.uid), connections: linked });
+  }
+  const agentMatch = path.match(/^\/v1\/agents\/([^/]+)$/);
+  if (agentMatch && method === "GET") {
+    assertScope(identity.scopes, "agents:read");
+    return json({ agent: await getAgent(env, identity.uid, decodeURIComponent(agentMatch[1]), { includeArchived: true }) });
+  }
+  if (agentMatch && method === "PATCH") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const agentId = decodeURIComponent(agentMatch[1]);
+    const agent = await updateAgent(env, identity.uid, agentId, await request.json());
+    if (["disabled", "archived"].includes(agent.status)) {
+      const connections = await listAgentConnections(env, identity.uid, agentId);
+      await Promise.all(connections.map((connection) => revokeAuthorizedClient(env, identity.uid, connection.clientId)));
+    }
+    return json({ agent });
+  }
+  const agentConnectionMatch = path.match(/^\/v1\/agents\/([^/]+)\/connections\/([^/]+)$/);
+  if (agentConnectionMatch && method === "PUT") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const agentId = decodeURIComponent(agentConnectionMatch[1]);
+    const clientId = decodeURIComponent(agentConnectionMatch[2]);
+    const client = await getAuthorizedClient(env, identity.uid, clientId);
+    if (!client) throw new DomainError(404, "oauth_client_not_found", "An active OAuth MCP client with this ID was not found for the signed-in user.");
+    return json({ connection: await linkAgentConnection(env, identity.uid, agentId, {
+      clientId: client.clientId,
+      clientName: client.clientName,
+      scopes: client.scopes,
+      firstConnectedAt: client.firstConnectedAt,
+      lastUsedAt: client.lastUsedAt,
+    }) });
+  }
+  if (agentConnectionMatch && method === "DELETE") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const agentId = decodeURIComponent(agentConnectionMatch[1]);
+    const clientId = decodeURIComponent(agentConnectionMatch[2]);
+    const existing = (await listAgentConnections(env, identity.uid, agentId)).find((connection) => connection.clientId === clientId);
+    if (!existing) throw new DomainError(404, "agent_connection_not_found", "This connection is not linked to the requested Agent.");
+    const connection = await unlinkAgentConnection(env, identity.uid, clientId);
+    await revokeAuthorizedClient(env, identity.uid, clientId);
+    return json({ connection });
+  }
   if (path === "/v1/profile" && method === "GET") {
     assertScope(identity.scopes, "profiles:read");
     return json({ profile: await getOwnProfile(env, identity.uid) });
@@ -684,6 +824,23 @@ async function convertCalendarEventWithOverrides(env, identity, state, args) {
 }
 
 async function callMcpTool(name, args, env, context, identity) {
+  if (name === "list_registered_agents") {
+    assertScope(identity.scopes, "agents:read");
+    return { agents: await listAgents(env, identity.uid) };
+  }
+  if (name === "get_current_agent_context") {
+    assertScope(identity.scopes, "agents:read");
+    return {
+      agent: identity.agent || null,
+      clientId: identity.clientId || null,
+      effectiveScopes: identity.scopes || [],
+      linked: Boolean(identity.agent),
+    };
+  }
+  if (name === "assign_quest_to_agent") {
+    assertScope(identity.scopes, "agents:read");
+    return assignQuestToAgent(env, identity, context, args);
+  }
   if (name === "get_my_profile") { assertScope(identity.scopes, "profiles:read"); return { profile: await getOwnProfile(env, identity.uid) }; }
   if (name === "find_profile_by_handle") { assertScope(identity.scopes, "profiles:read"); return { profile: await findProfileByHandle(env, args.handle) }; }
   if (name === "update_profile") { assertScope(identity.scopes, "profiles:write"); return { profile: await upsertProfile(env, identity.uid, args) }; }
@@ -860,7 +1017,7 @@ async function handleMcp(request, env, context, identity) {
   const message = await request.json();
   if (message.method === "notifications/initialized") return new Response(null, { status: 202 });
   let result;
-  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.5.0" }, instructions: "Use QuestForge to organize quests, Quest Trees, daily plans, reviews, agent handoffs, profiles, friends, parties, command battles, and Toggl Focus. Read before writing. Preview batch updates, archives, handoff transitions, battle commands, Focus tasks, timers, and time attribution before execution. Never request or accept a Toggl Focus API key through MCP. Ask for confirmation before destructive actions. Quest deletion is not supported." };
+  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.6.0" }, instructions: "Use QuestForge to organize quests, Quest Trees, registered Agents, daily plans, reviews, agent handoffs, profiles, friends, parties, command battles, and Toggl Focus. Read before writing. Preview Agent assignments, batch updates, archives, handoff transitions, battle commands, Focus tasks, timers, and time attribution before execution. Never request or accept API keys through MCP. Ask for confirmation before destructive actions. Quest deletion is not supported." };
   else if (message.method === "tools/list") result = { tools: MCP_TOOLS };
   else if (message.method === "tools/call") {
     try {
@@ -880,7 +1037,7 @@ async function handleMcp(request, env, context, identity) {
 async function handleRequest(request, env, context) {
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.5.0", schemaVersion: 6, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
+  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.6.0", schemaVersion: 6, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
   if (path === "/.well-known/oauth-authorization-server") return json(oauthMetadata(request, env));
   if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return json(protectedResourceMetadata(request, env));
   if (path === "/oauth/register" && request.method === "POST") return registerClient(request, env);
@@ -892,8 +1049,9 @@ async function handleRequest(request, env, context) {
   if (providerCallbackMatch && request.method === "GET") return handleProviderCallback(request, env, providerCallbackMatch[1]);
   if (path === "/openapi.json") return fetch(new URL("/api/openapi.json", env.WEB_APP_URL || "http://localhost:5173"));
 
-  const identity = await authenticateRequest(request, env);
-  if (!identity) return json({ error: { code: "unauthorized", message: "A valid OAuth or Firebase bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` });
+  const authenticated = await authenticateRequest(request, env);
+  if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Firebase bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` });
+  const identity = await identityWithAgentContext(env, authenticated);
   if (path === "/mcp") return handleMcp(request, env, context, identity);
   if (path === "/mcp-next") return handleMcpNext(request, env, context, identity);
   if (path.startsWith("/v1/")) return routeApi(request, env, context, identity, path);

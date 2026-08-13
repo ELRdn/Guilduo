@@ -3,7 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { callMcpTool, MCP_TOOLS } from "./index.mjs";
 
-const SERVER_INFO = { name: "questforge-mcp-next", version: "2.5.0" };
+const SERVER_INFO = { name: "questforge-mcp-next", version: "2.6.0" };
 const ROUTE = "/mcp-next";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TEXT_LENGTH = 8000;
@@ -125,6 +125,18 @@ function registerResources(server, env, context, identity) {
     (uri) => readSafe(uri, () => callMcpTool("list_agent_handoffs", { state: "all" }, env, context, identity)),
   );
   server.registerResource(
+    "questforge-registered-agents",
+    "questforge://agents/registered",
+    { title: "Registered Agents", mimeType: "application/json", description: "Private Agent Registry profiles available to the current QuestForge user." },
+    (uri) => readSafe(uri, () => callMcpTool("list_registered_agents", {}, env, context, identity)),
+  );
+  server.registerResource(
+    "questforge-current-agent-context",
+    "questforge://agents/current",
+    { title: "Current Agent Context", mimeType: "application/json", description: "The Agent Registry profile linked to this OAuth MCP client and its effective scopes." },
+    (uri) => readSafe(uri, () => callMcpTool("get_current_agent_context", {}, env, context, identity)),
+  );
+  server.registerResource(
     "questforge-toggl-focus-status",
     "questforge://toggl-focus/status",
     { title: "Toggl Focus Status", mimeType: "application/json", description: "Toggl Focus connection configuration and current timer without the personal API key." },
@@ -244,6 +256,24 @@ function registerPrompts(server) {
         "- update_quest to edit notes, nextAction, parentQuestId, or assignee details",
         "- score_quest to complete work",
         "Do not remove assignments or archive quests without explicit confirmation.",
+      ].join("\n"));
+    },
+  );
+  server.registerPrompt(
+    "assign_registered_agent",
+    { title: "Assign a Registered Agent", description: "Safely assign one Quest to a registered Agent.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ questId: z.string().max(120).optional() })) },
+    (rawArgs) => {
+      const { questId } = rawArgs || {};
+      return promptMessages([
+        "Help me assign a QuestForge Quest to one registered Agent.",
+        "",
+        "Read first:",
+        "1. Call list_registered_agents and use only an active Agent.",
+        `2. Call get_quest${questId ? ` with questId: \"${questId}\"` : " after I choose the Quest"} to obtain its current updatedAt value.`,
+        "3. Call assign_quest_to_agent with dryRun: true.",
+        "",
+        "Show the proposed assignee, handoff state, and note. Execute with dryRun: false and expectedUpdatedAt only after I confirm.",
+        "Never create, modify, archive, or expand Agent permissions through MCP.",
       ].join("\n"));
     },
   );

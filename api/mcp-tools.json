@@ -1,6 +1,6 @@
 {
   "serverName": "questforge-mcp",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "tools": [
     {
       "name": "list_today_quests",
@@ -2411,6 +2411,203 @@
       },
       "annotations": {
         "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_registered_agents",
+      "title": "List Registered Agents",
+      "description": "List the authenticated user's private QuestForge Agent Registry profiles.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "uid": {
+                  "type": "string"
+                },
+                "agentId": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "instructions": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "disabled",
+                    "archived"
+                  ]
+                },
+                "allowedScopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "quests:read",
+                      "quests:write",
+                      "character:read",
+                      "rewards:write",
+                      "integrations:read",
+                      "integrations:sync",
+                      "events:read",
+                      "webhooks:manage",
+                      "plugins:manage",
+                      "profiles:read",
+                      "profiles:write",
+                      "friends:read",
+                      "friends:write",
+                      "parties:read",
+                      "parties:write",
+                      "battle:read",
+                      "battle:write",
+                      "agents:read"
+                    ]
+                  }
+                },
+                "defaultHandoffState": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "ready",
+                    "working",
+                    "blocked",
+                    "review_required",
+                    "accepted"
+                  ]
+                },
+                "reviewRequired": {
+                  "type": "boolean"
+                },
+                "dryRunDefault": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_current_agent_context",
+      "title": "Get Current Agent Context",
+      "description": "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "assign_quest_to_agent",
+      "title": "Assign Quest to Agent",
+      "description": "Preview or assign one Quest to a registered Agent. Execution requires the Quest's current updatedAt value.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "questId",
+          "agentId"
+        ],
+        "properties": {
+          "questId": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+          },
+          "expectedUpdatedAt": {
+            "type": "string"
+          },
+          "handoffState": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "quest": {
+            "type": "object"
+          },
+          "event": {
+            "type": "object"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": true,
         "openWorldHint": false

@@ -20,6 +20,9 @@ Use the QuestForge MCP server as the source of truth. Never invent quest IDs, us
 - Handoff writes must include `dryRun: true` first. Use `expectedState` on execution so a stale agent update returns a conflict instead of overwriting newer work.
 - Never use `delete`; archive quests and preserve their history.
 - Never request, accept, echo, or store a Toggl Focus Personal API key through MCP. The user connects it only in the QuestForge web UI.
+- Use `list_registered_agents` before assigning work. Do not invent Agent IDs or treat a free-form legacy assignee as registered.
+- Use `get_current_agent_context` to understand the current MCP client's linked Agent and effective scopes. Never attempt to expand Agent permissions through MCP.
+- Call `assign_quest_to_agent` with `dryRun: true` first. Execute only with the Quest's current `expectedUpdatedAt` after confirmation.
 
 ## Quest Capture
 
@@ -57,7 +60,9 @@ Use `planningState: backlog` for unscheduled one-off work. Use `scheduled` with 
 
 - Self: `{ "type": "self", "id": "self", "label": "Me", "handoffState": "none" }`
 - Human: resolve a friend or party member and use the stable `uid`.
-- Agent: use a stable agent ID such as `chatgpt`, `codex`, `claude`, `gemini`, `openclaw`, `hermes`, or a user-defined ID.
+- Agent: call `list_registered_agents` and use an active immutable `agentId`. Legacy free-form assignees remain readable but are not Registry entries.
+- The user creates and edits Registry entries in the Firebase-authenticated QuestForge web UI. MCP clients can read the Registry and accept assignments, but cannot create Agents or expand their scopes.
+- Effective Agent permissions are the intersection of the OAuth grant and the Agent's allowed scopes.
 - Set `handoffState: ready` only when the user says the task is ready for the agent.
 - Use `list_agent_handoffs` before processing agent work, then read each task with `get_quest` and `get_quest_tree` when it has children.
 - Allowed flow: `none -> ready -> working -> review_required -> accepted -> none`; use `blocked` when work cannot continue and return to `working` or `none` after resolution.

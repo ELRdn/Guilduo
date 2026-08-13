@@ -76,13 +76,14 @@ test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the 
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
   const tools = await toolsResponse.json();
-  assert.equal(tools.result.tools.length, 47);
+  assert.equal(tools.result.tools.length, 50);
   assert.ok(tools.result.tools.some((tool) => tool.name === "create_quest"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "list_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "batch_update_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "archive_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_quest_tree"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "transition_quest_handoff"));
+  for (const name of ["list_registered_agents", "get_current_agent_context", "assign_quest_to_agent"]) assert.ok(tools.result.tools.some((tool) => tool.name === name), name);
   assert.ok(tools.result.tools.some((tool) => tool.name === "find_profile_by_handle"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_party"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "battle_command"));
@@ -113,7 +114,7 @@ function parseMcpSse(text) {
   return JSON.parse(line.slice(6));
 }
 
-test("MCP v2.5 SDK lane exposes tool schemas, Focus resources, and workflow prompts", async () => {
+test("MCP v2.6 SDK lane exposes Agent resources, Focus resources, and workflow prompts", async () => {
   const headers = { host: "worker.test", accept: "application/json, text/event-stream" };
   const mcpCall = async (method) => {
     const response = await call("/mcp-next", {
@@ -127,13 +128,15 @@ test("MCP v2.5 SDK lane exposes tool schemas, Focus resources, and workflow prom
   };
 
   const tools = await mcpCall("tools/list");
-  assert.equal(tools.tools.length, 47);
-  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 47);
+  assert.equal(tools.tools.length, 50);
+  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 50);
 
   const resources = await mcpCall("resources/list");
   assert.deepEqual(resources.resources.map((resource) => resource.uri).sort(), [
     "questforge://activity",
     "questforge://agent-handoffs",
+    "questforge://agents/current",
+    "questforge://agents/registered",
     "questforge://character",
     "questforge://quests/backlog",
     "questforge://quests/today",
@@ -146,6 +149,7 @@ test("MCP v2.5 SDK lane exposes tool schemas, Focus resources, and workflow prom
 
   const prompts = await mcpCall("prompts/list");
   assert.deepEqual(prompts.prompts.map((prompt) => prompt.name).sort(), [
+    "assign_registered_agent",
     "capture_quest",
     "plan_today",
     "process_agent_handoffs",

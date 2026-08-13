@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "QuestForge API",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "description": "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks."
   },
   "servers": [
@@ -1801,6 +1801,211 @@
           }
         }
       }
+    },
+    "/v1/agents": {
+      "get": {
+        "summary": "List the signed-in user's private Agent Registry",
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RegisteredAgent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Register an Agent from the Firebase-authenticated web app",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisteredAgentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Agent registered"
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentId}": {
+      "get": {
+        "summary": "Get one registered Agent",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Registered Agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "$ref": "#/components/schemas/RegisteredAgent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update, disable, or archive an Agent from the Firebase-authenticated web app",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisteredAgentPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated Agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-connections": {
+      "get": {
+        "summary": "List OAuth MCP clients and Agent links for the signed-in web user",
+        "responses": {
+          "200": {
+            "description": "Agent connections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentId}/connections/{clientId}": {
+      "put": {
+        "summary": "Link an OAuth MCP client to one Agent",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Linked connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Revoke and unlink an OAuth MCP client",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1828,7 +2033,8 @@
               "parties:read": "Read the active party and public members",
               "parties:write": "Create, invite, join, leave, and manage a party",
               "battle:read": "Read command battle state",
-              "battle:write": "Preview and execute command battle turns"
+              "battle:write": "Preview and execute command battle turns",
+              "agents:read": "Read registered Agent profiles and the current Agent context"
             }
           }
         }
@@ -2773,6 +2979,154 @@
             "default": true
           }
         }
+      },
+      "RegisteredAgentInput": {
+        "type": "object",
+        "required": [
+          "agentId",
+          "displayName"
+        ],
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "provider": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "allowedScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaultHandoffState": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
+            ]
+          },
+          "reviewRequired": {
+            "type": "boolean"
+          },
+          "dryRunDefault": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegisteredAgentPatch": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "provider": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled",
+              "archived"
+            ]
+          },
+          "allowedScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaultHandoffState": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ready",
+              "working",
+              "blocked",
+              "review_required",
+              "accepted"
+            ]
+          },
+          "reviewRequired": {
+            "type": "boolean"
+          },
+          "dryRunDefault": {
+            "type": "boolean"
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegisteredAgent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RegisteredAgentInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "status",
+              "createdAt",
+              "updatedAt"
+            ],
+            "properties": {
+              "uid": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "disabled",
+                  "archived"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        ]
       }
     }
   }

@@ -23,6 +23,7 @@ export const ALL_SCOPES = [
   "parties:write",
   "battle:read",
   "battle:write",
+  "agents:read",
 ];
 
 export function getKv(env) {

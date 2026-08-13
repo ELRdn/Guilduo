@@ -22,7 +22,7 @@ The KV binding is required for MCP OAuth clients, short-lived provider OAuth sta
 npx wrangler d1 migrations apply questforge-integrations --remote
 ```
 
-D1 stores per-user integration accounts, encrypted provider tokens, Calendar schedule blocks, sync cursors, locks, and logs.
+D1 stores per-user integration accounts, encrypted provider tokens, Calendar schedule blocks, sync cursors, locks, logs, private Agent Registry profiles, and MCP client links.
 
 ## 2. Add Firebase service credentials
 
@@ -90,11 +90,13 @@ npm run worker:deploy
 
 `PUBLIC_BASE_URL` and `WEB_APP_URL` stay as non-secret Wrangler variables. Verify `/health` reports `integrationStorage: d1`, then connect Google and Notion from the app.
 
-## MCP v2.5 connection check
+## MCP v2.6 connection check
 
-The normal OAuth endpoint is `https://your-questforge-worker.example.workers.dev/mcp`. It provides all 47 QuestForge tools, including Quest Tree, Agent Handoff, and safe Toggl Focus operations. After a Worker update, remove and reconnect a client only when it has cached an older tool list.
+The normal OAuth endpoint is `https://your-questforge-worker.example.workers.dev/mcp`. It provides all 50 QuestForge tools, including Quest Tree, Agent Handoff, Agent Registry reads and assignments, and safe Toggl Focus operations. Existing OAuth clients keep their previous scopes. Reconnect only when Agent features need the new `agents:read` scope or a client has cached an older tool list.
 
-`https://your-questforge-worker.example.workers.dev/mcp-next` is the SDK v2 Streamable HTTP lane. It provides the same tools plus Quest Tree, Agent Handoff, and Toggl Focus Resources and Prompts for `plan_today`, `review_day`, `review_week`, `capture_quest`, `process_agent_handoffs`, and `review_focus_time`. Use `/mcp-next` first for clients that support modern MCP discovery, then keep `/mcp` as the normal compatibility endpoint.
+`https://your-questforge-worker.example.workers.dev/mcp-next` is the SDK v2 Streamable HTTP lane. It provides the same tools plus Agent Registry, current Agent context, Quest Tree, Agent Handoff, and Toggl Focus Resources. It also adds the `assign_registered_agent` Prompt alongside the planning and review Prompts. Use `/mcp-next` first for clients that support modern MCP discovery, then keep `/mcp` as the compatibility endpoint.
+
+Agent IDs and instructions are managed from `/next/` > Settings > AI Agent Registry after Firebase Google login. The Registry never stores model API keys, passwords, access tokens, or execution URLs. One OAuth MCP client can belong to one Agent; one Agent can have multiple clients. Disabling, archiving, or unlinking an Agent revokes the related OAuth connection.
 
 Toggl Focus is a user-owned connection. Never add a global Toggl key to Worker Secrets and never ask an MCP client for a key.
 
