@@ -28,6 +28,10 @@ const state = {
   authUser: null,
   remoteMode: false,
   remoteIntegrations: [],
+  registeredAgents: [],
+  agentConnections: { authorizedClients: [], connections: [] },
+  remoteParty: null,
+  panelErrors: [],
   battleSession: null,
   battleTurn: 1,
   settings: {
@@ -163,7 +167,7 @@ function remoteState(task) {
 function remoteQuestToLab(task, index = 0) {
   const parent = task.parentQuestId || "";
   const progress = Number(task.progressPercent ?? task.progress ?? task.childrenSummary?.progressPercent ?? 0);
-  const owner = task.assignee?.displayName || task.assignee?.name || task.assignee?.agentId || "Astra";
+  const owner = task.assignee?.label || task.assignee?.displayName || task.assignee?.name || task.assignee?.id || task.assignee?.agentId || "Astra";
   const kind = parent ? "sub" : task.kind === "todo" ? "side" : "main";
   const reward = Number(task.mpGain ?? task.reward?.mp ?? task.reward ?? (task.kind === "habit" ? 6 : task.kind === "daily" ? 14 : 20));
   return {
@@ -183,6 +187,10 @@ function remoteQuestToLab(task, index = 0) {
     xp: Number(task.xpGain || task.xp || 60),
     difficulty: difficultyValue(task.difficulty),
     children: [],
+    lifecycleState: task.lifecycleState || (task.done ? "completed" : "active"),
+    parentQuestId: parent,
+    updatedAt: task.updatedAt || "",
+    raw: task,
     remote: true,
   };
 }
@@ -195,6 +203,10 @@ function hydrateRemoteSnapshot(snapshot) {
   });
   state.quests = remoteQuests;
   state.remoteIntegrations = snapshot.integrations || [];
+  state.registeredAgents = snapshot.agents || [];
+  state.agentConnections = snapshot.agentConnections || { authorizedClients: [], connections: [] };
+  state.remoteParty = snapshot.party || null;
+  state.panelErrors = snapshot.panelErrors || [];
   state.battleSession = snapshot.battle || null;
   state.battleTurn = Number(snapshot.battle?.battle?.turn || 1);
   state.battleLog = snapshot.battle?.battle?.log || state.battleLog;
@@ -271,6 +283,8 @@ function renderConnection() {
   if (syncTime) syncTime.textContent = state.lastSyncAt || "未同期";
   const mode = $("#connectionMode");
   if (mode) mode.textContent = state.remoteMode ? "QuestForge本体" : "この端末";
+  const demoBadge = $("#demoDataBadge");
+  if (demoBadge) demoBadge.hidden = state.remoteMode;
   setSyncStatus(state.syncStatus);
 }
 
@@ -283,7 +297,17 @@ function pill(value) {
 }
 
 function partyMember(name) {
-  return partyMembers.find((member) => member.name === name);
+  return activePartyMembers().find((member) => member.name === name);
+}
+
+function activePartyMembers() {
+  if (!state.remoteMode) return partyMembers;
+  const playerName = state.authUser?.displayName || "Astra";
+  const player = { name: playerName, identity: "HUMAN / PLAYER", role: "Quest owner", mark: playerName.slice(0, 2).toUpperCase(), state: "working", task: "QuestForgeを運用中", avatar: "../assets/avatar-role-femme-sentinel.png" };
+  return [player, ...(state.registeredAgents || []).filter((agent) => agent.status !== "archived").map((agent) => {
+    const assigned = state.quests.find((item) => item.raw?.assignee?.id === agent.agentId);
+    return { name: agent.displayName, agentId: agent.agentId, identity: `AGENT / ${String(agent.provider || "generic").toUpperCase()}`, role: agent.role || "assistant", mark: agent.displayName.slice(0, 2).toUpperCase(), state: assigned?.state || (agent.status === "disabled" ? "blocked" : "ready"), task: assigned?.title || agent.instructions || "割り当て待ち" };
+  })];
 }
 
 function questKind(item) {
@@ -357,6 +381,7 @@ function renderSelected() {
     "<div><dt>報酬</dt><dd>XP +" + (item.xp || 60) + " / MP +" + item.reward + "</dd></div>";
   $("#completeButton").disabled = item.state === "completed";
   $("#completeButton").textContent = item.state === "completed" ? "完了済み" : "完了にする";
+  $("#archiveQuestButton").textContent = item.lifecycleState === "archived" ? "復元する" : "アーカイブ";
   const sheet = document.querySelector(".selected-panel");
   sheet.classList.toggle("is-mobile-open", state.mobileSheetOpen);
   $("#selectedSheetToggle").setAttribute("aria-expanded", String(state.mobileSheetOpen));
@@ -370,7 +395,7 @@ function memberAvatar(member) {
 }
 
 function renderAgents() {
-  $("#agentList").innerHTML = partyMembers.map((member) =>
+  $("#agentList").innerHTML = activePartyMembers().map((member) =>
     '<article class="agent-row">' + memberAvatar(member) +
     "<div><strong>" + member.name + "</strong><small>" + member.identity + " · " + member.role + "</small></div>" +
     '<button type="button" data-agent="' + member.name + '">' + stateLabel(member.state) + "</button></article>"
@@ -412,7 +437,8 @@ function renderBattle() {
 }
 
 function renderParty() {
-  const assignments = partyMembers.map((member) => ({ member, quest: state.quests.find((item) => item.owner === member.name) }));
+  const members = activePartyMembers();
+  const assignments = members.map((member) => ({ member, quest: state.quests.find((item) => item.owner === member.name || item.raw?.assignee?.id === member.agentId) }));
   $("#partyList").innerHTML = assignments.map(({ member, quest: assignedQuest }) =>
     '<article class="party-card"><div class="party-card-head"><div class="party-mark ' + (member.avatar ? "has-avatar" : "") + '">' + (member.avatar ? '<img src="' + member.avatar + '" alt="" />' : member.mark) + "</div><div>" +
       "<p>" + member.identity + "</p><h2>" + member.name + "</h2>" + pill(member.state) +
@@ -424,14 +450,46 @@ function renderParty() {
       '<button type="button" data-party-agent="' + member.name + '">担当Questを確認</button>' +
     "</article>"
   ).join("");
-  $("#partyCount").textContent = String(partyMembers.length);
-  $("#partyWorking").textContent = String(partyMembers.filter((member) => member.state === "working").length);
-  $("#partyReview").textContent = String(partyMembers.filter((member) => member.state === "review").length);
+  $("#partyCount").textContent = String(members.length);
+  $("#partyWorking").textContent = String(members.filter((member) => member.state === "working").length);
+  $("#partyReview").textContent = String(members.filter((member) => member.state === "review").length);
   $("#partyActivity").innerHTML = [
     ["Cyan", "PCの司令室を試す", "レビュー待ちへ返却"],
     ["Astra", "Toggl Focusの連携導線を確認する", "接続設定を確認中"],
     ["Archivist", "10言語の表示長を確認する", "文言レビューを開始"]
   ].map((item) => '<li><b>' + item[0] + "</b><span>" + item[1] + "</span><small>" + item[2] + "</small></li>").join("");
+}
+
+function renderAgentRegistry() {
+  const list = $("#agentRegistryList");
+  if (!list) return;
+  if (!state.remoteMode) {
+    list.innerHTML = '<p class="empty-note">Googleログイン後に本体データを読み込むと、本人専用Agent台帳を管理できます。</p>';
+    return;
+  }
+  const connections = state.agentConnections?.connections || [];
+  list.innerHTML = (state.registeredAgents || []).map((agent) => {
+    const linked = connections.filter((connection) => connection.agentId === agent.agentId && !connection.revokedAt);
+    return '<article class="registry-agent"><div><strong>' + escapeHtml(agent.displayName) + '</strong><small>' + escapeHtml(agent.agentId) + ' · ' + escapeHtml(agent.provider) + ' · ' + escapeHtml(agent.role) + '</small></div>' +
+      '<span class="state-pill" data-state="' + (agent.status === "active" ? "working" : "blocked") + '">' + escapeHtml(agent.status) + '</span>' +
+      '<p>' + escapeHtml(agent.instructions || "作業指示なし") + '</p><small>接続 ' + linked.length + '件 · 最終更新 ' + escapeHtml(formatSyncTime(agent.updatedAt)) + '</small>' +
+      '<div class="registry-actions"><button type="button" data-agent-edit="' + escapeHtml(agent.agentId) + '">編集</button>' +
+      (agent.status !== "archived" ? '<button type="button" data-agent-archive="' + escapeHtml(agent.agentId) + '">アーカイブ</button>' : '') + '</div></article>';
+  }).join("") || '<p class="empty-note">まだAgentが登録されていません。</p>';
+  const clientSelect = $("#agentClientInput");
+  const agentSelect = $("#agentLinkInput");
+  if (clientSelect) clientSelect.innerHTML = '<option value="">MCPクライアントを選択</option>' + (state.agentConnections?.authorizedClients || []).filter((client) => !client.revokedAt).map((client) => '<option value="' + escapeHtml(client.clientId) + '">' + escapeHtml(client.clientName || client.clientId) + '</option>').join("");
+  if (agentSelect) agentSelect.innerHTML = '<option value="">Agentを選択</option>' + (state.registeredAgents || []).filter((agent) => agent.status === "active").map((agent) => '<option value="' + escapeHtml(agent.agentId) + '">' + escapeHtml(agent.displayName) + '</option>').join("");
+}
+
+function renderPanelErrors() {
+  const panel = $("#panelErrorList");
+  if (!panel) return;
+  if (!state.remoteMode || !state.panelErrors?.length) { panel.hidden = true; panel.innerHTML = ""; return; }
+  const labels = ["キャラクター", "バトル", "連携", "プロフィール", "パーティ", "Agent台帳", "MCP接続"];
+  panel.hidden = false;
+  panel.innerHTML = '<div><strong>一部の情報を読み込めませんでした</strong><small>Quest一覧は保持されています。</small></div>' + state.panelErrors.map((error) => '<span>' + escapeHtml(labels[error.index] || "追加情報") + '</span>').join("") + '<button type="button" id="retryPanelsButton">再試行</button>';
+  $("#retryPanelsButton")?.addEventListener("click", () => loadRemoteData());
 }
 
 function renderIntegrations() {
@@ -467,6 +525,8 @@ function renderAll() {
   renderIntegrations();
   renderTimer();
   renderConnection();
+  renderAgentRegistry();
+  renderPanelErrors();
 }
 
 function applySettings() {
@@ -604,8 +664,32 @@ function toggleTimer() {
 
 function openAdd() {
   $("#addForm").reset();
+  const ownerInput = $("#questOwnerInput");
+  ownerInput.innerHTML = '<option value="">自分で担当</option>' + (state.remoteMode ? (state.registeredAgents || []).filter((agent) => agent.status === "active").map((agent) => '<option value="' + escapeHtml(agent.agentId) + '">' + escapeHtml(agent.displayName) + '</option>').join("") : '<option value="Cyan">Cyan</option><option value="Archivist">Archivist</option>');
   $("#addDialog").showModal();
   $("#questNameInput").focus();
+}
+
+function openEdit() {
+  const item = quest(state.selectedQuestId);
+  if (!item) return;
+  $("#editQuestId").value = item.id;
+  $("#editQuestTitle").value = item.title;
+  $("#editQuestNotes").value = item.note || "";
+  $("#editQuestDue").value = item.raw?.dueDate || "";
+  $("#editQuestParent").innerHTML = '<option value="">ルートQuest</option>' + state.quests.filter((candidate) => candidate.id !== item.id && !candidate.parent).map((candidate) => '<option value="' + escapeHtml(candidate.id) + '">' + escapeHtml(candidate.title) + '</option>').join("");
+  $("#editQuestParent").value = item.parent || "";
+  $("#editQuestAgent").innerHTML = '<option value="">自分で担当</option>' + (state.registeredAgents || []).filter((agent) => agent.status === "active").map((agent) => '<option value="' + escapeHtml(agent.agentId) + '">' + escapeHtml(agent.displayName) + '</option>').join("");
+  $("#editQuestAgent").value = item.raw?.assignee?.id || "";
+  $("#editQuestHandoff").value = item.raw?.assignee?.handoffState || "none";
+  $("#editDialog").showModal();
+}
+
+async function refreshAgentRegistry() {
+  const [agents, connections] = await Promise.all([repository.listAgents(true), repository.listAgentConnections()]);
+  state.registeredAgents = agents.agents || [];
+  state.agentConnections = connections;
+  renderAll();
 }
 
 function openReview() {
@@ -620,12 +704,13 @@ function openReview() {
 async function addQuest(data) {
   const title = String(data.get("title") || "").trim();
   if (!title) return;
-  const owner = String(data.get("owner") || "Astra");
+  const owner = String(data.get("owner") || "");
   const focus = Number(data.get("focus") || 30);
   const dueInput = String(data.get("due") || "");
   if (state.remoteMode) {
     try {
       setSyncStatus("syncing");
+      const selectedAgent = (state.registeredAgents || []).find((agent) => agent.agentId === owner);
       const response = await repository.createQuest({
         kind: "todo",
         title,
@@ -637,6 +722,7 @@ async function addQuest(data) {
         difficulty: "medium",
         planningState: dueInput ? "scheduled" : "backlog",
         lifecycleState: "active",
+        ...(selectedAgent ? { assignee: { type: "agent", id: selectedAgent.agentId, label: selectedAgent.displayName, handoffState: selectedAgent.defaultHandoffState || "ready" } } : {}),
       });
       if (response?.quest) {
         const created = remoteQuestToLab(response.quest, state.quests.length);
@@ -661,8 +747,8 @@ async function addQuest(data) {
     title,
     note: "Interaction Labで追加したQuest。保存先はこの端末です。",
     progress: 0,
-    owner,
-    mark: partyMember(owner)?.mark || "AS",
+    owner: owner || "Astra",
+    mark: partyMember(owner || "Astra")?.mark || "AS",
     state: "ready",
     due: displayDue(dueInput),
     focus,
@@ -830,6 +916,77 @@ $("#mobileAdd").addEventListener("click", openAdd);
 $("#mobileMoreToggle").addEventListener("click", () => setMobileMore(!state.mobileMoreOpen));
 $("#cancelAdd").addEventListener("click", () => $("#addDialog").close());
 $("#reviewButton").addEventListener("click", openReview);
+$("#editQuestButton").addEventListener("click", openEdit);
+$("#archiveQuestButton").addEventListener("click", async () => {
+  const item = quest(state.selectedQuestId);
+  if (!item) return;
+  const restoring = item.lifecycleState === "archived";
+  if (state.remoteMode) {
+    try {
+      const response = await repository.updateQuest(item.id, { lifecycleState: restoring ? "active" : "archived" });
+      applyRemoteResponse(response);
+      notify(item.title + (restoring ? "を復元しました。" : "をアーカイブしました。"));
+    } catch (error) { notify(error?.message || "アーカイブ操作に失敗しました。"); }
+    return;
+  }
+  item.lifecycleState = restoring ? "active" : "archived";
+  item.state = restoring ? "ready" : "completed";
+  renderAll(); persistState();
+});
+$("#cancelEdit").addEventListener("click", () => $("#editDialog").close());
+$("#editForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const item = quest($("#editQuestId").value);
+  if (!item) return;
+  const agentId = $("#editQuestAgent").value;
+  const agent = (state.registeredAgents || []).find((candidate) => candidate.agentId === agentId);
+  const patch = { title: $("#editQuestTitle").value.trim(), notes: $("#editQuestNotes").value.trim(), dueDate: $("#editQuestDue").value, parentQuestId: $("#editQuestParent").value, assignee: agent ? { type: "agent", id: agent.agentId, label: agent.displayName, handoffState: $("#editQuestHandoff").value } : { type: "self", id: "self", label: "自分", handoffState: "none" } };
+  try {
+    if (state.remoteMode) applyRemoteResponse(await repository.updateQuest(item.id, patch));
+    else Object.assign(item, { title: patch.title, note: patch.notes, parent: patch.parentQuestId, owner: agent?.displayName || "Astra", state: remoteState({ assignee: patch.assignee }) });
+    $("#editDialog").close(); renderAll(); persistState(); notify("Questを更新しました。");
+  } catch (error) { notify(error?.message || "Questの更新に失敗しました。"); }
+});
+
+function resetAgentForm() {
+  $("#agentForm").reset();
+  $("#agentEditingId").value = "";
+  $("#agentIdInput").disabled = false;
+}
+$("#agentFormReset").addEventListener("click", resetAgentForm);
+$("#agentRegistryList").addEventListener("click", async (event) => {
+  const edit = event.target.closest("[data-agent-edit]");
+  const archive = event.target.closest("[data-agent-archive]");
+  const agentId = edit?.dataset.agentEdit || archive?.dataset.agentArchive;
+  const agent = (state.registeredAgents || []).find((item) => item.agentId === agentId);
+  if (!agent) return;
+  if (edit) {
+    $("#agentEditingId").value = agent.agentId; $("#agentIdInput").value = agent.agentId; $("#agentIdInput").disabled = true;
+    $("#agentNameInput").value = agent.displayName; $("#agentProviderInput").value = agent.provider; $("#agentRoleInput").value = agent.role; $("#agentInstructionsInput").value = agent.instructions || "";
+  } else {
+    try { await repository.updateAgent(agent.agentId, { status: "archived", expectedUpdatedAt: agent.updatedAt }); await refreshAgentRegistry(); notify("Agentと関連MCP接続をアーカイブしました。"); } catch (error) { notify(error?.message || "Agentをアーカイブできませんでした。"); }
+  }
+});
+$("#agentForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!state.remoteMode) { notify("Agent登録はQuestForge本体へ接続後に利用できます。"); return; }
+  const editingId = $("#agentEditingId").value;
+  const input = { agentId: $("#agentIdInput").value.trim().toLowerCase(), displayName: $("#agentNameInput").value.trim(), provider: $("#agentProviderInput").value.trim() || "generic", role: $("#agentRoleInput").value.trim() || "assistant", instructions: $("#agentInstructionsInput").value.trim(), reviewRequired: true, dryRunDefault: true };
+  try {
+    if (editingId) {
+      const current = state.registeredAgents.find((agent) => agent.agentId === editingId);
+      const { agentId: _immutable, ...patch } = input;
+      await repository.updateAgent(editingId, { ...patch, expectedUpdatedAt: current.updatedAt });
+    } else await repository.createAgent(input);
+    resetAgentForm(); await refreshAgentRegistry(); notify("Agent台帳を保存しました。");
+  } catch (error) { notify(error?.message || "Agent台帳を保存できませんでした。"); }
+});
+$("#linkAgentClient").addEventListener("click", async () => {
+  const agentId = $("#agentLinkInput").value;
+  const clientId = $("#agentClientInput").value;
+  if (!agentId || !clientId) { notify("AgentとMCPクライアントを選んでください。"); return; }
+  try { await repository.linkAgentConnection(agentId, clientId); await refreshAgentRegistry(); notify("MCPクライアントをAgentへ紐付けました。"); } catch (error) { notify(error?.message || "MCP接続を紐付けできませんでした。"); }
+});
 
 $("#addForm").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -844,7 +1001,8 @@ async function updateReview(accepted) {
   if (state.remoteMode) {
     try {
       setSyncStatus("syncing");
-      const response = await repository.updateQuest(item.id, { notes: note || item.note, lifecycleState: accepted ? "completed" : "active" });
+      const currentState = item.raw?.assignee?.handoffState || "review_required";
+      const response = await repository.transitionHandoff(item.id, { state: accepted ? "accepted" : "working", expectedState: currentState, note: note || item.note, dryRun: false });
       applyRemoteResponse(response);
       notify(item.title + (accepted ? "を本体で承認しました。" : "を本体で作業中へ戻しました。"));
     } catch (error) {

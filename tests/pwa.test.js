@@ -26,6 +26,8 @@ test("service worker uses the root navigation fallback", () => {
 
   assert.match(worker, /const NAVIGATION_FALLBACK = "\/index\.html"/);
   assert.match(worker, /caches\.match\(NAVIGATION_FALLBACK\)/);
+  assert.match(worker, /BETA_NAVIGATION_PATH/);
+  assert.match(worker, /requestUrl\.pathname === "\/next"/);
 });
 
 test("service worker upgrades an existing QuestForge client once", () => {
@@ -44,5 +46,11 @@ test("service worker upgrades an existing QuestForge client once", () => {
   const noCachePaths = firebase.hosting.headers
     .filter((entry) => entry.headers.some((header) => header.value.includes("no-store")))
     .map((entry) => entry.source);
-  assert.deepEqual(noCachePaths, ["/", "/index.html"]);
+  assert.deepEqual(noCachePaths, ["/", "/index.html", "/next/index.html"]);
+});
+
+test("Firebase routes the beta UI before the root SPA fallback", () => {
+  const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
+  assert.equal(firebase.hosting.rewrites[0].destination, "/next/index.html");
+  assert.equal(firebase.hosting.rewrites.at(-1).destination, "/index.html");
 });

@@ -14,9 +14,11 @@
           <span class="brand-mark">QF</span>
           <span class="brand-copy">
             <strong>QuestForge</strong>
-            <small>FORGE OPS LAB</small>
+            <small>FORGE OPS <b class="beta-badge">BETA</b></small>
           </span>
         </div>
+
+        <a class="legacy-link" href="../" aria-label="QuestForge現行版へ戻る">現行版へ戻る</a>
 
         <nav class="sidebar-nav">
           <button type="button" class="nav-button is-active" data-view="today" aria-pressed="true">
@@ -62,6 +64,7 @@
           <div class="page-title">
             <p>OPERATIONAL QUEST BOARD</p>
             <h1 id="pageTitle">今日の作戦</h1>
+            <span class="demo-data-badge" id="demoDataBadge">デモデータ</span>
           </div>
 
           <div class="status-strip" aria-label="Character and focus status">
@@ -156,6 +159,8 @@
                 <div class="selected-actions">
                   <button type="button" class="primary-action" id="completeButton">完了にする</button>
                   <button type="button" class="secondary-action" id="reviewButton">レビュー</button>
+                  <button type="button" class="secondary-action" id="editQuestButton">編集</button>
+                  <button type="button" class="secondary-action" id="archiveQuestButton">アーカイブ</button>
                 </div>
               </section>
             </aside>
@@ -330,6 +335,7 @@
           <div class="view-heading">
             <div><p>SETTINGS / PERSONAL OPS</p><h2 id="settingsTitle">表示と運用の設定</h2></div>
           </div>
+          <section id="panelErrorList" class="panel-error-list" aria-live="polite" hidden></section>
           <div class="settings-layout">
             <section class="settings-card">
               <p>DISPLAY</p><h2>読みやすさ</h2>
@@ -361,6 +367,20 @@
                 <button type="button" class="secondary-action" id="useLocalButton">ローカルへ戻す</button>
               </div>
               <dl class="connection-meta"><div><dt>最終同期</dt><dd id="lastSyncAt">未同期</dd></div><div><dt>現在の保存先</dt><dd id="connectionMode">この端末</dd></div></dl>
+            </section>
+            <section class="settings-card settings-agent-card">
+              <p>AGENT REGISTRY</p><h2>AIエージェント台帳</h2>
+              <p class="setting-description">APIキーは保存せず、役割・作業指示・許可範囲とMCP接続だけを管理します。</p>
+              <form id="agentForm" class="agent-form">
+                <input id="agentEditingId" type="hidden" />
+                <label><span>Agent ID</span><input id="agentIdInput" pattern="[a-z0-9-]+" maxlength="80" placeholder="codex" required /></label>
+                <label><span>表示名</span><input id="agentNameInput" maxlength="40" placeholder="Cyan" required /></label>
+                <div class="form-grid"><label><span>Provider</span><input id="agentProviderInput" maxlength="40" placeholder="openai" /></label><label><span>役割</span><input id="agentRoleInput" maxlength="60" placeholder="engineer" /></label></div>
+                <label><span>作業指示</span><textarea id="agentInstructionsInput" rows="3" maxlength="4000" placeholder="担当する仕事と返却条件"></textarea></label>
+                <div class="dialog-actions"><button class="secondary-action" type="button" id="agentFormReset">新規入力</button><button class="primary-action" type="submit">保存</button></div>
+              </form>
+              <div id="agentRegistryList" class="agent-registry-list"></div>
+              <div class="agent-link-row"><select id="agentLinkInput"><option>Agentを選択</option></select><select id="agentClientInput"><option>MCPクライアントを選択</option></select><button type="button" class="secondary-action" id="linkAgentClient">紐付け</button></div>
             </section>
           </div>
         </section>
@@ -423,6 +443,17 @@
           <button class="secondary-action" type="button" id="returnReview">差し戻す</button>
           <button class="primary-action" type="submit">承認する</button>
         </div>
+      </form>
+    </dialog>
+    <dialog id="editDialog" class="dialog">
+      <form method="dialog" id="editForm">
+        <header><div><p>QUEST CONTROL</p><h2>Questを編集</h2></div><button class="dialog-close" type="submit" value="cancel" aria-label="閉じる">x</button></header>
+        <input id="editQuestId" type="hidden" />
+        <label><span>Quest名</span><input id="editQuestTitle" maxlength="80" required /></label>
+        <label><span>メモ</span><textarea id="editQuestNotes" rows="3"></textarea></label>
+        <div class="form-grid"><label><span>期限</span><input id="editQuestDue" type="date" /></label><label><span>親Quest</span><select id="editQuestParent"></select></label></div>
+        <div class="form-grid"><label><span>担当Agent</span><select id="editQuestAgent"></select></label><label><span>Handoff</span><select id="editQuestHandoff"><option value="none">なし</option><option value="ready">作業待ち</option><option value="working">作業中</option><option value="blocked">ブロック中</option><option value="review_required">レビュー待ち</option><option value="accepted">承認済み</option></select></label></div>
+        <div class="dialog-actions"><button class="secondary-action" type="button" id="cancelEdit">やめる</button><button class="primary-action" type="submit">保存する</button></div>
       </form>
     </dialog>
 

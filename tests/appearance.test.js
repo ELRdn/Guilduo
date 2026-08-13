@@ -37,11 +37,12 @@ test("all three tastes define dedicated dark palettes and a readable battle stag
   assert.match(css, /background: var\(--panel\);/);
 });
 
-test("PWA cache and app version are bumped for the Toggl Focus release", () => {
+test("PWA cache and app version are bumped for the Agent Registry beta", () => {
   const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
   const worker = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
 
-  assert.match(app, /const appVersion = "2026\.08\.12-toggl-focus"/);
-  assert.match(worker, /const APP_VERSION = "2026\.08\.12-toggl-focus"/);
-  assert.match(worker, /CACHE_PREFIX}v17/);
+  assert.match(app, /const appVersion = "2026\.08\.13-agent-registry-beta"/);
+  assert.match(worker, /const APP_VERSION = "2026\.08\.13-agent-registry-beta"/);
+  assert.match(worker, /CACHE_PREFIX}v18/);
+  assert.match(worker, /BETA_NAVIGATION_PATH = "\/next\/index\.html"/);
 });

@@ -98,18 +98,28 @@ export class QuestForgeRepository {
   }
 
   async loadSnapshot() {
-    const [questPage, characterResponse, battleResponse, integrationResponse] = await Promise.all([
-      this.request("/v1/quests?view=all&limit=200"),
+    const questPage = await this.request("/v1/quests?view=all&limit=200");
+    const optionalEntries = await Promise.allSettled([
       this.request("/v1/character"),
       this.request("/v1/battle/session"),
       this.request("/v1/integrations"),
+      this.request("/v1/profile"),
+      this.request("/v1/party"),
+      this.request("/v1/agents?includeArchived=true"),
+      this.request("/v1/agent-connections"),
     ]);
+    const value = (index, fallback) => optionalEntries[index].status === "fulfilled" ? optionalEntries[index].value : fallback;
     return {
       quests: questPage?.quests || [],
       total: questPage?.total || 0,
-      character: characterResponse?.character || {},
-      battle: battleResponse?.session || {},
-      integrations: integrationResponse?.integrations || [],
+      character: value(0, {})?.character || {},
+      battle: value(1, {})?.session || {},
+      integrations: value(2, {})?.integrations || [],
+      profile: value(3, {})?.profile || null,
+      party: value(4, {})?.party || null,
+      agents: value(5, {})?.agents || [],
+      agentConnections: value(6, { authorizedClients: [], connections: [] }),
+      panelErrors: optionalEntries.map((entry, index) => entry.status === "rejected" ? ({ index, message: entry.reason?.message || "読み込みに失敗しました。" }) : null).filter(Boolean),
     };
   }
 
@@ -123,6 +133,10 @@ export class QuestForgeRepository {
 
   async scoreQuest(questId, direction = "up") {
     return this.request(`/v1/quests/${encodeURIComponent(questId)}/score`, { method: "POST", body: JSON.stringify({ direction, source: "interaction-lab" }) });
+  }
+
+  async transitionHandoff(questId, input) {
+    return this.request(`/v1/quests/${encodeURIComponent(questId)}/handoff`, { method: "POST", body: JSON.stringify(input) });
   }
 
   async battleCommand(command, expectedTurn, commandId) {
@@ -148,5 +162,29 @@ export class QuestForgeRepository {
       method: "POST",
       body: JSON.stringify({ direction, dryRun: false }),
     });
+  }
+
+  async listAgents(includeArchived = true) {
+    return this.request(`/v1/agents?includeArchived=${includeArchived}`);
+  }
+
+  async createAgent(input) {
+    return this.request("/v1/agents", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  async updateAgent(agentId, patch) {
+    return this.request(`/v1/agents/${encodeURIComponent(agentId)}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  async listAgentConnections() {
+    return this.request("/v1/agent-connections");
+  }
+
+  async linkAgentConnection(agentId, clientId) {
+    return this.request(`/v1/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(clientId)}`, { method: "PUT" });
+  }
+
+  async unlinkAgentConnection(agentId, clientId) {
+    return this.request(`/v1/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(clientId)}`, { method: "DELETE" });
   }
 }

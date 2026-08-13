@@ -1,7 +1,8 @@
-const APP_VERSION = "2026.08.12-toggl-focus";
+const APP_VERSION = "2026.08.13-agent-registry-beta";
 const CACHE_PREFIX = "questforge-pwa-";
-const CACHE_VERSION = `${CACHE_PREFIX}v17`;
+const CACHE_VERSION = `${CACHE_PREFIX}v18`;
 const NAVIGATION_FALLBACK = "/index.html";
+const BETA_NAVIGATION_PATH = "/next/index.html";
 
 const APP_SHELL = [
   "/manifest.webmanifest",
@@ -69,16 +70,18 @@ self.addEventListener("fetch", (event) => {
   if (requestUrl.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
+    const isBetaNavigation = requestUrl.pathname === "/next" || requestUrl.pathname.startsWith("/next/");
+    const navigationCacheKey = isBetaNavigation ? BETA_NAVIGATION_PATH : NAVIGATION_FALLBACK;
     event.respondWith(
       fetch(request, { cache: "no-store" })
         .then((response) => {
           if (response?.ok) {
             const copy = response.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(NAVIGATION_FALLBACK, copy));
+            caches.open(CACHE_VERSION).then((cache) => cache.put(navigationCacheKey, copy));
           }
           return response;
         })
-        .catch(() => caches.match(NAVIGATION_FALLBACK)),
+        .catch(() => caches.match(navigationCacheKey).then((cached) => cached || caches.match(NAVIGATION_FALLBACK))),
     );
     return;
   }

@@ -1,5 +1,5 @@
-import { cpSync, mkdirSync, readdirSync } from "node:fs";
-import { dirname, extname, join, relative } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { defineConfig } from "vite";
 
 const root = new URL(".", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
@@ -30,6 +30,12 @@ const copyQuestForgeRuntime = {
     cpSync(join(root, "service-worker.js"), join(dist, "service-worker.js"));
     cpSync(join(root, "api"), join(dist, "api"), { recursive: true });
     copyRuntimeAssets(join(root, "assets"), join(dist, "assets"));
+    const generatedLab = join(dist, "interaction-lab");
+    const betaDestination = join(dist, "next");
+    if (existsSync(generatedLab)) {
+      rmSync(betaDestination, { recursive: true, force: true });
+      renameSync(generatedLab, betaDestination);
+    }
   },
 };
 
@@ -40,5 +46,11 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        app: resolve(root, "index.html"),
+        next: resolve(root, "interaction-lab/index.html"),
+      },
+    },
   },
 });

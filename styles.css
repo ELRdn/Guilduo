@@ -3672,6 +3672,19 @@ body[data-motion="on"] .battle-float-text.is-visible {
   margin-top: 16px;
 }
 
+.beta-entry-panel {
+  grid-column: 1 / -1;
+  border-color: color-mix(in srgb, var(--gold) 52%, var(--line));
+}
+
+.beta-entry-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .plugin-runtime-panel {
   grid-column: 1 / -1;
 }

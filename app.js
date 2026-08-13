@@ -1,7 +1,7 @@
 const storageKey = "questforge-prototype-state";
 const appearanceStorageKey = "questforge-appearance-mode";
 const appearanceModes = ["light", "dark", "system"];
-const appVersion = "2026.08.12-toggl-focus";
+const appVersion = "2026.08.13-agent-registry-beta";
 const productionGatewayUrl = String(globalThis.QuestForgeConfig?.gatewayUrl || "").replace(/\/$/, "");
 const hadLocalStateAtStartup = Boolean(localStorage.getItem(storageKey));
 const core = globalThis.QuestForgeCore;
