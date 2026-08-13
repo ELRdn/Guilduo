@@ -70,13 +70,13 @@ test("REST create and score share production state and reward claims", async () 
   assert.equal(listed.quests[0].id, created.quest.id);
 });
 
-test("MCP advertises v2 quest, social, and battle tools and calls the same REST domain", async () => {
+test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the same REST domain", async () => {
   const toolsResponse = await call("/mcp", {
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
   const tools = await toolsResponse.json();
-  assert.equal(tools.result.tools.length, 38);
+  assert.equal(tools.result.tools.length, 47);
   assert.ok(tools.result.tools.some((tool) => tool.name === "create_quest"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "list_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "batch_update_quests"));
@@ -86,6 +86,11 @@ test("MCP advertises v2 quest, social, and battle tools and calls the same REST 
   assert.ok(tools.result.tools.some((tool) => tool.name === "find_profile_by_handle"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_party"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "battle_command"));
+  for (const name of ["get_toggl_focus_status", "list_toggl_focus_entries", "sync_quest_to_toggl_focus", "get_toggl_focus_tracking", "start_toggl_focus_tracking", "stop_toggl_focus_tracking", "preview_toggl_attribution", "apply_toggl_attribution", "get_toggl_estimate_insights"]) {
+    const tool = tools.result.tools.find((candidate) => candidate.name === name);
+    assert.ok(tool, name);
+    assert.ok(tool.outputSchema, `${name} output schema`);
+  }
   for (const name of ["get_quest", "get_daily_brief", "get_review_summary", "list_agent_handoffs", "list_activity_events", "get_calendar_schedule", "convert_calendar_event_to_quest"]) {
     const tool = tools.result.tools.find((candidate) => candidate.name === name);
     assert.ok(tool, name);
@@ -108,7 +113,7 @@ function parseMcpSse(text) {
   return JSON.parse(line.slice(6));
 }
 
-test("MCP v2.4 SDK lane exposes tool schemas, resources, and workflow prompts", async () => {
+test("MCP v2.5 SDK lane exposes tool schemas, Focus resources, and workflow prompts", async () => {
   const headers = { host: "worker.test", accept: "application/json, text/event-stream" };
   const mcpCall = async (method) => {
     const response = await call("/mcp-next", {
@@ -122,8 +127,8 @@ test("MCP v2.4 SDK lane exposes tool schemas, resources, and workflow prompts", 
   };
 
   const tools = await mcpCall("tools/list");
-  assert.equal(tools.tools.length, 38);
-  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 38);
+  assert.equal(tools.tools.length, 47);
+  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 47);
 
   const resources = await mcpCall("resources/list");
   assert.deepEqual(resources.resources.map((resource) => resource.uri).sort(), [
@@ -133,6 +138,8 @@ test("MCP v2.4 SDK lane exposes tool schemas, resources, and workflow prompts", 
     "questforge://quests/backlog",
     "questforge://quests/today",
     "questforge://quests/tree",
+    "questforge://toggl-focus/estimate-insights",
+    "questforge://toggl-focus/status",
   ]);
   const templates = await mcpCall("resources/templates/list");
   assert.ok(templates.resourceTemplates.some((resource) => resource.uriTemplate === "questforge://quest/{questId}"));
@@ -143,6 +150,7 @@ test("MCP v2.4 SDK lane exposes tool schemas, resources, and workflow prompts", 
     "plan_today",
     "process_agent_handoffs",
     "review_day",
+    "review_focus_time",
     "review_week",
   ]);
 });

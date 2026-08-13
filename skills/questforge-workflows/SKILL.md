@@ -19,6 +19,7 @@ Use the QuestForge MCP server as the source of truth. Never invent quest IDs, us
 - An `agent` assignee is metadata. `handoffState: ready` emits an event but does not prove that work was delivered to that agent.
 - Handoff writes must include `dryRun: true` first. Use `expectedState` on execution so a stale agent update returns a conflict instead of overwriting newer work.
 - Never use `delete`; archive quests and preserve their history.
+- Never request, accept, echo, or store a Toggl Focus Personal API key through MCP. The user connects it only in the QuestForge web UI.
 
 ## Quest Capture
 
@@ -87,6 +88,16 @@ Use `planningState: backlog` for unscheduled one-off work. Use `scheduled` with 
 4. Ask for confirmation if the user did not name a specific command.
 5. Execute with the current `expectedTurn`, a unique `commandId`, and `dryRun: false`.
 6. Report player HP, boss HP, MP, effects, and whether the battle ended.
+
+## Toggl Focus
+
+1. Call `get_toggl_focus_status` before reading entries or changing a timer. Do not assume the user has connected Focus.
+2. Use `sync_quest_to_toggl_focus` with its default dry-run first. Only active To Dos and Dailies are eligible.
+3. Use `start_toggl_focus_tracking` and `stop_toggl_focus_tracking` as previews first. If another timer is running, show its exact entry ID and get confirmation before executing.
+4. Call `preview_toggl_attribution` before importing time. A direct Focus task match may be proposed; an unlinked entry needs a user-selected Quest.
+5. Run `apply_toggl_attribution` with `dryRun: false` only after confirmation. One Focus entry belongs to one Quest and must never be counted twice.
+6. `get_toggl_estimate_insights` is suggestion-only. Never change estimates automatically.
+7. Do not import activity timeline, app name, window title, or raw desktop activity data.
 
 ## Tool Reference
 

@@ -50,7 +50,7 @@ test("all locale catalogs have complete keys, placeholders, and valid ICU messag
   const { IntlMessageFormat } = await import("intl-messageformat");
   const english = (await import("../locales/en.mjs")).default;
   const englishKeys = Object.keys(english);
-  assert.equal(englishKeys.length, 446);
+  assert.equal(englishKeys.length, 457);
 
   for (const [locale, filename] of Object.entries(localeFiles)) {
     const catalog = (await import(`../locales/${filename}`)).default;
@@ -105,18 +105,20 @@ test("public examples omit local absolute paths and private deployment identifie
   for (const ignored of ["runtime-config.js", ".firebaserc", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("generated contracts expose social, Quest Tree, agent handoff, battle, and MCP v2.4 work-management operations", () => {
+test("generated contracts expose social, Quest Tree, agent handoff, battle, and MCP v2.5 Toggl Focus operations", () => {
   const openapi = JSON.parse(fs.readFileSync(path.join(root, "api/openapi.json"), "utf8"));
   const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8"));
-  assert.equal(openapi.info.version, "2.4.0");
-  assert.equal(mcp.version, "2.4.0");
-  assert.equal(mcp.tools.length, 38);
-  for (const pathName of ["/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands", "/v1/quests/tree", "/v1/agent-handoffs", "/v1/quests/{questId}/handoff"]) assert.ok(openapi.paths[pathName], pathName);
+  assert.equal(openapi.info.version, "2.5.0");
+  assert.equal(mcp.version, "2.5.0");
+  assert.equal(mcp.tools.length, 47);
+  for (const pathName of ["/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands", "/v1/quests/tree", "/v1/agent-handoffs", "/v1/quests/{questId}/handoff", "/v1/quests/{questId}/toggl-focus-task", "/v1/integrations/toggl-focus/connect", "/v1/integrations/toggl-focus/disconnect", "/v1/integrations/toggl-focus/tracking", "/v1/integrations/toggl-focus/time-entries", "/v1/integrations/toggl-focus/attributions"]) assert.ok(openapi.paths[pathName], pathName);
   assert.ok(openapi.components.schemas.Assignee);
   assert.ok(mcp.tools.some((tool) => tool.name === "battle_command"));
   assert.ok(mcp.tools.some((tool) => tool.name === "get_quest_tree"));
   assert.ok(mcp.tools.some((tool) => tool.name === "transition_quest_handoff"));
   assert.ok(mcp.tools.some((tool) => tool.name === "find_profile_by_handle"));
+  assert.ok(mcp.tools.some((tool) => tool.name === "get_toggl_focus_status"));
+  assert.ok(mcp.tools.some((tool) => tool.name === "apply_toggl_attribution"));
   for (const name of ["get_daily_brief", "get_review_summary", "list_agent_handoffs", "list_activity_events", "get_calendar_schedule", "convert_calendar_event_to_quest"]) {
     const tool = mcp.tools.find((candidate) => candidate.name === name);
     assert.ok(tool, name);
@@ -124,11 +126,14 @@ test("generated contracts expose social, Quest Tree, agent handoff, battle, and 
   }
 });
 
-test("QuestForge workflow skill covers safe reviews, social actions, and battles", () => {
+test("QuestForge workflow skill covers safe reviews, social actions, battles, and Toggl Focus", () => {
   const skill = fs.readFileSync(path.join(root, "skills/questforge-workflows/SKILL.md"), "utf8");
   assert.match(skill, /dryRun/);
   assert.match(skill, /Weekly Review/);
   assert.match(skill, /exact `@handle`/);
   assert.match(skill, /get_battle_session/);
   assert.match(skill, /battle_command/);
+  assert.match(skill, /get_toggl_focus_status/);
+  assert.match(skill, /apply_toggl_attribution/);
+  assert.match(skill, /Personal API key/);
 });

@@ -1058,6 +1058,28 @@
       </section>
     </dialog>
 
+    <dialog class="task-dialog focus-connect-dialog" id="togglFocusConnectDialog" aria-labelledby="togglFocusConnectTitle">
+      <form id="togglFocusConnectForm" class="focus-connect-dialog-content" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <h3 id="togglFocusConnectTitle" data-i18n="focus.connect.title">Toggl Focusを接続</h3>
+            <p data-i18n="focus.connect.copy">Personal API keyはこの画面からだけ暗号化して保存されます。AIやMCPへは渡りません。</p>
+          </div>
+          <button class="edit-button" type="button" id="cancelTogglFocusConnect" aria-label="Toggl Focus接続を閉じる" data-i18n-aria-label="focus.connect.close">×</button>
+        </div>
+        <label>
+          <span data-i18n="focus.connect.key">Personal API key</span>
+          <input id="togglFocusApiKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="toggl_sk_..." required />
+        </label>
+        <p class="focus-connect-note" data-i18n="focus.connect.note">次の画面で組織IDとWorkspace IDを選びます。デスクトップのアプリ名・ウィンドウ名はQuestForgeへ保存しません。</p>
+        <p class="integration-setup-message" id="togglFocusConnectMessage" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button type="button" class="secondary-button" id="cancelTogglFocusConnectButton" data-i18n="common.close">閉じる</button>
+          <button type="submit" class="primary-button" id="saveTogglFocusConnect" data-i18n="focus.connect.save">安全に接続</button>
+        </div>
+      </form>
+    </dialog>
+
     <input id="importFileInput" type="file" accept="application/json,.json" hidden />
     <div class="undo-toast" id="undoToast" role="status" aria-live="polite" hidden>
       <span id="undoToastMessage"></span>

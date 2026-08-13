@@ -1,6 +1,6 @@
 {
   "serverName": "questforge-mcp",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "tools": [
     {
       "name": "list_today_quests",
@@ -1151,6 +1151,322 @@
         "destructiveHint": false,
         "idempotentHint": true,
         "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_toggl_focus_status",
+      "title": "Get Toggl Focus Status",
+      "description": "Read the user's Toggl Focus connection configuration and current timer without exposing the personal API key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_toggl_focus_entries",
+      "title": "List Toggl Focus Entries",
+      "description": "List up to 30 days of Toggl Focus time entries and their current QuestForge attribution state.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 30
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 100
+          },
+          "includeTaskless": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "sync_quest_to_toggl_focus",
+      "title": "Sync Quest to Toggl Focus",
+      "description": "Preview or create/update one active To Do or Daily as a Toggl Focus task. Tags may be created in Focus on execution.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "questId"
+        ],
+        "properties": {
+          "questId": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "get_toggl_focus_tracking",
+      "title": "Get Toggl Focus Tracking",
+      "description": "Read the current Toggl Focus timer and its linked Focus task when available.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "start_toggl_focus_tracking",
+      "title": "Start Toggl Focus Tracking",
+      "description": "Preview or start a Focus timer for a linked Quest. If another timer is running, confirm its exact entry ID first.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "questId"
+        ],
+        "properties": {
+          "questId": {
+            "type": "string"
+          },
+          "expectedCurrentEntryId": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "stop_toggl_focus_tracking",
+      "title": "Stop Toggl Focus Tracking",
+      "description": "Preview or stop the exact currently running Toggl Focus timer. The expected entry ID prevents stopping a different device's timer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expectedEntryId": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "preview_toggl_attribution",
+      "title": "Preview Toggl Focus Attribution",
+      "description": "Preview direct Focus-task time entry attribution or manual candidate attribution without changing QuestForge.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 30
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 100
+          },
+          "includeTaskless": {
+            "type": "boolean",
+            "default": false
+          },
+          "questId": {
+            "type": "string"
+          },
+          "entryIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "apply_toggl_attribution",
+      "title": "Apply Toggl Focus Attribution",
+      "description": "Preview or confirm one-to-one Focus time entry attribution. A Focus entry can belong to only one Quest.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 30
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 100
+          },
+          "includeTaskless": {
+            "type": "boolean",
+            "default": false
+          },
+          "questId": {
+            "type": "string"
+          },
+          "entryIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "get_toggl_estimate_insights",
+      "title": "Get Toggl Estimate Insights",
+      "description": "Suggest future Quest estimates from completed Toggl Focus-linked work. Suggestions never change Quest data automatically.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
       }
     },
     {

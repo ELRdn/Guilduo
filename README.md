@@ -2,7 +2,7 @@
 
 QuestForge is an open task RPG where completing real work earns MP, then the player chooses when and how to use that MP in a deterministic command battle. It combines a browser/PWA task manager, REST API, remote MCP server, social profiles and parties, and opt-in external integrations.
 
-Version: `0.3.0-social-beta` / Web release: `2026.08.10-i18n-beta`
+Version: `0.3.0-social-beta` / Web release: `2026.08.12-toggl-focus`
 
 > QuestForge is an independent project. It is not affiliated with, endorsed by, or a substitute for Habitica. Product names and trademarks belong to their respective owners.
 
@@ -15,7 +15,7 @@ Version: `0.3.0-social-beta` / Web release: `2026.08.10-i18n-beta`
 - Public profile with exact `@handle` search, friend requests, and one four-person party per user
 - Firebase Google login, PC/mobile state sync, and installable PWA
 - Cloudflare Worker REST API and Streamable HTTP MCP with OAuth scopes
-- Google Calendar, Google Tasks, and Notion integration foundations; Toggl Track remains a later phase
+- Google Calendar, Google Tasks, Notion, and Toggl Focus integrations
 - Japanese, English, Spanish, Brazilian Portuguese, French, German, Korean, Simplified Chinese, and Russian display modes
 - Three visual themes with light, dark, and system appearance modes
 - Sandboxed plugin slots and signed webhook foundations
@@ -77,9 +77,9 @@ The standard remote endpoint is:
 https://<your-worker>/mcp
 ```
 
-Use OAuth for normal users. Version 2.4 exposes 38 tools, including Quest Trees, daily briefs, day/week reviews, agent handoffs, activity history, and Calendar-to-Quest conversion. Clients that cache tool lists may need one disconnect/reconnect after an update.
+Use OAuth for normal users. Version 2.5 exposes 47 tools, including Quest Trees, daily briefs, day/week reviews, agent handoffs, activity history, Calendar-to-Quest conversion, and safe Toggl Focus task/timer/time-entry workflows. Clients that cache tool lists may need one disconnect/reconnect after an update.
 
-`/mcp-next` is the SDK v2 Streamable HTTP compatibility lane. It exposes the same 38 tools plus MCP Resources for Quest Trees and Agent Handoffs and workflow Prompts. Use it to test a client before moving its standard connection to the newer transport behavior.
+`/mcp-next` is the SDK v2 Streamable HTTP compatibility lane. It exposes the same 47 tools plus MCP Resources for Quest Trees, Agent Handoffs, and Toggl Focus, as well as workflow Prompts. Use it to test a client before moving its standard connection to the newer transport behavior.
 
 The local stdio bridge in `mcp-local/` is a development compatibility path. The bundled [QuestForge workflow skill](skills/questforge-workflows/SKILL.md) teaches an AI client to preview batch changes, inspect Quest Trees, use exact handles, archive instead of delete, process Agent Handoffs with stale-state protection, plan reviews, and execute battle turns safely.
 
@@ -88,7 +88,8 @@ The local stdio bridge in `mcp-local/` is a development compatibility path. The 
 - Google Calendar: read-only schedule slots and explicit quest conversion
 - Google Tasks: deletion-free bidirectional contract and conflict handling
 - Notion: one daily `QuestForge Logs` record
-- Toggl Track: data contract only; token UI, timer controls, and production sync are pending
+- Toggl Focus: per-user encrypted personal API key, explicit Quest task creation/update, guarded timer controls, and confirmed time-entry attribution for the last 30 days
+- Toggl Track: data contract only; legacy Track compatibility remains a later phase
 
 Provider OAuth requires operator-owned client IDs and secrets. A user only presses Connect after the operator configures them.
 

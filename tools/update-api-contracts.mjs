@@ -29,8 +29,8 @@ if (questListPath?.get) {
 
 openapi.info = {
   title: "QuestForge API",
-  version: "2.4.0",
-  description: "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks.",
+  version: "2.5.0",
+  description: "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
   { url: "https://your-questforge-worker.example.workers.dev", description: "Cloudflare Worker" },
@@ -97,6 +97,42 @@ Object.assign(openapi.paths, {
   },
   "/v1/quests/{questId}/handoff": {
     post: { summary: "Preview or transition an agent handoff", parameters: [parameter("questId")], requestBody: body({ $ref: "#/components/schemas/HandoffTransitionInput" }), responses: ok("Handoff transition", { $ref: "#/components/schemas/HandoffTransitionResult" }) },
+  },
+  "/v1/quests/{questId}/toggl-focus-task": {
+    post: { summary: "Preview or create/update a Toggl Focus task for one Quest", parameters: [parameter("questId")], requestBody: body({ type: "object", properties: { dryRun: { type: "boolean", default: true } } }), responses: ok("Focus task sync") },
+  },
+  "/v1/integrations/toggl-focus/connect": {
+    post: { summary: "Connect Toggl Focus from the QuestForge web app", description: "Web/Firebase-authenticated endpoint only. The personal API key is encrypted in D1 and never returned by REST or MCP.", requestBody: body({ $ref: "#/components/schemas/TogglFocusConnectInput" }), responses: ok("Focus connection") },
+  },
+  "/v1/integrations/toggl-focus/resources": {
+    get: { summary: "List configured Toggl Focus projects and tags", responses: ok("Focus resources") },
+  },
+  "/v1/integrations/toggl-focus": {
+    patch: { summary: "Save Toggl Focus organization, workspace, project, and auto-create settings", requestBody: body({ $ref: "#/components/schemas/TogglFocusConfiguration" }), responses: ok("Focus configuration") },
+  },
+  "/v1/integrations/toggl-focus/disconnect": {
+    post: { summary: "Disconnect Toggl Focus and remove the encrypted personal API key from QuestForge", responses: ok("Focus disconnection") },
+  },
+  "/v1/integrations/toggl-focus/tracking": {
+    get: { summary: "Read the current Toggl Focus timer", responses: ok("Focus current tracking") },
+  },
+  "/v1/integrations/toggl-focus/tracking/start": {
+    post: { summary: "Preview or start a Focus timer for a Quest", requestBody: body({ $ref: "#/components/schemas/TogglFocusStartInput" }), responses: ok("Focus timer result") },
+  },
+  "/v1/integrations/toggl-focus/tracking/stop": {
+    post: { summary: "Preview or stop the exact current Focus timer", requestBody: body({ $ref: "#/components/schemas/TogglFocusStopInput" }), responses: ok("Focus timer result") },
+  },
+  "/v1/integrations/toggl-focus/time-entries": {
+    get: { summary: "List up to 30 days of Toggl Focus time entries", parameters: [
+      { name: "dateFrom", in: "query", schema: { type: "string", format: "date" } }, { name: "dateTo", in: "query", schema: { type: "string", format: "date" } },
+      { name: "days", in: "query", schema: { type: "integer", minimum: 1, maximum: 30, default: 30 } }, { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } },
+    ], responses: ok("Focus time entries") },
+  },
+  "/v1/integrations/toggl-focus/attributions": {
+    post: { summary: "Preview or confirm one-to-one Focus entry attribution", requestBody: body({ $ref: "#/components/schemas/TogglFocusAttributionInput" }), responses: ok("Focus attribution") },
+  },
+  "/v1/integrations/toggl-focus/purge": {
+    post: { summary: "Preview or remove all QuestForge-side Toggl Focus links", requestBody: body({ type: "object", properties: { dryRun: { type: "boolean", default: true } } }), responses: ok("Focus link purge") },
   },
 });
 
@@ -177,8 +213,13 @@ schemas.FriendRequest = { type: "object", properties: { id: { type: "string" }, 
 schemas.Party = { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, ownerUid: { type: "string" }, maxMembers: { type: "integer", maximum: 4 }, members: { type: "array", maxItems: 4, items: { allOf: [{ $ref: "#/components/schemas/PublicProfile" }, { type: "object", properties: { role: { type: "string", enum: ["owner", "member"] }, joinedAt: { type: "string", format: "date-time" } } }] } } } };
 schemas.BattleCommandInput = { type: "object", required: ["command"], properties: { command: { type: "string", enum: ["attack", "skill", "guard", "heal", "burst"] }, expectedTurn: { type: "integer", minimum: 1 }, commandId: { type: "string", maxLength: 120 }, dryRun: { type: "boolean", default: true } } };
 schemas.BattleSession = { type: "object", required: ["schemaVersion", "character", "boss", "battle", "quests", "commands"], properties: { schemaVersion: { type: "integer", const: 1 }, character: { type: "object" }, boss: { type: "object" }, battle: { type: "object" }, quests: { type: "array", items: { type: "object" } }, commands: { type: "array", items: { type: "object" } } } };
+schemas.TogglFocusConnectInput = { type: "object", required: ["apiKey"], properties: { apiKey: { type: "string", pattern: "^toggl_sk_" }, organizationId: { type: "string", pattern: "^\\d+$" }, workspaceId: { type: "string", pattern: "^\\d+$" }, projectId: { type: "string", pattern: "^\\d+$" }, autoCreateTasks: { type: "boolean", default: false } } };
+schemas.TogglFocusConfiguration = { type: "object", properties: { organizationId: { type: "string", pattern: "^\\d+$" }, workspaceId: { type: "string", pattern: "^\\d+$" }, projectId: { type: "string", pattern: "^\\d+$" }, autoCreateTasks: { type: "boolean", default: false } } };
+schemas.TogglFocusStartInput = { type: "object", required: ["questId"], properties: { questId: { type: "string" }, expectedCurrentEntryId: { type: "string" }, dryRun: { type: "boolean", default: true } } };
+schemas.TogglFocusStopInput = { type: "object", properties: { expectedEntryId: { type: "string" }, end: { type: "string", format: "date-time" }, dryRun: { type: "boolean", default: true } } };
+schemas.TogglFocusAttributionInput = { type: "object", properties: { questId: { type: "string" }, entryIds: { type: "array", items: { type: "string" }, maxItems: 100 }, dateFrom: { type: "string", format: "date" }, dateTo: { type: "string", format: "date" }, days: { type: "integer", minimum: 1, maximum: 30, default: 30 }, dryRun: { type: "boolean", default: true } } };
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
-await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.4.0", tools: MCP_TOOLS }, null, 2)}\n`);
+await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.5.0", tools: MCP_TOOLS }, null, 2)}\n`);
 
 console.log(`Updated OpenAPI and ${MCP_TOOLS.length} MCP tools.`);

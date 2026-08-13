@@ -5,9 +5,19 @@ const decoder = new TextDecoder();
 const memoryAccounts = new Map();
 const memoryEvents = new Map();
 const memoryLogs = [];
+const memoryFocusAttributions = new Map();
+const memoryFocusTaskLinks = new Map();
 
 function accountKey(uid, service) {
   return `${uid}:${service}`;
+}
+
+function focusAttributionKey(uid, entryId) {
+  return `${uid}:toggl-focus:${entryId}`;
+}
+
+function focusTaskLinkKey(uid, questId) {
+  return `${uid}:toggl-focus-task:${questId}`;
 }
 
 function nowIso() {
@@ -207,6 +217,161 @@ export async function listCalendarEvents(env, uid, from, to) {
     htmlUrl: row.html_url || row.htmlUrl || "",
     status: row.status || "confirmed",
   }));
+}
+
+function normalizeFocusAttribution(row) {
+  if (!row) return null;
+  return {
+    uid: row.uid,
+    entryId: String(row.entry_id || row.entryId || ""),
+    questId: String(row.quest_id || row.questId || ""),
+    focusTaskId: String(row.focus_task_id || row.focusTaskId || ""),
+    durationMinutes: Number(row.duration_minutes ?? row.durationMinutes ?? 0),
+    source: row.source || "direct",
+    status: row.status || "confirmed",
+    entryUpdatedAt: row.entry_updated_at || row.entryUpdatedAt || "",
+    entryStartAt: row.entry_start_at || row.entryStartAt || "",
+    entryStopAt: row.entry_stop_at || row.entryStopAt || "",
+    createdAt: row.created_at || row.createdAt || "",
+    updatedAt: row.updated_at || row.updatedAt || "",
+  };
+}
+
+export async function getTogglFocusAttribution(env, uid, entryId) {
+  let row;
+  if (env.QUESTFORGE_DB) {
+    row = await env.QUESTFORGE_DB.prepare("SELECT * FROM toggl_focus_attributions WHERE uid = ? AND entry_id = ?").bind(uid, String(entryId)).first();
+  } else row = memoryFocusAttributions.get(focusAttributionKey(uid, entryId));
+  return normalizeFocusAttribution(row);
+}
+
+export async function listTogglFocusAttributions(env, uid, { questId = "" } = {}) {
+  let rows;
+  if (env.QUESTFORGE_DB) {
+    const query = questId
+      ? env.QUESTFORGE_DB.prepare("SELECT * FROM toggl_focus_attributions WHERE uid = ? AND quest_id = ? ORDER BY entry_start_at DESC").bind(uid, String(questId))
+      : env.QUESTFORGE_DB.prepare("SELECT * FROM toggl_focus_attributions WHERE uid = ? ORDER BY entry_start_at DESC").bind(uid);
+    rows = (await query.all()).results || [];
+  } else {
+    rows = [...memoryFocusAttributions.values()].filter((row) => row.uid === uid && (!questId || row.quest_id === String(questId)));
+  }
+  return rows.map(normalizeFocusAttribution);
+}
+
+export async function saveTogglFocusAttribution(env, uid, value) {
+  const entryId = String(value.entryId || "").trim();
+  const questId = String(value.questId || "").trim();
+  if (!entryId || !questId) throw Object.assign(new Error("Focus time entry and Quest are required."), { status: 400, code: "invalid_focus_attribution" });
+  const previous = await getTogglFocusAttribution(env, uid, entryId);
+  if (previous && previous.questId !== questId) {
+    throw Object.assign(new Error("This Focus time entry is already attributed to another Quest."), { status: 409, code: "time_entry_already_attributed", details: { entryId, questId: previous.questId } });
+  }
+  const now = nowIso();
+  const row = {
+    uid,
+    entry_id: entryId,
+    quest_id: questId,
+    focus_task_id: String(value.focusTaskId || ""),
+    duration_minutes: Math.max(0, Math.round(Number(value.durationMinutes || 0))),
+    source: String(value.source || "direct").slice(0, 40),
+    status: "confirmed",
+    entry_updated_at: String(value.entryUpdatedAt || ""),
+    entry_start_at: String(value.entryStartAt || ""),
+    entry_stop_at: String(value.entryStopAt || ""),
+    created_at: previous?.createdAt || now,
+    updated_at: now,
+  };
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare(`INSERT INTO toggl_focus_attributions
+      (uid, entry_id, quest_id, focus_task_id, duration_minutes, source, status, entry_updated_at, entry_start_at, entry_stop_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(uid, entry_id) DO UPDATE SET quest_id=excluded.quest_id, focus_task_id=excluded.focus_task_id,
+      duration_minutes=excluded.duration_minutes, source=excluded.source, status=excluded.status, entry_updated_at=excluded.entry_updated_at,
+      entry_start_at=excluded.entry_start_at, entry_stop_at=excluded.entry_stop_at, updated_at=excluded.updated_at`)
+      .bind(row.uid, row.entry_id, row.quest_id, row.focus_task_id, row.duration_minutes, row.source, row.status, row.entry_updated_at, row.entry_start_at, row.entry_stop_at, row.created_at, row.updated_at).run();
+  } else memoryFocusAttributions.set(focusAttributionKey(uid, entryId), row);
+  return normalizeFocusAttribution(row);
+}
+
+export async function purgeTogglFocusAttributions(env, uid) {
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare("DELETE FROM toggl_focus_attributions WHERE uid = ?").bind(uid).run();
+  } else {
+    for (const key of memoryFocusAttributions.keys()) if (key.startsWith(`${uid}:toggl-focus:`)) memoryFocusAttributions.delete(key);
+  }
+}
+
+export async function deleteTogglFocusAttribution(env, uid, entryId) {
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare("DELETE FROM toggl_focus_attributions WHERE uid = ? AND entry_id = ?").bind(uid, String(entryId)).run();
+  } else memoryFocusAttributions.delete(focusAttributionKey(uid, entryId));
+}
+
+function normalizeFocusTaskLink(row) {
+  if (!row) return null;
+  return {
+    uid: row.uid,
+    questId: String(row.quest_id || row.questId || ""),
+    focusTaskId: String(row.focus_task_id || row.focusTaskId || ""),
+    organizationId: String(row.organization_id || row.organizationId || ""),
+    workspaceId: String(row.workspace_id || row.workspaceId || ""),
+    projectId: String(row.project_id || row.projectId || ""),
+    createdAt: row.created_at || row.createdAt || "",
+    updatedAt: row.updated_at || row.updatedAt || "",
+  };
+}
+
+export async function getTogglFocusTaskLink(env, uid, questId) {
+  let row;
+  if (env.QUESTFORGE_DB) {
+    row = await env.QUESTFORGE_DB.prepare("SELECT * FROM toggl_focus_task_links WHERE uid = ? AND quest_id = ?").bind(uid, String(questId)).first();
+  } else row = memoryFocusTaskLinks.get(focusTaskLinkKey(uid, questId));
+  return normalizeFocusTaskLink(row);
+}
+
+export async function listTogglFocusTaskLinks(env, uid) {
+  let rows;
+  if (env.QUESTFORGE_DB) {
+    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM toggl_focus_task_links WHERE uid = ? ORDER BY updated_at DESC").bind(uid).all()).results || [];
+  } else {
+    rows = [...memoryFocusTaskLinks.values()].filter((row) => row.uid === uid);
+  }
+  return rows.map(normalizeFocusTaskLink);
+}
+
+export async function saveTogglFocusTaskLink(env, uid, value) {
+  const questId = String(value.questId || "").trim();
+  const focusTaskId = String(value.focusTaskId || "").trim();
+  if (!questId || !focusTaskId) throw Object.assign(new Error("Focus task and Quest are required."), { status: 400, code: "invalid_focus_task_link" });
+  const previous = await getTogglFocusTaskLink(env, uid, questId);
+  const now = nowIso();
+  const row = {
+    uid,
+    quest_id: questId,
+    focus_task_id: focusTaskId,
+    organization_id: String(value.organizationId || ""),
+    workspace_id: String(value.workspaceId || ""),
+    project_id: String(value.projectId || ""),
+    created_at: previous?.createdAt || now,
+    updated_at: now,
+  };
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare(`INSERT INTO toggl_focus_task_links
+      (uid, quest_id, focus_task_id, organization_id, workspace_id, project_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(uid, quest_id) DO UPDATE SET focus_task_id=excluded.focus_task_id, organization_id=excluded.organization_id,
+      workspace_id=excluded.workspace_id, project_id=excluded.project_id, updated_at=excluded.updated_at`)
+      .bind(row.uid, row.quest_id, row.focus_task_id, row.organization_id, row.workspace_id, row.project_id, row.created_at, row.updated_at).run();
+  } else memoryFocusTaskLinks.set(focusTaskLinkKey(uid, questId), row);
+  return normalizeFocusTaskLink(row);
+}
+
+export async function purgeTogglFocusTaskLinks(env, uid) {
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare("DELETE FROM toggl_focus_task_links WHERE uid = ?").bind(uid).run();
+  } else {
+    for (const key of memoryFocusTaskLinks.keys()) if (key.startsWith(`${uid}:toggl-focus-task:`)) memoryFocusTaskLinks.delete(key);
+  }
 }
 
 export async function addIntegrationLog(env, uid, service, value) {

@@ -16,6 +16,7 @@ import {
   listQuestPage,
   listQuests,
   patchQuest,
+  purgeManagedFocusLinks,
   scoreQuest,
   todayText,
   transitionQuestHandoff,
@@ -41,6 +42,22 @@ import {
   resolveGoogleTaskConflict,
   syncIntegration,
 } from "./integrations.mjs";
+import {
+  applyTogglFocusAttribution,
+  configureTogglFocus,
+  connectTogglFocus,
+  getTogglFocusEstimateInsights,
+  getTogglFocusTracking,
+  isTogglFocusAutoCreateEnabled,
+  isTogglFocusService,
+  listTogglFocusEntries,
+  listTogglFocusResources,
+  previewTogglFocusAttribution,
+  purgeTogglFocus,
+  startTogglFocusTracking,
+  stopTogglFocusTracking,
+  syncQuestToTogglFocus,
+} from "./toggl-focus.mjs";
 import { listDueIntegrationAccounts } from "./integration-store.mjs";
 import { beginIntegrationConnect, disconnectIntegration, handleProviderCallback } from "./provider-oauth.mjs";
 import { handleMcpNext } from "./mcp-server.mjs";
@@ -205,6 +222,20 @@ const CALENDAR_OVERRIDE_PROPERTIES = {
   impact: QUEST_INPUT_PROPERTIES.impact, isBlockingOthers: QUEST_INPUT_PROPERTIES.isBlockingOthers,
 };
 
+const TOGGL_FOCUS_CONFIGURATION_PROPERTIES = {
+  organizationId: { type: "string", pattern: "^\\d+$" },
+  workspaceId: { type: "string", pattern: "^\\d+$" },
+  projectId: { type: "string", pattern: "^\\d+$" },
+  autoCreateTasks: { type: "boolean", default: false },
+};
+const TOGGL_FOCUS_ENTRY_PROPERTIES = {
+  dateFrom: { type: "string", format: "date" },
+  dateTo: { type: "string", format: "date" },
+  days: { type: "integer", minimum: 1, maximum: 30, default: 30 },
+  limit: { type: "integer", minimum: 1, maximum: 200, default: 100 },
+  includeTaskless: { type: "boolean", default: false },
+};
+
 const MCP_TOOLS = [
   { name: "list_today_quests", title: "List Today's Quests", description: "List active scheduled QuestForge quests visible today, including overdue work.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_quests", title: "List Quests", description: "List QuestForge quests by today, week, future, backlog, completed, archive, or all views.", inputSchema: { type: "object", properties: LIST_QUEST_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
@@ -217,6 +248,15 @@ const MCP_TOOLS = [
   { name: "get_character_state", title: "Get Character State", description: "Return the current character, MP, equipment, and boss state.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: CHARACTER_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "buy_reward", title: "Buy Reward", description: "Redeem a reward quest using Gems.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" } }, additionalProperties: false }, outputSchema: REWARD_OUTPUT, annotations: DESTRUCTIVE_ANNOTATIONS },
   { name: "list_integrations", title: "List Integrations", description: "List per-user integration connection, configuration, and reconnect status without exposing provider tokens.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { integrations: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
+  { name: "get_toggl_focus_status", title: "Get Toggl Focus Status", description: "Read the user's Toggl Focus connection configuration and current timer without exposing the personal API key.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
+  { name: "list_toggl_focus_entries", title: "List Toggl Focus Entries", description: "List up to 30 days of Toggl Focus time entries and their current QuestForge attribution state.", inputSchema: { type: "object", properties: TOGGL_FOCUS_ENTRY_PROPERTIES, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
+  { name: "sync_quest_to_toggl_focus", title: "Sync Quest to Toggl Focus", description: "Preview or create/update one active To Do or Daily as a Toggl Focus task. Tags may be created in Focus on execution.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_IDEMPOTENT_ANNOTATIONS },
+  { name: "get_toggl_focus_tracking", title: "Get Toggl Focus Tracking", description: "Read the current Toggl Focus timer and its linked Focus task when available.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
+  { name: "start_toggl_focus_tracking", title: "Start Toggl Focus Tracking", description: "Preview or start a Focus timer for a linked Quest. If another timer is running, confirm its exact entry ID first.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, expectedCurrentEntryId: { type: "string" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
+  { name: "stop_toggl_focus_tracking", title: "Stop Toggl Focus Tracking", description: "Preview or stop the exact currently running Toggl Focus timer. The expected entry ID prevents stopping a different device's timer.", inputSchema: { type: "object", properties: { expectedEntryId: { type: "string" }, end: { type: "string", format: "date-time" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
+  { name: "preview_toggl_attribution", title: "Preview Toggl Focus Attribution", description: "Preview direct Focus-task time entry attribution or manual candidate attribution without changing QuestForge.", inputSchema: { type: "object", properties: { ...TOGGL_FOCUS_ENTRY_PROPERTIES, questId: { type: "string" }, entryIds: { type: "array", items: { type: "string" }, maxItems: 100 } }, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
+  { name: "apply_toggl_attribution", title: "Apply Toggl Focus Attribution", description: "Preview or confirm one-to-one Focus time entry attribution. A Focus entry can belong to only one Quest.", inputSchema: { type: "object", properties: { ...TOGGL_FOCUS_ENTRY_PROPERTIES, questId: { type: "string" }, entryIds: { type: "array", items: { type: "string" }, maxItems: 100 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_IDEMPOTENT_ANNOTATIONS },
+  { name: "get_toggl_estimate_insights", title: "Get Toggl Estimate Insights", description: "Suggest future Quest estimates from completed Toggl Focus-linked work. Suggestions never change Quest data automatically.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "preview_external_sync", title: "Preview External Sync", description: "Preview connected Google Calendar, Google Tasks, or Notion changes without saving them.", inputSchema: { type: "object", required: ["service"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] } }, additionalProperties: false }, outputSchema: SYNC_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "sync_external_service", title: "Sync External Service", description: "Run a configured external sync. dryRun defaults to true and provider writes require explicit execution.", inputSchema: { type: "object", required: ["service", "direction"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: SYNC_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
   { name: "get_my_profile", title: "Get My Profile", description: "Get the authenticated user's QuestForge public profile settings.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
@@ -270,6 +310,15 @@ function withCors(response, request, env) {
   next.headers.set("access-control-allow-headers", "authorization,content-type,mcp-protocol-version");
   next.headers.set("access-control-allow-methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
   return next;
+}
+
+function assertTogglFocusWebConnection(request, env, identity) {
+  if (!identity || !["firebase", "dev"].includes(identity.authType)) {
+    throw new DomainError(403, "focus_web_connection_required", "Toggl Focus API keys can only be connected from the QuestForge web app.");
+  }
+  if (identity.authType === "firebase" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+    throw new DomainError(403, "focus_web_origin_required", "Open QuestForge in an approved browser origin to connect Toggl Focus.");
+  }
 }
 
 function validDateValue(value) {
@@ -378,7 +427,16 @@ async function routeApi(request, env, context, identity, path) {
   if (path === "/v1/quests" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
     const input = await request.json();
-    return json(await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { source: "api", returnEvent: true })), 201);
+    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { source: "api", returnEvent: true }));
+    if (created.quest && await isTogglFocusAutoCreateEnabled(env, identity)) {
+      try {
+        const synced = await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, created.quest.id, { dryRun: false }));
+        created.focus = { queued: false, synced: true, external: synced.external };
+      } catch (error) {
+        created.focus = { queued: false, synced: false, error: error.code || "focus_sync_failed" };
+      }
+    }
+    return json(created, 201);
   }
   if (path === "/v1/quests/tree" && method === "GET") {
     assertScope(identity.scopes, "quests:read");
@@ -407,6 +465,14 @@ async function routeApi(request, env, context, identity, path) {
     assertScope(identity.scopes, "quests:write");
     const input = await request.json();
     return json(await mutateAndNotify(env, identity, context, (state) => linkExternalRecord(state, decodeURIComponent(externalLinkMatch[1]), input, { source: "api" })), 201);
+  }
+  const togglFocusTaskMatch = path.match(/^\/v1\/quests\/([^/]+)\/toggl-focus-task$/);
+  if (togglFocusTaskMatch && method === "POST") {
+    assertScope(identity.scopes, "integrations:sync");
+    const input = await request.json();
+    const questId = decodeURIComponent(togglFocusTaskMatch[1]);
+    if (input.dryRun !== false) return json(await syncQuestToTogglFocus(env, identity, await stateFor(env, identity), questId, input));
+    return json(await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, questId, input)), 201);
   }
   const questMatch = path.match(/^\/v1\/quests\/([^/]+)$/);
   if (questMatch && method === "PATCH") {
@@ -440,11 +506,46 @@ async function routeApi(request, env, context, identity, path) {
   const connectMatch = path.match(/^\/v1\/integrations\/([^/]+)\/connect$/);
   if (connectMatch && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
+    if (isTogglFocusService(decodeURIComponent(connectMatch[1]))) {
+      assertTogglFocusWebConnection(request, env, identity);
+      return json(await connectTogglFocus(env, identity, await request.json()));
+    }
     return json(await beginIntegrationConnect(env, identity, decodeURIComponent(connectMatch[1])));
+  }
+  if (path === "/v1/integrations/toggl-focus/tracking" && method === "GET") {
+    assertScope(identity.scopes, "integrations:read");
+    return json(await getTogglFocusTracking(env, identity));
+  }
+  if (path === "/v1/integrations/toggl-focus/tracking/start" && method === "POST") {
+    assertScope(identity.scopes, "integrations:sync");
+    const input = await request.json();
+    return json(await startTogglFocusTracking(env, identity, await stateFor(env, identity), input));
+  }
+  if (path === "/v1/integrations/toggl-focus/tracking/stop" && method === "POST") {
+    assertScope(identity.scopes, "integrations:sync");
+    return json(await stopTogglFocusTracking(env, identity, await request.json()));
+  }
+  if (path === "/v1/integrations/toggl-focus/time-entries" && method === "GET") {
+    assertScope(identity.scopes, "integrations:read");
+    const query = Object.fromEntries(new URL(request.url).searchParams);
+    return json(await listTogglFocusEntries(env, identity, query));
+  }
+  if (path === "/v1/integrations/toggl-focus/attributions" && method === "POST") {
+    assertScope(identity.scopes, "integrations:sync");
+    const input = await request.json();
+    if (input.dryRun !== false) return json(await previewTogglFocusAttribution(env, identity, await stateFor(env, identity), input));
+    return json(await mutateAndNotify(env, identity, context, (state) => applyTogglFocusAttribution(env, identity, state, input)));
+  }
+  if (path === "/v1/integrations/toggl-focus/purge" && method === "POST") {
+    assertScope(identity.scopes, "integrations:sync");
+    const input = await request.json();
+    if (input.dryRun !== false) return json(purgeManagedFocusLinks(await stateFor(env, identity), input, { source: "toggl-focus" }));
+    return json(await mutateAndNotify(env, identity, context, (state) => purgeTogglFocus(env, identity, state, input)));
   }
   const resourcesMatch = path.match(/^\/v1\/integrations\/([^/]+)\/resources$/);
   if (resourcesMatch && method === "GET") {
     assertScope(identity.scopes, "integrations:read");
+    if (isTogglFocusService(decodeURIComponent(resourcesMatch[1]))) return json(await listTogglFocusResources(env, identity));
     return json(await listIntegrationResources(env, identity, decodeURIComponent(resourcesMatch[1])));
   }
   const disconnectMatch = path.match(/^\/v1\/integrations\/([^/]+)\/disconnect$/);
@@ -455,6 +556,7 @@ async function routeApi(request, env, context, identity, path) {
   const integrationMatch = path.match(/^\/v1\/integrations\/([^/]+)$/);
   if (integrationMatch && method === "PATCH") {
     assertScope(identity.scopes, "integrations:sync");
+    if (isTogglFocusService(decodeURIComponent(integrationMatch[1]))) return json(await configureTogglFocus(env, identity, await request.json()));
     return json(await configureIntegration(env, identity, decodeURIComponent(integrationMatch[1]), await request.json()));
   }
   if (path === "/v1/calendar/schedule" && method === "GET") {
@@ -610,7 +712,19 @@ async function callMcpTool(name, args, env, context, identity) {
   }
   if (name === "list_today_quests") { assertScope(identity.scopes, "quests:read"); return listQuestPage(await stateFor(env, identity), { view: "today", date: args.date }); }
   if (name === "list_quests") { assertScope(identity.scopes, "quests:read"); return listQuestPage(await stateFor(env, identity), args); }
-  if (name === "create_quest") { assertScope(identity.scopes, "quests:write"); return mutateAndNotify(env, identity, context, (state) => createQuest(state, args, { source: "mcp", returnEvent: true })); }
+  if (name === "create_quest") {
+    assertScope(identity.scopes, "quests:write");
+    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, args, { source: "mcp", returnEvent: true }));
+    if (created.quest && await isTogglFocusAutoCreateEnabled(env, identity)) {
+      try {
+        const synced = await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, created.quest.id, { dryRun: false }));
+        created.focus = { queued: false, synced: true, external: synced.external };
+      } catch (error) {
+        created.focus = { queued: false, synced: false, error: error.code || "focus_sync_failed" };
+      }
+    }
+    return created;
+  }
   if (name === "update_quest") {
     assertScope(identity.scopes, "quests:write");
     const { questId, ...patch } = args;
@@ -635,6 +749,44 @@ async function callMcpTool(name, args, env, context, identity) {
   if (name === "get_character_state") { assertScope(identity.scopes, "character:read"); return { character: characterState(await stateFor(env, identity)) }; }
   if (name === "buy_reward") { assertScope(identity.scopes, "rewards:write"); return mutateAndNotify(env, identity, context, (state) => buyReward(state, args.questId, { source: "mcp" })); }
   if (name === "list_integrations") { assertScope(identity.scopes, "integrations:read"); return { integrations: await listIntegrations(env, identity) }; }
+  if (name === "get_toggl_focus_status") {
+    assertScope(identity.scopes, "integrations:read");
+    return getTogglFocusTracking(env, identity);
+  }
+  if (name === "list_toggl_focus_entries") {
+    assertScope(identity.scopes, "integrations:read");
+    return listTogglFocusEntries(env, identity, args);
+  }
+  if (name === "sync_quest_to_toggl_focus") {
+    assertScope(identity.scopes, "integrations:sync");
+    if (args.dryRun !== false) return syncQuestToTogglFocus(env, identity, await stateFor(env, identity), args.questId, args);
+    return mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, args.questId, args));
+  }
+  if (name === "get_toggl_focus_tracking") {
+    assertScope(identity.scopes, "integrations:read");
+    return getTogglFocusTracking(env, identity);
+  }
+  if (name === "start_toggl_focus_tracking") {
+    assertScope(identity.scopes, "integrations:sync");
+    return startTogglFocusTracking(env, identity, await stateFor(env, identity), args);
+  }
+  if (name === "stop_toggl_focus_tracking") {
+    assertScope(identity.scopes, "integrations:sync");
+    return stopTogglFocusTracking(env, identity, args);
+  }
+  if (name === "preview_toggl_attribution") {
+    assertScope(identity.scopes, "integrations:read");
+    return previewTogglFocusAttribution(env, identity, await stateFor(env, identity), args);
+  }
+  if (name === "apply_toggl_attribution") {
+    assertScope(identity.scopes, "integrations:sync");
+    if (args.dryRun !== false) return previewTogglFocusAttribution(env, identity, await stateFor(env, identity), args);
+    return mutateAndNotify(env, identity, context, (state) => applyTogglFocusAttribution(env, identity, state, args));
+  }
+  if (name === "get_toggl_estimate_insights") {
+    assertScope(identity.scopes, "integrations:read");
+    return getTogglFocusEstimateInsights(env, identity, await stateFor(env, identity));
+  }
   if (name === "preview_external_sync") { assertScope(identity.scopes, "integrations:read"); return syncIntegration(env, identity, await stateFor(env, identity), args.service, args.direction || "import", true); }
   if (name === "sync_external_service") {
     assertScope(identity.scopes, "integrations:sync");
@@ -708,7 +860,7 @@ async function handleMcp(request, env, context, identity) {
   const message = await request.json();
   if (message.method === "notifications/initialized") return new Response(null, { status: 202 });
   let result;
-  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.4.0" }, instructions: "Use QuestForge to organize quests, Quest Trees, daily plans, reviews, agent handoffs, profiles, friends, parties, and command battles. Read before writing. Preview batch updates, archives, handoff transitions, battle commands, and external sync before execution. Ask for confirmation before destructive actions. Quest deletion is not supported." };
+  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.5.0" }, instructions: "Use QuestForge to organize quests, Quest Trees, daily plans, reviews, agent handoffs, profiles, friends, parties, command battles, and Toggl Focus. Read before writing. Preview batch updates, archives, handoff transitions, battle commands, Focus tasks, timers, and time attribution before execution. Never request or accept a Toggl Focus API key through MCP. Ask for confirmation before destructive actions. Quest deletion is not supported." };
   else if (message.method === "tools/list") result = { tools: MCP_TOOLS };
   else if (message.method === "tools/call") {
     try {
@@ -728,7 +880,7 @@ async function handleMcp(request, env, context, identity) {
 async function handleRequest(request, env, context) {
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.4.0", schemaVersion: 6, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
+  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.5.0", schemaVersion: 6, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
   if (path === "/.well-known/oauth-authorization-server") return json(oauthMetadata(request, env));
   if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return json(protectedResourceMetadata(request, env));
   if (path === "/oauth/register" && request.method === "POST") return registerClient(request, env);

@@ -15,6 +15,7 @@ export const INTEGRATIONS = [
   { id: "google-calendar", name: "Google Calendar", auth: "OAuth 2.0", capabilities: ["import"], phase: 1 },
   { id: "google-tasks", name: "Google Tasks", auth: "OAuth 2.0", capabilities: ["import", "export", "bidirectional"], phase: 1 },
   { id: "notion", name: "Notion", auth: "OAuth 2.0", capabilities: ["export"], phase: 1 },
+  { id: "toggl-focus", name: "Toggl Focus", auth: "Personal API key", capabilities: ["task_export", "timer_read", "timer_write", "time_entry_import"], phase: 1 },
   { id: "toggl-track", name: "Toggl Track", auth: "API token", capabilities: ["import", "timer_read", "timer_write"], phase: 2 },
 ];
 
@@ -44,6 +45,7 @@ function providerConfigurationStatus(env, service) {
   if (service === "notion") {
     return env.NOTION_CLIENT_ID && env.NOTION_CLIENT_SECRET ? "ready" : "admin_setup_required";
   }
+  if (service === "toggl-focus") return "ready";
   return "planned";
 }
 
@@ -326,7 +328,11 @@ export async function syncIntegration(env, identity, state, service, direction, 
   const { uid } = normalizeIdentity(identity);
   const adapter = INTEGRATIONS.find((item) => item.id === service);
   if (!adapter) throw integrationError(404, "integration_not_found", "Unknown integration.");
-  if (adapter.phase === 2) throw integrationError(409, "integration_planned", "Toggl Track is planned for phase 2.");
+  if (!["google-calendar", "google-tasks", "notion"].includes(service)) {
+    throw integrationError(409, "integration_uses_dedicated_api", service === "toggl-focus"
+      ? "Toggl Focus uses dedicated task, timer, and attribution endpoints."
+      : "This integration is planned for a later phase.");
+  }
   const account = await getIntegrationAccount(env, uid, service);
   if (!account) throw integrationError(409, "integration_not_connected", `${service} is not connected.`);
   if (!dryRun && !(await acquireIntegrationLock(env, uid, service))) throw integrationError(409, "integration_busy", `${service} sync is already running.`);

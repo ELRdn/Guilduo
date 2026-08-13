@@ -1,7 +1,7 @@
 const storageKey = "questforge-prototype-state";
 const appearanceStorageKey = "questforge-appearance-mode";
 const appearanceModes = ["light", "dark", "system"];
-const appVersion = "2026.08.12-phase2";
+const appVersion = "2026.08.12-toggl-focus";
 const productionGatewayUrl = String(globalThis.QuestForgeConfig?.gatewayUrl || "").replace(/\/$/, "");
 const hadLocalStateAtStartup = Boolean(localStorage.getItem(storageKey));
 const core = globalThis.QuestForgeCore;
@@ -412,6 +412,13 @@ const els = {
   integrationAccountLabel: document.querySelector("#integrationAccountLabel"),
   integrationAutoSync: document.querySelector("#integrationAutoSync"),
   saveIntegrationSettingsButton: document.querySelector("#saveIntegrationSettingsButton"),
+  togglFocusConnectDialog: document.querySelector("#togglFocusConnectDialog"),
+  togglFocusConnectForm: document.querySelector("#togglFocusConnectForm"),
+  togglFocusApiKey: document.querySelector("#togglFocusApiKey"),
+  togglFocusConnectMessage: document.querySelector("#togglFocusConnectMessage"),
+  cancelTogglFocusConnect: document.querySelector("#cancelTogglFocusConnect"),
+  cancelTogglFocusConnectButton: document.querySelector("#cancelTogglFocusConnectButton"),
+  saveTogglFocusConnect: document.querySelector("#saveTogglFocusConnect"),
   calendarAgenda: document.querySelector("#calendarAgenda"),
   calendarAgendaList: document.querySelector("#calendarAgendaList"),
   refreshCalendarAgendaButton: document.querySelector("#refreshCalendarAgendaButton"),
@@ -616,6 +623,22 @@ const integrationAdapters = [
       "dueは日付のみ。時刻はCalendar側に任せる",
       "needsActionは未完了、completedは完了へ対応",
       "リンク済みQuestだけ削除なしで双方向同期",
+    ],
+  },
+  {
+    id: "toggl-focus",
+    name: "Toggl Focus",
+    shortName: "Focus",
+    type: "実績・タイマー",
+    auth: "Personal API key",
+    status: "not_connected",
+    recommendedDirection: "bidirectional",
+    scope: "Focus tasks / tracking / 30-day entries",
+    description: "QuestをFocusタスクにして、確定済みの作業時間だけを実績へ取り込む。",
+    rules: [
+      "To Doと日課をFocusタスクへ明示的に作成・更新",
+      "開始中タイマーは確認してから切り替え、実績は1件につき1つのQuestへ",
+      "アプリ名やウィンドウ名はQuestForgeへ保存しない",
     ],
   },
   {
@@ -894,6 +917,7 @@ let suppressCloudSaveEvent = false;
 let deferredInstallPrompt = null;
 let interactionAudioContext = null;
 const gatewayStorageKey = "questforge-api-gateway-url";
+const focusAutoSyncQueueKey = "questforge-toggl-focus-sync-queue";
 let gatewayRuntime = {
   status: "offline",
   webhooks: [],
@@ -937,6 +961,53 @@ globalThis.QuestForgeBridge = {
     render();
   },
 };
+
+function readFocusAutoSyncQueue() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(focusAutoSyncQueueKey) || "[]");
+    return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
+  } catch { return []; }
+}
+
+function writeFocusAutoSyncQueue(ids) {
+  sessionStorage.setItem(focusAutoSyncQueueKey, JSON.stringify([...new Set(ids)].slice(-50)));
+}
+
+function shouldAutoCreateFocusTask(task) {
+  const focus = gatewayRuntime.integrations?.find((item) => item.id === "toggl-focus");
+  const settings = focus?.account?.settings || {};
+  const hasCurrentFocusTask = (task?.externalLinks || []).some((link) => link.service === "toggl-focus"
+    && (link.type === "task" || link.sourceType === "focus.task")
+    && (!link.organizationId || (link.organizationId === settings.organizationId && link.workspaceId === settings.workspaceId)));
+  return Boolean(task && ["todo", "daily"].includes(task.kind) && focus?.status === "connected"
+    && settings.autoCreateTasks
+    && settings.organizationId
+    && settings.workspaceId
+    && !hasCurrentFocusTask);
+}
+
+async function flushFocusAutoSyncQueue() {
+  const queue = readFocusAutoSyncQueue();
+  if (!queue.length || !globalThis.QuestForgeFirebase?.getUser?.() || !getGatewayUrl()) return;
+  await globalThis.QuestForgeFirebase?.flushState?.();
+  const remaining = [];
+  for (const questId of queue) {
+    try {
+      await gatewayFetch(`/v1/quests/${encodeURIComponent(questId)}/toggl-focus-task`, { method: "POST", body: JSON.stringify({ dryRun: false }) });
+    } catch (error) {
+      remaining.push(questId);
+      console.warn("QuestForge Focus task auto-create failed:", error);
+    }
+  }
+  writeFocusAutoSyncQueue(remaining);
+  if (remaining.length !== queue.length) await refreshGatewayRuntime();
+}
+
+function queueFocusAutoSync(task) {
+  if (!shouldAutoCreateFocusTask(task)) return;
+  writeFocusAutoSyncQueue([...readFocusAutoSyncQueue(), task.id]);
+  window.setTimeout(() => { flushFocusAutoSyncQueue().catch(() => {}); }, 1200);
+}
 
 const themePresets = {
   arcane: {
@@ -1438,8 +1509,13 @@ function normalizeState(nextState) {
         ? "backlog"
         : "scheduled";
     const externalLinks = Array.isArray(task.externalLinks) ? task.externalLinks : [];
-    const linkedTogglMinutes = externalLinks
-      .filter((link) => link.service === "toggl-track" && (link.type === "time_entry" || link.sourceType === "toggl.time_entry"))
+    const entryLinks = externalLinks
+      .filter((link) => link.type === "time_entry" || link.sourceType === "toggl.time_entry" || link.sourceType === "focus.time_entry");
+    const focusMinutes = entryLinks
+      .filter((link) => link.service === "toggl-focus")
+      .reduce((sum, link) => sum + Math.max(0, Math.round(Number(link.durationMinutes || 0))), 0);
+    const linkedTogglMinutes = focusMinutes || entryLinks
+      .filter((link) => link.service === "toggl-track")
       .reduce((sum, link) => sum + Math.max(0, Math.round(Number(link.durationMinutes || 0))), 0);
     const manualActualMinutes = Math.max(0, Math.round(Number(task.manualActualMinutes ?? task.actualMinutes ?? 0)));
     return {
@@ -2362,6 +2438,7 @@ function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags 
   state.tasks.push(task);
   recordTaskEvent("task.created", task);
   recordAssignmentReadyEvent(task);
+  queueFocusAutoSync(task);
   render();
   return task;
 }
@@ -3676,6 +3753,69 @@ function createTaskCard(task) {
     card.appendChild(conflictActions);
   }
 
+  const focusRuntime = gatewayRuntime.integrations?.find((item) => item.id === "toggl-focus" && item.status === "connected");
+  const focusSettings = focusRuntime?.account?.settings || {};
+  const focusLink = (task.externalLinks || []).find((link) => link.service === "toggl-focus"
+    && (link.type === "task" || link.sourceType === "focus.task")
+    && (!link.organizationId || (link.organizationId === focusSettings.organizationId && link.workspaceId === focusSettings.workspaceId)));
+  const canUseFocusTask = ["todo", "daily"].includes(task.kind) && task.lifecycleState === "active" && !task.done;
+  if (canUseFocusTask && focusRuntime) {
+    const focusActions = document.createElement("div");
+    focusActions.className = "task-external-conflict focus-task-actions";
+    const syncFocus = document.createElement("button");
+    syncFocus.type = "button";
+    syncFocus.className = "secondary-button task-external-action";
+    syncFocus.textContent = focusLink ? "Focusタスクを更新" : "Focusタスクを作成";
+    syncFocus.addEventListener("click", async () => {
+      syncFocus.disabled = true;
+      try {
+        const preview = await gatewayFetch(`/v1/quests/${encodeURIComponent(task.id)}/toggl-focus-task`, { method: "POST", body: JSON.stringify({ dryRun: true }) });
+        const action = preview.operation === "update" ? "更新" : "作成";
+        if (!window.confirm(`Toggl Focusに「${task.title}」を${action}しますか？`)) return;
+        await gatewayFetch(`/v1/quests/${encodeURIComponent(task.id)}/toggl-focus-task`, { method: "POST", body: JSON.stringify({ dryRun: false }) });
+        await refreshGatewayRuntime();
+        showToast(`Focusタスクを${action}しました。`);
+      } catch (error) {
+        showToast(describeIntegrationError(error), { duration: 6000 });
+      } finally { syncFocus.disabled = false; }
+    });
+    focusActions.appendChild(syncFocus);
+    if (focusLink) {
+      const timer = document.createElement("button");
+      timer.type = "button";
+      timer.className = "secondary-button task-external-action";
+      timer.textContent = "Focusタイマー";
+      timer.addEventListener("click", async () => {
+        timer.disabled = true;
+        try {
+          const status = await gatewayFetch("/v1/integrations/toggl-focus/tracking");
+          const current = status.tracking;
+          if (current?.taskId === focusLink.externalId) {
+            const preview = await gatewayFetch("/v1/integrations/toggl-focus/tracking/stop", { method: "POST", body: JSON.stringify({ expectedEntryId: current.id, dryRun: true }) });
+            if (preview.action === "stop" && window.confirm("このFocusタイマーを停止しますか？")) {
+              await gatewayFetch("/v1/integrations/toggl-focus/tracking/stop", { method: "POST", body: JSON.stringify({ expectedEntryId: current.id, dryRun: false }) });
+              showToast("Focusタイマーを停止しました。");
+            }
+          } else {
+            const preview = await gatewayFetch("/v1/integrations/toggl-focus/tracking/start", { method: "POST", body: JSON.stringify({ questId: task.id, dryRun: true }) });
+            const expectedCurrentEntryId = preview.expectedCurrentEntryId || "";
+            const message = preview.action === "confirmation_required"
+              ? `「${preview.current.taskName || "別の作業"}」のタイマーを止めて開始しますか？`
+              : `「${task.title}」のFocusタイマーを開始しますか？`;
+            if (window.confirm(message)) {
+              await gatewayFetch("/v1/integrations/toggl-focus/tracking/start", { method: "POST", body: JSON.stringify({ questId: task.id, expectedCurrentEntryId, dryRun: false }) });
+              showToast("Focusタイマーを開始しました。");
+            }
+          }
+        } catch (error) {
+          showToast(describeIntegrationError(error), { duration: 6000 });
+        } finally { timer.disabled = false; }
+      });
+      focusActions.appendChild(timer);
+    }
+    card.appendChild(focusActions);
+  }
+
   if (task.kind === "reward") {
     const buy = document.createElement("button");
     buy.className = "primary-button reward-buy";
@@ -3803,6 +3943,21 @@ function describeIntegrationError(error) {
   if (error?.code === "reconnect_required") {
     return "外部サービスの許可が切れています。再接続してください。";
   }
+  if (error?.code === "invalid_focus_api_key") {
+    return "Toggl FocusのPersonal API keyを確認してください。toggl_sk_で始まる値が必要です。";
+  }
+  if (["incomplete_focus_configuration", "invalid_focus_organizationId", "invalid_focus_workspaceId"].includes(error?.code)) {
+    return "Toggl Focusの組織IDとWorkspace IDは数字で入力してください。";
+  }
+  if (error?.code === "focus_task_not_linked") {
+    return "先にこのQuestのFocusタスクを作成してください。";
+  }
+  if (error?.code === "focus_quest_not_eligible") {
+    return "Focusへ送れるのは、未完了でアーカイブされていないTo Doまたは日課です。";
+  }
+  if (error?.code === "time_entry_already_attributed") {
+    return "このFocus実績はすでに別のQuestへ取り込まれています。";
+  }
   return error?.message || "連携処理に失敗しました。";
 }
 
@@ -3864,6 +4019,7 @@ async function refreshGatewayRuntime() {
       renderIntegrationHub();
     }
     await refreshCalendarSchedule().catch(() => {});
+    await flushFocusAutoSyncQueue().catch(() => {});
   } catch (error) {
     setGatewayStatus("error", i18n.t("gateway.error"));
     if (els.mcpConnectionNote) els.mcpConnectionNote.textContent = i18n.t("gateway.checkFailed", { message: error.message });
@@ -3955,6 +4111,9 @@ function renderPluginSlots(plugins) {
 
 async function previewLiveIntegration(run = false) {
   const adapter = getSelectedIntegration();
+  if (adapter.id === "toggl-focus") {
+    throw Object.assign(new Error("Toggl Focusは専用の実績確認ボタンから操作してください。"), { code: "integration_uses_dedicated_api" });
+  }
   const result = await gatewayFetch(`/v1/integrations/${encodeURIComponent(adapter.id)}/sync`, {
     method: "POST",
     body: JSON.stringify({ direction: state.integrations.direction, dryRun: !run }),
@@ -4128,16 +4287,18 @@ function renderIntegrationResourcePanel(adapter) {
   if (!els.integrationResourcePanel) return;
   const runtime = selectedRuntimeIntegration();
   const connected = runtime.status === "connected";
-  const supported = ["google-calendar", "google-tasks", "notion"].includes(adapter.id);
+  const isFocus = adapter.id === "toggl-focus";
+  const supported = ["google-calendar", "google-tasks", "notion", "toggl-focus"].includes(adapter.id);
   const user = globalThis.QuestForgeFirebase?.getUser?.();
   const configurationReady = runtime.configurationStatus !== "admin_setup_required";
   els.connectIntegrationButton.hidden = connected || !supported || runtime.status === "planned";
   els.connectIntegrationButton.disabled = !user || !configurationReady;
   els.connectIntegrationButton.textContent = i18n.t(runtime.status === "reconnect_required" ? "integration.reconnect" : "integration.connect");
   els.disconnectIntegrationButton.hidden = !connected && runtime.status !== "reconnect_required";
-  els.previewLiveSyncButton.disabled = !connected;
+  els.previewLiveSyncButton.disabled = !connected || isFocus;
   els.runLiveSyncButton.disabled = true;
   els.integrationResourcePanel.hidden = !connected;
+  if (els.integrationAutoSync?.closest("label")) els.integrationAutoSync.closest("label").hidden = isFocus;
   if (els.integrationSetupMessage) {
     els.integrationSetupMessage.className = "integration-setup-message";
     if (!user) {
@@ -4147,6 +4308,8 @@ function renderIntegrationResourcePanel(adapter) {
       els.integrationSetupMessage.textContent = i18n.t("integration.setup.admin");
     } else if (!connected) {
       els.integrationSetupMessage.textContent = i18n.t("integration.setup.connect");
+    } else if (isFocus && !(runtime.account?.settings?.organizationId && runtime.account?.settings?.workspaceId)) {
+      els.integrationSetupMessage.textContent = "Focusの組織IDとWorkspace IDを入力して設定を保存してください。";
     } else {
       els.integrationSetupMessage.textContent = i18n.t("integration.setup.ready");
     }
@@ -4156,6 +4319,45 @@ function renderIntegrationResourcePanel(adapter) {
   els.integrationAccountLabel.textContent = runtime.account?.providerAccountName || i18n.t("integration.connectedAccount");
   els.integrationAutoSync.checked = Boolean(runtime.account?.settings?.autoSync);
   els.integrationResourceList.innerHTML = "";
+  if (isFocus) {
+    els.integrationResourceTitle.textContent = "Toggl Focusの接続先";
+    const settings = runtime.account?.settings || {};
+    const makeField = (label, key, placeholder, optional = false) => {
+      const field = document.createElement("label");
+      field.className = "focus-config-field";
+      const caption = document.createElement("span");
+      caption.textContent = optional ? `${label}（任意）` : label;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.inputMode = "numeric";
+      input.pattern = "\\d*";
+      input.dataset.focusSetting = key;
+      input.value = settings[key] || "";
+      input.placeholder = placeholder;
+      field.append(caption, input);
+      return field;
+    };
+    els.integrationResourceList.append(
+      makeField("組織ID", "organizationId", "例: 123456"),
+      makeField("Workspace ID", "workspaceId", "例: 654321"),
+      makeField("Project ID", "projectId", "未指定ならFocusのInbox", true),
+    );
+    const automatic = document.createElement("label");
+    automatic.className = "integration-auto-sync";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.focusSetting = "autoCreateTasks";
+    checkbox.checked = Boolean(settings.autoCreateTasks);
+    const copy = document.createElement("span");
+    copy.textContent = "新しいTo Doと日課をFocusタスクにも自動作成する";
+    automatic.append(checkbox, copy);
+    els.integrationResourceList.appendChild(automatic);
+    const note = document.createElement("p");
+    note.className = "focus-privacy-note";
+    note.textContent = "Focusのデスクトップ自動計測ルールやアプリ名・ウィンドウ名はQuestForgeへ保存しません。";
+    els.integrationResourceList.appendChild(note);
+    return;
+  }
   const resources = gatewayRuntime.integrationResources[adapter.id] || [];
   if (!resources.length) {
     const load = document.createElement("button");
@@ -4190,8 +4392,27 @@ function renderIntegrationResourcePanel(adapter) {
 async function connectSelectedIntegration() {
   if (!globalThis.QuestForgeFirebase?.getUser?.()) throw new Error("先にQuestForgeへGoogleログインしてください。");
   const adapter = getSelectedIntegration();
+  if (adapter.id === "toggl-focus") {
+    openTogglFocusConnectDialog();
+    return;
+  }
   const result = await gatewayFetch(`/v1/integrations/${encodeURIComponent(adapter.id)}/connect`, { method: "POST" });
   window.location.assign(result.authorizationUrl);
+}
+
+function openTogglFocusConnectDialog() {
+  if (!els.togglFocusConnectDialog) return;
+  els.togglFocusConnectMessage.textContent = "";
+  els.togglFocusApiKey.value = "";
+  if (typeof els.togglFocusConnectDialog.showModal === "function") els.togglFocusConnectDialog.showModal();
+  else els.togglFocusConnectDialog.setAttribute("open", "");
+  window.setTimeout(() => els.togglFocusApiKey.focus(), 0);
+}
+
+function closeTogglFocusConnectDialog() {
+  els.togglFocusApiKey.value = "";
+  if (typeof els.togglFocusConnectDialog.close === "function") els.togglFocusConnectDialog.close();
+  else els.togglFocusConnectDialog.removeAttribute("open");
 }
 
 async function disconnectSelectedIntegration() {
@@ -4206,16 +4427,21 @@ async function disconnectSelectedIntegration() {
 async function saveSelectedIntegrationSettings() {
   const adapter = getSelectedIntegration();
   const selected = [...els.integrationResourceList.querySelectorAll("input:checked")].map((input) => input.value);
-  const body = { autoSync: els.integrationAutoSync.checked };
+  const body = adapter.id === "toggl-focus" ? {} : { autoSync: els.integrationAutoSync.checked };
   if (adapter.id === "google-calendar") body.calendarIds = selected;
   if (adapter.id === "google-tasks") body.taskListId = selected[0] || "";
   if (adapter.id === "notion") { body.parentPageId = selected[0] || ""; body.createDatabase = true; }
+  if (adapter.id === "toggl-focus") {
+    els.integrationResourceList.querySelectorAll("[data-focus-setting]").forEach((input) => {
+      body[input.dataset.focusSetting] = input.type === "checkbox" ? input.checked : input.value.trim();
+    });
+  }
   const result = await gatewayFetch(`/v1/integrations/${encodeURIComponent(adapter.id)}`, { method: "PATCH", body: JSON.stringify(body) });
   const index = gatewayRuntime.integrations.findIndex((item) => item.id === adapter.id);
   if (index >= 0) gatewayRuntime.integrations[index] = { ...gatewayRuntime.integrations[index], account: result.account, status: result.account.status };
   gatewayRuntime.integrationPreviewed[adapter.id] = false;
   renderIntegrationHub();
-  showToast(adapter.id === "notion" ? "QuestForge Logsを準備しました。" : "同期設定を保存しました。");
+  showToast(adapter.id === "notion" ? "QuestForge Logsを準備しました。" : adapter.id === "toggl-focus" ? "Toggl Focusの接続先を保存しました。" : "同期設定を保存しました。");
 }
 
 function renderSyncRuleSummary(adapter) {
@@ -4238,11 +4464,123 @@ function renderSyncRuleSummary(adapter) {
 
 function renderSyncPreview(adapter) {
   els.syncPreviewList.innerHTML = "";
+  if (adapter.id === "toggl-focus") {
+    const runtime = gatewayRuntime.integrations?.find((item) => item.id === adapter.id);
+    const controls = document.createElement("div");
+    controls.className = "focus-entry-controls";
+    const inspect = document.createElement("button");
+    inspect.type = "button";
+    inspect.className = "secondary-button";
+    inspect.textContent = "30日分の実績を確認";
+    inspect.disabled = runtime?.status !== "connected";
+    inspect.addEventListener("click", async () => {
+      inspect.disabled = true;
+      try {
+        const preview = await gatewayFetch("/v1/integrations/toggl-focus/attributions", { method: "POST", body: JSON.stringify({ dryRun: true, days: 30 }) });
+        renderTogglFocusAttributionPreview(preview);
+      } catch (error) {
+        showToast(describeIntegrationError(error), { duration: 6000 });
+      } finally { inspect.disabled = false; }
+    });
+    controls.appendChild(inspect);
+    els.syncPreviewList.appendChild(controls);
+    const message = document.createElement("div");
+    message.className = "empty-sync-log";
+    message.textContent = runtime?.status === "connected"
+      ? "Focusタスクに直接ひもづく実績は、一括確認後に取り込めます。未ひもづけの記録は候補として残ります。"
+      : "まずToggl Focusを接続してください。";
+    els.syncPreviewList.appendChild(message);
+    return;
+  }
   const empty = document.createElement("div");
   empty.className = "empty-sync-log";
   const runtime = gatewayRuntime.integrations?.find((item) => item.id === adapter.id);
   empty.textContent = i18n.t(runtime?.status === "connected" ? "integration.preview.connected" : runtime?.status === "planned" ? "integration.preview.planned" : "integration.preview.disconnected");
   els.syncPreviewList.appendChild(empty);
+}
+
+function renderTogglFocusAttributionPreview(preview) {
+  els.syncPreviewList.innerHTML = "";
+  const ready = (preview.candidates || []).filter((candidate) => candidate.status === "ready");
+  const heading = document.createElement("div");
+  heading.className = "sync-rule-heading";
+  const range = document.createElement("span");
+  range.textContent = `${preview.dateFrom} - ${preview.dateTo}`;
+  const headingTitle = document.createElement("strong");
+  headingTitle.textContent = `取り込み候補 ${ready.length} 件`;
+  heading.append(range, headingTitle);
+  els.syncPreviewList.appendChild(heading);
+  if (ready.length) {
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "primary-button";
+    apply.textContent = "直接ひもづく実績を取り込む";
+    apply.addEventListener("click", async () => {
+      if (!window.confirm(`${ready.length}件のFocus実績をQuestForgeへ取り込みますか？`)) return;
+      apply.disabled = true;
+      try {
+        const result = await gatewayFetch("/v1/integrations/toggl-focus/attributions", { method: "POST", body: JSON.stringify({ dryRun: false, days: 30 }) });
+        showToast(`${result.count || 0}件のFocus実績を取り込みました。`);
+        render();
+      } catch (error) {
+        showToast(describeIntegrationError(error), { duration: 6000 });
+      } finally { apply.disabled = false; }
+    });
+    els.syncPreviewList.appendChild(apply);
+  }
+  (preview.candidates || []).forEach((candidate) => {
+    const item = document.createElement("article");
+    item.className = "sync-preview-card";
+    const entry = candidate.entry || {};
+    const title = document.createElement("strong");
+    title.textContent = entry.taskName || entry.description || "名前のないFocus記録";
+    const details = document.createElement("p");
+    details.textContent = `${entry.durationMinutes || 0}分 / ${candidate.questTitle || "未ひもづけ"}`;
+    const footer = document.createElement("footer");
+    const origin = document.createElement("span");
+    origin.textContent = candidate.mode === "direct" ? "Focusタスクから自動候補" : "確認が必要な候補";
+    const status = document.createElement("span");
+    status.textContent = candidate.status;
+    footer.append(origin, status);
+    item.append(title, details, footer);
+    if (candidate.status === "unlinked") {
+      const assignment = document.createElement("div");
+      assignment.className = "focus-entry-assignment";
+      const select = document.createElement("select");
+      select.appendChild(new Option("割り当てるQuestを選ぶ", ""));
+      state.tasks
+        .filter((task) => ["todo", "daily"].includes(task.kind) && task.lifecycleState !== "archived")
+        .sort((left, right) => i18n?.compareText?.(left.title, right.title) ?? left.title.localeCompare(right.title))
+        .forEach((task) => select.appendChild(new Option(task.title, task.id)));
+      const assign = document.createElement("button");
+      assign.type = "button";
+      assign.className = "secondary-button";
+      assign.textContent = "このQuestへ割り当て";
+      assign.disabled = state.tasks.every((task) => !["todo", "daily"].includes(task.kind) || task.lifecycleState === "archived");
+      assign.addEventListener("click", async () => {
+        if (!select.value) {
+          showToast("割り当てるQuestを選んでください。");
+          return;
+        }
+        const selectedQuest = state.tasks.find((task) => task.id === select.value);
+        if (!window.confirm(`Focus実績 ${entry.durationMinutes || 0}分を「${selectedQuest?.title || "このQuest"}」へ取り込みますか？`)) return;
+        assign.disabled = true;
+        try {
+          const result = await gatewayFetch("/v1/integrations/toggl-focus/attributions", {
+            method: "POST",
+            body: JSON.stringify({ dryRun: false, days: 30, questId: select.value, entryIds: [entry.id] }),
+          });
+          showToast(`${result.count || 0}件のFocus実績を取り込みました。`);
+          render();
+        } catch (error) {
+          showToast(describeIntegrationError(error), { duration: 6000 });
+        } finally { assign.disabled = false; }
+      });
+      assignment.append(select, assign);
+      item.appendChild(assignment);
+    }
+    els.syncPreviewList.appendChild(item);
+  });
 }
 
 function renderSyncLogs() {
@@ -4629,6 +4967,27 @@ els.connectIntegrationButton.addEventListener("click", () => {
 
 els.disconnectIntegrationButton.addEventListener("click", () => {
   disconnectSelectedIntegration().catch((error) => showToast(describeIntegrationError(error), { duration: 6000 }));
+});
+
+els.cancelTogglFocusConnect?.addEventListener("click", closeTogglFocusConnectDialog);
+els.cancelTogglFocusConnectButton?.addEventListener("click", closeTogglFocusConnectDialog);
+els.togglFocusConnectForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const apiKey = els.togglFocusApiKey.value.trim();
+  if (!apiKey) return;
+  els.saveTogglFocusConnect.disabled = true;
+  els.togglFocusConnectMessage.textContent = "接続を確認しています。";
+  try {
+    await gatewayFetch("/v1/integrations/toggl-focus/connect", { method: "POST", body: JSON.stringify({ apiKey }) });
+    closeTogglFocusConnectDialog();
+    await refreshGatewayRuntime();
+    showToast("Toggl Focusを接続しました。次に組織IDとWorkspace IDを設定してください。");
+  } catch (error) {
+    els.togglFocusConnectMessage.textContent = describeIntegrationError(error);
+  } finally {
+    els.togglFocusApiKey.value = "";
+    els.saveTogglFocusConnect.disabled = false;
+  }
 });
 
 els.saveIntegrationSettingsButton.addEventListener("click", () => {

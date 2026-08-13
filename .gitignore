@@ -13,6 +13,11 @@ worker/.dev.vars
 .wrangler/
 .tmp-worker*/
 screenshots/
+backups/
+
+# Interaction Lab capture helpers and generated visual evidence stay local.
+interaction-lab/capture-*.mjs
+interaction-lab/screenshots/
 
 # Unity Battle Lab is intentionally pending and excluded from the public web release.
 unity-battle-prototype/

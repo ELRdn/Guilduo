@@ -1,6 +1,6 @@
 # Terms Of Use
 
-Effective date: 2026-08-09
+Effective date: 2026-08-12
 
 QuestForge is beta task-management and game software. By using a deployed instance, you agree to use it lawfully and not to disrupt the service, access another user's data, abuse OAuth permissions, send malicious webhooks, or distribute content without the necessary rights.
 
@@ -14,7 +14,7 @@ MCP and agent assignments can create or change data. Review previews and confirm
 
 ## External Services
 
-Google, Notion, Firebase, Cloudflare, and other connected services are independent providers. Their availability, limits, and terms can change. QuestForge is not responsible for third-party outages or account actions.
+Google, Notion, Toggl Focus, Firebase, Cloudflare, and other connected services are independent providers. Their availability, limits, and terms can change. QuestForge is not responsible for third-party outages or account actions. You are responsible for revoking or rotating a third-party personal API key at its provider when needed.
 
 ## Beta Disclaimer
 

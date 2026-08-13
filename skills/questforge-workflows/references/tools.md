@@ -28,6 +28,16 @@
 - Execute: `sync_external_service`
 - Calendar: `get_calendar_schedule`, `convert_calendar_event_to_quest`
 
+## Toggl Focus
+
+- Connection/state: `get_toggl_focus_status`, `get_toggl_focus_tracking`
+- Task export: `sync_quest_to_toggl_focus` (preview by default)
+- Timer: `start_toggl_focus_tracking`, `stop_toggl_focus_tracking` (confirm the exact current entry before execution)
+- Time: `list_toggl_focus_entries`, `preview_toggl_attribution`, `apply_toggl_attribution`
+- Insights: `get_toggl_estimate_insights` (suggestions only)
+
+Never ask for a Personal API key through MCP. The user enters it exclusively in the QuestForge web connection dialog. A Focus time entry maps to one Quest only; an unlinked entry needs the user's selected Quest before attribution.
+
 ## Quest Trees
 
 - Read hierarchy and progress: `get_quest_tree`

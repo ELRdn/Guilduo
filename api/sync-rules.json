@@ -61,6 +61,39 @@
       ]
     },
     {
+      "id": "questforge-to-toggl-focus-task",
+      "service": "toggl-focus",
+      "direction": "export",
+      "source": "questforge.quest",
+      "target": "focus.task",
+      "mapping": {
+        "title": "name",
+        "notes": "description,notes",
+        "estimatedMinutes": "estimated_mins",
+        "scheduledDate": "start_date",
+        "dueDate": "end_date",
+        "impact": "priority",
+        "tags[]": "tag_ids[]"
+      },
+      "eligibility": ["kind is todo or daily", "lifecycleState is not archived"],
+      "safety": ["Create/update is explicit unless autoCreateTasks is enabled.", "Completing or archiving a Quest never completes or deletes a Focus task."]
+    },
+    {
+      "id": "toggl-focus-time-entry-to-quest-actual",
+      "service": "toggl-focus",
+      "direction": "import",
+      "source": "focus.time_entry",
+      "target": "quest.externalLinks[]",
+      "mapping": {
+        "id": "externalLinks[].externalId",
+        "task_id": "externalLinks[].taskId",
+        "duration": "externalLinks[].durationMinutes",
+        "start": "externalLinks[].entryStartAt",
+        "end": "externalLinks[].entryStopAt"
+      },
+      "safety": ["A Focus time entry can map to only one Quest.", "Direct Focus task matches may be confirmed in bulk; unlinked entries require a selected Quest.", "actualMinutes uses Focus totals before manualActualMinutes."]
+    },
+    {
       "id": "toggl-time-entry-to-focus-log",
       "service": "toggl-track",
       "direction": "import",

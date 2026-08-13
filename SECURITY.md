@@ -16,6 +16,8 @@ Do not include real OAuth tokens, Firebase ID tokens, integration secrets, webho
 - Worker endpoints verify Firebase or delegated OAuth bearer tokens.
 - Social data uses minimal public profiles in D1.
 - Integration tokens are encrypted with AES-GCM and an operator-owned secret.
+- Toggl Focus Personal API keys are accepted only by the authenticated web connection flow; REST and MCP responses never return them, and MCP clients cannot submit them.
+- Focus timer stop or replacement requires the exact current entry ID to reduce cross-device timer mistakes.
 - Party invite tokens are stored only as SHA-256 hashes and expire after seven days.
 - MCP scopes separate read, write, social, battle, integration, webhook, and plugin capabilities.
 - Plugin UI runs in sandboxed iframes and must not execute with the main app's authority.

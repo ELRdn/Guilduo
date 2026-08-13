@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "QuestForge API",
-    "version": "2.4.0",
-    "description": "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, integrations, plugins, and signed webhooks."
+    "version": "2.5.0",
+    "description": "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks."
   },
   "servers": [
     {
@@ -1483,6 +1483,324 @@
           }
         }
       }
+    },
+    "/v1/quests/{questId}/toggl-focus-task": {
+      "post": {
+        "summary": "Preview or create/update a Toggl Focus task for one Quest",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Focus task sync",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/connect": {
+      "post": {
+        "summary": "Connect Toggl Focus from the QuestForge web app",
+        "description": "Web/Firebase-authenticated endpoint only. The personal API key is encrypted in D1 and never returned by REST or MCP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TogglFocusConnectInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Focus connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/resources": {
+      "get": {
+        "summary": "List configured Toggl Focus projects and tags",
+        "responses": {
+          "200": {
+            "description": "Focus resources",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus": {
+      "patch": {
+        "summary": "Save Toggl Focus organization, workspace, project, and auto-create settings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TogglFocusConfiguration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Focus configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/disconnect": {
+      "post": {
+        "summary": "Disconnect Toggl Focus and remove the encrypted personal API key from QuestForge",
+        "responses": {
+          "200": {
+            "description": "Focus disconnection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/tracking": {
+      "get": {
+        "summary": "Read the current Toggl Focus timer",
+        "responses": {
+          "200": {
+            "description": "Focus current tracking",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/tracking/start": {
+      "post": {
+        "summary": "Preview or start a Focus timer for a Quest",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TogglFocusStartInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Focus timer result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/tracking/stop": {
+      "post": {
+        "summary": "Preview or stop the exact current Focus timer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TogglFocusStopInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Focus timer result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/time-entries": {
+      "get": {
+        "summary": "List up to 30 days of Toggl Focus time entries",
+        "parameters": [
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 30
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Focus time entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/attributions": {
+      "post": {
+        "summary": "Preview or confirm one-to-one Focus entry attribution",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TogglFocusAttributionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Focus attribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/toggl-focus/purge": {
+      "post": {
+        "summary": "Preview or remove all QuestForge-side Toggl Focus links",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Focus link purge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2337,6 +2655,122 @@
                 "type": "integer"
               }
             }
+          }
+        }
+      },
+      "TogglFocusConnectInput": {
+        "type": "object",
+        "required": [
+          "apiKey"
+        ],
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "pattern": "^toggl_sk_"
+          },
+          "organizationId": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "workspaceId": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "projectId": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "autoCreateTasks": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "TogglFocusConfiguration": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "workspaceId": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "projectId": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "autoCreateTasks": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "TogglFocusStartInput": {
+        "type": "object",
+        "required": [
+          "questId"
+        ],
+        "properties": {
+          "questId": {
+            "type": "string"
+          },
+          "expectedCurrentEntryId": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "TogglFocusStopInput": {
+        "type": "object",
+        "properties": {
+          "expectedEntryId": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "TogglFocusAttributionInput": {
+        "type": "object",
+        "properties": {
+          "questId": {
+            "type": "string"
+          },
+          "entryIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100
+          },
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 30
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
           }
         }
       }

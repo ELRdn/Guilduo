@@ -45,6 +45,13 @@ globalThis.QuestForgeFirebase = {
   getUser() {
     return currentUser ? { uid: currentUser.uid, email: currentUser.email || "", displayName: currentUser.displayName || "" } : null;
   },
+  async flushState() {
+    const bridge = getBridge();
+    if (!currentUser || !currentStateRef || !bridge) return false;
+    window.clearTimeout(uploadTimer);
+    await uploadState(bridge.getSyncSnapshot().state);
+    return true;
+  },
 };
 
 function getBridge() {

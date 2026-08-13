@@ -3,7 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { callMcpTool, MCP_TOOLS } from "./index.mjs";
 
-const SERVER_INFO = { name: "questforge-mcp-next", version: "2.4.0" };
+const SERVER_INFO = { name: "questforge-mcp-next", version: "2.5.0" };
 const ROUTE = "/mcp-next";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TEXT_LENGTH = 8000;
@@ -124,6 +124,18 @@ function registerResources(server, env, context, identity) {
     { title: "Agent Handoffs", mimeType: "application/json", description: "Agent-assigned quests and their current handoff state." },
     (uri) => readSafe(uri, () => callMcpTool("list_agent_handoffs", { state: "all" }, env, context, identity)),
   );
+  server.registerResource(
+    "questforge-toggl-focus-status",
+    "questforge://toggl-focus/status",
+    { title: "Toggl Focus Status", mimeType: "application/json", description: "Toggl Focus connection configuration and current timer without the personal API key." },
+    (uri) => readSafe(uri, () => callMcpTool("get_toggl_focus_status", {}, env, context, identity)),
+  );
+  server.registerResource(
+    "questforge-toggl-focus-insights",
+    "questforge://toggl-focus/estimate-insights",
+    { title: "Toggl Focus Estimate Insights", mimeType: "application/json", description: "Suggestion-only estimates from completed Toggl Focus-linked Quests." },
+    (uri) => readSafe(uri, () => callMcpTool("get_toggl_estimate_insights", {}, env, context, identity)),
+  );
 }
 
 function promptMessages(text) {
@@ -232,6 +244,28 @@ function registerPrompts(server) {
         "- update_quest to edit notes, nextAction, parentQuestId, or assignee details",
         "- score_quest to complete work",
         "Do not remove assignments or archive quests without explicit confirmation.",
+      ].join("\n"));
+    },
+  );
+  server.registerPrompt(
+    "review_focus_time",
+    { title: "Review Focus Time", description: "Review Toggl Focus time entries and safely attribute them to Quests.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ dateFrom: dateString.optional(), dateTo: dateString.optional() })) },
+    (rawArgs) => {
+      const { dateFrom, dateTo } = rawArgs || {};
+      return promptMessages([
+        "Help me review recent Toggl Focus time in QuestForge.",
+        "",
+        "Read first:",
+        "1. Call get_toggl_focus_status to confirm the Focus connection and current timer.",
+        `2. Call list_toggl_focus_entries${dateFrom || dateTo ? ` with dateFrom: ${dateFrom || ""}, dateTo: ${dateTo || ""}` : " for the default 30-day window"}.`,
+        "3. Call preview_toggl_attribution before proposing any attribution.",
+        "",
+        "Rules:",
+        "- Never ask for or accept a Toggl API key through MCP.",
+        "- Direct Focus-task matches can be proposed; unlinked entries require a human-selected Quest.",
+        "- Explain any conflict or unlinked entry, then request explicit confirmation.",
+        "- Call apply_toggl_attribution with dryRun false only after confirmation.",
+        "- Do not stop a running timer unless the user explicitly approves the exact expected entry ID.",
       ].join("\n"));
     },
   );

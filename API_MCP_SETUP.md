@@ -90,13 +90,13 @@ npm run worker:deploy
 
 `PUBLIC_BASE_URL` and `WEB_APP_URL` stay as non-secret Wrangler variables. Verify `/health` reports `integrationStorage: d1`, then connect Google and Notion from the app.
 
-## MCP v2.4 connection check
+## MCP v2.5 connection check
 
-The normal OAuth endpoint is `https://your-questforge-worker.example.workers.dev/mcp`. It provides all 38 QuestForge tools, including Quest Tree and Agent Handoff operations. After a Worker update, remove and reconnect a client only when it has cached an older tool list.
+The normal OAuth endpoint is `https://your-questforge-worker.example.workers.dev/mcp`. It provides all 47 QuestForge tools, including Quest Tree, Agent Handoff, and safe Toggl Focus operations. After a Worker update, remove and reconnect a client only when it has cached an older tool list.
 
-`https://your-questforge-worker.example.workers.dev/mcp-next` is the SDK v2 Streamable HTTP lane. It provides the same tools plus Quest Tree and Agent Handoff Resources and Prompts for `plan_today`, `review_day`, `review_week`, `capture_quest`, and `process_agent_handoffs`. Use `/mcp-next` first for clients that support modern MCP discovery, then keep `/mcp` as the normal compatibility endpoint.
+`https://your-questforge-worker.example.workers.dev/mcp-next` is the SDK v2 Streamable HTTP lane. It provides the same tools plus Quest Tree, Agent Handoff, and Toggl Focus Resources and Prompts for `plan_today`, `review_day`, `review_week`, `capture_quest`, `process_agent_handoffs`, and `review_focus_time`. Use `/mcp-next` first for clients that support modern MCP discovery, then keep `/mcp` as the normal compatibility endpoint.
 
-Toggl Track remains phase 2. Do not add one global Toggl token to the Worker.
+Toggl Focus is a user-owned connection. Never add a global Toggl key to Worker Secrets and never ask an MCP client for a key.
 
 ## Local development
 
@@ -119,13 +119,22 @@ Use a Firebase ID token as a bearer token, or set `DEV_BEARER_TOKEN` and `DEV_US
 
 Provider connections stay disabled until the Google and Notion client credentials in sections 4 and 5 are stored as Worker Secrets. Scheduled Firebase writes also require the two service credentials in section 2.
 
-### Phase 2: Toggl Track
+### Toggl Focus: implemented
 
-1. Accept a personal API token in the QuestForge connection screen and encrypt it in D1.
-2. Verify the token with `/me`, then select a Workspace and Project.
-3. Import linked time entries into `togglActualMinutes` and `actualMinutes`.
-4. Add start/stop timer commands with duplicate-timer and rate-limit handling.
-5. Expose timer tools through the existing Remote MCP rather than creating a second Agent API.
+Toggl Focus uses one Personal API key per QuestForge user. It is encrypted with `INTEGRATION_TOKEN_KEY` in D1 and never returned by REST or MCP.
+
+1. In QuestForge, open `AI・サービス連携` and select `Toggl Focus`.
+2. Press `接続する`, then paste a key beginning with `toggl_sk_` into the web-only dialog.
+3. Save the numeric organization ID and Workspace ID. Project ID is optional.
+4. From a To Do or Daily, use `Focusタスクを作成` or enable automatic creation for new items.
+5. Start or stop a timer only after the confirmation dialog shows the current Focus entry.
+6. In the Focus integration panel, inspect up to 30 days of time entries and confirm direct or manually selected Quest attribution.
+
+The connection only transfers confirmed time-entry duration, task metadata, and IDs. QuestForge does not collect desktop app names, window titles, Activity Timeline rules, or raw activity data. Archiving or completing a Quest never deletes or completes the Focus task.
+
+Disconnecting removes the encrypted key from QuestForge. It does not change anything in Toggl Focus; revoke or rotate the key from Toggl Focus if you no longer want that key to be usable there.
+
+Toggl Track remains a later compatibility phase. Do not reuse a Track token for Toggl Focus.
 
 ### Phase 3: Agent recipes
 

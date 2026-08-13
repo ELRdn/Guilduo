@@ -89,6 +89,11 @@ function normalizeExternalLink(link) {
     sourceType: String(link.sourceType || link.type || "record").trim().slice(0, 80),
     url: String(link.url || "").trim().slice(0, 500),
     projectId: String(link.projectId || "").trim().slice(0, 160),
+    organizationId: String(link.organizationId || "").trim().slice(0, 80),
+    workspaceId: String(link.workspaceId || "").trim().slice(0, 80),
+    taskId: String(link.taskId || "").trim().slice(0, 160),
+    entryStartAt: String(link.entryStartAt || "").trim().slice(0, 40),
+    entryStopAt: String(link.entryStopAt || "").trim().slice(0, 40),
     durationMinutes: nonNegativeInteger(link.durationMinutes),
     direction: String(link.direction || "").trim().slice(0, 30),
     syncedAt: String(link.syncedAt || "").trim().slice(0, 40),
@@ -100,8 +105,14 @@ function normalizeExternalLink(link) {
 }
 
 function togglMinutes(task) {
-  const linked = (task.externalLinks || [])
-    .filter((link) => link.service === "toggl-track" && (link.type === "time_entry" || link.sourceType === "toggl.time_entry"))
+  const entryLinks = (task.externalLinks || [])
+    .filter((link) => link.type === "time_entry" || link.sourceType === "toggl.time_entry" || link.sourceType === "focus.time_entry");
+  const focus = entryLinks
+    .filter((link) => link.service === "toggl-focus")
+    .reduce((sum, link) => sum + nonNegativeInteger(link.durationMinutes), 0);
+  if (focus > 0) return focus;
+  const linked = entryLinks
+    .filter((link) => link.service === "toggl-track")
     .reduce((sum, link) => sum + nonNegativeInteger(link.durationMinutes), 0);
   return linked || nonNegativeInteger(task.togglActualMinutes);
 }
@@ -809,6 +820,9 @@ export function linkExternalRecord(state, questId, input, context = {}) {
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
   const link = normalizeExternalLink({ ...input, syncedAt: input?.syncedAt || new Date().toISOString() });
   if (!link) throw new DomainError(400, "invalid_external_link", "service and externalId are required.");
+  if (link.service === "toggl-focus" && context.allowManagedFocus !== true) {
+    throw new DomainError(403, "managed_focus_link_required", "Toggl Focus time entries must be linked through the verified Focus integration.");
+  }
   if (link.url && !link.url.startsWith("https://")) throw new DomainError(400, "invalid_external_url", "External record URLs must use HTTPS.");
   const index = quest.externalLinks.findIndex((item) => item.service === link.service && item.externalId === link.externalId && item.type === link.type);
   if (index >= 0) quest.externalLinks[index] = link;
@@ -818,6 +832,37 @@ export function linkExternalRecord(state, questId, input, context = {}) {
   const event = appendEvent(state, "quest.external_linked", quest, { service: link.service, externalId: link.externalId, type: link.type }, context.source || "api");
   touch(state);
   return { quest: questOutput(quest), link, event };
+}
+
+export function removeManagedFocusEntry(state, questId, entryId, context = {}) {
+  ensureState(state);
+  const quest = state.tasks.find((task) => task.id === questId);
+  if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
+  const before = quest.externalLinks.length;
+  quest.externalLinks = quest.externalLinks.filter((link) => !(link.service === "toggl-focus" && link.externalId === String(entryId) && (link.type === "time_entry" || link.sourceType === "focus.time_entry")));
+  if (quest.externalLinks.length === before) return { quest: questOutput(quest), removed: false, event: null };
+  refreshActualMinutes(quest);
+  quest.updatedAt = new Date().toISOString();
+  const event = appendEvent(state, "quest.external_unlinked", quest, { service: "toggl-focus", externalId: String(entryId), type: "time_entry" }, context.source || "api");
+  touch(state);
+  return { quest: questOutput(quest), removed: true, event };
+}
+
+export function purgeManagedFocusLinks(state, input = {}, context = {}) {
+  ensureState(state);
+  const dryRun = input.dryRun !== false;
+  const affected = state.tasks.filter((task) => task.externalLinks.some((link) => link.service === "toggl-focus"));
+  if (dryRun) return { dryRun: true, count: affected.length, quests: affected.map(questOutput) };
+  const events = [];
+  const now = new Date().toISOString();
+  for (const task of affected) {
+    task.externalLinks = task.externalLinks.filter((link) => link.service !== "toggl-focus");
+    refreshActualMinutes(task);
+    task.updatedAt = now;
+    events.push(appendEvent(state, "quest.external_purged", task, { service: "toggl-focus" }, context.source || "api"));
+  }
+  if (affected.length) touch(state);
+  return { dryRun: false, count: affected.length, quests: affected.map(questOutput), events };
 }
 
 function grantXp(character, amount) {

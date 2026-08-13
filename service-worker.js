@@ -1,6 +1,6 @@
-const APP_VERSION = "2026.08.12-phase2";
+const APP_VERSION = "2026.08.12-toggl-focus";
 const CACHE_PREFIX = "questforge-pwa-";
-const CACHE_VERSION = `${CACHE_PREFIX}v16`;
+const CACHE_VERSION = `${CACHE_PREFIX}v17`;
 const NAVIGATION_FALLBACK = "/index.html";
 
 const APP_SHELL = [

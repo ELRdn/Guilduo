@@ -28,13 +28,24 @@
       ]
     },
     {
+      "id": "toggl-focus",
+      "name": "Toggl Focus",
+      "auth": "personal_api_key",
+      "minimumScopes": [],
+      "capabilities": ["task_export", "timer_read", "timer_write", "time_entry_import", "estimate_insights"],
+      "resources": ["organizations", "workspaces", "projects", "tags", "tasks", "time_entries"],
+      "recommendedMvp": "manual_confirmation",
+      "privacy": ["QuestForge stores only confirmed time entries, never desktop app names or window titles."],
+      "limitations": ["Workspace discovery is entered by the user as numeric organization and workspace IDs.", "At most 30 days of entries are retrieved per request."]
+    },
+    {
       "id": "toggl-track",
       "name": "Toggl Track",
       "auth": "basic_api_token",
       "minimumScopes": [],
       "capabilities": ["import", "timer_read", "timer_write"],
       "resources": ["workspaces", "projects", "tags", "time_entries"],
-      "recommendedMvp": "phase_2",
+      "recommendedMvp": "future_compatibility",
       "syncStrategy": "polling_modified_since"
     },
     {
