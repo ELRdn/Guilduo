@@ -14,6 +14,7 @@ worker/.dev.vars
 .tmp-worker*/
 screenshots/
 backups/
+.qa-artifacts/
 
 # Interaction Lab capture helpers and generated visual evidence stay local.
 interaction-lab/capture-*.mjs

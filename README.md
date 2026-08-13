@@ -2,7 +2,7 @@
 
 QuestForge is an open task RPG where completing real work earns MP, then the player chooses when and how to use that MP in a deterministic command battle. It combines a browser/PWA task manager, REST API, remote MCP server, social profiles and parties, and opt-in external integrations.
 
-Version: `0.3.0-social-beta` / Web release: `2026.08.12-toggl-focus`
+Version: `0.4.0-beta.1` / Web release: `2026.08.13-agent-registry-beta`
 
 > QuestForge is an independent project. It is not affiliated with, endorsed by, or a substitute for Habitica. Product names and trademarks belong to their respective owners.
 
@@ -77,9 +77,9 @@ The standard remote endpoint is:
 https://<your-worker>/mcp
 ```
 
-Use OAuth for normal users. Version 2.5 exposes 47 tools, including Quest Trees, daily briefs, day/week reviews, agent handoffs, activity history, Calendar-to-Quest conversion, and safe Toggl Focus task/timer/time-entry workflows. Clients that cache tool lists may need one disconnect/reconnect after an update.
+Use OAuth for normal users. Version 2.6 exposes 50 tools, including Quest Trees, daily briefs, reviews, registered Agent context and assignment, handoffs, activity history, Calendar-to-Quest conversion, and safe Toggl Focus workflows. Existing clients reconnect only when they need the new `agents:read` scope or cached an older tool list.
 
-`/mcp-next` is the SDK v2 Streamable HTTP compatibility lane. It exposes the same 47 tools plus MCP Resources for Quest Trees, Agent Handoffs, and Toggl Focus, as well as workflow Prompts. Use it to test a client before moving its standard connection to the newer transport behavior.
+`/mcp-next` is the SDK v2 Streamable HTTP lane. It exposes the same 50 tools plus MCP Resources for registered Agents, current Agent context, Quest Trees, Agent Handoffs, and Toggl Focus, as well as workflow Prompts. Use it to test a client before moving its standard connection to the newer transport behavior.
 
 The local stdio bridge in `mcp-local/` is a development compatibility path. The bundled [QuestForge workflow skill](skills/questforge-workflows/SKILL.md) teaches an AI client to preview batch changes, inspect Quest Trees, use exact handles, archive instead of delete, process Agent Handoffs with stale-state protection, plan reviews, and execute battle turns safely.
 

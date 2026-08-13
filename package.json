@@ -1,6 +1,6 @@
 {
   "name": "questforge-prototype",
-  "version": "0.3.0-social-beta",
+  "version": "0.4.0-beta.1",
   "description": "Open task RPG with MCP, REST, social parties, integrations, and deterministic command battles.",
   "license": "AGPL-3.0-only",
   "private": true,
@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.js",
-    "check": "node --check app.js && node --check firebase-client.js && node --check questforge-core.js && node --check i18n.mjs && node --check service-worker.js && node --check shared/battle-rules.mjs && node --check worker/src/index.mjs && node --check worker/src/mcp-server.mjs && node --check worker/src/security.mjs && node --check worker/src/social-store.mjs && node --check worker/src/oauth.mjs && node --check worker/src/integrations.mjs && node --check worker/src/integration-store.mjs && node --check worker/src/toggl-focus.mjs && node --check worker/src/provider-oauth.mjs && node --check mcp-local/questforge-mcp.mjs && node --check tools/update-api-contracts.mjs",
+    "check": "node --check app.js && node --check firebase-client.js && node --check questforge-core.js && node --check i18n.mjs && node --check service-worker.js && node --check interaction-lab/app.js && node --check interaction-lab/repository.mjs && node --check shared/battle-rules.mjs && node --check worker/src/index.mjs && node --check worker/src/mcp-server.mjs && node --check worker/src/security.mjs && node --check worker/src/social-store.mjs && node --check worker/src/agent-store.mjs && node --check worker/src/oauth.mjs && node --check worker/src/integrations.mjs && node --check worker/src/integration-store.mjs && node --check worker/src/toggl-focus.mjs && node --check worker/src/provider-oauth.mjs && node --check mcp-local/questforge-mcp.mjs && node --check tools/update-api-contracts.mjs && node --check tools/generate-release-config.mjs && node --check tools/verify-beta-cdp.mjs",
     "deploy": "firebase deploy --only hosting,database",
     "worker:dev": "wrangler dev --port 8787",
     "worker:deploy": "wrangler deploy",

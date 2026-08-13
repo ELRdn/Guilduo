@@ -1,0 +1,80 @@
+name: Tagged Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate ignored public deployment configuration
+        run: node tools/generate-release-config.mjs
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_DATABASE_URL: ${{ vars.FIREBASE_DATABASE_URL }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          SOURCE_URL: ${{ vars.SOURCE_URL }}
+          D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+          KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+      - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - name: Apply additive D1 migrations
+        run: npx wrangler d1 migrations apply "${{ vars.D1_DATABASE_NAME }}" --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+      - name: Verify Worker before Firebase
+        shell: bash
+        run: |
+          health="$(curl --fail --retry 5 --retry-delay 3 '${{ vars.WORKER_BASE_URL }}/health')"
+          node -e 'const h=JSON.parse(process.argv[1]); if(h.version!=="2.6.0"||h.schemaVersion!==6||h.agentStorage!=="d1") process.exit(1)' "$health"
+          curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-authorization-server' >/dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' '${{ vars.WORKER_BASE_URL }}/v1/quests')" = "401"
+      - name: Deploy Firebase rules and hosting
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
+          npx firebase-tools deploy --project '${{ vars.FIREBASE_PROJECT_ID }}' --only database,hosting --non-interactive
+      - name: Smoke test public routes
+        shell: bash
+        run: |
+          curl --fail --retry 5 '${{ vars.WEB_APP_URL }}/' >/dev/null
+          curl --fail --retry 5 '${{ vars.WEB_APP_URL }}/next/' >/dev/null
+          curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-protected-resource/mcp' >/dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST '${{ vars.WORKER_BASE_URL }}/mcp')" = "401"
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

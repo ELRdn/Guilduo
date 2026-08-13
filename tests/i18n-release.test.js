@@ -85,10 +85,10 @@ test("locale preference is device-local and PWA fallback manifests are available
 
 test("release metadata, license, public docs, and CI are present", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.3.0-social-beta");
+  assert.equal(packageJson.version, "0.4.0-beta.1");
   assert.equal(packageJson.license, "AGPL-3.0-only");
   assert.match(fs.readFileSync(path.join(root, "LICENSE"), "utf8"), /GNU AFFERO GENERAL PUBLIC LICENSE/);
-  for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", ".github/workflows/ci.yml"]) {
+  for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", "RELEASE_SETUP.md", ".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
     assert.equal(fs.existsSync(path.join(root, file)), true, file);
   }
 });
@@ -105,17 +105,18 @@ test("public examples omit local absolute paths and private deployment identifie
   for (const ignored of ["runtime-config.js", ".firebaserc", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("generated contracts expose social, Quest Tree, agent handoff, battle, and MCP v2.5 Toggl Focus operations", () => {
+test("generated contracts expose Agent Registry, social, Quest Tree, battle, and MCP v2.6 operations", () => {
   const openapi = JSON.parse(fs.readFileSync(path.join(root, "api/openapi.json"), "utf8"));
   const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8"));
-  assert.equal(openapi.info.version, "2.5.0");
-  assert.equal(mcp.version, "2.5.0");
-  assert.equal(mcp.tools.length, 47);
-  for (const pathName of ["/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands", "/v1/quests/tree", "/v1/agent-handoffs", "/v1/quests/{questId}/handoff", "/v1/quests/{questId}/toggl-focus-task", "/v1/integrations/toggl-focus/connect", "/v1/integrations/toggl-focus/disconnect", "/v1/integrations/toggl-focus/tracking", "/v1/integrations/toggl-focus/time-entries", "/v1/integrations/toggl-focus/attributions"]) assert.ok(openapi.paths[pathName], pathName);
+  assert.equal(openapi.info.version, "2.6.0");
+  assert.equal(mcp.version, "2.6.0");
+  assert.equal(mcp.tools.length, 50);
+  for (const pathName of ["/v1/agents", "/v1/agents/{agentId}", "/v1/agent-connections", "/v1/agents/{agentId}/connections/{clientId}", "/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands", "/v1/quests/tree", "/v1/agent-handoffs", "/v1/quests/{questId}/handoff", "/v1/quests/{questId}/toggl-focus-task", "/v1/integrations/toggl-focus/connect", "/v1/integrations/toggl-focus/disconnect", "/v1/integrations/toggl-focus/tracking", "/v1/integrations/toggl-focus/time-entries", "/v1/integrations/toggl-focus/attributions"]) assert.ok(openapi.paths[pathName], pathName);
   assert.ok(openapi.components.schemas.Assignee);
   assert.ok(mcp.tools.some((tool) => tool.name === "battle_command"));
   assert.ok(mcp.tools.some((tool) => tool.name === "get_quest_tree"));
   assert.ok(mcp.tools.some((tool) => tool.name === "transition_quest_handoff"));
+  assert.ok(mcp.tools.some((tool) => tool.name === "assign_quest_to_agent"));
   assert.ok(mcp.tools.some((tool) => tool.name === "find_profile_by_handle"));
   assert.ok(mcp.tools.some((tool) => tool.name === "get_toggl_focus_status"));
   assert.ok(mcp.tools.some((tool) => tool.name === "apply_toggl_attribution"));
