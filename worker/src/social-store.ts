@@ -1,57 +1,95 @@
-// @ts-nocheck
 import { randomToken, sha256 } from "./security.ts";
+import type { JsonRecord, WorkerEnv, WorkerError } from "./worker-types.ts";
+
+type SocialValue = string | number | boolean | null | undefined | SocialRow | SocialRow[];
+type SocialRow = { [key: string]: SocialValue };
+type SocialInput = JsonRecord;
+
+export interface PublicProfile {
+  uid: string;
+  displayName: string;
+  handle: string;
+  bio: string;
+  avatarRole: string;
+  avatarVariant: string;
+  avatarUrl: string;
+  level: number;
+}
+
+export interface OwnProfile extends PublicProfile {
+  handleChangedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type FriendRequest = { id: string; senderUid: string; receiverUid: string; status: string; createdAt: string; updatedAt: string };
+type Friendship = { userLow: string; userHigh: string; createdAt: string };
+type PartyMember = PublicProfile & { role: string; joinedAt: string };
+type Party = { id: string; name: string; ownerUid: string; maxMembers: number; createdAt: string; updatedAt: string; members: PartyMember[] };
+type StoredParty = Omit<Party, "members">;
+type StoredMember = { partyId: string; uid: string; role: string; joinedAt: string };
+type StoredInvite = { id: string; partyId: string; inviterUid: string; inviteeUid: string | null; tokenHash: string; status: string; expiresAt: string; createdAt: string; updatedAt: string };
+type PublicInvite = { id: string; partyId: string; inviterUid: string; inviteeUid: string | null; status: string; expiresAt: string; createdAt: string; updatedAt: string };
+type SocialMemory = {
+  profiles: Map<string, SocialRow>;
+  requests: Map<string, FriendRequest>;
+  friendships: Map<string, Friendship>;
+  parties: Map<string, StoredParty>;
+  membersByUid: Map<string, StoredMember>;
+  invites: Map<string, StoredInvite>;
+};
 
 const RESERVED_HANDLES = new Set(["admin", "api", "mcp", "questforge", "support", "system"]);
 const HANDLE_PATTERN = /^[a-z0-9_]{3,20}$/;
 const HANDLE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-let memoryByEnv = new WeakMap();
+let memoryByEnv = new WeakMap<object, SocialMemory>();
 
-function socialError(status, code, message) {
+function socialError(status: number, code: string, message: string): WorkerError {
   return Object.assign(new Error(message), { status, code });
 }
 
-function nowDate(env) {
+function nowDate(env: WorkerEnv): Date {
   return env?.SOCIAL_NOW ? new Date(env.SOCIAL_NOW) : new Date();
 }
 
-function nowIso(env) {
+function nowIso(env: WorkerEnv): string {
   return nowDate(env).toISOString();
 }
 
-function memory(env) {
+function memory(env: WorkerEnv): SocialMemory {
   if (!env || (typeof env !== "object" && typeof env !== "function")) {
     throw socialError(500, "social_env_invalid", "Social storage requires an environment object.");
   }
   if (!memoryByEnv.has(env)) {
     memoryByEnv.set(env, {
-      profiles: new Map(),
-      requests: new Map(),
-      friendships: new Map(),
-      parties: new Map(),
-      membersByUid: new Map(),
-      invites: new Map(),
+      profiles: new Map<string, SocialRow>(),
+      requests: new Map<string, FriendRequest>(),
+      friendships: new Map<string, Friendship>(),
+      parties: new Map<string, StoredParty>(),
+      membersByUid: new Map<string, StoredMember>(),
+      invites: new Map<string, StoredInvite>(),
     });
   }
-  return memoryByEnv.get(env);
+  return memoryByEnv.get(env) as SocialMemory;
 }
 
-function canonicalPair(a, b) {
+function canonicalPair(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a];
 }
 
-function pairKey(a, b) {
+function pairKey(a: string, b: string): string {
   return canonicalPair(a, b).join(":");
 }
 
-function cleanString(value, maxLength, field, { required = false } = {}) {
+function cleanString(value: unknown, maxLength: number, field: string, { required = false }: { required?: boolean } = {}): string {
   const result = String(value ?? "").trim();
   if (required && !result) throw socialError(400, `${field}_required`, `${field} is required.`);
   if (result.length > maxLength) throw socialError(400, `${field}_too_long`, `${field} is too long.`);
   return result;
 }
 
-function cleanAvatarUrl(value, previous = "") {
+function cleanAvatarUrl(value: unknown, previous = ""): string {
   if (value === undefined) return previous;
   const result = String(value ?? "").trim();
   if (!result) return "";
@@ -62,73 +100,83 @@ function cleanAvatarUrl(value, previous = "") {
   return result;
 }
 
-function publicProfile(row) {
-  if (!row) return null;
-  const handle = row.handle || "";
+function asRow(value: unknown): SocialRow {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as SocialRow : {};
+}
+
+function publicProfile(row: unknown): PublicProfile | null {
+  if (!row || typeof row !== "object") return null;
+  const item = asRow(row);
+  const handle = String(item.handle || "");
   return {
-    uid: row.uid,
-    displayName: row.display_name ?? row.displayName,
+    uid: String(item.uid || ""),
+    displayName: String(item.display_name ?? item.displayName ?? ""),
     handle: handle ? `@${handle.replace(/^@/, "")}` : "",
-    bio: row.bio || "",
-    avatarRole: row.avatar_role ?? row.avatarRole ?? "sentinel",
-    avatarVariant: row.avatar_variant ?? row.avatarVariant ?? "femme",
-    avatarUrl: row.avatar_url ?? row.avatarUrl ?? "",
-    level: Number(row.level || 1),
+    bio: String(item.bio || ""),
+    avatarRole: String(item.avatar_role ?? item.avatarRole ?? "sentinel"),
+    avatarVariant: String(item.avatar_variant ?? item.avatarVariant ?? "femme"),
+    avatarUrl: String(item.avatar_url ?? item.avatarUrl ?? ""),
+    level: Number(item.level || 1),
   };
 }
 
-function ownProfile(row) {
+function ownProfile(row: unknown): OwnProfile | null {
   const result = publicProfile(row);
   if (!result) return null;
+  const item = asRow(row);
   return {
     ...result,
-    handleChangedAt: row.handle_changed_at ?? row.handleChangedAt ?? "",
-    createdAt: row.created_at ?? row.createdAt ?? "",
-    updatedAt: row.updated_at ?? row.updatedAt ?? "",
+    handleChangedAt: String(item.handle_changed_at ?? item.handleChangedAt ?? ""),
+    createdAt: String(item.created_at ?? item.createdAt ?? ""),
+    updatedAt: String(item.updated_at ?? item.updatedAt ?? ""),
   };
 }
 
-function normalizeRequest(row, uid, counterpart) {
+function normalizeRequest(row: unknown, uid: string, counterpart: PublicProfile | null): JsonRecord {
+  const item = asRow(row);
   return {
-    id: row.id,
-    direction: row.sender_uid === uid || row.senderUid === uid ? "outgoing" : "incoming",
-    senderUid: row.sender_uid ?? row.senderUid,
-    receiverUid: row.receiver_uid ?? row.receiverUid,
-    status: row.status,
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    id: String(item.id || ""),
+    direction: item.sender_uid === uid || item.senderUid === uid ? "outgoing" : "incoming",
+    senderUid: String(item.sender_uid ?? item.senderUid ?? ""),
+    receiverUid: String(item.receiver_uid ?? item.receiverUid ?? ""),
+    status: String(item.status || ""),
+    createdAt: String(item.created_at ?? item.createdAt ?? ""),
+    updatedAt: String(item.updated_at ?? item.updatedAt ?? ""),
     profile: publicProfile(counterpart),
   };
 }
 
-function publicInvite(row) {
+function publicInvite(row: unknown): PublicInvite {
+  const item = asRow(row);
   return {
-    id: row.id,
-    partyId: row.party_id ?? row.partyId,
-    inviterUid: row.inviter_uid ?? row.inviterUid,
-    inviteeUid: row.invitee_uid ?? row.inviteeUid ?? null,
-    status: row.status,
-    expiresAt: row.expires_at ?? row.expiresAt,
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    id: String(item.id || ""),
+    partyId: String(item.party_id ?? item.partyId ?? ""),
+    inviterUid: String(item.inviter_uid ?? item.inviterUid ?? ""),
+    inviteeUid: item.invitee_uid !== undefined && item.invitee_uid !== null
+      ? String(item.invitee_uid)
+      : item.inviteeUid !== undefined && item.inviteeUid !== null ? String(item.inviteeUid) : null,
+    status: String(item.status || ""),
+    expiresAt: String(item.expires_at ?? item.expiresAt ?? ""),
+    createdAt: String(item.created_at ?? item.createdAt ?? ""),
+    updatedAt: String(item.updated_at ?? item.updatedAt ?? ""),
   };
 }
 
-async function requireProfile(env, uid) {
+async function requireProfile(env: WorkerEnv, uid: string): Promise<PublicProfile> {
   const profile = await getPublicProfile(env, uid);
   if (!profile) throw socialError(404, "profile_not_found", "Profile was not found.");
   return profile;
 }
 
-export function normalizeHandle(value) {
+export function normalizeHandle(value: unknown): string {
   return String(value ?? "").trim().replace(/^@+/, "").toLowerCase();
 }
 
-export function isReservedHandle(value) {
+export function isReservedHandle(value: unknown): boolean {
   return RESERVED_HANDLES.has(normalizeHandle(value));
 }
 
-export function validateHandle(value) {
+export function validateHandle(value: unknown): string {
   const handle = normalizeHandle(value);
   if (!HANDLE_PATTERN.test(handle)) {
     throw socialError(400, "handle_invalid", "Handle must be 3-20 lowercase letters, numbers, or underscores.");
@@ -137,29 +185,29 @@ export function validateHandle(value) {
   return handle;
 }
 
-export async function getOwnProfile(env, uid) {
+export async function getOwnProfile(env: WorkerEnv, uid: string): Promise<OwnProfile | null> {
   if (env.QUESTFORGE_DB) {
     return ownProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE uid = ?").bind(uid).first());
   }
   return ownProfile(memory(env).profiles.get(uid));
 }
 
-export async function getPublicProfile(env, uid) {
+export async function getPublicProfile(env: WorkerEnv, uid: string): Promise<PublicProfile | null> {
   if (env.QUESTFORGE_DB) {
     return publicProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE uid = ?").bind(uid).first());
   }
   return publicProfile(memory(env).profiles.get(uid));
 }
 
-export async function findProfileByHandle(env, value) {
+export async function findProfileByHandle(env: WorkerEnv, value: unknown): Promise<PublicProfile | null> {
   const handle = validateHandle(value);
   if (env.QUESTFORGE_DB) {
     return publicProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE handle = ? COLLATE NOCASE").bind(handle).first());
   }
-  return publicProfile([...memory(env).profiles.values()].find((profile) => profile.handle.toLowerCase() === handle));
+  return publicProfile([...memory(env).profiles.values()].find((profile) => String(profile.handle || "").toLowerCase() === handle));
 }
 
-export async function upsertProfile(env, uid, patch = {}) {
+export async function upsertProfile(env: WorkerEnv, uid: string, patch: SocialInput = {}): Promise<OwnProfile | null> {
   const previous = await getOwnProfile(env, uid);
   const handle = patch.handle === undefined && previous ? normalizeHandle(previous.handle) : validateHandle(patch.handle);
   const displayName = patch.displayName === undefined && previous
@@ -174,7 +222,7 @@ export async function upsertProfile(env, uid, patch = {}) {
 
   const changedHandle = Boolean(previous && normalizeHandle(previous.handle) !== handle);
   const now = nowDate(env);
-  if (changedHandle && previous.handleChangedAt && now.getTime() - new Date(previous.handleChangedAt).getTime() < HANDLE_COOLDOWN_MS) {
+  if (previous && changedHandle && previous.handleChangedAt && now.getTime() - new Date(previous.handleChangedAt).getTime() < HANDLE_COOLDOWN_MS) {
     throw socialError(409, "handle_cooldown", "Handle can only be changed once every 30 days.");
   }
   const createdAt = previous?.createdAt || now.toISOString();
@@ -193,19 +241,20 @@ export async function upsertProfile(env, uid, patch = {}) {
           handle_changed_at=excluded.handle_changed_at, updated_at=excluded.updated_at`)
         .bind(uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt).run();
     } catch (error) {
-      if (/unique/i.test(error.message || "")) throw socialError(409, "handle_taken", "This handle is already in use.");
+      const message = error instanceof Error ? error.message : String(error ?? "");
+      if (/unique/i.test(message)) throw socialError(409, "handle_taken", "This handle is already in use.");
       throw error;
     }
   } else {
     const store = memory(env);
-    const owner = [...store.profiles.values()].find((profile) => profile.uid !== uid && profile.handle.toLowerCase() === handle);
+    const owner = [...store.profiles.values()].find((profile) => profile.uid !== uid && String(profile.handle || "").toLowerCase() === handle);
     if (owner) throw socialError(409, "handle_taken", "This handle is already in use.");
     store.profiles.set(uid, { uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt });
   }
   return getOwnProfile(env, uid);
 }
 
-export async function sendFriendRequest(env, senderUid, receiverUid) {
+export async function sendFriendRequest(env: WorkerEnv, senderUid: string, receiverUid: string): Promise<JsonRecord> {
   if (senderUid === receiverUid) throw socialError(400, "friend_self", "You cannot send a friend request to yourself.");
   await requireProfile(env, senderUid);
   await requireProfile(env, receiverUid);
@@ -235,40 +284,43 @@ export async function sendFriendRequest(env, senderUid, receiverUid) {
   return normalizeRequest({ id, senderUid, receiverUid, status: "pending", createdAt, updatedAt: createdAt }, senderUid, counterpart);
 }
 
-export async function listFriendRequests(env, uid) {
+export async function listFriendRequests(env: WorkerEnv, uid: string): Promise<JsonRecord[]> {
   if (env.QUESTFORGE_DB) {
     const rows = (await env.QUESTFORGE_DB.prepare(`SELECT r.*, p.uid AS p_uid, p.display_name AS p_display_name, p.handle AS p_handle,
       p.bio AS p_bio, p.avatar_role AS p_avatar_role, p.avatar_variant AS p_avatar_variant, p.avatar_url AS p_avatar_url, p.level AS p_level
       FROM friend_requests r JOIN social_profiles p ON p.uid = CASE WHEN r.sender_uid = ? THEN r.receiver_uid ELSE r.sender_uid END
-      WHERE (r.sender_uid = ? OR r.receiver_uid = ?) AND r.status = 'pending' ORDER BY r.created_at DESC`).bind(uid, uid, uid).all()).results || [];
-    return rows.map((row) => normalizeRequest(row, uid, {
+      WHERE (r.sender_uid = ? OR r.receiver_uid = ?) AND r.status = 'pending' ORDER BY r.created_at DESC`).bind(uid, uid, uid).all<SocialRow>()).results || [];
+    return rows.map((row: SocialRow) => normalizeRequest(row, uid, publicProfile({
       uid: row.p_uid, display_name: row.p_display_name, handle: row.p_handle, bio: row.p_bio,
       avatar_role: row.p_avatar_role, avatar_variant: row.p_avatar_variant, avatar_url: row.p_avatar_url, level: row.p_level,
-    }));
+    })));
   }
   const store = memory(env);
   return [...store.requests.values()]
     .filter((request) => request.status === "pending" && (request.senderUid === uid || request.receiverUid === uid))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map((request) => normalizeRequest(request, uid, store.profiles.get(request.senderUid === uid ? request.receiverUid : request.senderUid)));
+    .map((request) => normalizeRequest(request, uid, publicProfile(store.profiles.get(request.senderUid === uid ? request.receiverUid : request.senderUid) || null)));
 }
 
-async function decideFriendRequest(env, uid, requestId, status) {
+function decideFriendRequest(env: WorkerEnv, uid: string, requestId: string, status: "accepted"): Promise<PublicProfile[]>;
+function decideFriendRequest(env: WorkerEnv, uid: string, requestId: string, status: "declined"): Promise<JsonRecord[]>;
+async function decideFriendRequest(env: WorkerEnv, uid: string, requestId: string, status: "accepted" | "declined"): Promise<PublicProfile[] | JsonRecord[]> {
   if (env.QUESTFORGE_DB) {
-    const request = await env.QUESTFORGE_DB.prepare("SELECT * FROM friend_requests WHERE id = ?").bind(requestId).first();
+    const request = await env.QUESTFORGE_DB.prepare("SELECT * FROM friend_requests WHERE id = ?").bind(requestId).first<SocialRow>();
     if (!request) throw socialError(404, "friend_request_not_found", "Friend request was not found.");
-    if (request.receiver_uid !== uid) throw socialError(403, "friend_request_forbidden", "Only the receiver can respond to this request.");
-    if (request.status !== "pending") throw socialError(409, "friend_request_closed", "Friend request is no longer pending.");
+    if (String(request.receiver_uid) !== uid) throw socialError(403, "friend_request_forbidden", "Only the receiver can respond to this request.");
+    if (String(request.status) !== "pending") throw socialError(409, "friend_request_closed", "Friend request is no longer pending.");
     const updatedAt = nowIso(env);
     if (status === "accepted") {
-      const [low, high] = canonicalPair(request.sender_uid, request.receiver_uid);
+      const [low, high] = canonicalPair(String(request.sender_uid), String(request.receiver_uid));
       try {
         await env.QUESTFORGE_DB.batch([
           env.QUESTFORGE_DB.prepare("UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ? AND receiver_uid = ? AND status = 'pending'").bind(updatedAt, requestId, uid),
           env.QUESTFORGE_DB.prepare("INSERT INTO friendships (user_low, user_high, created_at) VALUES (?, ?, ?)").bind(low, high, updatedAt),
         ]);
       } catch (error) {
-        if (/unique/i.test(error.message || "")) throw socialError(409, "already_friends", "You are already friends.");
+        const message = error instanceof Error ? error.message : String(error ?? "");
+        if (/unique/i.test(message)) throw socialError(409, "already_friends", "You are already friends.");
         throw error;
       }
     } else {
@@ -289,28 +341,28 @@ async function decideFriendRequest(env, uid, requestId, status) {
   return status === "accepted" ? listFriends(env, uid) : listFriendRequests(env, uid);
 }
 
-export function acceptFriendRequest(env, uid, requestId) {
+export function acceptFriendRequest(env: WorkerEnv, uid: string, requestId: string): Promise<PublicProfile[]> {
   return decideFriendRequest(env, uid, requestId, "accepted");
 }
 
-export function declineFriendRequest(env, uid, requestId) {
+export function declineFriendRequest(env: WorkerEnv, uid: string, requestId: string): Promise<JsonRecord[]> {
   return decideFriendRequest(env, uid, requestId, "declined");
 }
 
-export async function listFriends(env, uid) {
+export async function listFriends(env: WorkerEnv, uid: string): Promise<PublicProfile[]> {
   if (env.QUESTFORGE_DB) {
     const rows = (await env.QUESTFORGE_DB.prepare(`SELECT p.* FROM friendships f JOIN social_profiles p
       ON p.uid = CASE WHEN f.user_low = ? THEN f.user_high ELSE f.user_low END
-      WHERE f.user_low = ? OR f.user_high = ? ORDER BY p.display_name COLLATE NOCASE`).bind(uid, uid, uid).all()).results || [];
-    return rows.map(publicProfile);
+      WHERE f.user_low = ? OR f.user_high = ? ORDER BY p.display_name COLLATE NOCASE`).bind(uid, uid, uid).all<SocialRow>()).results || [];
+    return rows.map((row: SocialRow) => publicProfile(row)).filter((profile): profile is PublicProfile => Boolean(profile));
   }
   const store = memory(env);
   const ids = [...store.friendships.values()].filter((friendship) => friendship.userLow === uid || friendship.userHigh === uid)
     .map((friendship) => friendship.userLow === uid ? friendship.userHigh : friendship.userLow);
-  return ids.map((id) => publicProfile(store.profiles.get(id))).filter(Boolean).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  return ids.map((id) => publicProfile(store.profiles.get(id) || null)).filter((profile): profile is PublicProfile => Boolean(profile)).sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-export async function removeFriend(env, uid, friendUid) {
+export async function removeFriend(env: WorkerEnv, uid: string, friendUid: string): Promise<JsonRecord> {
   const [low, high] = canonicalPair(uid, friendUid);
   if (env.QUESTFORGE_DB) {
     const result = await env.QUESTFORGE_DB.prepare("DELETE FROM friendships WHERE user_low = ? AND user_high = ?").bind(low, high).run();
@@ -321,7 +373,7 @@ export async function removeFriend(env, uid, friendUid) {
   return { removed: true, friendUid };
 }
 
-export async function createParty(env, uid, input = {}) {
+export async function createParty(env: WorkerEnv, uid: string, input: SocialInput = {}): Promise<Party | null> {
   await requireProfile(env, uid);
   if (await getParty(env, uid)) throw socialError(409, "party_membership_exists", "You already belong to a party.");
   const name = cleanString(input.name, 40, "party_name", { required: true });
@@ -340,16 +392,20 @@ export async function createParty(env, uid, input = {}) {
   return getParty(env, uid);
 }
 
-export async function getParty(env, uid) {
+export async function getParty(env: WorkerEnv, uid: string): Promise<Party | null> {
   if (env.QUESTFORGE_DB) {
-    const party = await env.QUESTFORGE_DB.prepare(`SELECT p.* FROM parties p JOIN party_members m ON m.party_id = p.id WHERE m.uid = ?`).bind(uid).first();
+    const party = await env.QUESTFORGE_DB.prepare(`SELECT p.* FROM parties p JOIN party_members m ON m.party_id = p.id WHERE m.uid = ?`).bind(uid).first<SocialRow>();
     if (!party) return null;
     const rows = (await env.QUESTFORGE_DB.prepare(`SELECT m.role, m.joined_at, p.* FROM party_members m JOIN social_profiles p ON p.uid = m.uid
-      WHERE m.party_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, m.joined_at`).bind(party.id).all()).results || [];
+      WHERE m.party_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, m.joined_at`).bind(String(party.id)).all<SocialRow>()).results || [];
     return {
-      id: party.id, name: party.name, ownerUid: party.owner_uid, maxMembers: Number(party.max_members),
-      createdAt: party.created_at, updatedAt: party.updated_at,
-      members: rows.map((row) => ({ ...publicProfile(row), role: row.role, joinedAt: row.joined_at })),
+      id: String(party.id || ""), name: String(party.name || ""), ownerUid: String(party.owner_uid || ""), maxMembers: Number(party.max_members),
+      createdAt: String(party.created_at || ""), updatedAt: String(party.updated_at || ""),
+      members: rows.map((row: SocialRow) => {
+        const profile = publicProfile(row);
+        if (!profile) throw socialError(500, "party_profile_invalid", "Party member profile is invalid.");
+        return { ...profile, role: String(row.role || "member"), joinedAt: String(row.joined_at || "") };
+      }),
     };
   }
   const store = memory(env);
@@ -359,16 +415,20 @@ export async function getParty(env, uid) {
   if (!party) return null;
   const members = [...store.membersByUid.values()].filter((item) => item.partyId === party.id)
     .sort((a, b) => (a.role === "owner" ? -1 : b.role === "owner" ? 1 : a.joinedAt.localeCompare(b.joinedAt)))
-    .map((item) => ({ ...publicProfile(store.profiles.get(item.uid)), role: item.role, joinedAt: item.joinedAt }));
+    .map((item) => {
+      const profile = publicProfile(store.profiles.get(item.uid) || null);
+      if (!profile) throw socialError(500, "party_profile_invalid", "Party member profile is invalid.");
+      return { ...profile, role: item.role, joinedAt: item.joinedAt };
+    });
   return { ...party, members };
 }
 
-export async function inviteToParty(env, uid, input = {}) {
+export async function inviteToParty(env: WorkerEnv, uid: string, input: SocialInput = {}): Promise<{ invite: PublicInvite; token: string }> {
   const party = await getParty(env, uid);
   if (!party) throw socialError(404, "party_not_found", "Party was not found.");
   if (party.ownerUid !== uid) throw socialError(403, "party_owner_required", "Only the party owner can invite members.");
   if (party.members.length >= party.maxMembers) throw socialError(409, "party_full", "Party is full.");
-  const inviteeUid = input.inviteeUid || null;
+  const inviteeUid = input.inviteeUid ? String(input.inviteeUid) : null;
   if (inviteeUid) {
     await requireProfile(env, inviteeUid);
     if (party.members.some((member) => member.uid === inviteeUid)) throw socialError(409, "party_member_exists", "This user is already in the party.");
@@ -387,17 +447,17 @@ export async function inviteToParty(env, uid, input = {}) {
   return { invite: publicInvite(row), token };
 }
 
-async function findInvite(env, input) {
-  const id = input?.inviteId || "";
-  const tokenHash = input?.token ? await sha256(input.token) : "";
+async function findInvite(env: WorkerEnv, input: SocialInput = {}): Promise<SocialRow | StoredInvite | null> {
+  const id = input.inviteId ? String(input.inviteId) : "";
+  const tokenHash = input.token ? await sha256(String(input.token)) : "";
   if (!id && !tokenHash) throw socialError(400, "party_invite_required", "Invite ID or token is required.");
   if (env.QUESTFORGE_DB) {
-    return env.QUESTFORGE_DB.prepare(`SELECT * FROM party_invites WHERE ${id ? "id = ?" : "token_hash = ?"}`).bind(id || tokenHash).first();
+    return env.QUESTFORGE_DB.prepare(`SELECT * FROM party_invites WHERE ${id ? "id = ?" : "token_hash = ?"}`).bind(id || tokenHash).first<SocialRow>();
   }
-  return id ? memory(env).invites.get(id) : [...memory(env).invites.values()].find((invite) => invite.tokenHash === tokenHash);
+  return id ? memory(env).invites.get(id) ?? null : [...memory(env).invites.values()].find((invite) => invite.tokenHash === tokenHash) ?? null;
 }
 
-export async function acceptPartyInvite(env, uid, input = {}) {
+export async function acceptPartyInvite(env: WorkerEnv, uid: string, input: SocialInput = {}): Promise<Party | null> {
   await requireProfile(env, uid);
   if (await getParty(env, uid)) throw socialError(409, "party_membership_exists", "You already belong to a party.");
   const invite = await findInvite(env, input);
@@ -407,7 +467,11 @@ export async function acceptPartyInvite(env, uid, input = {}) {
   if (normalized.inviteeUid && normalized.inviteeUid !== uid) throw socialError(403, "party_invite_forbidden", "This invite belongs to another user.");
   if (new Date(normalized.expiresAt).getTime() <= nowDate(env).getTime()) {
     if (env.QUESTFORGE_DB) await env.QUESTFORGE_DB.prepare("UPDATE party_invites SET status = 'expired', updated_at = ? WHERE id = ? AND status = 'pending'").bind(nowIso(env), normalized.id).run();
-    else { invite.status = "expired"; invite.updatedAt = nowIso(env); }
+    else {
+      const memoryInvite = invite as StoredInvite;
+      memoryInvite.status = "expired";
+      memoryInvite.updatedAt = nowIso(env);
+    }
     throw socialError(410, "party_invite_expired", "Party invite has expired.");
   }
   const partyId = normalized.partyId;
@@ -421,11 +485,12 @@ export async function acceptPartyInvite(env, uid, input = {}) {
             SELECT 1 FROM party_invites WHERE id = ? AND status = 'accepted' AND updated_at = ?
           )`).bind(partyId, uid, joinedAt, normalized.id, joinedAt),
       ]);
-      if (Number(results[0]?.meta?.changes || 0) !== 1 || Number(results[1]?.meta?.changes || 0) !== 1) {
+      const batchResults = Array.isArray(results) ? results as Array<{ meta?: { changes?: number } }> : [];
+      if (Number(batchResults[0]?.meta?.changes || 0) !== 1 || Number(batchResults[1]?.meta?.changes || 0) !== 1) {
         throw socialError(409, "party_invite_closed", "Party invite is no longer pending.");
       }
     } catch (error) {
-      const message = error.message || "";
+      const message = error instanceof Error ? error.message : String(error ?? "");
       if (/party_full/i.test(message)) throw socialError(409, "party_full", "Party is full.");
       if (/unique/i.test(message)) throw socialError(409, "party_membership_exists", "You already belong to a party.");
       throw error;
@@ -437,13 +502,14 @@ export async function acceptPartyInvite(env, uid, input = {}) {
     const count = [...store.membersByUid.values()].filter((member) => member.partyId === partyId).length;
     if (count >= party.maxMembers) throw socialError(409, "party_full", "Party is full.");
     store.membersByUid.set(uid, { partyId, uid, role: "member", joinedAt });
-    invite.status = "accepted";
-    invite.updatedAt = joinedAt;
+    const memoryInvite = invite as StoredInvite;
+    memoryInvite.status = "accepted";
+    memoryInvite.updatedAt = joinedAt;
   }
   return getParty(env, uid);
 }
 
-export async function leaveParty(env, uid) {
+export async function leaveParty(env: WorkerEnv, uid: string): Promise<JsonRecord> {
   const party = await getParty(env, uid);
   if (!party) throw socialError(404, "party_not_found", "Party was not found.");
   const remaining = party.members.filter((member) => member.uid !== uid);
@@ -472,8 +538,12 @@ export async function leaveParty(env, uid) {
     store.membersByUid.delete(uid);
     if (party.ownerUid === uid && remaining.length) {
       const nextOwner = remaining.slice().sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0];
-      store.membersByUid.get(nextOwner.uid).role = "owner";
+      if (!nextOwner) throw socialError(500, "party_owner_missing", "A next party owner could not be selected.");
+      const storedMember = store.membersByUid.get(nextOwner.uid);
+      if (!storedMember) throw socialError(500, "party_member_missing", "The next party owner is missing.");
+      storedMember.role = "owner";
       const storedParty = store.parties.get(party.id);
+      if (!storedParty) throw socialError(500, "party_missing", "The party is missing.");
       storedParty.ownerUid = nextOwner.uid;
       storedParty.updatedAt = updatedAt;
     } else if (party.ownerUid === uid) {
@@ -484,7 +554,7 @@ export async function leaveParty(env, uid) {
   return { left: true, partyId: party.id, nextOwnerUid: remaining.length && party.ownerUid === uid ? remaining.slice().sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0].uid : null };
 }
 
-export async function removePartyMember(env, uid, memberUid) {
+export async function removePartyMember(env: WorkerEnv, uid: string, memberUid: string): Promise<Party | null> {
   const party = await getParty(env, uid);
   if (!party) throw socialError(404, "party_not_found", "Party was not found.");
   if (party.ownerUid !== uid) throw socialError(403, "party_owner_required", "Only the party owner can remove members.");
