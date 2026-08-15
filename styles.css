@@ -3965,6 +3965,26 @@ body[data-motion="on"] .battle-float-text.is-visible {
   font-size: 12px;
 }
 
+.telemetry-settings {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.telemetry-settings h4,
+.telemetry-settings p {
+  margin: 0;
+}
+
+.telemetry-settings > div p,
+.telemetry-settings > p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 @media (max-width: 760px) {
   .developer-runtime-grid {
     grid-template-columns: 1fr;

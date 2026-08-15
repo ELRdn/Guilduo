@@ -1,6 +1,6 @@
-const APP_VERSION = "2026.08.13-agent-registry-beta";
+const APP_VERSION = "2026.08.14-public-beta";
 const CACHE_PREFIX = "questforge-pwa-";
-const CACHE_VERSION = `${CACHE_PREFIX}v18`;
+const CACHE_VERSION = `${CACHE_PREFIX}v21`;
 const NAVIGATION_FALLBACK = "/index.html";
 const BETA_NAVIGATION_PATH = "/next/index.html";
 

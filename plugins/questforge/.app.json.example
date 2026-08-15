@@ -1,0 +1,11 @@
+{
+  "apps": {
+    "questforge": {
+      "display_name": "QuestForge",
+      "technical_id": "plugin_asdk_app_replace_after_dashboard_registration",
+      "remote_mcp_url": "https://your-questforge-worker.example.workers.dev/mcp",
+      "oauth_metadata_url": "https://your-questforge-worker.example.workers.dev/.well-known/oauth-authorization-server",
+      "review_status": "not_submitted"
+    }
+  }
+}

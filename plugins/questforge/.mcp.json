@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "questforge": {
+      "type": "http",
+      "url": "https://your-questforge-worker.example.workers.dev/mcp",
+      "authentication": "oauth"
+    }
+  }
+}

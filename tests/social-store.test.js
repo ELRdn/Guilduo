@@ -42,11 +42,21 @@ test("profiles enforce uniqueness and expose only approved public fields", async
   const own = await profile(env, "alpha", "Alpha_User");
   await expectCode(profile(env, "beta", "alpha_user"), "handle_taken");
   const found = await social.findProfileByHandle(env, "@ALPHA_USER");
-  assert.deepEqual(Object.keys(found).sort(), ["avatarRole", "avatarVariant", "bio", "displayName", "handle", "level", "uid"].sort());
+  assert.deepEqual(Object.keys(found).sort(), ["avatarRole", "avatarVariant", "avatarUrl", "bio", "displayName", "handle", "level", "uid"].sort());
   assert.equal(found.handle, "@alpha_user");
   assert.equal("email" in found, false);
   assert.equal("createdAt" in found, false);
+  assert.equal(found.avatarUrl, "");
   assert.equal(typeof own.handleChangedAt, "string");
+});
+
+test("profiles accept a bounded image data URL and reject unsafe avatar values", async () => {
+  const env = {};
+  const avatarUrl = "data:image/webp;base64," + "A".repeat(128);
+  const saved = await social.upsertProfile(env, "avatar-user", { displayName: "Avatar User", handle: "avatar_user", avatarUrl });
+  assert.equal(saved.avatarUrl, avatarUrl);
+  await expectCode(social.upsertProfile(env, "avatar-user", { avatarUrl: "https://example.com/avatar.png" }), "avatar_url_invalid");
+  await expectCode(social.upsertProfile(env, "avatar-user", { avatarUrl: "data:image/png;base64," + "A".repeat(700001) }), "avatar_url_too_large");
 });
 
 test("handle changes have a 30 day cooldown", async () => {

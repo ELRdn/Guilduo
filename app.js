@@ -1,8 +1,10 @@
 const storageKey = "questforge-prototype-state";
+const trackTelemetry = (...args) => globalThis.QuestForgeTelemetry?.track?.(...args);
 const appearanceStorageKey = "questforge-appearance-mode";
 const appearanceModes = ["light", "dark", "system"];
-const appVersion = "2026.08.13-agent-registry-beta";
+const appVersion = "2026.08.14-public-beta";
 const productionGatewayUrl = String(globalThis.QuestForgeConfig?.gatewayUrl || "").replace(/\/$/, "");
+const externalOAuthEnabled = globalThis.QuestForgeConfig?.externalOAuthEnabled === true;
 const hadLocalStateAtStartup = Boolean(localStorage.getItem(storageKey));
 const core = globalThis.QuestForgeCore;
 const battleRules = globalThis.QuestForgeBattleRules;
@@ -254,6 +256,8 @@ const els = {
   audioDiagnosticStatus: document.querySelector("#audioDiagnosticStatus"),
   testWebAudioButton: document.querySelector("#testWebAudioButton"),
   testMediaAudioButton: document.querySelector("#testMediaAudioButton"),
+  telemetryConsentToggle: document.querySelector("#telemetryConsentToggle"),
+  telemetryConsentStatus: document.querySelector("#telemetryConsentStatus"),
   feedbackPreviewCard: document.querySelector("#feedbackPreviewCard"),
   installAppButton: document.querySelector("#installAppButton"),
   bossImage: document.querySelector("#bossImage"),
@@ -987,6 +991,7 @@ function shouldAutoCreateFocusTask(task) {
 }
 
 async function flushFocusAutoSyncQueue() {
+  if (!externalOAuthEnabled) return;
   const queue = readFocusAutoSyncQueue();
   if (!queue.length || !globalThis.QuestForgeFirebase?.getUser?.() || !getGatewayUrl()) return;
   await globalThis.QuestForgeFirebase?.flushState?.();
@@ -1004,6 +1009,7 @@ async function flushFocusAutoSyncQueue() {
 }
 
 function queueFocusAutoSync(task) {
+  if (!externalOAuthEnabled) return;
   if (!shouldAutoCreateFocusTask(task)) return;
   writeFocusAutoSyncQueue([...readFocusAutoSyncQueue(), task.id]);
   window.setTimeout(() => { flushFocusAutoSyncQueue().catch(() => {}); }, 1200);
@@ -1361,6 +1367,14 @@ function normalizeState(nextState) {
       rewardClaims: cloneStateValue(nextState.rewardClaims || {}),
     };
   }
+  if (previousSchemaVersion < 7 && !nextState.migrationSnapshots.schema6To7) {
+    nextState.migrationSnapshots.schema6To7 = {
+      createdAt: new Date().toISOString(),
+      schemaVersion: previousSchemaVersion,
+      tasks: cloneStateValue(Array.isArray(nextState.tasks) ? nextState.tasks : []),
+      rewardClaims: cloneStateValue(nextState.rewardClaims || {}),
+    };
+  }
   nextState.schemaVersion = currentSchemaVersion;
   nextState.createdAt = nextState.createdAt || new Date().toISOString();
   nextState.updatedAt = nextState.updatedAt || nextState.createdAt;
@@ -1496,13 +1510,15 @@ function normalizeState(nextState) {
   const sourceTasks = Array.isArray(nextState.tasks) ? nextState.tasks : cloneDefaultState().tasks;
   nextState.tasks = sourceTasks.filter((task) => task && typeof task === "object").map((task, index) => {
     const hadRepeat = typeof task.repeat === "string" && task.repeat.length > 0;
+    const repeat = repeatLabels[task.repeat] ? task.repeat : task.kind === "daily" && !hadRepeat ? "daily" : "none";
     const createdAt = task.createdAt || new Date(Date.UTC(2026, 5, 23, 0, index)).toISOString();
     const dueDate = task.dueDate || "";
-    const lifecycleState = ["active", "completed", "archived"].includes(task.lifecycleState)
+    let lifecycleState = ["active", "completed", "archived"].includes(task.lifecycleState)
       ? task.lifecycleState
       : previousSchemaVersion < 4 && task.kind === "todo" && task.done
         ? "archived"
         : "active";
+    if (task.kind === "todo" && repeat === "none" && (lifecycleState === "completed" || task.done)) lifecycleState = "archived";
     const planningState = ["scheduled", "backlog"].includes(task.planningState)
       ? task.planningState
       : task.kind === "todo" && !dueDate && lifecycleState === "active"
@@ -1527,7 +1543,7 @@ function normalizeState(nextState) {
       difficulty: difficultyLabels[task.difficulty] ? task.difficulty : "easy",
       category: String(task.category || "").slice(0, 40),
       dueDate,
-      repeat: repeatLabels[task.repeat] ? task.repeat : task.kind === "daily" && !hadRepeat ? "daily" : "none",
+      repeat,
       tags: Array.isArray(task.tags) ? task.tags.slice(0, 6) : parseTags(task.tags || ""),
       planningState,
       lifecycleState: task.kind === "daily" ? "active" : lifecycleState,
@@ -1795,8 +1811,9 @@ function scoreTask(taskId, direction) {
       task.lastCompletedDate = currentDateText();
       task.updatedAt = new Date().toISOString();
       if (task.kind === "todo" && (task.repeat || "none") === "none") {
-        task.lifecycleState = "completed";
+        task.lifecycleState = "archived";
         task.completedAt = task.updatedAt;
+        task.archivedAt = task.updatedAt;
       } else {
         task.lifecycleState = "active";
       }
@@ -1856,11 +1873,12 @@ function scoreTask(taskId, direction) {
 }
 
 function completeTaskFeedback(task) {
+  trackTelemetry("first_quest_complete", { source: "root" });
   playInteractionCue("success");
   saveState();
   renderTaskSummary();
   renderArchiveDialog();
-  showToast(`「${task.title}」を完了しました。週次レビューまで完了一覧に保管します。`, { duration: 4200 });
+  showToast(`「${task.title}」を完了して保管しました。`, { duration: 4200 });
 
   const card = document.querySelector(`.task-card[data-task-id="${task.id}"]`);
   if (!card || !canPlayMotion()) {
@@ -2568,11 +2586,11 @@ function transitionTaskHandoff(task, nextState, details = {}) {
 
 function archiveTask(taskId) {
   const task = state.tasks.find((item) => item.id === taskId);
-  if (!task) return null;
+  if (!task || task.kind !== "todo" || (task.repeat || "none") !== "none") return null;
   task.lifecycleState = "archived";
   task.archivedAt = new Date().toISOString();
   task.updatedAt = task.archivedAt;
-  if (task.kind === "todo" || task.kind === "daily") task.done = true;
+  task.done = true;
   recordTaskEvent("task.archived", task, { source: "editor" });
   render();
   return task;
@@ -2924,6 +2942,10 @@ function renderFeedbackSettings() {
   if (els.motionEnabledToggle) {
     els.motionEnabledToggle.checked = Boolean(state.preferences?.motionEnabled);
   }
+  const telemetry = globalThis.QuestForgeTelemetry;
+  const consent = telemetry?.getConsent?.() || "unknown";
+  if (els.telemetryConsentToggle) els.telemetryConsentToggle.checked = consent === "granted";
+  if (els.telemetryConsentStatus) els.telemetryConsentStatus.textContent = i18n?.t?.(`telemetry.${consent}`) || consent;
 }
 
 function renderRolloverStatus() {
@@ -4012,13 +4034,17 @@ async function refreshGatewayRuntime() {
     await refreshSocialRuntime();
     const selectedIntegration = getSelectedIntegration();
     const selectedRuntime = selectedRuntimeIntegration();
-    if (selectedRuntime.status === "connected" && !gatewayRuntime.integrationResources[selectedIntegration.id]) {
+    if (externalOAuthEnabled && selectedRuntime.status === "connected" && !gatewayRuntime.integrationResources[selectedIntegration.id]) {
       await loadIntegrationResources(selectedIntegration.id).catch((error) => {
         if (els.integrationSetupMessage) els.integrationSetupMessage.textContent = describeIntegrationError(error);
       });
       renderIntegrationHub();
     }
-    await refreshCalendarSchedule().catch(() => {});
+    if (externalOAuthEnabled) await refreshCalendarSchedule().catch(() => {});
+    else {
+      gatewayRuntime.calendarEvents = [];
+      renderCalendarAgenda();
+    }
     await flushFocusAutoSyncQueue().catch(() => {});
   } catch (error) {
     setGatewayStatus("error", i18n.t("gateway.error"));
@@ -4028,6 +4054,11 @@ async function refreshGatewayRuntime() {
 }
 
 async function refreshCalendarSchedule() {
+  if (!externalOAuthEnabled) {
+    gatewayRuntime.calendarEvents = [];
+    renderCalendarAgenda();
+    return;
+  }
   const connected = gatewayRuntime.integrations?.some((item) => item.id === "google-calendar" && item.status === "connected");
   if (!connected) {
     gatewayRuntime.calendarEvents = [];
@@ -4110,6 +4141,10 @@ function renderPluginSlots(plugins) {
 }
 
 async function previewLiveIntegration(run = false) {
+  if (!externalOAuthEnabled) {
+    showToast("外部サービス連携は公開βでは準備中です。", { duration: 6000 });
+    return;
+  }
   const adapter = getSelectedIntegration();
   if (adapter.id === "toggl-focus") {
     throw Object.assign(new Error("Toggl Focusは専用の実績確認ボタンから操作してください。"), { code: "integration_uses_dedicated_api" });
@@ -4179,11 +4214,12 @@ function renderIntegrationOnboarding() {
   const connected = runtime.status === "connected";
   const resourceConfigured = connected && integrationResourceConfigured(adapter, runtime);
   const previewed = Boolean(gatewayRuntime.integrationPreviewed?.[adapter.id]);
+  const publicBetaPaused = !externalOAuthEnabled;
   const steps = [
     [els.integrationStepLogin, Boolean(user)],
-    [els.integrationStepConnect, Boolean(user && configurationReady && connected)],
-    [els.integrationStepResource, Boolean(resourceConfigured)],
-    [els.integrationStepSync, Boolean(previewed)],
+    [els.integrationStepConnect, publicBetaPaused ? false : Boolean(user && configurationReady && connected)],
+    [els.integrationStepResource, publicBetaPaused ? false : Boolean(resourceConfigured)],
+    [els.integrationStepSync, publicBetaPaused ? false : Boolean(previewed)],
   ];
   steps.forEach(([element, complete], index) => {
     if (!element) return;
@@ -4196,6 +4232,8 @@ function renderIntegrationOnboarding() {
 
   if (!user) {
     els.integrationOnboardingDescription.textContent = i18n.t("integration.onboarding.loggedOut");
+  } else if (publicBetaPaused) {
+    els.integrationOnboardingDescription.textContent = i18n.t("integration.onboarding.earlyAccess", { service: adapter.name });
   } else if (!configurationReady) {
     els.integrationOnboardingDescription.textContent = i18n.t("integration.onboarding.admin", { service: adapter.name });
   } else if (!connected) {
@@ -4227,7 +4265,9 @@ function renderIntegrationHub() {
   integrationAdapters.forEach((adapter) => {
     const runtimeAdapter = gatewayRuntime.integrations?.find((item) => item.id === adapter.id);
     const runtimeStatus = runtimeAdapter?.status || adapter.status;
-    const displayStatus = runtimeAdapter?.configurationStatus === "admin_setup_required"
+    const displayStatus = !externalOAuthEnabled
+      ? "public_beta"
+      : runtimeAdapter?.configurationStatus === "admin_setup_required"
       ? "admin_setup_required"
       : runtimeStatus;
     const card = document.createElement("article");
@@ -4291,17 +4331,22 @@ function renderIntegrationResourcePanel(adapter) {
   const supported = ["google-calendar", "google-tasks", "notion", "toggl-focus"].includes(adapter.id);
   const user = globalThis.QuestForgeFirebase?.getUser?.();
   const configurationReady = runtime.configurationStatus !== "admin_setup_required";
+  const publicBetaPaused = !externalOAuthEnabled;
   els.connectIntegrationButton.hidden = connected || !supported || runtime.status === "planned";
-  els.connectIntegrationButton.disabled = !user || !configurationReady;
-  els.connectIntegrationButton.textContent = i18n.t(runtime.status === "reconnect_required" ? "integration.reconnect" : "integration.connect");
+  els.connectIntegrationButton.disabled = publicBetaPaused || !user || !configurationReady;
+  els.connectIntegrationButton.textContent = publicBetaPaused ? i18n.t("integration.status.public_beta") : i18n.t(runtime.status === "reconnect_required" ? "integration.reconnect" : "integration.connect");
   els.disconnectIntegrationButton.hidden = !connected && runtime.status !== "reconnect_required";
-  els.previewLiveSyncButton.disabled = !connected || isFocus;
+  els.disconnectIntegrationButton.disabled = publicBetaPaused;
+  els.previewLiveSyncButton.disabled = publicBetaPaused || !connected || isFocus;
   els.runLiveSyncButton.disabled = true;
   els.integrationResourcePanel.hidden = !connected;
   if (els.integrationAutoSync?.closest("label")) els.integrationAutoSync.closest("label").hidden = isFocus;
   if (els.integrationSetupMessage) {
     els.integrationSetupMessage.className = "integration-setup-message";
-    if (!user) {
+    if (publicBetaPaused) {
+      els.integrationSetupMessage.className = "integration-setup-message is-warning";
+      els.integrationSetupMessage.textContent = i18n.t("integration.setup.earlyAccess");
+    } else if (!user) {
       els.integrationSetupMessage.textContent = i18n.t("integration.setup.loggedOut");
     } else if (!configurationReady) {
       els.integrationSetupMessage.className = "integration-setup-message is-warning";
@@ -4390,6 +4435,7 @@ function renderIntegrationResourcePanel(adapter) {
 }
 
 async function connectSelectedIntegration() {
+  if (!externalOAuthEnabled) throw new Error("外部サービス連携は公開βでは準備中です。");
   if (!globalThis.QuestForgeFirebase?.getUser?.()) throw new Error("先にQuestForgeへGoogleログインしてください。");
   const adapter = getSelectedIntegration();
   if (adapter.id === "toggl-focus") {
@@ -4416,6 +4462,10 @@ function closeTogglFocusConnectDialog() {
 }
 
 async function disconnectSelectedIntegration() {
+  if (!externalOAuthEnabled) {
+    showToast("外部サービス連携は公開βでは準備中です。", { duration: 6000 });
+    return;
+  }
   const adapter = getSelectedIntegration();
   if (!window.confirm(`${adapter.name}との接続を解除しますか？Questは削除されません。`)) return;
   await gatewayFetch(`/v1/integrations/${encodeURIComponent(adapter.id)}/disconnect`, { method: "POST" });
@@ -4425,6 +4475,10 @@ async function disconnectSelectedIntegration() {
 }
 
 async function saveSelectedIntegrationSettings() {
+  if (!externalOAuthEnabled) {
+    showToast("外部サービス連携は公開βでは準備中です。", { duration: 6000 });
+    return;
+  }
   const adapter = getSelectedIntegration();
   const selected = [...els.integrationResourceList.querySelectorAll("input:checked")].map((input) => input.value);
   const body = adapter.id === "toggl-focus" ? {} : { autoSync: els.integrationAutoSync.checked };
@@ -4890,7 +4944,7 @@ els.archiveTaskButton.addEventListener("click", () => {
   const archived = archiveTask(taskId);
   if (!archived) return;
   closeTaskDialog();
-  showToast(`「${archived.title}」をアーカイブしました。`, {
+  showToast(`「${archived.title}」を保管しました。`, {
     actionLabel: "未完了に戻す",
     onAction: () => restoreArchivedTask(archived.id),
   });
@@ -5251,6 +5305,14 @@ els.motionEnabledToggle.addEventListener("change", () => {
   state.preferences.motionEnabled = els.motionEnabledToggle.checked;
   render();
 });
+
+els.telemetryConsentToggle?.addEventListener("change", () => {
+  globalThis.QuestForgeTelemetry?.setConsent?.(els.telemetryConsentToggle.checked ? "granted" : "denied");
+  renderFeedbackSettings();
+});
+
+window.addEventListener("questforge:telemetry-consent-changed", () => renderFeedbackSettings());
+window.addEventListener("questforge:telemetry-ready", () => renderFeedbackSettings());
 
 els.previewSoundButton.addEventListener("click", () => {
   previewFeedback({ sound: true });

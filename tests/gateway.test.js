@@ -64,10 +64,43 @@ test("REST create and score share production state and reward claims", async () 
   assert.equal(scored.rewardGranted, true);
   assert.equal(scored.reward.gems, 11);
   assert.equal(scored.reward.mp, 30);
+  assert.equal(scored.quest.lifecycleState, "archived");
 
   const listed = await (await call("/v1/quests?done=true")).json();
   assert.equal(listed.quests.length, 1);
   assert.equal(listed.quests[0].id, created.quest.id);
+});
+
+test("REST batch-score previews atomically and archives one-off todos", async () => {
+  const first = await (await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "todo", title: "一括To Do" }) })).json();
+  const daily = await (await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "daily", title: "一括日課" }) })).json();
+  const preview = await (await call("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds: [first.quest.id, daily.quest.id], direction: "up" }) })).json();
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.count, 2);
+  assert.equal((await (await call("/v1/quests?view=all")).json()).quests.every((quest) => !quest.done), true);
+  const applied = await (await call("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds: [first.quest.id, daily.quest.id], direction: "up", dryRun: false }) })).json();
+  const byId = new Map(applied.quests.map((quest) => [quest.id, quest]));
+  assert.equal(byId.get(first.quest.id).lifecycleState, "archived");
+  assert.equal(byId.get(daily.quest.id).lifecycleState, "active");
+});
+
+test("MCP batch-score uses the same automatic archive transition", async () => {
+  const created = await (await call("/v1/quests", {
+    method: "POST",
+    body: JSON.stringify({ kind: "todo", title: "MCP一括完了" }),
+  })).json();
+  const previewResponse = await call("/mcp", {
+    method: "POST",
+    body: JSON.stringify({ jsonrpc: "2.0", id: 21, method: "tools/call", params: { name: "batch_score_quests", arguments: { questIds: [created.quest.id], direction: "up" } } }),
+  });
+  const preview = await previewResponse.json();
+  assert.equal(preview.result.structuredContent.dryRun, true);
+  const appliedResponse = await call("/mcp", {
+    method: "POST",
+    body: JSON.stringify({ jsonrpc: "2.0", id: 22, method: "tools/call", params: { name: "batch_score_quests", arguments: { questIds: [created.quest.id], direction: "up", dryRun: false } } }),
+  });
+  const applied = await appliedResponse.json();
+  assert.equal(applied.result.structuredContent.quests[0].lifecycleState, "archived");
 });
 
 test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the same REST domain", async () => {
@@ -76,10 +109,11 @@ test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the 
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
   const tools = await toolsResponse.json();
-  assert.equal(tools.result.tools.length, 50);
+  assert.equal(tools.result.tools.length, 51);
   assert.ok(tools.result.tools.some((tool) => tool.name === "create_quest"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "list_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "batch_update_quests"));
+  assert.ok(tools.result.tools.some((tool) => tool.name === "batch_score_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "archive_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_quest_tree"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "transition_quest_handoff"));
@@ -114,7 +148,7 @@ function parseMcpSse(text) {
   return JSON.parse(line.slice(6));
 }
 
-test("MCP v2.6 SDK lane exposes Agent resources, Focus resources, and workflow prompts", async () => {
+test("MCP v2.7 SDK lane exposes Agent resources, Focus resources, and workflow prompts", async () => {
   const headers = { host: "worker.test", accept: "application/json, text/event-stream" };
   const mcpCall = async (method) => {
     const response = await call("/mcp-next", {
@@ -128,8 +162,8 @@ test("MCP v2.6 SDK lane exposes Agent resources, Focus resources, and workflow p
   };
 
   const tools = await mcpCall("tools/list");
-  assert.equal(tools.tools.length, 50);
-  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 50);
+  assert.equal(tools.tools.length, 51);
+  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 51);
 
   const resources = await mcpCall("resources/list");
   assert.deepEqual(resources.resources.map((resource) => resource.uri).sort(), [

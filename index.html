@@ -206,7 +206,7 @@
               <div class="quest-tree-actions">
                 <label class="compact-check">
                   <input type="checkbox" id="questTreeIncludeArchived" />
-                  <span data-i18n="questTree.includeArchived">完了・アーカイブも表示</span>
+                  <span data-i18n="questTree.includeArchived">完了・保管済みも表示</span>
                 </label>
                 <button class="secondary-button" type="button" id="refreshQuestTreeButton" data-i18n="questTree.refresh">更新</button>
               </div>
@@ -234,7 +234,7 @@
               <button type="button" class="filter-option" data-task-filter="undone" data-i18n="task.filter.undone">未完了</button>
             </div>
             <button class="secondary-button archive-button" type="button" id="archiveButton">
-              <span data-i18n="task.archive">アーカイブ</span> <span id="archiveCount">0</span>
+              <span data-i18n="task.archive">保管</span> <span id="archiveCount">0</span>
             </button>
             <label>
               <span data-i18n="task.sort">並び替え</span>
@@ -1010,7 +1010,7 @@
         </div>
         <div class="plugin-slot-inline" id="pluginQuestDetailSlot" data-plugin-slot="quest.detail" hidden></div>
         <div class="dialog-actions">
-          <button type="button" class="secondary-button" id="archiveTaskButton" data-i18n="task.archive">アーカイブ</button>
+          <button type="button" class="secondary-button" id="archiveTaskButton" data-i18n="task.archive">保管</button>
           <span class="dialog-spacer"></span>
           <button type="button" class="secondary-button" id="cancelDialog" data-i18n="common.close">閉じる</button>
           <button type="submit" class="primary-button" data-i18n="common.save">保存</button>
@@ -1021,8 +1021,8 @@
     <dialog class="task-dialog archive-dialog" id="archiveDialog" aria-labelledby="archiveDialogTitle">
       <section class="archive-dialog-content">
         <div class="dialog-heading">
-          <h3 id="archiveDialogTitle" data-i18n="archive.title">完了・アーカイブ</h3>
-          <button class="edit-button" type="button" id="closeArchiveDialog" aria-label="アーカイブを閉じる" data-i18n-aria-label="archive.close">×</button>
+          <h3 id="archiveDialogTitle" data-i18n="archive.title">完了・保管</h3>
+          <button class="edit-button" type="button" id="closeArchiveDialog" aria-label="保管を閉じる" data-i18n-aria-label="archive.close">×</button>
         </div>
         <div class="archive-list" id="archiveList"></div>
       </section>
@@ -1047,7 +1047,7 @@
             <span class="feedback-preview-check" aria-hidden="true">✓</span>
             <div>
               <strong data-i18n="feedback.questComplete">クエスト完了</strong>
-              <span data-i18n="feedback.archived">アーカイブへ格納</span>
+              <span data-i18n="feedback.archived">保管へ格納</span>
             </div>
           </div>
           <div class="feedback-preview-actions">
@@ -1064,6 +1064,17 @@
             <button class="secondary-button" type="button" id="testWebAudioButton" data-feedback-silent data-i18n="feedback.webAudio">Web Audioテスト</button>
             <button class="secondary-button" type="button" id="testMediaAudioButton" data-feedback-silent data-i18n="feedback.mediaAudio">メディア音テスト</button>
           </div>
+        </section>
+        <section class="telemetry-settings" aria-labelledby="telemetryTitle">
+          <div>
+            <h4 id="telemetryTitle" data-i18n="telemetry.title">匿名計測</h4>
+            <p data-i18n="telemetry.copy">Quest本文や個人情報を送らず、表示速度・操作応答・同期状態だけを匿名で測定します。</p>
+          </div>
+          <label class="preference-row" for="telemetryConsentToggle">
+            <span data-i18n="telemetry.optIn">匿名計測に協力する</span>
+            <input id="telemetryConsentToggle" type="checkbox" role="switch" />
+          </label>
+          <p id="telemetryConsentStatus" class="field-note" aria-live="polite"></p>
         </section>
       </section>
     </dialog>

@@ -1,6 +1,6 @@
 import { createBattleSession, executeBattleCommand, normalizeBattleState } from "../shared/battle-rules.mjs";
 
-const CURRENT_SCHEMA_VERSION = 6;
+const CURRENT_SCHEMA_VERSION = 7;
 const TASK_KINDS = new Set(["habit", "daily", "todo", "reward"]);
 const DIFFICULTIES = new Set(["trivial", "easy", "medium", "hard"]);
 const REPEATS = new Set(["none", "daily", "weekdays", "weekly", "monthly"]);
@@ -176,9 +176,10 @@ function normalizeAssignee(value) {
 function normalizeQuest(task, index, previousVersion, migrationDate) {
   const createdAt = String(task.createdAt || new Date(Date.UTC(2026, 5, 23, 0, index)).toISOString());
   const kind = TASK_KINDS.has(task.kind) ? task.kind : "todo";
+  const repeat = REPEATS.has(task.repeat) ? task.repeat : kind === "daily" ? "daily" : "none";
   const dueDate = validDate(String(task.dueDate || "")) ? String(task.dueDate || "") : "";
   let lifecycleState = LIFECYCLE_STATES.has(task.lifecycleState) ? task.lifecycleState : "active";
-  if (previousVersion < 4 && kind === "todo" && task.done) lifecycleState = "archived";
+  if (kind === "todo" && repeat === "none" && (lifecycleState === "completed" || task.done)) lifecycleState = "archived";
   if (kind === "daily") lifecycleState = "active";
   let planningState = PLANNING_STATES.has(task.planningState) ? task.planningState : "scheduled";
   if (previousVersion < 4 && kind === "todo" && !dueDate && lifecycleState === "active") planningState = "backlog";
@@ -197,7 +198,7 @@ function normalizeQuest(task, index, previousVersion, migrationDate) {
     notes: String(task.notes || "").slice(0, 180),
     category: String(task.category || "").trim().slice(0, 40),
     dueDate,
-    repeat: REPEATS.has(task.repeat) ? task.repeat : kind === "daily" ? "daily" : "none",
+    repeat,
     difficulty: DIFFICULTIES.has(task.difficulty) ? task.difficulty : "easy",
     tags: Array.isArray(task.tags) ? [...new Set(task.tags.map((tag) => String(tag).trim()).filter(Boolean))].slice(0, 6) : [],
     planningState,
@@ -216,7 +217,7 @@ function normalizeQuest(task, index, previousVersion, migrationDate) {
     dependencyIds: Array.isArray(task.dependencyIds) ? [...new Set(task.dependencyIds.map(String).filter(Boolean))].slice(0, 20) : [],
     parentQuestId: String(task.parentQuestId || "").trim().slice(0, 120),
     completedAt: String(task.completedAt || ""),
-    archivedAt: String(task.archivedAt || (lifecycleState === "archived" ? task.updatedAt || createdAt : "")),
+    archivedAt: String(task.archivedAt || (lifecycleState === "archived" ? (previousVersion < 7 && kind === "todo" && repeat === "none" ? new Date().toISOString() : task.updatedAt || createdAt) : "")),
     externalLinks,
     assignee: normalizeAssignee(task.assignee),
     handoff: normalizeHandoff(task.handoff),
@@ -311,6 +312,14 @@ export function migrateState(state, migrationDate = todayText()) {
       rewardClaims: clone(state.rewardClaims),
     };
   }
+  if (previousVersion < 7 && !state.migrationSnapshots.schema6To7) {
+    state.migrationSnapshots.schema6To7 = {
+      createdAt: new Date().toISOString(),
+      schemaVersion: previousVersion,
+      tasks: clone(state.tasks),
+      rewardClaims: clone(state.rewardClaims),
+    };
+  }
   state.tasks = state.tasks.filter((task) => task && typeof task === "object" && !Array.isArray(task))
     .map((task, index) => normalizeQuest(task, index, previousVersion, migrationDate));
   repairParentQuestLinks(state);
@@ -343,6 +352,10 @@ function completionKey(task, date) {
   if (task.kind === "daily") return `${task.id}:daily:${date}`;
   if (task.kind === "todo" && task.repeat && task.repeat !== "none") return `${task.id}:todo:${task.dueDate || date}`;
   return `${task.id}:todo:once`;
+}
+
+function isOneOffTodo(task) {
+  return task?.kind === "todo" && (task.repeat || "none") === "none";
 }
 
 function appendEvent(state, type, task, details, source) {
@@ -737,8 +750,29 @@ export function patchQuest(state, questId, input, context = {}) {
   if (clean.lifecycleState) {
     const now = new Date().toISOString();
     if (clean.lifecycleState === "active") { quest.done = false; quest.completedAt = ""; quest.archivedAt = ""; }
-    if (clean.lifecycleState === "completed") { quest.done = true; quest.completedAt ||= now; quest.archivedAt = ""; }
-    if (clean.lifecycleState === "archived") { quest.done = true; quest.archivedAt ||= now; }
+    if (clean.lifecycleState === "completed") {
+      quest.done = true;
+      quest.completedAt ||= now;
+      if (isOneOffTodo(quest)) {
+        quest.lifecycleState = "archived";
+        quest.archivedAt ||= now;
+      } else {
+        quest.lifecycleState = "active";
+        quest.archivedAt = "";
+      }
+    }
+    if (clean.lifecycleState === "archived") {
+      if (isOneOffTodo(quest)) {
+        quest.done = true;
+        quest.completedAt ||= now;
+        quest.archivedAt ||= now;
+      } else {
+        quest.done = false;
+        quest.lifecycleState = "active";
+        quest.completedAt = "";
+        quest.archivedAt = "";
+      }
+    }
   }
   quest.updatedAt = new Date().toISOString();
   refreshActualMinutes(quest);
@@ -791,7 +825,8 @@ export function archiveQuests(state, input = {}, context = {}) {
   const throughDate = String(input.throughDate || "");
   if (throughDate && !validDate(throughDate)) throw new DomainError(400, "invalid_through_date", "throughDate must use YYYY-MM-DD.");
   const candidates = state.tasks.filter((task) => {
-    if (task.kind !== "todo" || task.repeat !== "none" || task.lifecycleState !== "completed") return false;
+    if (!isOneOffTodo(task) || !["completed", "archived"].includes(task.lifecycleState)) return false;
+    if (task.lifecycleState === "archived" && !requested.length) return false;
     if (requested.length && !requested.includes(task.id)) return false;
     if (throughDate && String(task.completedAt || task.lastCompletedDate || "9999-12-31").slice(0, 10) > throughDate) return false;
     return true;
@@ -805,7 +840,9 @@ export function archiveQuests(state, input = {}, context = {}) {
   const now = new Date().toISOString();
   const events = [];
   for (const task of candidates) {
+    if (task.lifecycleState === "archived") continue;
     task.lifecycleState = "archived";
+    task.completedAt ||= now;
     task.archivedAt = now;
     task.updatedAt = now;
     events.push(appendEvent(state, "quest.archived", task, {}, context.source || "api"));
@@ -919,9 +956,10 @@ export function scoreQuest(state, questId, direction = "up", context = {}) {
       if (quest.kind === "daily") {
         quest.lifecycleState = "active";
         if (rewardGranted) quest.streak = Number(quest.streak || 0) + 1;
-      } else if (quest.repeat === "none") {
-        quest.lifecycleState = "completed";
+      } else if (isOneOffTodo(quest)) {
+        quest.lifecycleState = "archived";
         quest.completedAt = now;
+        quest.archivedAt = now;
       } else {
         quest.lifecycleState = "active";
       }
@@ -940,6 +978,36 @@ export function scoreQuest(state, questId, direction = "up", context = {}) {
   const event = appendEvent(state, eventType, quest, { direction, reward, rewardGranted }, context.source || "api");
   touch(state);
   return { quest: questOutput(quest), reward, rewardGranted, character: characterState(state), battle: state.battle, event };
+}
+
+export function batchScoreQuests(state, input = {}, context = {}) {
+  ensureState(state);
+  const questIds = [...new Set((input.questIds || []).map(String).filter(Boolean))];
+  if (!questIds.length) throw new DomainError(400, "quest_ids_required", "At least one questId is required.");
+  if (questIds.length > 100) throw new DomainError(400, "batch_too_large", "A batch can score at most 100 quests.");
+  const direction = input.direction || "up";
+  if (!["up", "down"].includes(direction)) throw new DomainError(400, "invalid_direction", "direction must be up or down.");
+  const dryRun = input.dryRun !== false;
+  const target = clone(state);
+  for (const questId of questIds) {
+    const quest = target.tasks.find((item) => item.id === questId);
+    if (!quest) throw new DomainError(404, "quest_not_found", `Quest not found: ${questId}`);
+    if (!["habit", "daily", "todo"].includes(quest.kind)) throw new DomainError(400, "invalid_batch_score_quest", "Batch scoring only supports habit, daily, and todo quests.", { questId });
+  }
+  const results = questIds.map((questId) => scoreQuest(target, questId, direction, { ...context, source: context.source || "api" }));
+  if (!dryRun) {
+    for (const key of Object.keys(state)) delete state[key];
+    Object.assign(state, target);
+  }
+  return {
+    dryRun,
+    count: results.length,
+    quests: results.map((result) => result.quest),
+    rewards: results.map((result) => ({ questId: result.quest.id, reward: result.reward, rewardGranted: result.rewardGranted })),
+    character: characterState(target),
+    battle: target.battle,
+    events: results.map((result) => result.event),
+  };
 }
 
 export function buyReward(state, questId, context = {}) {

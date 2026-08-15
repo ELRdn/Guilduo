@@ -29,10 +29,11 @@ function state(overrides = {}) {
 test("schema v6 migration assigns existing quests to self and preserves migration snapshots", () => {
   const current = state({ tasks: [{ id: "legacy", kind: "todo", title: "Legacy", difficulty: "easy", done: false }] });
   domain.migrateState(current, "2026-08-09");
-  assert.equal(current.schemaVersion, 6);
+  assert.equal(current.schemaVersion, 7);
   assert.deepEqual(current.tasks[0].assignee, { type: "self", id: "self", label: "自分", handoffState: "none" });
   assert.equal(current.migrationSnapshots.schema4To5.schemaVersion, 4);
   assert.equal(current.migrationSnapshots.schema5To6.schemaVersion, 4);
+  assert.equal(current.migrationSnapshots.schema6To7.schemaVersion, 4);
   assert.equal(current.tasks[0].parentQuestId, "");
   assert.equal(current.tasks[0].handoff.note, "");
 });

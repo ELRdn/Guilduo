@@ -73,13 +73,25 @@ await evaluate('document.querySelector("#editQuestTitle").value="公開βブラ�
 await click('#editForm button[type="submit"]');
 if (await evaluate('document.querySelector("#selectedTitle").textContent') !== "公開βブラウザ検証・編集済み") throw new Error("Edit failed");
 await click("#archiveQuestButton");
-if (await evaluate('document.querySelector("#archiveQuestButton").textContent') !== "復元する") throw new Error("Archive failed");
+await click("#toggleArchived");
+if (await evaluate('document.querySelector("#toggleArchived").textContent') !== "保管済みを隠す") throw new Error("Archive visibility toggle failed");
+await evaluate(`[...document.querySelectorAll("[data-quest]")].find((row) => row.textContent.includes("公開βブラウザ検証・編集済み"))?.click()`);
+if (await evaluate('document.querySelector("#archiveQuestButton").textContent') !== "戻す") throw new Error("Archived Quest selection failed");
 await click("#archiveQuestButton");
+if (await evaluate('document.querySelector("#archiveQuestButton").textContent') !== "保管") throw new Error("Restore failed");
+await click("#toggleArchived");
+if (await evaluate('document.querySelector("#toggleArchived").textContent') !== "保管済みを表示") throw new Error("Archive hide toggle failed");
+await evaluate(`document.querySelector('[data-quest="qf-ui"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+await evaluate(`document.querySelector('[data-quest="qf-mobile"]').dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }))`);
+if (await evaluate('document.querySelector("#selectionCount").textContent') !== "2件選択") throw new Error("Shift range selection failed");
+await click("#clearSelection");
 await evaluate("location.reload()"); await waitFor(".beta-badge");
 if (await evaluate('document.querySelector("#selectedTitle").textContent') !== "公開βブラウザ検証・編集済み") throw new Error("Reload persistence failed");
 
 await click('[data-view="settings"]');
 if (!await evaluate('!document.querySelector("#agentForm").closest("[hidden]") && document.querySelector("#agentForm").offsetParent !== null')) throw new Error("Agent form hidden");
+await click('[data-detail-mode="modal"]');
+if (!await evaluate('document.querySelector("[data-detail-mode=modal]").getAttribute("aria-pressed") === "true"')) throw new Error("Detail mode setting failed");
 await click('[data-setting="typeScale"]'); await click('[data-setting="density"]');
 if (!await evaluate('document.body.classList.contains("is-large-type") && document.body.classList.contains("is-relaxed-density")')) throw new Error("Settings failed");
 await noOverflow("desktop settings");
@@ -92,6 +104,12 @@ for (const [width, file, view] of [[412, "04-pixel9-settings.png", "settings"], 
   await evaluate("location.reload()"); await waitFor(".beta-badge");
   if (view === "settings") { await click("#mobileMoreToggle"); await click('.mobile-more-menu [data-view="settings"]'); }
   else await click('[data-view="today"]');
+  if (view === "today") {
+    await click('[data-quest="qf-ui"]');
+    if (!await evaluate('document.body.classList.contains("is-detail-modal") && document.querySelector(".selected-panel").classList.contains("is-mobile-open")')) throw new Error("Mobile popup detail failed");
+    await click("#selectedSheetToggle");
+    if (await evaluate('document.body.classList.contains("is-detail-modal")')) throw new Error("Mobile popup close failed");
+  }
   await noOverflow(`mobile ${width}`);
   await screenshot(file);
 }

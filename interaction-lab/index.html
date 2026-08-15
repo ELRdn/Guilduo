@@ -82,7 +82,7 @@
             <section class="status-card">
               <span>QUEST LINE</span>
               <strong>3 / 5</strong>
-              <small>今日の主目的</small>
+              <small data-i18n="ui.todayPurpose">今日の主目的</small>
             </section>
             <section class="status-card mp-card">
               <span>MP</span>
@@ -92,7 +92,7 @@
             <section class="status-card pressure-card">
               <span>BOSS PRESSURE</span>
               <strong>3 / 10</strong>
-              <small>期限の近いQuest</small>
+              <small data-i18n="ui.nearDue">期限の近いQuest</small>
             </section>
           </div>
 
@@ -109,11 +109,21 @@
               <button type="button" class="tool is-active" id="filterAll" aria-pressed="true">すべて</button>
               <button type="button" class="tool" id="filterPriority" aria-pressed="false">優先のみ</button>
               <button type="button" class="tool" id="sortButton">期限順</button>
+              <button type="button" class="tool" id="toggleArchived" data-archive-toggle aria-pressed="false">保管済みを表示</button>
+              <span class="archive-count" id="archiveCount" aria-live="polite"></span>
             </div>
           </div>
 
+          <div class="bulk-selection-bar" id="bulkSelectionBar" hidden aria-live="polite">
+            <strong id="selectionCount">0件選択</strong>
+            <button type="button" class="tool" id="clearSelection">選択解除</button>
+            <button type="button" class="primary-action" id="bulkCompleteButton">完了</button>
+            <button type="button" class="secondary-action" id="bulkArchiveButton">保管</button>
+            <button type="button" class="secondary-action" id="bulkRestoreButton">戻す</button>
+          </div>
+
           <div class="today-layout">
-            <section class="quest-board" aria-label="今日のQuest一覧">
+            <section class="quest-board" role="region" aria-label="今日のQuest一覧">
               <div class="quest-head" aria-hidden="true">
                 <span>#</span>
                 <span>QUEST / OBJECTIVE</span>
@@ -123,13 +133,13 @@
                 <span>DUE</span>
                 <span>FOCUS</span>
               </div>
-              <div id="questList" class="quest-list"></div>
+              <div id="questList" class="quest-list" role="region" aria-label="今日のQuest一覧。フォーカスするとこの欄だけスクロールできます" tabindex="0"></div>
             </section>
 
             <aside class="today-side">
               <section class="agent-panel">
                 <div class="panel-heading">
-                  <div><p>PARTY MEMBERS</p><h2>担当とレビュー</h2></div>
+                  <div><p>PARTY MEMBERS</p><h2 id="partyReviewTitle" data-i18n="party.roadmapTitle">担当とレビュー</h2></div>
                   <span class="counter" id="reviewCounter">2</span>
                 </div>
                 <div id="agentList" class="agent-list"></div>
@@ -139,14 +149,14 @@
                 <div class="boss-copy">
                   <p>BOSS PRESSURE</p>
                   <h2>Deadline Wraith</h2>
-                  <span>残りの高優先度Questが圧力に変わる</span>
+                  <span data-i18n="ui.bossPressureCopy">残りの高優先度Questが圧力に変わる</span>
                 </div>
                 <img src="../assets/boss-h3-transparent.png" alt="Deadline Wraith boss" />
                 <meter min="0" max="100" value="72">72</meter>
-                <div class="boss-stats"><span><b>72%</b> 圧力</span><span><b id="bossMp">68</b> MP</span></div>
+                <div class="boss-stats"><span><b>72%</b> <span data-i18n="ui.pressure">圧力</span></span><span><b id="bossMp">68</b> MP</span></div>
               </section>
 
-              <section class="selected-panel" aria-live="polite">
+              <section class="selected-panel" role="dialog" aria-modal="false" aria-live="polite">
                 <div class="panel-heading">
                   <div><p>SELECTED QUEST</p><h2 id="selectedTitle">Questを選択</h2></div>
                   <div class="selected-heading-actions">
@@ -154,13 +164,13 @@
                     <button type="button" class="sheet-toggle" id="selectedSheetToggle" aria-expanded="false">詳細</button>
                   </div>
                 </div>
-                <p id="selectedDescription">行を選ぶと、完了・レビュー・編集の操作をここから試せます。</p>
+                <p id="selectedDescription">行を選ぶと、完了・確認・編集の操作をここから試せます。</p>
                 <dl id="selectedMeta" class="selected-meta"></dl>
                 <div class="selected-actions">
-                  <button type="button" class="primary-action" id="completeButton">完了にする</button>
-                  <button type="button" class="secondary-action" id="reviewButton">レビュー</button>
+                  <button type="button" class="primary-action" id="completeButton">完了</button>
+                  <button type="button" class="secondary-action" id="reviewButton">確認</button>
                   <button type="button" class="secondary-action" id="editQuestButton">編集</button>
-                  <button type="button" class="secondary-action" id="archiveQuestButton">アーカイブ</button>
+                  <button type="button" class="secondary-action" id="archiveQuestButton">保管</button>
                 </div>
               </section>
             </aside>
@@ -169,8 +179,8 @@
 
         <section class="view" data-panel="tree" aria-labelledby="treeTitle" hidden>
           <div class="view-heading">
-            <div><p>QUEST TREE / STRATEGY</p><h2 id="treeTitle">目的とサブQuest</h2></div>
-            <button type="button" class="tool" id="collapseTree">すべて閉じる</button>
+            <div><p>QUEST TREE / STRATEGY</p><h2 id="treeTitle" data-i18n="questTree.title">目的とサブQuest</h2></div>
+            <div class="toolbar"><button type="button" class="tool" id="toggleArchivedTree" data-archive-toggle aria-pressed="false">保管済みを表示</button><button type="button" class="tool" id="collapseTree">すべて閉じる</button></div>
           </div>
           <div class="quest-rail-legend" aria-label="Quest Railの凡例">
             <span><i class="rail-marker is-main"></i>主目的</span>
@@ -178,24 +188,29 @@
             <span><i class="rail-marker is-side"></i>サイドQuest</span>
           </div>
           <div class="tree-layout">
-            <section id="treeList" class="tree-list" aria-label="Quest Tree"></section>
-            <aside class="tree-note">
+            <section id="treeList" class="tree-list" role="region" aria-label="Quest Treeの一覧" tabindex="0"></section>
+            <aside class="tree-note" aria-label="Quest Treeの作戦サマリー">
+              <div class="tree-note-profile">
+                <span id="treeNoteAvatar" class="tree-note-avatar" aria-hidden="true">A</span>
+                <div><strong id="treeNoteAccount">ゲスト</strong><small id="treeNoteIdentity">デモデータ</small><small id="treeNoteCompanion">Astra / 相棒キャラクター</small></div>
+              </div>
               <p>QUEST FLOW</p>
-              <h2>進捗は見える。判断は人がする。</h2>
-              <span>親Questを完了にしても、子Questは勝手に完了しない。</span>
+              <h2 id="treeNoteTitle">進捗は見える。判断は人がする。</h2>
+              <span id="treeNoteDescription">親Questを完了にしても、子Questは勝手に完了しない。</span>
               <dl>
-                <div><dt>作業中</dt><dd>3</dd></div>
-                <div><dt>レビュー待ち</dt><dd id="treeReviewCount">2</dd></div>
-                <div><dt>ブロック中</dt><dd>1</dd></div>
+                <div><dt>作業中</dt><dd id="treeWorkingCount">0</dd></div>
+                <div><dt>レビュー待ち</dt><dd id="treeReviewCount">0</dd></div>
+                <div><dt>ブロック中</dt><dd id="treeBlockedCount">0</dd></div>
+                <div><dt>アクティブQuest</dt><dd id="treeActiveCount">0</dd></div>
               </dl>
             </aside>
           </div>
         </section>
 
         <section class="view" data-panel="battle" aria-labelledby="battleTitle" hidden>
-          <div class="view-heading">
-            <div><p>COMMAND BATTLE / MP LOOP</p><h2 id="battleTitle">QuestでMPをためて戦う</h2></div>
-            <button type="button" class="tool" id="resetBattle">戦闘をリセット</button>
+            <div class="view-heading">
+            <div><p>COMMAND BATTLE / MP LOOP</p><h2 id="battleTitle" data-i18n="battle.subtitle">QuestでMPをためて戦う</h2></div>
+            <button type="button" class="tool" id="resetBattle" data-i18n="battle.reset">戦闘をリセット</button>
           </div>
           <div class="battle-layout">
             <section class="battle-stage">
@@ -221,73 +236,73 @@
                 <p class="turn-indicator">ASTRA'S TURN <span>MPを選んでコマンドを決める</span></p>
               </div>
               <div class="battle-console">
-                <p id="battleMessage">Questを完了してMPをためよう。</p>
+                <p id="battleMessage" data-i18n="battle.intro">Questを完了してMPをためよう。</p>
                 <div class="command-grid">
-                  <button type="button" data-command="attack">たたかう <small>0 MP</small></button>
+                  <button type="button" data-command="attack"><span data-i18n="battle.attack">たたかう</span> <small>0 MP</small></button>
                   <button type="button" data-command="skill">Aegis Break <small>18 MP</small></button>
-                  <button type="button" data-command="guard">まもる <small>6 MP</small></button>
-                  <button type="button" data-command="heal">かいふく <small>14 MP</small></button>
-                  <button type="button" data-command="burst">バースト <small>40 MP</small></button>
+                  <button type="button" data-command="guard"><span data-i18n="battle.guard">まもる</span> <small>6 MP</small></button>
+                  <button type="button" data-command="heal"><span data-i18n="battle.heal">かいふく</span> <small>14 MP</small></button>
+                  <button type="button" data-command="burst"><span data-i18n="battle.burst">バースト</span> <small>40 MP</small></button>
                 </div>
               </div>
             </section>
             <aside class="battle-side">
               <section class="battle-tactical">
-                <p>TACTICAL READOUT</p><h2>この戦いの要点</h2>
+                <p>TACTICAL READOUT</p><h2 data-i18n="battle.dataPanel">この戦いの要点</h2>
                 <dl>
-                  <div><dt>弱点</dt><dd>単発Quest</dd></div>
+                  <div><dt data-i18n="ui.weakness">弱点</dt><dd>単発Quest</dd></div>
                   <div><dt>RAGE</dt><dd>3 / 10</dd></div>
-                  <div><dt>次の目標</dt><dd>MP 40でBurst</dd></div>
+                  <div><dt data-i18n="ui.nextTarget">次の目標</dt><dd>MP 40でBurst</dd></div>
                 </dl>
               </section>
-              <section><p>MP QUEUE</p><h2>次にMPになるQuest</h2><div id="battleQueue"></div></section>
+              <section><p>MP QUEUE</p><h2 data-i18n="battle.questPanel">次にMPになるQuest</h2><div id="battleQueue"></div></section>
               <section><p>BATTLE LOG</p><ul id="battleLog"></ul></section>
             </aside>
           </div>
         </section>
 
         <section class="view" data-panel="party" aria-labelledby="partyTitle" hidden>
-          <div class="view-heading">
-            <div><p>PARTY / AGENT HANDOFF</p><h2 id="partyTitle">一緒にQuestを進める</h2></div>
+            <div class="view-heading">
+            <div><p>PARTY / AGENT HANDOFF</p><h2 id="partyTitle" data-i18n="party.roadmapTitle">一緒にQuestを進める</h2></div>
           </div>
           <div class="party-summary">
-            <section class="party-summary-card"><span>PARTY</span><strong id="partyCount">4</strong><small>人間とAgent</small></section>
-            <section class="party-summary-card"><span>WORKING</span><strong id="partyWorking">2</strong><small>今進行中の担当</small></section>
-            <section class="party-summary-card"><span>REVIEW</span><strong id="partyReview">1</strong><small>人の確認待ち</small></section>
-            <section class="party-brief-card"><p>PARTY BRIEF</p><h2>同じQuestに、人とAgentが並ぶ。</h2><span>役割・担当・返却状態を同じルールで追えるようにする。</span></section>
+            <section class="party-summary-card"><span>PARTY</span><strong id="partyCount">4</strong><small data-i18n="ui.partyHumansAgents">人間とAgent</small></section>
+            <section class="party-summary-card"><span>WORKING</span><strong id="partyWorking">2</strong><small data-i18n="ui.workingNow">今進行中の担当</small></section>
+            <section class="party-summary-card"><span>REVIEW</span><strong id="partyReview">1</strong><small data-i18n="ui.waitingReview">人の確認待ち</small></section>
+            <section class="party-brief-card"><p>PARTY BRIEF</p><h2 data-i18n="ui.partyBriefTitle">同じQuestに、人とAgentが並ぶ。</h2><span data-i18n="ui.partyBriefCopy">役割・担当・返却状態を同じルールで追えるようにする。</span></section>
           </div>
           <div id="partyList" class="party-list"></div>
           <section class="party-activity-panel">
-            <div class="panel-heading"><div><p>RECENT HANDOFFS</p><h2>直近の引き継ぎ</h2></div><span class="counter">3</span></div>
+            <div class="panel-heading"><div><p>RECENT HANDOFFS</p><h2 data-i18n="ui.recentHandoffs">直近の引き継ぎ</h2></div><span class="counter">3</span></div>
             <ol id="partyActivity" class="party-activity"></ol>
           </section>
         </section>
 
         <section class="view" data-panel="integrations" aria-labelledby="integrationsTitle" hidden>
-          <div class="view-heading">
-            <div><p>INTEGRATIONS / SAFE SYNC</p><h2 id="integrationsTitle">連携は確認してから同期</h2></div>
+            <div class="view-heading">
+            <div><p>INTEGRATIONS / SAFE SYNC</p><h2 id="integrationsTitle" data-i18n="integration.title">連携は確認してから同期</h2></div>
           </div>
           <section class="integration-runway">
             <ol>
-              <li class="is-done"><b>1</b><span>QuestForgeへログイン</span></li>
-              <li class="is-current"><b>2</b><span>サービスを接続</span></li>
-              <li><b>3</b><span>対象を選択</span></li>
-              <li><b>4</b><span>プレビューして同期</span></li>
+            <li class="is-done"><b>1</b><span data-i18n="integration.step.login">QuestForgeへログイン</span></li>
+            <li class="is-current"><b>2</b><span data-i18n="integration.step.connect">サービスを接続</span></li>
+            <li><b>3</b><span data-i18n="integration.step.resource">対象を選択</span></li>
+            <li><b>4</b><span data-i18n="integration.step.sync">プレビューして同期</span></li>
             </ol>
           </section>
           <div class="integration-metrics">
-            <section><span>CONNECTED</span><strong>2</strong><small>接続済み</small></section>
-            <section><span>PREVIEW READY</span><strong>1</strong><small>確定前の同期</small></section>
-            <section><span>SAFE RULE</span><strong>0</strong><small>自動削除</small></section>
+            <section><span>CONNECTED</span><strong>2</strong><small data-i18n="integration.status.connected">接続済み</small></section>
+            <section><span>PREVIEW READY</span><strong>1</strong><small data-i18n="ui.previewReady">確定前の同期</small></section>
+            <section><span>SAFE RULE</span><strong>0</strong><small data-i18n="ui.noAutoDelete">自動削除なし</small></section>
           </div>
           <div class="integration-workspace">
             <div id="integrationList" class="integration-list"></div>
             <aside class="integration-context">
               <p>SYNC CONTEXT</p><h2 id="integrationContextTitle">Google Calendar</h2>
               <dl>
-                <div><dt>最終確認</dt><dd id="integrationLastSync">今日 16:30</dd></div>
-                <div><dt>対象</dt><dd id="integrationScope">2 calendars</dd></div>
-                <div><dt>次の操作</dt><dd id="integrationNextStep">予定枠を確認</dd></div>
+                <div><dt data-i18n="ui.lastChecked">最終確認</dt><dd id="integrationLastSync">今日 16:30</dd></div>
+                <div><dt data-i18n="ui.target">対象</dt><dd id="integrationScope">2 calendars</dd></div>
+                <div><dt data-i18n="ui.nextAction">次の操作</dt><dd id="integrationNextStep">予定枠を確認</dd></div>
               </dl>
               <ol id="integrationActivity" class="integration-activity"></ol>
             </aside>
@@ -299,34 +314,35 @@
               <span id="integrationDescription">Questを勝手に作らず、今日の作戦に予定枠として置きます。</span>
             </div>
             <div class="integration-actions">
-              <button class="secondary-action" type="button" id="previewButton">プレビュー</button>
-              <button class="primary-action" type="button" id="syncButton">同期を確認</button>
+              <button class="secondary-action" type="button" id="previewButton" data-i18n="integration.previewLive">プレビュー</button>
+              <button class="primary-action" type="button" id="syncButton" data-i18n="integration.confirmSync">同期を確認</button>
             </div>
           </section>
+          <p class="integration-public-beta-note" id="integrationPublicBetaNote" role="status">公開βでは外部サービスのOAuth接続を準備中です。FirebaseログインとMCP接続は利用できます。</p>
         </section>
 
         <section class="view" data-panel="profile" aria-labelledby="profileTitle" hidden>
           <div class="view-heading">
-            <div><p>PROFILE / ACCOUNT</p><h2 id="profileTitle">Astraの冒険者記録</h2></div>
-            <button type="button" class="tool" data-view="settings">表示と通知を設定</button>
+            <div><p>PROFILE / ACCOUNT</p><h2 id="profileTitle">プロフィール</h2></div>
+            <button type="button" class="tool" data-view="settings" id="profileSettingsButton">表示と通知を設定</button>
           </div>
           <div class="profile-layout">
             <section class="profile-identity-card">
-              <div class="profile-page-avatar"><img src="../assets/avatar-role-femme-sentinel.png" alt="AstraのSentinelアバター" /></div>
-              <div><p>HUMAN / SENTINEL</p><h2>Astra</h2><span>QuestForgeを運用するプレイヤー</span></div>
+              <div class="profile-page-avatar"><img id="profileAvatarImage" src="../assets/avatar-role-femme-sentinel.png" alt="AstraのSentinelアバター" /></div>
+              <div><p id="profileIdentityLabel">HUMAN / PLAYER</p><h2 id="profileCharacterName">Astra</h2><span id="profileAccountLine">アカウント: ひろなお</span><small class="profile-role-note" id="profileRoleNote">Astraは操作するキャラクター。アカウント名はあなた自身です。</small><label class="avatar-upload"><span id="changeAvatarLabel">キャラクターアイコンを変更</span><input id="profileAvatarInput" type="file" accept="image/png,image/jpeg,image/webp" hidden /></label><small id="profileAvatarStatus" class="profile-avatar-status"></small></div>
               <dl>
                 <div><dt>LEVEL</dt><dd>24</dd></div><div><dt>XP</dt><dd>8,420</dd></div><div><dt>STREAK</dt><dd>5 days</dd></div>
               </dl>
             </section>
             <section class="profile-current-card">
-              <p>CURRENT CAMPAIGN</p><h2>QuestForgeの公開準備</h2>
-              <meter min="0" max="100" value="72">72</meter><span>72% / 3つの子Questのうち1つを完了</span>
-              <button type="button" class="secondary-action" data-view="tree">Quest Treeを開く</button>
+              <p>CURRENT CAMPAIGN</p><h2 id="campaignTitle">QuestForgeの公開準備</h2>
+              <meter min="0" max="100" value="72">72</meter><span id="campaignProgress">72% / 3つの子Questのうち1つを完了</span>
+              <button type="button" class="secondary-action" data-view="tree" id="openTreeButton">Quest Treeを開く</button>
             </section>
             <section class="profile-log-card">
-              <p>ACCOUNT STATUS</p><h2>同期と安全性</h2>
-              <dl><div><dt>保存先</dt><dd>Firebase同期</dd></div><div><dt>外部連携</dt><dd>2 connected</dd></div><div><dt>AI接続</dt><dd>MCP ready</dd></div></dl>
-              <button type="button" class="secondary-action" data-view="integrations">連携を確認</button>
+              <p>ACCOUNT STATUS</p><h2 id="accountStatusTitle">同期と安全性</h2>
+              <dl><div><dt id="storageLocationLabel">保存先</dt><dd>Firebase同期</dd></div><div><dt id="externalConnectionsLabel">外部連携</dt><dd>2 connected</dd></div><div><dt id="aiConnectionLabel">AI接続</dt><dd>MCP ready</dd></div></dl>
+              <button type="button" class="secondary-action" data-view="integrations" id="checkConnectionsButton">連携を確認</button>
             </section>
           </div>
         </section>
@@ -338,23 +354,26 @@
           <section id="panelErrorList" class="panel-error-list" aria-live="polite" hidden></section>
           <div class="settings-layout">
             <section class="settings-card">
-              <p>DISPLAY</p><h2>読みやすさ</h2>
-              <div class="setting-row"><div><strong>文字を大きめにする</strong><small>一覧・詳細・操作ボタンを読みやすくします。</small></div><button type="button" class="setting-toggle" data-setting="typeScale" aria-pressed="false">標準</button></div>
-              <div class="setting-row"><div><strong>表示密度</strong><small>情報を詰めすぎず、行間を少し広くします。</small></div><button type="button" class="setting-toggle" data-setting="density" aria-pressed="false">標準</button></div>
+              <p>DISPLAY</p><h2 id="displayHeading">読みやすさ</h2>
+              <div class="setting-row"><div><strong id="languageLabel">表示言語</strong><small id="languageNote">この端末だけで表示言語を切り替えます。Questデータは変わりません。</small></div><select id="labLocaleSelect" class="setting-select" aria-label="表示言語"><option value="ja">日本語</option><option value="en">English</option><option value="es">Español</option><option value="pt-BR">Português (Brasil)</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="ko">한국어</option><option value="zh-Hans">简体中文</option><option value="ru">Русский</option></select></div>
+              <div class="setting-row"><div><strong id="typeScaleLabel">文字を大きめにする</strong><small id="typeScaleNote">一覧・詳細・操作ボタンを読みやすくします。</small></div><button type="button" class="setting-toggle" data-setting="typeScale" aria-pressed="false">標準</button></div>
+              <div class="setting-row"><div><strong id="densityLabel">表示密度</strong><small id="densityNote">情報を詰めすぎず、行間を少し広くします。</small></div><button type="button" class="setting-toggle" data-setting="density" aria-pressed="false">標準</button></div>
+              <div class="setting-row setting-row-stack"><div><strong id="mobileDetailLabel">スマホのQuest詳細</strong><small id="mobileDetailNote">現在の「下から表示」と、画面中央に重ねるポップアップを切り替えて見比べられます。</small></div><div class="detail-mode-switch" role="group" aria-label="スマホのQuest詳細表示"><button type="button" data-detail-mode="sheet">下から表示</button><button type="button" data-detail-mode="modal">ポップアップ</button></div></div>
             </section>
             <section class="settings-card">
-              <p>FEEDBACK</p><h2>操作の手応え</h2>
-              <div class="setting-row"><div><strong>モーション</strong><small>画面遷移と完了時の短い反応を表示します。</small></div><button type="button" class="setting-toggle" data-setting="motion" aria-pressed="true">オン</button></div>
-              <div class="setting-row"><div><strong>効果音</strong><small>本体へ移植するときにテーマ別SEを使用します。</small></div><button type="button" class="setting-toggle" data-setting="sound" aria-pressed="true">オン</button></div>
+              <p>FEEDBACK</p><h2 id="feedbackHeading">操作の手応え</h2>
+              <div class="setting-row"><div><strong id="motionLabel">モーション</strong><small id="motionNote">画面遷移と完了時の短い反応を表示します。</small></div><button type="button" class="setting-toggle" data-setting="motion" aria-pressed="true">オン</button></div>
+              <div class="setting-row"><div><strong id="soundLabel">効果音</strong><small id="soundNote">本体へ移植するときにテーマ別SEを使用します。</small></div><button type="button" class="setting-toggle" data-setting="sound" aria-pressed="true">オン</button></div>
+              <div class="setting-row setting-row-stack"><div><strong id="telemetryTitle" data-i18n="telemetry.title">匿名計測</strong><small id="telemetryCopy">Quest本文や個人情報を送らず、表示速度・操作応答・同期状態だけを匿名で測定します。</small></div><label class="setting-check"><input id="telemetryConsentToggle" type="checkbox" role="switch" /><span id="telemetryOptIn">匿名計測に協力する</span></label><small id="telemetryConsentStatus" class="setting-status" aria-live="polite"></small></div>
             </section>
             <section class="settings-card settings-routes">
-              <p>SHORTCUTS</p><h2>よく使う場所</h2>
-              <button type="button" class="secondary-action" data-view="profile">プロフィール</button>
-              <button type="button" class="secondary-action" data-view="party">パーティ</button>
-              <button type="button" class="secondary-action" data-view="integrations">連携</button>
+              <p>SHORTCUTS</p><h2 id="shortcutsHeading">よく使う場所</h2>
+              <button type="button" class="secondary-action" id="profileShortcut" data-view="profile">プロフィール</button>
+              <button type="button" class="secondary-action" id="partyShortcut" data-view="party">パーティ</button>
+              <button type="button" class="secondary-action" id="integrationShortcut" data-view="integrations">連携</button>
             </section>
             <section class="settings-card settings-connection-card">
-              <p>DATA / SYNC</p><h2>QuestForge本体と接続</h2>
+              <p>DATA / SYNC</p><h2 id="connectionHeading">QuestForge本体と接続</h2>
               <div class="connection-status">
                 <strong id="dataSourceStatus" data-status="local-only">この端末に保存中</strong>
                 <small id="connectionUser">Googleログイン前。ローカルモードで利用中</small>
@@ -363,14 +382,17 @@
               <div class="connection-actions">
                 <button type="button" class="primary-action" id="signInButton">Googleでログイン</button>
                 <button type="button" class="primary-action" id="loadRemoteButton" disabled>本体データを読み込む</button>
+                <button type="button" class="secondary-action" id="reconnectButton" hidden>再接続する</button>
                 <button type="button" class="secondary-action" id="signOutButton" hidden>ログアウト</button>
                 <button type="button" class="secondary-action" id="useLocalButton">ローカルへ戻す</button>
               </div>
-              <dl class="connection-meta"><div><dt>最終同期</dt><dd id="lastSyncAt">未同期</dd></div><div><dt>現在の保存先</dt><dd id="connectionMode">この端末</dd></div></dl>
+              <label class="connection-preference"><input id="autoConnectToggle" type="checkbox" disabled /><span><b id="autoConnectTitle">起動時に本体へ自動接続</b><small id="autoConnectCopy">この端末のQuestForge起動時に自動で同期します。</small></span></label>
+              <dl class="connection-meta"><div><dt id="lastSyncLabel">最終同期</dt><dd id="lastSyncAt">未同期</dd></div><div><dt id="currentStorageLabel">現在の保存先</dt><dd id="connectionMode">この端末</dd></div></dl>
             </section>
             <section class="settings-card settings-agent-card">
-              <p>AGENT REGISTRY</p><h2>AIエージェント台帳</h2>
-              <p class="setting-description">APIキーは保存せず、役割・作業指示・許可範囲とMCP接続だけを管理します。</p>
+              <p>AGENT REGISTRY</p><h2 id="agentHeading">AIエージェント台帳</h2>
+              <p class="setting-description">ここではAIの担当役割を登録します。AgentはAIの人格・仕事の単位、MCPクライアントはChatGPTやClaudeなどから入る接続口です。Astraやあなたのプロフィールとは別物です。</p>
+              <div class="agent-registry-legend"><span><b>Agent</b> AIの担当役割</span><span><b>MCP</b> AIからの接続</span><span><b>Quest</b> 実際の担当作業</span></div>
               <form id="agentForm" class="agent-form">
                 <input id="agentEditingId" type="hidden" />
                 <label><span>Agent ID</span><input id="agentIdInput" pattern="[a-z0-9-]+" maxlength="80" placeholder="codex" required /></label>
@@ -380,12 +402,13 @@
                 <div class="dialog-actions"><button class="secondary-action" type="button" id="agentFormReset">新規入力</button><button class="primary-action" type="submit">保存</button></div>
               </form>
               <div id="agentRegistryList" class="agent-registry-list"></div>
-              <div class="agent-link-row"><select id="agentLinkInput"><option>Agentを選択</option></select><select id="agentClientInput"><option>MCPクライアントを選択</option></select><button type="button" class="secondary-action" id="linkAgentClient">紐付け</button></div>
+              <section class="agent-connection-box"><div><p>MCP CONNECTIONS</p><h3>接続口をAgentへ紐付ける</h3><small id="agentConnectionHint">MCPクライアントを選ぶと、その接続から使うAgentを固定できます。</small></div><div class="agent-link-row"><label><span>担当Agent</span><select id="agentLinkInput"><option value="">Agentを選択</option></select></label><label><span>MCPクライアント</span><select id="agentClientInput"><option value="">MCPクライアントを選択</option></select></label><button type="button" class="secondary-action" id="linkAgentClient">紐付け</button></div><div id="agentConnectionList" class="agent-connection-list"></div></section>
             </section>
           </div>
         </section>
-      </main>
+    </main>
     </div>
+    <button type="button" class="selected-backdrop" id="selectedBackdrop" aria-label="Quest詳細を閉じる" hidden></button>
 
     <nav class="mobile-nav" aria-label="モバイルナビゲーション">
       <button type="button" data-view="today"><span>01</span><b>今日</b></button>
@@ -395,9 +418,9 @@
       <button type="button" id="mobileMoreToggle" aria-expanded="false" aria-controls="mobileMoreMenu"><span>...</span><b>その他</b></button>
     </nav>
     <div id="mobileMoreMenu" class="mobile-more-menu" aria-label="その他の画面" hidden>
-      <button type="button" data-view="profile"><span>PROFILE</span>プロフィール</button>
-      <button type="button" data-view="integrations"><span>SYNC</span>連携</button>
-      <button type="button" data-view="settings"><span>SET</span>設定</button>
+      <button type="button" data-view="profile"><span>PROFILE</span><b>プロフィール</b></button>
+      <button type="button" data-view="integrations"><span>SYNC</span><b>連携</b></button>
+      <button type="button" data-view="settings"><span>SET</span><b>設定</b></button>
     </div>
 
     <dialog id="addDialog" class="dialog">

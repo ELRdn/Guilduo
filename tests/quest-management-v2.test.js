@@ -27,7 +27,7 @@ test("schema v3 migration preserves history and separates planning from lifecycl
 
   migrateState(state, "2026-08-01");
 
-  assert.equal(state.schemaVersion, 6);
+  assert.equal(state.schemaVersion, 7);
   assert.equal(state.migrationSnapshots.schema3To4.tasks.length, 4);
   assert.deepEqual(state.rewardClaims, {});
   assert.equal(state.tasks.find((task) => task.id === "due").planningMode, "until_due");
@@ -38,10 +38,11 @@ test("schema v3 migration preserves history and separates planning from lifecycl
   assert.equal(state.tasks.every((task) => task.parentQuestId === ""), true);
   assert.equal(state.tasks.every((task) => task.handoff && task.handoff.note === ""), true);
   assert.equal(state.migrationSnapshots.schema5To6.schemaVersion, 3);
+  assert.equal(state.migrationSnapshots.schema6To7.schemaVersion, 3);
 });
 
 test("quest views distinguish today, week, future, backlog, completed, and archive", async () => {
-  const { archiveQuests, createQuest, listQuestPage, scoreQuest } = await import("../server/questforge-domain.mjs");
+  const { createQuest, listQuestPage, scoreQuest } = await import("../server/questforge-domain.mjs");
   const state = legacyState();
   const today = createQuest(state, { kind: "todo", title: "継続表示", dueDate: "2026-08-05", planningMode: "until_due" }, { date: "2026-08-01" });
   createQuest(state, { kind: "todo", title: "今週の指定日", dueDate: "2026-08-03", scheduledDate: "2026-08-03", planningMode: "on_date" }, { date: "2026-08-01" });
@@ -54,9 +55,30 @@ test("quest views distinguish today, week, future, backlog, completed, and archi
   assert.deepEqual(listQuestPage(state, { view: "backlog", date: "2026-08-01" }).quests.map((task) => task.title), ["バックログ"]);
 
   scoreQuest(state, today.id, "up", { date: "2026-08-01" });
-  assert.equal(listQuestPage(state, { view: "completed" }).quests[0].id, today.id);
-  archiveQuests(state, { questIds: [today.id], dryRun: false });
+  assert.equal(state.tasks.find((task) => task.id === today.id).lifecycleState, "archived");
+  assert.equal(listQuestPage(state, { view: "completed" }).quests.length, 0);
   assert.equal(listQuestPage(state, { view: "archive" }).quests[0].id, today.id);
+});
+
+test("single todos archive on completion while recurring work stays active", async () => {
+  const { createQuest, patchQuest, scoreQuest } = await import("../server/questforge-domain.mjs");
+  const state = legacyState();
+  const oneOff = createQuest(state, { kind: "todo", title: "単発" });
+  const recurring = createQuest(state, { kind: "todo", title: "毎週", repeat: "weekly" });
+  const daily = createQuest(state, { kind: "daily", title: "日課" });
+
+  scoreQuest(state, oneOff.id, "up", { date: "2026-08-01" });
+  scoreQuest(state, recurring.id, "up", { date: "2026-08-01" });
+  scoreQuest(state, daily.id, "up", { date: "2026-08-01" });
+  assert.equal(state.tasks.find((task) => task.id === oneOff.id).lifecycleState, "archived");
+  assert.equal(state.tasks.find((task) => task.id === recurring.id).lifecycleState, "active");
+  assert.equal(state.tasks.find((task) => task.id === daily.id).lifecycleState, "active");
+
+  scoreQuest(state, oneOff.id, "down", { date: "2026-08-01" });
+  assert.equal(state.tasks.find((task) => task.id === oneOff.id).lifecycleState, "active");
+  assert.equal(state.tasks.find((task) => task.id === oneOff.id).archivedAt, "");
+  const patched = patchQuest(state, oneOff.id, { lifecycleState: "completed" });
+  assert.equal(patched.lifecycleState, "archived");
 });
 
 test("batch updates are dry-run by default, atomic, and count explicit postponements", async () => {
@@ -101,7 +123,7 @@ test("Toggl time entries override manual actual minutes", async () => {
 });
 
 test("Quest Tree validates parents, reports progress, and keeps the parent active", async () => {
-  const { archiveQuests, createQuest, getQuestTree, patchQuest, scoreQuest } = await import("../server/questforge-domain.mjs");
+  const { createQuest, getQuestTree, patchQuest, scoreQuest } = await import("../server/questforge-domain.mjs");
   const state = legacyState();
   const parent = createQuest(state, { kind: "todo", title: "公開準備" });
   const child = createQuest(state, { kind: "todo", title: "READMEを更新", parentQuestId: parent.id });
@@ -115,13 +137,13 @@ test("Quest Tree validates parents, reports progress, and keeps the parent activ
 
   scoreQuest(state, child.id, "up", { date: "2026-08-01" });
   tree = getQuestTree(state);
-  assert.equal(tree.summary.childrenCompleted, 1);
-  assert.equal(tree.summary.progressPercent, 50);
+  assert.equal(tree.summary.childrenTotal, 1);
+  assert.equal(tree.summary.childrenCompleted, 0);
+  assert.equal(tree.summary.progressPercent, 0);
   assert.equal(state.tasks.find((task) => task.id === parent.id).lifecycleState, "active");
 
-  archiveQuests(state, { questIds: [child.id], dryRun: false });
-  assert.equal(getQuestTree(state).summary.childrenTotal, 1);
   assert.equal(getQuestTree(state, { includeArchived: true }).summary.childrenTotal, 2);
+  assert.equal(getQuestTree(state, { includeArchived: true }).summary.childrenCompleted, 1);
   assert.throws(() => patchQuest(state, parent.id, { parentQuestId: secondChild.id }), /cycle|circular/i);
   assert.throws(() => patchQuest(state, parent.id, { parentQuestId: parent.id }), /own parent|own/i);
   const reward = createQuest(state, { kind: "reward", title: "休憩" });

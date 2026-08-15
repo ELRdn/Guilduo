@@ -1,6 +1,6 @@
 {
   "serverName": "questforge-mcp",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "tools": [
     {
       "name": "list_today_quests",
@@ -886,6 +886,82 @@
       }
     },
     {
+      "name": "batch_score_quests",
+      "title": "Batch Score Quests",
+      "description": "Preview or atomically complete or reopen up to 100 quests. One-off todo quests become archived when completed.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "questIds",
+          "direction"
+        ],
+        "properties": {
+          "questIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ]
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "quests": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "rewards": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "character": {
+            "type": "object"
+          },
+          "battle": {
+            "type": "object"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "archive_quests",
       "title": "Archive Quests",
       "description": "Preview or archive completed one-off todo quests. Archived quests are retained permanently.",
@@ -1007,7 +1083,7 @@
     {
       "name": "score_quest",
       "title": "Score Quest",
-      "description": "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects.",
+      "description": "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects. A completed one-off todo is archived automatically.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -1674,7 +1750,7 @@
     {
       "name": "update_profile",
       "title": "Update Profile",
-      "description": "Create or update the authenticated user's public QuestForge profile.",
+      "description": "Create or update the authenticated user's public QuestForge profile, including the selected character icon.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1699,6 +1775,11 @@
           "avatarVariant": {
             "type": "string",
             "maxLength": 40
+          },
+          "avatarUrl": {
+            "type": "string",
+            "maxLength": 700000,
+            "pattern": "^data:image/(png|jpeg|webp);base64,"
           },
           "level": {
             "type": "integer",

@@ -2,6 +2,8 @@ const defaultGatewayUrl = "https://questforge-gateway.guangchuannaito.workers.de
 
 export const LAB_STATE_KEY = "questforge-interaction-lab-state";
 export const LAB_LOCAL_BACKUP_KEY = "questforge-interaction-lab-local-backup";
+export const LAB_AUTO_CONNECT_KEY = "questforge-interaction-auto-connect";
+export const LAB_REMOTE_SNAPSHOT_KEY = "questforge-interaction-remote-snapshot";
 
 function clone(value) {
   return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
@@ -9,6 +11,84 @@ function clone(value) {
 
 function cleanUrl(value) {
   return String(value || "").trim().replace(/\/$/, "");
+}
+
+function userStorageKey(prefix, uid) {
+  const normalizedUid = String(uid || "").trim();
+  return normalizedUid ? `${prefix}:${encodeURIComponent(normalizedUid)}` : "";
+}
+
+function readJsonStorage(key) {
+  if (!key) return null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readAutoConnectPreference(uid) {
+  const key = userStorageKey(LAB_AUTO_CONNECT_KEY, uid);
+  if (!key) return false;
+  try {
+    return localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function hasAutoConnectPreference(uid) {
+  const key = userStorageKey(LAB_AUTO_CONNECT_KEY, uid);
+  if (!key) return false;
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function writeAutoConnectPreference(uid, enabled) {
+  const key = userStorageKey(LAB_AUTO_CONNECT_KEY, uid);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, enabled ? "true" : "false");
+  } catch {
+    // A private browsing quota failure must not break the application.
+  }
+}
+
+export function readRemoteSnapshot(uid) {
+  const saved = readJsonStorage(userStorageKey(LAB_REMOTE_SNAPSHOT_KEY, uid));
+  return saved?.ownerUid === String(uid || "") && saved.snapshot && typeof saved.snapshot === "object"
+    ? saved
+    : null;
+}
+
+export function writeRemoteSnapshot(uid, snapshot, gatewayUrl = "") {
+  const ownerUid = String(uid || "").trim();
+  const key = userStorageKey(LAB_REMOTE_SNAPSHOT_KEY, ownerUid);
+  if (!key || !snapshot || typeof snapshot !== "object") return;
+  try {
+    localStorage.setItem(key, JSON.stringify({
+      ownerUid,
+      savedAt: new Date().toISOString(),
+      gatewayUrl: cleanUrl(gatewayUrl),
+      snapshot: clone(snapshot),
+    }));
+  } catch {
+    // The live API remains the source of truth when the cache cannot be written.
+  }
+}
+
+export function removeRemoteSnapshot(uid) {
+  const key = userStorageKey(LAB_REMOTE_SNAPSHOT_KEY, uid);
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
 }
 
 export function readLabState() {
@@ -23,6 +103,7 @@ export function readLabState() {
 export function writeLabState(state) {
   const snapshot = clone(state);
   snapshot.expanded = [...(state.expanded instanceof Set ? state.expanded : new Set(state.expanded || []))];
+  snapshot.selectedQuestIds = [...new Set(Array.isArray(state.selectedQuestIds) ? state.selectedQuestIds : [])];
   snapshot.timerId = null;
   localStorage.setItem(LAB_STATE_KEY, JSON.stringify(snapshot));
 }
@@ -39,6 +120,7 @@ export function readLocalBackup() {
 export function writeLocalBackup(state) {
   const snapshot = clone(state);
   snapshot.expanded = [...(state.expanded instanceof Set ? state.expanded : new Set(state.expanded || []))];
+  snapshot.selectedQuestIds = [...new Set(Array.isArray(state.selectedQuestIds) ? state.selectedQuestIds : [])];
   snapshot.timerId = null;
   snapshot.dataSource = "local";
   snapshot.syncStatus = "local-only";
@@ -135,6 +217,14 @@ export class QuestForgeRepository {
     return this.request(`/v1/quests/${encodeURIComponent(questId)}/score`, { method: "POST", body: JSON.stringify({ direction, source: "interaction-lab" }) });
   }
 
+  async batchScoreQuests(questIds, direction = "up", dryRun = true) {
+    return this.request("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds, direction, dryRun, source: "interaction-lab" }) });
+  }
+
+  async batchUpdateQuests(questIds, patch = {}, dryRun = true) {
+    return this.request("/v1/quests/batch-update", { method: "POST", body: JSON.stringify({ questIds, patch, dryRun, source: "interaction-lab" }) });
+  }
+
   async transitionHandoff(questId, input) {
     return this.request(`/v1/quests/${encodeURIComponent(questId)}/handoff`, { method: "POST", body: JSON.stringify(input) });
   }
@@ -178,6 +268,10 @@ export class QuestForgeRepository {
 
   async listAgentConnections() {
     return this.request("/v1/agent-connections");
+  }
+
+  async updateProfile(input) {
+    return this.request("/v1/profile", { method: "PATCH", body: JSON.stringify(input) });
   }
 
   async linkAgentConnection(agentId, clientId) {

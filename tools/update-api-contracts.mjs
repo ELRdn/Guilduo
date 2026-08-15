@@ -29,7 +29,7 @@ if (questListPath?.get) {
 
 openapi.info = {
   title: "QuestForge API",
-  version: "2.6.0",
+  version: "2.7.0",
   description: "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
@@ -101,6 +101,9 @@ Object.assign(openapi.paths, {
       { name: "includeArchived", in: "query", schema: { type: "boolean", default: false } },
       { name: "maxDepth", in: "query", schema: { type: "integer", minimum: 1, maximum: 8, default: 8 } },
     ], responses: ok("Quest Tree", { $ref: "#/components/schemas/QuestTree" }) },
+  },
+  "/v1/quests/batch-score": {
+    post: { summary: "Preview or atomically score up to 100 quests", description: "Completing a one-off todo also archives it. dryRun defaults to true.", requestBody: body({ $ref: "#/components/schemas/BatchScoreInput" }), responses: ok("Batch score result", { $ref: "#/components/schemas/BatchScoreResult" }) },
   },
   "/v1/agent-handoffs": {
     get: { summary: "List agent-assigned Quest handoffs", parameters: [
@@ -216,15 +219,16 @@ schemas.ProfileInput = {
     bio: { type: "string", maxLength: 160 },
     avatarRole: { type: "string", maxLength: 40 },
     avatarVariant: { type: "string", maxLength: 40 },
+    avatarUrl: { type: "string", maxLength: 700000, pattern: "^data:image/(png|jpeg|webp);base64," },
     level: { type: "integer", minimum: 1 },
   },
 };
 schemas.PublicProfile = {
   type: "object",
-  required: ["uid", "displayName", "handle", "bio", "avatarRole", "avatarVariant", "level"],
+  required: ["uid", "displayName", "handle", "bio", "avatarRole", "avatarVariant", "avatarUrl", "level"],
   properties: {
     uid: { type: "string" }, displayName: { type: "string" }, handle: { type: "string" }, bio: { type: "string" },
-    avatarRole: { type: "string" }, avatarVariant: { type: "string" }, level: { type: "integer" },
+    avatarRole: { type: "string" }, avatarVariant: { type: "string" }, avatarUrl: { type: "string", maxLength: 700000 }, level: { type: "integer" },
   },
 };
 schemas.OwnProfile = { allOf: [{ $ref: "#/components/schemas/PublicProfile" }, { type: "object", properties: { handleChangedAt: { type: "string", format: "date-time" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } }] };
@@ -232,6 +236,8 @@ schemas.FriendRequest = { type: "object", properties: { id: { type: "string" }, 
 schemas.Party = { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, ownerUid: { type: "string" }, maxMembers: { type: "integer", maximum: 4 }, members: { type: "array", maxItems: 4, items: { allOf: [{ $ref: "#/components/schemas/PublicProfile" }, { type: "object", properties: { role: { type: "string", enum: ["owner", "member"] }, joinedAt: { type: "string", format: "date-time" } } }] } } } };
 schemas.BattleCommandInput = { type: "object", required: ["command"], properties: { command: { type: "string", enum: ["attack", "skill", "guard", "heal", "burst"] }, expectedTurn: { type: "integer", minimum: 1 }, commandId: { type: "string", maxLength: 120 }, dryRun: { type: "boolean", default: true } } };
 schemas.BattleSession = { type: "object", required: ["schemaVersion", "character", "boss", "battle", "quests", "commands"], properties: { schemaVersion: { type: "integer", const: 1 }, character: { type: "object" }, boss: { type: "object" }, battle: { type: "object" }, quests: { type: "array", items: { type: "object" } }, commands: { type: "array", items: { type: "object" } } } };
+schemas.BatchScoreInput = { type: "object", required: ["questIds", "direction"], properties: { questIds: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } }, direction: { type: "string", enum: ["up", "down"] }, dryRun: { type: "boolean", default: true } }, additionalProperties: false };
+schemas.BatchScoreResult = { type: "object", properties: { dryRun: { type: "boolean" }, count: { type: "integer" }, quests: { type: "array", items: { $ref: "#/components/schemas/Quest" } }, rewards: { type: "array", items: { type: "object" } }, character: { type: "object" }, battle: { type: "object" }, events: { type: "array", items: { type: "object" } } }, additionalProperties: false };
 schemas.TogglFocusConnectInput = { type: "object", required: ["apiKey"], properties: { apiKey: { type: "string", pattern: "^toggl_sk_" }, organizationId: { type: "string", pattern: "^\\d+$" }, workspaceId: { type: "string", pattern: "^\\d+$" }, projectId: { type: "string", pattern: "^\\d+$" }, autoCreateTasks: { type: "boolean", default: false } } };
 schemas.TogglFocusConfiguration = { type: "object", properties: { organizationId: { type: "string", pattern: "^\\d+$" }, workspaceId: { type: "string", pattern: "^\\d+$" }, projectId: { type: "string", pattern: "^\\d+$" }, autoCreateTasks: { type: "boolean", default: false } } };
 schemas.TogglFocusStartInput = { type: "object", required: ["questId"], properties: { questId: { type: "string" }, expectedCurrentEntryId: { type: "string" }, dryRun: { type: "boolean", default: true } } };
@@ -239,6 +245,6 @@ schemas.TogglFocusStopInput = { type: "object", properties: { expectedEntryId: {
 schemas.TogglFocusAttributionInput = { type: "object", properties: { questId: { type: "string" }, entryIds: { type: "array", items: { type: "string" }, maxItems: 100 }, dateFrom: { type: "string", format: "date" }, dateTo: { type: "string", format: "date" }, days: { type: "integer", minimum: 1, maximum: 30, default: 30 }, dryRun: { type: "boolean", default: true } } };
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
-await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.6.0", tools: MCP_TOOLS }, null, 2)}\n`);
+await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.7.0", tools: MCP_TOOLS }, null, 2)}\n`);
 
 console.log(`Updated OpenAPI and ${MCP_TOOLS.length} MCP tools.`);

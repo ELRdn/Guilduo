@@ -46,7 +46,16 @@
         ]
       },
       {
-        "source": "/next/index.html",
+        "source": "/next",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/next/**",
         "headers": [
           {
             "key": "Cache-Control",

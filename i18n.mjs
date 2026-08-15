@@ -215,7 +215,11 @@ export function applyDocumentTranslations(root = globalThis.document) {
   root.querySelectorAll("[data-i18n-label]").forEach((element) => { element.label = t(element.dataset.i18nLabel); });
   root.querySelectorAll("[data-view]").forEach((element) => {
     const key = viewKeys[element.dataset.view];
-    if (key && !element.classList.contains("sync-integrations-button")) element.textContent = t(key);
+    if (key && !element.classList.contains("sync-integrations-button")) {
+      const labelTarget = element.querySelector("b");
+      if (labelTarget) labelTarget.textContent = t(key);
+      else element.textContent = t(key);
+    }
   });
   const signIn = root.querySelector("#syncSignInButton");
   const settings = root.querySelector(".sync-integrations-button");

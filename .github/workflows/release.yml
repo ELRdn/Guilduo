@@ -35,6 +35,7 @@ jobs:
           WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
           SOURCE_URL: ${{ vars.SOURCE_URL }}
+          EXTERNAL_OAUTH_ENABLED: ${{ vars.EXTERNAL_OAUTH_ENABLED || 'false' }}
           D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
@@ -57,7 +58,7 @@ jobs:
         shell: bash
         run: |
           health="$(curl --fail --retry 5 --retry-delay 3 '${{ vars.WORKER_BASE_URL }}/health')"
-          node -e 'const h=JSON.parse(process.argv[1]); if(h.version!=="2.6.0"||h.schemaVersion!==6||h.agentStorage!=="d1") process.exit(1)' "$health"
+          node -e 'const h=JSON.parse(process.argv[1]); if(h.version!=="2.7.0"||h.schemaVersion!==7||h.agentStorage!=="d1") process.exit(1)' "$health"
           curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-authorization-server' >/dev/null
           test "$(curl -s -o /dev/null -w '%{http_code}' '${{ vars.WORKER_BASE_URL }}/v1/quests')" = "401"
       - name: Deploy Firebase rules and hosting

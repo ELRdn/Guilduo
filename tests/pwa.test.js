@@ -46,7 +46,7 @@ test("service worker upgrades an existing QuestForge client once", () => {
   const noCachePaths = firebase.hosting.headers
     .filter((entry) => entry.headers.some((header) => header.value.includes("no-store")))
     .map((entry) => entry.source);
-  assert.deepEqual(noCachePaths, ["/", "/index.html", "/next/index.html"]);
+  assert.deepEqual(noCachePaths, ["/", "/index.html", "/next", "/next/**"]);
 });
 
 test("Firebase routes the beta UI before the root SPA fallback", () => {

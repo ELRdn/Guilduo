@@ -18,7 +18,12 @@ const firebase = {
   messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.FIREBASE_APP_ID,
 };
-const runtime = { gatewayUrl: process.env.WORKER_BASE_URL, sourceUrl: process.env.SOURCE_URL || "" };
+const runtime = {
+  gatewayUrl: process.env.WORKER_BASE_URL,
+  sourceUrl: process.env.SOURCE_URL || "",
+  externalOAuthEnabled: String(process.env.EXTERNAL_OAUTH_ENABLED || "false").toLowerCase() === "true",
+  telemetryEndpoint: process.env.TELEMETRY_ENDPOINT || `${process.env.WORKER_BASE_URL}/telemetry`,
+};
 const wrangler = {
   $schema: "node_modules/wrangler/config-schema.json",
   name: "questforge-gateway",

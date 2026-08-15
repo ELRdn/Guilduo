@@ -3,7 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { callMcpTool, MCP_TOOLS } from "./index.mjs";
 
-const SERVER_INFO = { name: "questforge-mcp-next", version: "2.6.0" };
+const SERVER_INFO = { name: "questforge-mcp-next", version: "2.7.0" };
 const ROUTE = "/mcp-next";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TEXT_LENGTH = 8000;
@@ -177,7 +177,7 @@ function registerPrompts(server) {
         "- Keep the plan concise and actionable.",
         "",
         "Only change data after I confirm:",
-        "- Ask before calling create_quest, update_quest, score_quest, batch_update_quests, or convert_calendar_event_to_quest.",
+        "- Ask before calling create_quest, update_quest, score_quest, batch_score_quests, batch_update_quests, or convert_calendar_event_to_quest.",
         "- Prefer dryRun wherever a tool supports it.",
         "- Never archive quests, remove friends or party members, or spend Gems without explicit confirmation.",
       ].join("\n"));
@@ -254,7 +254,7 @@ function registerPrompts(server) {
         "Only write after I confirm:",
         "- transition_quest_handoff with dryRun first, then review_required when the agent returns work",
         "- update_quest to edit notes, nextAction, parentQuestId, or assignee details",
-        "- score_quest to complete work",
+        "- score_quest for one quest, or batch_score_quests for a confirmed group; one-off To Dos are stored automatically when completed",
         "Do not remove assignments or archive quests without explicit confirmation.",
       ].join("\n"));
     },

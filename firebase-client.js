@@ -18,6 +18,7 @@ import {
   update,
 } from "firebase/database";
 import firebaseConfig from "./firebase-config.js";
+import { trackTelemetry } from "./telemetry.mjs";
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
@@ -90,6 +91,7 @@ async function uploadState(state) {
   await mirrorStateEntities(state);
   lastUploadedAt = state.updatedAt || "";
   setSyncUi("synced", "sync.synced");
+  trackTelemetry("sync_success", { source: "firebase" });
 }
 
 function entityFingerprint(value) {
@@ -143,6 +145,7 @@ function scheduleUpload(state) {
     uploadState(state).catch((error) => {
       console.warn("QuestForge Firebase upload failed:", error);
       setSyncUi("error", describeFirebaseError(error));
+      trackTelemetry("sync_failure", { source: "firebase" });
     });
   }, 900);
 }
@@ -153,6 +156,7 @@ function applyCloudState(payload) {
   bridge.applyCloudState(payload.state);
   lastUploadedAt = payload.state.updatedAt || payload.clientUpdatedAt || "";
   setSyncUi("synced", "sync.synced");
+  trackTelemetry("sync_success", { source: "firebase" });
 }
 
 async function startStateSync(user) {
@@ -194,6 +198,7 @@ async function startStateSync(user) {
   }, (error) => {
     console.warn("QuestForge Firebase subscription failed:", error);
     setSyncUi("error", describeFirebaseError(error));
+    trackTelemetry("sync_failure", { source: "firebase" });
   });
 }
 

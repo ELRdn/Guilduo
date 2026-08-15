@@ -1,0 +1,70 @@
+{
+  "version": "0.1.0",
+  "purpose": "Contract for merging QuestForge task systems with the command battle prototype.",
+  "resources": {
+    "hp": {
+      "type": "integer",
+      "owner": "questforge-core",
+      "description": "Player health. Existing QuestForge HP can be reused."
+    },
+    "mp": {
+      "type": "integer",
+      "owner": "battle",
+      "description": "Battle resource earned from task completion and spent on commands."
+    },
+    "focus": {
+      "type": "integer",
+      "owner": "battle",
+      "description": "Temporary bonus from streaks, daily completion, or Toggl Track focus sessions."
+    }
+  },
+  "events": [
+    {
+      "type": "task.completed",
+      "source": "questforge-core",
+      "effect": {
+        "daily": { "mpDelta": 14, "focusDelta": 1 },
+        "todo": { "mpDelta": 20 },
+        "habitPositive": { "mpDelta": 6 },
+        "toggl25m": { "mpDelta": 18, "focusDelta": 2 }
+      }
+    },
+    {
+      "type": "task.missed",
+      "source": "questforge-core",
+      "effect": {
+        "hpDelta": -8,
+        "bossRageDelta": 1
+      }
+    },
+    {
+      "type": "battle.commandUsed",
+      "source": "battle",
+      "payload": {
+        "command": "attack | skill | guard | heal | burst",
+        "mpCost": "integer",
+        "classId": "sentinel | archivist | operator | alchemist | ranger | artificer"
+      }
+    },
+    {
+      "type": "battle.resolved",
+      "source": "battle",
+      "payload": {
+        "result": "victory | defeat",
+        "bossId": "string",
+        "rewards": {
+          "gems": "integer",
+          "xp": "integer",
+          "items": "array"
+        }
+      }
+    }
+  ],
+  "mergePlan": [
+    "Add mp and focus to QuestForge character state.",
+    "Change task scoring from direct boss damage to MP gain.",
+    "Move boss damage into battle command handlers.",
+    "Keep old auto-attack as an optional setting for users who prefer Habitica-style flow.",
+    "Use this prototype as the battle view mounted under the existing Boss page."
+  ]
+}

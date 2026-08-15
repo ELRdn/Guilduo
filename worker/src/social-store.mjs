@@ -50,6 +50,17 @@ function cleanString(value, maxLength, field, { required = false } = {}) {
   return result;
 }
 
+function cleanAvatarUrl(value, previous = "") {
+  if (value === undefined) return previous;
+  const result = String(value ?? "").trim();
+  if (!result) return "";
+  if (!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(result)) {
+    throw socialError(400, "avatar_url_invalid", "Avatar must be a PNG, JPEG, or WebP data URL.");
+  }
+  if (result.length > 700000) throw socialError(400, "avatar_url_too_large", "Avatar must be 512 KB or smaller.");
+  return result;
+}
+
 function publicProfile(row) {
   if (!row) return null;
   const handle = row.handle || "";
@@ -60,6 +71,7 @@ function publicProfile(row) {
     bio: row.bio || "",
     avatarRole: row.avatar_role ?? row.avatarRole ?? "sentinel",
     avatarVariant: row.avatar_variant ?? row.avatarVariant ?? "femme",
+    avatarUrl: row.avatar_url ?? row.avatarUrl ?? "",
     level: Number(row.level || 1),
   };
 }
@@ -155,6 +167,7 @@ export async function upsertProfile(env, uid, patch = {}) {
   const bio = patch.bio === undefined ? previous?.bio || "" : cleanString(patch.bio, 160, "bio");
   const avatarRole = patch.avatarRole === undefined ? previous?.avatarRole || "sentinel" : cleanString(patch.avatarRole, 40, "avatar_role", { required: true });
   const avatarVariant = patch.avatarVariant === undefined ? previous?.avatarVariant || "femme" : cleanString(patch.avatarVariant, 40, "avatar_variant", { required: true });
+  const avatarUrl = cleanAvatarUrl(patch.avatarUrl, previous?.avatarUrl || "");
   const level = patch.level === undefined ? previous?.level || 1 : Number(patch.level);
   if (!Number.isInteger(level) || level < 1) throw socialError(400, "level_invalid", "Level must be a positive integer.");
 
@@ -172,12 +185,12 @@ export async function upsertProfile(env, uid, patch = {}) {
     if (owner) throw socialError(409, "handle_taken", "This handle is already in use.");
     try {
       await env.QUESTFORGE_DB.prepare(`INSERT INTO social_profiles
-        (uid, display_name, handle, bio, avatar_role, avatar_variant, level, handle_changed_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (uid, display_name, handle, bio, avatar_role, avatar_variant, avatar_url, level, handle_changed_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(uid) DO UPDATE SET display_name=excluded.display_name, handle=excluded.handle, bio=excluded.bio,
-          avatar_role=excluded.avatar_role, avatar_variant=excluded.avatar_variant, level=excluded.level,
+          avatar_role=excluded.avatar_role, avatar_variant=excluded.avatar_variant, avatar_url=excluded.avatar_url, level=excluded.level,
           handle_changed_at=excluded.handle_changed_at, updated_at=excluded.updated_at`)
-        .bind(uid, displayName, handle, bio, avatarRole, avatarVariant, level, handleChangedAt, createdAt, updatedAt).run();
+        .bind(uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt).run();
     } catch (error) {
       if (/unique/i.test(error.message || "")) throw socialError(409, "handle_taken", "This handle is already in use.");
       throw error;
@@ -186,7 +199,7 @@ export async function upsertProfile(env, uid, patch = {}) {
     const store = memory(env);
     const owner = [...store.profiles.values()].find((profile) => profile.uid !== uid && profile.handle.toLowerCase() === handle);
     if (owner) throw socialError(409, "handle_taken", "This handle is already in use.");
-    store.profiles.set(uid, { uid, displayName, handle, bio, avatarRole, avatarVariant, level, handleChangedAt, createdAt, updatedAt });
+    store.profiles.set(uid, { uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt });
   }
   return getOwnProfile(env, uid);
 }
@@ -224,12 +237,12 @@ export async function sendFriendRequest(env, senderUid, receiverUid) {
 export async function listFriendRequests(env, uid) {
   if (env.QUESTFORGE_DB) {
     const rows = (await env.QUESTFORGE_DB.prepare(`SELECT r.*, p.uid AS p_uid, p.display_name AS p_display_name, p.handle AS p_handle,
-      p.bio AS p_bio, p.avatar_role AS p_avatar_role, p.avatar_variant AS p_avatar_variant, p.level AS p_level
+      p.bio AS p_bio, p.avatar_role AS p_avatar_role, p.avatar_variant AS p_avatar_variant, p.avatar_url AS p_avatar_url, p.level AS p_level
       FROM friend_requests r JOIN social_profiles p ON p.uid = CASE WHEN r.sender_uid = ? THEN r.receiver_uid ELSE r.sender_uid END
       WHERE (r.sender_uid = ? OR r.receiver_uid = ?) AND r.status = 'pending' ORDER BY r.created_at DESC`).bind(uid, uid, uid).all()).results || [];
     return rows.map((row) => normalizeRequest(row, uid, {
       uid: row.p_uid, display_name: row.p_display_name, handle: row.p_handle, bio: row.p_bio,
-      avatar_role: row.p_avatar_role, avatar_variant: row.p_avatar_variant, level: row.p_level,
+      avatar_role: row.p_avatar_role, avatar_variant: row.p_avatar_variant, avatar_url: row.p_avatar_url, level: row.p_level,
     }));
   }
   const store = memory(env);
