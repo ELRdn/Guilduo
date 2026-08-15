@@ -7,7 +7,7 @@
 - 公開β状態をローカルZIP、差分パッチ、GitHubの`backup/pre-typescript-20260815` branchと`backup-pre-typescript-20260815` tagへ退避済み
 - 手書きアプリ、Worker、MCP、CLI、テストを`.ts`へ移行し、Vite・tsx・Wrangler型生成の基盤を追加
 - `npm run typecheck`でWorker型生成、`wrangler types --check`、TypeScriptプロジェクト検査を実行
-- 移行中の既存大規模モジュールは挙動を優先する互換境界として`@ts-nocheck`を一時使用。共有型ファイルから順にstrict型付けを進める
+- TypeScript移行後の実運用ソースはstrict型チェック済み。共有型・境界検証・ブラウザ・Worker・CLI・テスト・バトル原型を`npm run typecheck`で継続検査する
 - Firebaseデータ、Schema 7、REST 2.7.0、MCP 51ツール、OpenAPI 52パスは変更しない
 
 ## 現在地

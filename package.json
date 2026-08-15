@@ -17,7 +17,9 @@
     "api:generate": "tsx tools/update-api-contracts.mts",
     "cli": "tsx cli/questforge.ts",
     "generate-release-config": "tsx tools/generate-release-config.mts",
-    "typecheck": "npm run generate-types && wrangler types --check && tsc -b",
+    "typecheck": "npm run generate-types && wrangler types --check && npm run check:typescript-policy && tsc -b && npm run typecheck:battle",
+    "check:typescript-policy": "tsx tools/check-typescript-policy.mts",
+    "typecheck:battle": "tsc -p tsconfig.battle.json --noEmit",
     "typecheck:refresh": "npm run generate-types && tsc -b",
     "typecheck:watch": "tsc -b --watch",
     "generate-types": "wrangler types"
@@ -37,7 +39,7 @@
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vite": "^8.1.4",
-    "wrangler": "^4.26.0"
+    "wrangler": "4.116.0"
   },
   "engines": {
     "node": ">=22"

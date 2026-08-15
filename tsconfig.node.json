@@ -12,6 +12,7 @@
     "mcp-local/**/*.ts",
     "tools/**/*.ts",
     "tools/**/*.mts",
+    "interaction-lab/**/*.mts",
     "tests/**/*.ts",
     "vite.config.ts"
   ],

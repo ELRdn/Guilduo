@@ -142,7 +142,7 @@ npm run api:generate
 npm run worker:dev
 ```
 
-TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自動生成します。`npm run typecheck`は型生成、生成結果の整合性確認、strict設定のプロジェクト検査をまとめて実行します。大規模な既存モジュールには挙動を変えないための一時的な`@ts-nocheck`互換境界があり、共有型・境界型から順にstrict型付けを進めています。
+TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自動生成します。`npm run typecheck`は型生成、生成結果の整合性確認、明示的な`any`と`@ts-nocheck`の検査、ブラウザ・Worker・Node・バトル原型のstrict型チェックをまとめて実行します。Viteの変換と型チェックは分離し、API/MCPの契約は別テストで維持します。
 
 公開デプロイは `v*` タグ専用GitHub Actionsです。WorkerのD1 migration・deploy・health確認が成功した場合だけFirebaseを更新します。今回の作業終了地点は、**実装・テスト・スクリーンショット検証済みのデプロイ直前**です。
 

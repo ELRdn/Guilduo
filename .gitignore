@@ -18,8 +18,7 @@ backups/
 *.tsbuildinfo
 worker-configuration.d.ts
 
-# Interaction Lab capture helpers and generated visual evidence stay local.
-interaction-lab/capture-*.mjs
+# Interaction Lab generated visual evidence stays local; capture scripts are tracked TypeScript tooling.
 interaction-lab/screenshots/
 
 # Unity Battle Lab is intentionally pending and excluded from the public web release.

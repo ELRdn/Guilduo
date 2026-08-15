@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": []
+  },
+  "include": ["questforge-battle-prototype/battle.ts"],
+  "exclude": ["dist", "node_modules"]
+}
