@@ -1,27 +1,39 @@
-// @ts-nocheck
+/// <reference types="node" />
 import fs from "node:fs/promises";
 import path from "node:path";
+
+type JsonRecord = Record<string, unknown>;
+type CdpTarget = { webSocketDebuggerUrl: string };
+type CdpMessage = { id?: number; result?: JsonRecord; error?: { message?: string } };
+type CdpEvaluateResult = { exceptionDetails?: unknown; result?: { value?: unknown } };
+type CdpScreenshotResult = { data: string };
+type PendingRequest = { resolve: (value: unknown) => void; reject: (reason: Error) => void };
+type TreeScrollState = { bodyOverflow: string; workspaceOverflow: string; listOverflow: string; listScrollTop: number; listHasRoom: boolean; pageOverflow: boolean; noteTopStable: boolean; account?: string; active?: string };
+type DesktopScrollState = { bodyOverflow: string; workspaceOverflow: string; listOverflow: string; listFocusedRegion: boolean; listScrollTop: number };
+type MobileTreeScrollState = { bodyOverflow: string; listOverflow: string; pageScroll: boolean };
+type MobileScrollState = { bodyOverflow: string; workspaceOverflow: string; listOverflow: string };
 
 const debuggerUrl = process.env.QF_LAB_DEBUG_URL || "http://127.0.0.1:9222";
 const labUrl = process.env.QF_LAB_URL || "http://127.0.0.1:5191/interaction-lab/";
 const screenshotDir = process.env.QF_LAB_SCREENSHOT_DIR || path.join(process.cwd(), "screenshots");
 
-const target = await fetch(`${debuggerUrl}/json/new?${encodeURIComponent(labUrl)}`, { method: "PUT" }).then((response) => response.json());
+const target = await fetch(`${debuggerUrl}/json/new?${encodeURIComponent(labUrl)}`, { method: "PUT" }).then(async (response) => await response.json() as CdpTarget);
 const socket = new WebSocket(target.webSocketDebuggerUrl);
-const pending = new Map();
+const pending = new Map<number, PendingRequest>();
 let nextId = 0;
 
-socket.addEventListener("message", ({ data }) => {
-  const message = JSON.parse(data);
+socket.addEventListener("message", ({ data }: MessageEvent) => {
+  const message = JSON.parse(String(data)) as CdpMessage;
+  if (typeof message.id !== "number") return;
   const request = pending.get(message.id);
   if (!request) return;
   pending.delete(message.id);
-  message.error ? request.reject(new Error(message.error.message)) : request.resolve(message.result);
+  message.error ? request.reject(new Error(message.error.message || "CDP command failed.")) : request.resolve(message.result);
 });
 
-await new Promise((resolve, reject) => {
-  socket.addEventListener("open", resolve, { once: true });
-  socket.addEventListener("error", reject, { once: true });
+await new Promise<void>((resolve, reject) => {
+  socket.addEventListener("open", () => resolve(), { once: true });
+  socket.addEventListener("error", () => reject(new Error("CDP WebSocket connection failed.")), { once: true });
 });
 
 await send("Runtime.enable");
@@ -36,30 +48,30 @@ await send("Emulation.setDeviceMetricsOverride", {
   mobile: false
 });
 
-function send(method, params = {}) {
+function send(method: string, params: JsonRecord = {}): Promise<unknown> {
   const id = ++nextId;
   socket.send(JSON.stringify({ id, method, params }));
   return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
 }
 
-async function evaluate(expression) {
-  const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+async function evaluate<T = unknown>(expression: string): Promise<T> {
+  const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }) as CdpEvaluateResult;
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
-  return result.result.value;
+  return result.result?.value as T;
 }
 
-async function click(selector) {
+async function click(selector: string): Promise<void> {
   await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
 }
 
-async function reloadPage() {
+async function reloadPage(): Promise<void> {
   await send("Page.reload", { ignoreCache: true });
   await new Promise((resolve) => setTimeout(resolve, 700));
 }
 
-async function screenshot(name) {
+async function screenshot(name: string): Promise<void> {
   await fs.mkdir(screenshotDir, { recursive: true });
-  const result = await send("Page.captureScreenshot", { format: "png" });
+  const result = await send("Page.captureScreenshot", { format: "png" }) as CdpScreenshotResult;
   await fs.writeFile(path.join(screenshotDir, name), Buffer.from(result.data, "base64"));
 }
 
@@ -77,7 +89,7 @@ for (let index = 0; index < 14; index += 1) {
 
 await click('[data-view="tree"]');
 await new Promise((resolve) => setTimeout(resolve, 200));
-const treeScroll = await evaluate(`(() => {
+const treeScroll = await evaluate<TreeScrollState>(`(() => {
   const list = document.querySelector("#treeList");
   const note = document.querySelector(".tree-note");
   const before = note.getBoundingClientRect().top;
@@ -101,7 +113,7 @@ await screenshot("interaction-lab-tree-desktop.png");
 await click('[data-view="today"]');
 await new Promise((resolve) => setTimeout(resolve, 150));
 
-const desktopScroll = await evaluate(`(() => {
+const desktopScroll = await evaluate<DesktopScrollState>(`(() => {
   const list = document.querySelector("#questList");
   list.scrollTop = 9999;
   return {
@@ -122,27 +134,27 @@ await click("#reviewButton");
 await evaluate('document.querySelector("#reviewNote").value = "Pixel 9で選択バーから詳細を開けることを確認"');
 await click('#reviewForm button[type="submit"]');
 await click('[data-archive-toggle]');
-const reviewState = await evaluate('document.querySelector("[data-quest=\\"qf-mobile\\"] .state-pill")?.textContent || document.querySelector("#selectedState")?.textContent || ""');
+const reviewState = await evaluate<string>('document.querySelector("[data-quest=\\"qf-mobile\\"] .state-pill")?.textContent || document.querySelector("#selectedState")?.textContent || ""');
 if (reviewState !== "完了") throw new Error(`レビュー承認の状態が不正です: ${reviewState}`);
 
 await click("#openAddDialog");
 await evaluate('document.querySelector("#questNameInput").value = "検証用の新規Quest"');
 await click('#addForm button[type="submit"]');
-const addedTitle = await evaluate('document.querySelector("#selectedTitle").textContent');
+const addedTitle = await evaluate<string>('document.querySelector("#selectedTitle").textContent');
 if (addedTitle !== "検証用の新規Quest") throw new Error(`新規Questの選択が不正です: ${addedTitle}`);
 await reloadPage();
-const persistedQuest = await evaluate('document.querySelector("#selectedTitle").textContent');
+const persistedQuest = await evaluate<string>('document.querySelector("#selectedTitle").textContent');
 if (persistedQuest !== "検証用の新規Quest") throw new Error(`再読み込み後にQuestが保持されません: ${persistedQuest}`);
 
 await click('[data-view="battle"]');
-const beforeBattle = await evaluate('document.querySelector("#battleBossHp").textContent');
+const beforeBattle = await evaluate<string>('document.querySelector("#battleBossHp").textContent');
 await click('[data-command="attack"]');
-const afterBattle = await evaluate('document.querySelector("#battleBossHp").textContent');
+const afterBattle = await evaluate<string>('document.querySelector("#battleBossHp").textContent');
 if (Number(afterBattle) !== Number(beforeBattle) - 9) throw new Error(`バトルダメージが不正です: ${beforeBattle} -> ${afterBattle}`);
 
 await click('[data-view="integrations"]');
 await click('[data-integration="focus"]');
-const integrationTitle = await evaluate('document.querySelector("#integrationTitle").textContent');
+const integrationTitle = await evaluate<string>('document.querySelector("#integrationTitle").textContent');
 if (!integrationTitle.includes("集中時間")) throw new Error(`連携切替が不正です: ${integrationTitle}`);
 
 await click('[data-view="settings"]');
@@ -164,7 +176,7 @@ await reloadPage();
 const persistedDetailMode = await evaluate('document.querySelector("[data-detail-mode=modal]").getAttribute("aria-pressed") === "true"');
 if (!persistedDetailMode) throw new Error("再読み込み後にQuest詳細表示設定が保持されません。");
 await click('[data-view="profile"]');
-const profileTitle = await evaluate('document.querySelector("#profileTitle").textContent');
+const profileTitle = await evaluate<string>('document.querySelector("#profileTitle").textContent');
 if (!profileTitle.includes("プロフィール")) throw new Error(`プロフィールへの移動が不正です: ${profileTitle}`);
 
 const desktopOverflow = await evaluate('document.documentElement.scrollWidth > window.innerWidth');
@@ -178,7 +190,7 @@ await send("Emulation.setDeviceMetricsOverride", {
 });
 await new Promise((resolve) => setTimeout(resolve, 100));
 await click('[data-view="tree"]');
-const mobileTreeScroll = await evaluate(`(() => {
+const mobileTreeScroll = await evaluate<MobileTreeScrollState>(`(() => {
   const list = document.querySelector("#treeList");
   return {
     bodyOverflow: getComputedStyle(document.body).overflowY,
@@ -191,7 +203,7 @@ if (mobileTreeScroll.bodyOverflow !== "auto" || mobileTreeScroll.listOverflow !=
 }
 await screenshot("interaction-lab-tree-mobile.png");
 await click('[data-view="today"]');
-const mobileScroll = await evaluate(`(() => {
+const mobileScroll = await evaluate<MobileScrollState>(`(() => {
   const list = document.querySelector("#questList");
   return {
     bodyOverflow: getComputedStyle(document.body).overflowY,
