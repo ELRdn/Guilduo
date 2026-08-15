@@ -20,7 +20,9 @@ jobs:
       - run: npm ci
       - run: cp firebase-config.example.js firebase-config.js
       - run: cp runtime-config.example.js runtime-config.js
+      - run: cp wrangler.example.jsonc wrangler.jsonc
       - run: npm run api:generate
+      - run: npm run typecheck
       - run: npm run check
       - run: npm test
       - run: npm run build

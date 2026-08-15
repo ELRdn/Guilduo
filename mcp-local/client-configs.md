@@ -8,8 +8,8 @@ Set `QUESTFORGE_MCP_URL` to the deployed Worker `/mcp` URL and `QUESTFORGE_TOKEN
 
 ```toml
 [mcp_servers.questforge]
-command = "node"
-args = ["<absolute-path-to-questforge>/mcp-local/questforge-mcp.mjs"]
+command = "npx"
+args = ["tsx", "<absolute-path-to-questforge>/mcp-local/questforge-mcp.ts"]
 env_vars = ["QUESTFORGE_MCP_URL", "QUESTFORGE_TOKEN"]
 default_tools_approval_mode = "writes"
 ```
@@ -29,8 +29,8 @@ default_tools_approval_mode = "writes"
 {
   "mcpServers": {
     "questforge": {
-      "command": "node",
-      "args": ["<absolute-path-to-questforge>/mcp-local/questforge-mcp.mjs"],
+      "command": "npx",
+      "args": ["tsx", "<absolute-path-to-questforge>/mcp-local/questforge-mcp.ts"],
       "env": {
         "QUESTFORGE_MCP_URL": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp",
         "QUESTFORGE_TOKEN": "development-token-only"

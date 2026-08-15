@@ -23,7 +23,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Generate ignored public deployment configuration
-        run: node tools/generate-release-config.mjs
+        run: npm run generate-release-config
         env:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FIREBASE_DATABASE_URL: ${{ vars.FIREBASE_DATABASE_URL }}

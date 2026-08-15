@@ -1,0 +1,502 @@
+// @ts-nocheck
+import { randomToken, sha256 } from "./security.ts";
+
+const RESERVED_HANDLES = new Set(["admin", "api", "mcp", "questforge", "support", "system"]);
+const HANDLE_PATTERN = /^[a-z0-9_]{3,20}$/;
+const HANDLE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+let memoryByEnv = new WeakMap();
+
+function socialError(status, code, message) {
+  return Object.assign(new Error(message), { status, code });
+}
+
+function nowDate(env) {
+  return env?.SOCIAL_NOW ? new Date(env.SOCIAL_NOW) : new Date();
+}
+
+function nowIso(env) {
+  return nowDate(env).toISOString();
+}
+
+function memory(env) {
+  if (!env || (typeof env !== "object" && typeof env !== "function")) {
+    throw socialError(500, "social_env_invalid", "Social storage requires an environment object.");
+  }
+  if (!memoryByEnv.has(env)) {
+    memoryByEnv.set(env, {
+      profiles: new Map(),
+      requests: new Map(),
+      friendships: new Map(),
+      parties: new Map(),
+      membersByUid: new Map(),
+      invites: new Map(),
+    });
+  }
+  return memoryByEnv.get(env);
+}
+
+function canonicalPair(a, b) {
+  return a < b ? [a, b] : [b, a];
+}
+
+function pairKey(a, b) {
+  return canonicalPair(a, b).join(":");
+}
+
+function cleanString(value, maxLength, field, { required = false } = {}) {
+  const result = String(value ?? "").trim();
+  if (required && !result) throw socialError(400, `${field}_required`, `${field} is required.`);
+  if (result.length > maxLength) throw socialError(400, `${field}_too_long`, `${field} is too long.`);
+  return result;
+}
+
+function cleanAvatarUrl(value, previous = "") {
+  if (value === undefined) return previous;
+  const result = String(value ?? "").trim();
+  if (!result) return "";
+  if (!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(result)) {
+    throw socialError(400, "avatar_url_invalid", "Avatar must be a PNG, JPEG, or WebP data URL.");
+  }
+  if (result.length > 700000) throw socialError(400, "avatar_url_too_large", "Avatar must be 512 KB or smaller.");
+  return result;
+}
+
+function publicProfile(row) {
+  if (!row) return null;
+  const handle = row.handle || "";
+  return {
+    uid: row.uid,
+    displayName: row.display_name ?? row.displayName,
+    handle: handle ? `@${handle.replace(/^@/, "")}` : "",
+    bio: row.bio || "",
+    avatarRole: row.avatar_role ?? row.avatarRole ?? "sentinel",
+    avatarVariant: row.avatar_variant ?? row.avatarVariant ?? "femme",
+    avatarUrl: row.avatar_url ?? row.avatarUrl ?? "",
+    level: Number(row.level || 1),
+  };
+}
+
+function ownProfile(row) {
+  const result = publicProfile(row);
+  if (!result) return null;
+  return {
+    ...result,
+    handleChangedAt: row.handle_changed_at ?? row.handleChangedAt ?? "",
+    createdAt: row.created_at ?? row.createdAt ?? "",
+    updatedAt: row.updated_at ?? row.updatedAt ?? "",
+  };
+}
+
+function normalizeRequest(row, uid, counterpart) {
+  return {
+    id: row.id,
+    direction: row.sender_uid === uid || row.senderUid === uid ? "outgoing" : "incoming",
+    senderUid: row.sender_uid ?? row.senderUid,
+    receiverUid: row.receiver_uid ?? row.receiverUid,
+    status: row.status,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+    profile: publicProfile(counterpart),
+  };
+}
+
+function publicInvite(row) {
+  return {
+    id: row.id,
+    partyId: row.party_id ?? row.partyId,
+    inviterUid: row.inviter_uid ?? row.inviterUid,
+    inviteeUid: row.invitee_uid ?? row.inviteeUid ?? null,
+    status: row.status,
+    expiresAt: row.expires_at ?? row.expiresAt,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  };
+}
+
+async function requireProfile(env, uid) {
+  const profile = await getPublicProfile(env, uid);
+  if (!profile) throw socialError(404, "profile_not_found", "Profile was not found.");
+  return profile;
+}
+
+export function normalizeHandle(value) {
+  return String(value ?? "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+export function isReservedHandle(value) {
+  return RESERVED_HANDLES.has(normalizeHandle(value));
+}
+
+export function validateHandle(value) {
+  const handle = normalizeHandle(value);
+  if (!HANDLE_PATTERN.test(handle)) {
+    throw socialError(400, "handle_invalid", "Handle must be 3-20 lowercase letters, numbers, or underscores.");
+  }
+  if (isReservedHandle(handle)) throw socialError(400, "handle_reserved", "This handle is reserved.");
+  return handle;
+}
+
+export async function getOwnProfile(env, uid) {
+  if (env.QUESTFORGE_DB) {
+    return ownProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE uid = ?").bind(uid).first());
+  }
+  return ownProfile(memory(env).profiles.get(uid));
+}
+
+export async function getPublicProfile(env, uid) {
+  if (env.QUESTFORGE_DB) {
+    return publicProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE uid = ?").bind(uid).first());
+  }
+  return publicProfile(memory(env).profiles.get(uid));
+}
+
+export async function findProfileByHandle(env, value) {
+  const handle = validateHandle(value);
+  if (env.QUESTFORGE_DB) {
+    return publicProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE handle = ? COLLATE NOCASE").bind(handle).first());
+  }
+  return publicProfile([...memory(env).profiles.values()].find((profile) => profile.handle.toLowerCase() === handle));
+}
+
+export async function upsertProfile(env, uid, patch = {}) {
+  const previous = await getOwnProfile(env, uid);
+  const handle = patch.handle === undefined && previous ? normalizeHandle(previous.handle) : validateHandle(patch.handle);
+  const displayName = patch.displayName === undefined && previous
+    ? previous.displayName
+    : cleanString(patch.displayName, 40, "display_name", { required: true });
+  const bio = patch.bio === undefined ? previous?.bio || "" : cleanString(patch.bio, 160, "bio");
+  const avatarRole = patch.avatarRole === undefined ? previous?.avatarRole || "sentinel" : cleanString(patch.avatarRole, 40, "avatar_role", { required: true });
+  const avatarVariant = patch.avatarVariant === undefined ? previous?.avatarVariant || "femme" : cleanString(patch.avatarVariant, 40, "avatar_variant", { required: true });
+  const avatarUrl = cleanAvatarUrl(patch.avatarUrl, previous?.avatarUrl || "");
+  const level = patch.level === undefined ? previous?.level || 1 : Number(patch.level);
+  if (!Number.isInteger(level) || level < 1) throw socialError(400, "level_invalid", "Level must be a positive integer.");
+
+  const changedHandle = Boolean(previous && normalizeHandle(previous.handle) !== handle);
+  const now = nowDate(env);
+  if (changedHandle && previous.handleChangedAt && now.getTime() - new Date(previous.handleChangedAt).getTime() < HANDLE_COOLDOWN_MS) {
+    throw socialError(409, "handle_cooldown", "Handle can only be changed once every 30 days.");
+  }
+  const createdAt = previous?.createdAt || now.toISOString();
+  const handleChangedAt = previous && !changedHandle ? previous.handleChangedAt : now.toISOString();
+  const updatedAt = now.toISOString();
+
+  if (env.QUESTFORGE_DB) {
+    const owner = await env.QUESTFORGE_DB.prepare("SELECT uid FROM social_profiles WHERE handle = ? COLLATE NOCASE AND uid <> ?").bind(handle, uid).first();
+    if (owner) throw socialError(409, "handle_taken", "This handle is already in use.");
+    try {
+      await env.QUESTFORGE_DB.prepare(`INSERT INTO social_profiles
+        (uid, display_name, handle, bio, avatar_role, avatar_variant, avatar_url, level, handle_changed_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(uid) DO UPDATE SET display_name=excluded.display_name, handle=excluded.handle, bio=excluded.bio,
+          avatar_role=excluded.avatar_role, avatar_variant=excluded.avatar_variant, avatar_url=excluded.avatar_url, level=excluded.level,
+          handle_changed_at=excluded.handle_changed_at, updated_at=excluded.updated_at`)
+        .bind(uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt).run();
+    } catch (error) {
+      if (/unique/i.test(error.message || "")) throw socialError(409, "handle_taken", "This handle is already in use.");
+      throw error;
+    }
+  } else {
+    const store = memory(env);
+    const owner = [...store.profiles.values()].find((profile) => profile.uid !== uid && profile.handle.toLowerCase() === handle);
+    if (owner) throw socialError(409, "handle_taken", "This handle is already in use.");
+    store.profiles.set(uid, { uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt });
+  }
+  return getOwnProfile(env, uid);
+}
+
+export async function sendFriendRequest(env, senderUid, receiverUid) {
+  if (senderUid === receiverUid) throw socialError(400, "friend_self", "You cannot send a friend request to yourself.");
+  await requireProfile(env, senderUid);
+  await requireProfile(env, receiverUid);
+  const [low, high] = canonicalPair(senderUid, receiverUid);
+  if (env.QUESTFORGE_DB) {
+    if (await env.QUESTFORGE_DB.prepare("SELECT 1 FROM friendships WHERE user_low = ? AND user_high = ?").bind(low, high).first()) {
+      throw socialError(409, "already_friends", "You are already friends.");
+    }
+    if (await env.QUESTFORGE_DB.prepare("SELECT 1 FROM friend_requests WHERE status = 'pending' AND ((sender_uid = ? AND receiver_uid = ?) OR (sender_uid = ? AND receiver_uid = ?))")
+      .bind(senderUid, receiverUid, receiverUid, senderUid).first()) {
+      throw socialError(409, "friend_request_pending", "A friend request is already pending.");
+    }
+  } else {
+    const store = memory(env);
+    if (store.friendships.has(pairKey(senderUid, receiverUid))) throw socialError(409, "already_friends", "You are already friends.");
+    if ([...store.requests.values()].some((request) => request.status === "pending" && new Set([request.senderUid, request.receiverUid]).has(senderUid) && new Set([request.senderUid, request.receiverUid]).has(receiverUid))) {
+      throw socialError(409, "friend_request_pending", "A friend request is already pending.");
+    }
+  }
+  const id = randomToken("friend");
+  const createdAt = nowIso(env);
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare("INSERT INTO friend_requests (id, sender_uid, receiver_uid, status, created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?)")
+      .bind(id, senderUid, receiverUid, createdAt, createdAt).run();
+  } else memory(env).requests.set(id, { id, senderUid, receiverUid, status: "pending", createdAt, updatedAt: createdAt });
+  const counterpart = await getPublicProfile(env, receiverUid);
+  return normalizeRequest({ id, senderUid, receiverUid, status: "pending", createdAt, updatedAt: createdAt }, senderUid, counterpart);
+}
+
+export async function listFriendRequests(env, uid) {
+  if (env.QUESTFORGE_DB) {
+    const rows = (await env.QUESTFORGE_DB.prepare(`SELECT r.*, p.uid AS p_uid, p.display_name AS p_display_name, p.handle AS p_handle,
+      p.bio AS p_bio, p.avatar_role AS p_avatar_role, p.avatar_variant AS p_avatar_variant, p.avatar_url AS p_avatar_url, p.level AS p_level
+      FROM friend_requests r JOIN social_profiles p ON p.uid = CASE WHEN r.sender_uid = ? THEN r.receiver_uid ELSE r.sender_uid END
+      WHERE (r.sender_uid = ? OR r.receiver_uid = ?) AND r.status = 'pending' ORDER BY r.created_at DESC`).bind(uid, uid, uid).all()).results || [];
+    return rows.map((row) => normalizeRequest(row, uid, {
+      uid: row.p_uid, display_name: row.p_display_name, handle: row.p_handle, bio: row.p_bio,
+      avatar_role: row.p_avatar_role, avatar_variant: row.p_avatar_variant, avatar_url: row.p_avatar_url, level: row.p_level,
+    }));
+  }
+  const store = memory(env);
+  return [...store.requests.values()]
+    .filter((request) => request.status === "pending" && (request.senderUid === uid || request.receiverUid === uid))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((request) => normalizeRequest(request, uid, store.profiles.get(request.senderUid === uid ? request.receiverUid : request.senderUid)));
+}
+
+async function decideFriendRequest(env, uid, requestId, status) {
+  if (env.QUESTFORGE_DB) {
+    const request = await env.QUESTFORGE_DB.prepare("SELECT * FROM friend_requests WHERE id = ?").bind(requestId).first();
+    if (!request) throw socialError(404, "friend_request_not_found", "Friend request was not found.");
+    if (request.receiver_uid !== uid) throw socialError(403, "friend_request_forbidden", "Only the receiver can respond to this request.");
+    if (request.status !== "pending") throw socialError(409, "friend_request_closed", "Friend request is no longer pending.");
+    const updatedAt = nowIso(env);
+    if (status === "accepted") {
+      const [low, high] = canonicalPair(request.sender_uid, request.receiver_uid);
+      try {
+        await env.QUESTFORGE_DB.batch([
+          env.QUESTFORGE_DB.prepare("UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ? AND receiver_uid = ? AND status = 'pending'").bind(updatedAt, requestId, uid),
+          env.QUESTFORGE_DB.prepare("INSERT INTO friendships (user_low, user_high, created_at) VALUES (?, ?, ?)").bind(low, high, updatedAt),
+        ]);
+      } catch (error) {
+        if (/unique/i.test(error.message || "")) throw socialError(409, "already_friends", "You are already friends.");
+        throw error;
+      }
+    } else {
+      const result = await env.QUESTFORGE_DB.prepare("UPDATE friend_requests SET status = 'declined', updated_at = ? WHERE id = ? AND receiver_uid = ? AND status = 'pending'")
+        .bind(updatedAt, requestId, uid).run();
+      if (Number(result.meta?.changes || 0) !== 1) throw socialError(409, "friend_request_closed", "Friend request is no longer pending.");
+    }
+  } else {
+    const store = memory(env);
+    const request = store.requests.get(requestId);
+    if (!request) throw socialError(404, "friend_request_not_found", "Friend request was not found.");
+    if (request.receiverUid !== uid) throw socialError(403, "friend_request_forbidden", "Only the receiver can respond to this request.");
+    if (request.status !== "pending") throw socialError(409, "friend_request_closed", "Friend request is no longer pending.");
+    request.status = status;
+    request.updatedAt = nowIso(env);
+    if (status === "accepted") store.friendships.set(pairKey(request.senderUid, request.receiverUid), { userLow: canonicalPair(request.senderUid, request.receiverUid)[0], userHigh: canonicalPair(request.senderUid, request.receiverUid)[1], createdAt: request.updatedAt });
+  }
+  return status === "accepted" ? listFriends(env, uid) : listFriendRequests(env, uid);
+}
+
+export function acceptFriendRequest(env, uid, requestId) {
+  return decideFriendRequest(env, uid, requestId, "accepted");
+}
+
+export function declineFriendRequest(env, uid, requestId) {
+  return decideFriendRequest(env, uid, requestId, "declined");
+}
+
+export async function listFriends(env, uid) {
+  if (env.QUESTFORGE_DB) {
+    const rows = (await env.QUESTFORGE_DB.prepare(`SELECT p.* FROM friendships f JOIN social_profiles p
+      ON p.uid = CASE WHEN f.user_low = ? THEN f.user_high ELSE f.user_low END
+      WHERE f.user_low = ? OR f.user_high = ? ORDER BY p.display_name COLLATE NOCASE`).bind(uid, uid, uid).all()).results || [];
+    return rows.map(publicProfile);
+  }
+  const store = memory(env);
+  const ids = [...store.friendships.values()].filter((friendship) => friendship.userLow === uid || friendship.userHigh === uid)
+    .map((friendship) => friendship.userLow === uid ? friendship.userHigh : friendship.userLow);
+  return ids.map((id) => publicProfile(store.profiles.get(id))).filter(Boolean).sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+export async function removeFriend(env, uid, friendUid) {
+  const [low, high] = canonicalPair(uid, friendUid);
+  if (env.QUESTFORGE_DB) {
+    const result = await env.QUESTFORGE_DB.prepare("DELETE FROM friendships WHERE user_low = ? AND user_high = ?").bind(low, high).run();
+    if (Number(result.meta?.changes || 0) !== 1) throw socialError(404, "friendship_not_found", "Friendship was not found.");
+  } else if (!memory(env).friendships.delete(pairKey(uid, friendUid))) {
+    throw socialError(404, "friendship_not_found", "Friendship was not found.");
+  }
+  return { removed: true, friendUid };
+}
+
+export async function createParty(env, uid, input = {}) {
+  await requireProfile(env, uid);
+  if (await getParty(env, uid)) throw socialError(409, "party_membership_exists", "You already belong to a party.");
+  const name = cleanString(input.name, 40, "party_name", { required: true });
+  const id = randomToken("party");
+  const createdAt = nowIso(env);
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.batch([
+      env.QUESTFORGE_DB.prepare("INSERT INTO parties (id, name, owner_uid, max_members, created_at, updated_at) VALUES (?, ?, ?, 4, ?, ?)").bind(id, name, uid, createdAt, createdAt),
+      env.QUESTFORGE_DB.prepare("INSERT INTO party_members (party_id, uid, role, joined_at) VALUES (?, ?, 'owner', ?)").bind(id, uid, createdAt),
+    ]);
+  } else {
+    const store = memory(env);
+    store.parties.set(id, { id, name, ownerUid: uid, maxMembers: 4, createdAt, updatedAt: createdAt });
+    store.membersByUid.set(uid, { partyId: id, uid, role: "owner", joinedAt: createdAt });
+  }
+  return getParty(env, uid);
+}
+
+export async function getParty(env, uid) {
+  if (env.QUESTFORGE_DB) {
+    const party = await env.QUESTFORGE_DB.prepare(`SELECT p.* FROM parties p JOIN party_members m ON m.party_id = p.id WHERE m.uid = ?`).bind(uid).first();
+    if (!party) return null;
+    const rows = (await env.QUESTFORGE_DB.prepare(`SELECT m.role, m.joined_at, p.* FROM party_members m JOIN social_profiles p ON p.uid = m.uid
+      WHERE m.party_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, m.joined_at`).bind(party.id).all()).results || [];
+    return {
+      id: party.id, name: party.name, ownerUid: party.owner_uid, maxMembers: Number(party.max_members),
+      createdAt: party.created_at, updatedAt: party.updated_at,
+      members: rows.map((row) => ({ ...publicProfile(row), role: row.role, joinedAt: row.joined_at })),
+    };
+  }
+  const store = memory(env);
+  const membership = store.membersByUid.get(uid);
+  if (!membership) return null;
+  const party = store.parties.get(membership.partyId);
+  if (!party) return null;
+  const members = [...store.membersByUid.values()].filter((item) => item.partyId === party.id)
+    .sort((a, b) => (a.role === "owner" ? -1 : b.role === "owner" ? 1 : a.joinedAt.localeCompare(b.joinedAt)))
+    .map((item) => ({ ...publicProfile(store.profiles.get(item.uid)), role: item.role, joinedAt: item.joinedAt }));
+  return { ...party, members };
+}
+
+export async function inviteToParty(env, uid, input = {}) {
+  const party = await getParty(env, uid);
+  if (!party) throw socialError(404, "party_not_found", "Party was not found.");
+  if (party.ownerUid !== uid) throw socialError(403, "party_owner_required", "Only the party owner can invite members.");
+  if (party.members.length >= party.maxMembers) throw socialError(409, "party_full", "Party is full.");
+  const inviteeUid = input.inviteeUid || null;
+  if (inviteeUid) {
+    await requireProfile(env, inviteeUid);
+    if (party.members.some((member) => member.uid === inviteeUid)) throw socialError(409, "party_member_exists", "This user is already in the party.");
+  }
+  const token = randomToken("party_invite");
+  const tokenHash = await sha256(token);
+  const id = randomToken("invite");
+  const createdAt = nowIso(env);
+  const expiresAt = new Date(nowDate(env).getTime() + INVITE_TTL_MS).toISOString();
+  const row = { id, partyId: party.id, inviterUid: uid, inviteeUid, tokenHash, status: "pending", expiresAt, createdAt, updatedAt: createdAt };
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare(`INSERT INTO party_invites
+      (id, party_id, inviter_uid, invitee_uid, token_hash, status, expires_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`).bind(id, party.id, uid, inviteeUid, tokenHash, expiresAt, createdAt, createdAt).run();
+  } else memory(env).invites.set(id, row);
+  return { invite: publicInvite(row), token };
+}
+
+async function findInvite(env, input) {
+  const id = input?.inviteId || "";
+  const tokenHash = input?.token ? await sha256(input.token) : "";
+  if (!id && !tokenHash) throw socialError(400, "party_invite_required", "Invite ID or token is required.");
+  if (env.QUESTFORGE_DB) {
+    return env.QUESTFORGE_DB.prepare(`SELECT * FROM party_invites WHERE ${id ? "id = ?" : "token_hash = ?"}`).bind(id || tokenHash).first();
+  }
+  return id ? memory(env).invites.get(id) : [...memory(env).invites.values()].find((invite) => invite.tokenHash === tokenHash);
+}
+
+export async function acceptPartyInvite(env, uid, input = {}) {
+  await requireProfile(env, uid);
+  if (await getParty(env, uid)) throw socialError(409, "party_membership_exists", "You already belong to a party.");
+  const invite = await findInvite(env, input);
+  if (!invite) throw socialError(404, "party_invite_not_found", "Party invite was not found.");
+  const normalized = publicInvite(invite);
+  if (normalized.status !== "pending") throw socialError(409, "party_invite_closed", "Party invite is no longer pending.");
+  if (normalized.inviteeUid && normalized.inviteeUid !== uid) throw socialError(403, "party_invite_forbidden", "This invite belongs to another user.");
+  if (new Date(normalized.expiresAt).getTime() <= nowDate(env).getTime()) {
+    if (env.QUESTFORGE_DB) await env.QUESTFORGE_DB.prepare("UPDATE party_invites SET status = 'expired', updated_at = ? WHERE id = ? AND status = 'pending'").bind(nowIso(env), normalized.id).run();
+    else { invite.status = "expired"; invite.updatedAt = nowIso(env); }
+    throw socialError(410, "party_invite_expired", "Party invite has expired.");
+  }
+  const partyId = normalized.partyId;
+  const joinedAt = nowIso(env);
+  if (env.QUESTFORGE_DB) {
+    try {
+      const results = await env.QUESTFORGE_DB.batch([
+        env.QUESTFORGE_DB.prepare("UPDATE party_invites SET status = 'accepted', updated_at = ? WHERE id = ? AND status = 'pending'").bind(joinedAt, normalized.id),
+        env.QUESTFORGE_DB.prepare(`INSERT INTO party_members (party_id, uid, role, joined_at)
+          SELECT ?, ?, 'member', ? WHERE EXISTS (
+            SELECT 1 FROM party_invites WHERE id = ? AND status = 'accepted' AND updated_at = ?
+          )`).bind(partyId, uid, joinedAt, normalized.id, joinedAt),
+      ]);
+      if (Number(results[0]?.meta?.changes || 0) !== 1 || Number(results[1]?.meta?.changes || 0) !== 1) {
+        throw socialError(409, "party_invite_closed", "Party invite is no longer pending.");
+      }
+    } catch (error) {
+      const message = error.message || "";
+      if (/party_full/i.test(message)) throw socialError(409, "party_full", "Party is full.");
+      if (/unique/i.test(message)) throw socialError(409, "party_membership_exists", "You already belong to a party.");
+      throw error;
+    }
+  } else {
+    const store = memory(env);
+    const party = store.parties.get(partyId);
+    if (!party) throw socialError(404, "party_not_found", "Party was not found.");
+    const count = [...store.membersByUid.values()].filter((member) => member.partyId === partyId).length;
+    if (count >= party.maxMembers) throw socialError(409, "party_full", "Party is full.");
+    store.membersByUid.set(uid, { partyId, uid, role: "member", joinedAt });
+    invite.status = "accepted";
+    invite.updatedAt = joinedAt;
+  }
+  return getParty(env, uid);
+}
+
+export async function leaveParty(env, uid) {
+  const party = await getParty(env, uid);
+  if (!party) throw socialError(404, "party_not_found", "Party was not found.");
+  const remaining = party.members.filter((member) => member.uid !== uid);
+  const updatedAt = nowIso(env);
+  if (env.QUESTFORGE_DB) {
+    if (party.ownerUid === uid && remaining.length) {
+      const nextOwner = remaining.slice().sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0];
+      await env.QUESTFORGE_DB.batch([
+        env.QUESTFORGE_DB.prepare("UPDATE parties SET owner_uid = ?, updated_at = ? WHERE id = ? AND owner_uid = ?").bind(nextOwner.uid, updatedAt, party.id, uid),
+        env.QUESTFORGE_DB.prepare("UPDATE party_members SET role = 'owner' WHERE party_id = ? AND uid = ?").bind(party.id, nextOwner.uid),
+        env.QUESTFORGE_DB.prepare("DELETE FROM party_members WHERE party_id = ? AND uid = ?").bind(party.id, uid),
+      ]);
+    } else if (party.ownerUid === uid) {
+      await env.QUESTFORGE_DB.batch([
+        env.QUESTFORGE_DB.prepare("UPDATE party_invites SET status = 'revoked', updated_at = ? WHERE party_id = ? AND status = 'pending'").bind(updatedAt, party.id),
+        env.QUESTFORGE_DB.prepare("DELETE FROM party_invites WHERE party_id = ?").bind(party.id),
+        env.QUESTFORGE_DB.prepare("DELETE FROM party_members WHERE party_id = ? AND uid = ?").bind(party.id, uid),
+        env.QUESTFORGE_DB.prepare("DELETE FROM parties WHERE id = ? AND owner_uid = ?").bind(party.id, uid),
+      ]);
+    } else {
+      const result = await env.QUESTFORGE_DB.prepare("DELETE FROM party_members WHERE party_id = ? AND uid = ?").bind(party.id, uid).run();
+      if (Number(result.meta?.changes || 0) !== 1) throw socialError(409, "party_membership_changed", "Party membership changed. Please retry.");
+    }
+  } else {
+    const store = memory(env);
+    store.membersByUid.delete(uid);
+    if (party.ownerUid === uid && remaining.length) {
+      const nextOwner = remaining.slice().sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0];
+      store.membersByUid.get(nextOwner.uid).role = "owner";
+      const storedParty = store.parties.get(party.id);
+      storedParty.ownerUid = nextOwner.uid;
+      storedParty.updatedAt = updatedAt;
+    } else if (party.ownerUid === uid) {
+      store.parties.delete(party.id);
+      for (const invite of store.invites.values()) if (invite.partyId === party.id && invite.status === "pending") { invite.status = "revoked"; invite.updatedAt = updatedAt; }
+    }
+  }
+  return { left: true, partyId: party.id, nextOwnerUid: remaining.length && party.ownerUid === uid ? remaining.slice().sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0].uid : null };
+}
+
+export async function removePartyMember(env, uid, memberUid) {
+  const party = await getParty(env, uid);
+  if (!party) throw socialError(404, "party_not_found", "Party was not found.");
+  if (party.ownerUid !== uid) throw socialError(403, "party_owner_required", "Only the party owner can remove members.");
+  if (memberUid === uid) throw socialError(400, "party_owner_remove_self", "Use leave party to transfer ownership.");
+  if (!party.members.some((member) => member.uid === memberUid)) throw socialError(404, "party_member_not_found", "Party member was not found.");
+  if (env.QUESTFORGE_DB) {
+    const result = await env.QUESTFORGE_DB.prepare("DELETE FROM party_members WHERE party_id = ? AND uid = ? AND role = 'member'").bind(party.id, memberUid).run();
+    if (Number(result.meta?.changes || 0) !== 1) throw socialError(409, "party_membership_changed", "Party membership changed. Please retry.");
+  } else memory(env).membersByUid.delete(memberUid);
+  return getParty(env, uid);
+}
+
+export function resetSocialMemoryForTests() {
+  memoryByEnv = new WeakMap();
+}
