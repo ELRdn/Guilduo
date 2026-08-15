@@ -1,4 +1,43 @@
-// @ts-nocheck
+import type { JsonRecord, WorkerEnv, WorkerError } from "./worker-types.ts";
+
+type AgentStatus = "active" | "disabled" | "archived";
+type HandoffState = "none" | "ready" | "working" | "blocked" | "review_required" | "accepted";
+
+export interface AgentRecord {
+  uid: string;
+  agentId: string;
+  displayName: string;
+  provider: string;
+  role: string;
+  instructions: string;
+  status: AgentStatus;
+  allowedScopes: string[];
+  defaultHandoffState: HandoffState | string;
+  reviewRequired: boolean;
+  dryRunDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentConnectionRecord {
+  clientId: string;
+  uid: string;
+  agentId: string;
+  clientName: string;
+  scopes: string[];
+  firstConnectedAt: string;
+  lastUsedAt: string;
+  revokedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type AgentInput = JsonRecord;
+type AgentMemory = {
+  agents: Map<string, AgentRecord>;
+  connections: Map<string, AgentConnectionRecord>;
+};
+
 const MAX_AGENTS = 20;
 const AGENT_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const AGENT_STATUSES = new Set(["active", "disabled", "archived"]);
@@ -22,45 +61,45 @@ const UPDATE_AGENT_KEYS = [
 ];
 const LINK_CONNECTION_KEYS = ["clientId", "clientName", "scopes", "firstConnectedAt", "lastUsedAt"];
 
-let memoryByEnv = new WeakMap();
+let memoryByEnv = new WeakMap<object, AgentMemory>();
 
-function agentError(status, code, message) {
+function agentError(status: number, code: string, message: string): WorkerError {
   return Object.assign(new Error(message), { status, code });
 }
 
-function nowDate(env) {
+function nowDate(env: WorkerEnv): Date {
   return env?.AGENT_NOW ? new Date(env.AGENT_NOW) : new Date();
 }
 
-function nowIso(env) {
+function nowIso(env: WorkerEnv): string {
   return nowDate(env).toISOString();
 }
 
-function memory(env) {
+function memory(env: WorkerEnv): AgentMemory {
   if (!env || (typeof env !== "object" && typeof env !== "function")) {
     throw agentError(500, "agent_env_invalid", "Agent storage requires an environment object.");
   }
   if (!memoryByEnv.has(env)) {
     memoryByEnv.set(env, {
-      agents: new Map(),
-      connections: new Map(),
+      agents: new Map<string, AgentRecord>(),
+      connections: new Map<string, AgentConnectionRecord>(),
     });
   }
-  return memoryByEnv.get(env);
+  return memoryByEnv.get(env) as AgentMemory;
 }
 
-function agentKey(uid, agentId) {
+function agentKey(uid: string, agentId: string): string {
   return `${uid}:${agentId}`;
 }
 
-function cleanString(value, maxLength, field, { required = false } = {}) {
+function cleanString(value: unknown, maxLength: number, field: string, { required = false }: { required?: boolean } = {}): string {
   const result = String(value ?? "").trim();
   if (required && !result) throw agentError(400, `${field}_required`, `${field} is required.`);
   if (result.length > maxLength) throw agentError(400, `${field}_too_long`, `${field} is too long.`);
   return result;
 }
 
-function assertSafeKeys(input, allowed, context) {
+function assertSafeKeys(input: AgentInput, allowed: readonly string[], context: string): void {
   for (const key of Object.keys(input)) {
     if (allowed.includes(key)) continue;
     if (SECRET_KEY_PATTERN.test(key)) {
@@ -70,22 +109,22 @@ function assertSafeKeys(input, allowed, context) {
   }
 }
 
-function parseScopes(value, fallback = []) {
-  if (value === undefined || value === null) return fallback;
-  if (Array.isArray(value)) return value;
+function parseScopes(value: unknown, fallback: readonly string[] = []): string[] {
+  if (value === undefined || value === null) return [...fallback];
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
   try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : fallback;
+    const parsed: unknown = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [...fallback];
   } catch {
-    return fallback;
+    return [...fallback];
   }
 }
 
-function validateScopes(value, fallback = []) {
+function validateScopes(value: unknown, fallback: readonly string[] = []): string[] {
   if (value === undefined) return [...fallback];
   if (!Array.isArray(value)) throw agentError(400, "scopes_invalid", "Scopes must be an array of strings.");
   if (value.length > 100) throw agentError(400, "scopes_too_many", "Scopes must contain at most 100 entries.");
-  const result = [];
+  const result: string[] = [];
   for (const item of value) {
     const scope = cleanString(item, 80, "scope", { required: true });
     if (!ALLOWED_AGENT_SCOPES.has(scope)) throw agentError(400, "scope_invalid", `Unsupported agent scope: ${scope}`);
@@ -94,18 +133,18 @@ function validateScopes(value, fallback = []) {
   return result;
 }
 
-function coerceBoolean(value, field) {
+function coerceBoolean(value: unknown, field: string): boolean {
   if (value === true || value === 1 || value === "1" || value === "true") return true;
   if (value === false || value === 0 || value === "0" || value === "false") return false;
   throw agentError(400, `${field}_invalid`, `${field} must be a boolean.`);
 }
 
-function validateStatus(value) {
-  if (!AGENT_STATUSES.has(value)) throw agentError(400, "agent_status_invalid", "Status must be active, disabled, or archived.");
-  return value;
+function validateStatus(value: unknown): AgentStatus {
+  if (typeof value !== "string" || !AGENT_STATUSES.has(value)) throw agentError(400, "agent_status_invalid", "Status must be active, disabled, or archived.");
+  return value as AgentStatus;
 }
 
-export function validateAgentId(value) {
+export function validateAgentId(value: unknown): string {
   const agentId = String(value ?? "").trim().toLowerCase();
   if (!agentId) throw agentError(400, "agent_id_required", "Agent ID is required.");
   if (agentId.length > 80) throw agentError(400, "agent_id_too_long", "Agent ID must be at most 80 characters.");
@@ -115,64 +154,70 @@ export function validateAgentId(value) {
   return agentId;
 }
 
-function normalizeAgent(row) {
-  if (!row) return null;
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function normalizeAgent(row: unknown): AgentRecord | null {
+  if (!row || typeof row !== "object") return null;
+  const item = asRecord(row);
   return {
-    uid: row.uid,
-    agentId: row.agent_id ?? row.agentId,
-    displayName: row.display_name ?? row.displayName,
-    provider: row.provider ?? "generic",
-    role: row.role ?? "assistant",
-    instructions: row.instructions ?? "",
-    status: row.status,
-    allowedScopes: parseScopes(row.allowed_scopes ?? row.allowedScopes, []),
-    defaultHandoffState: row.default_handoff_state ?? row.defaultHandoffState ?? "",
-    reviewRequired: Boolean(row.review_required ?? row.reviewRequired ?? 0),
-    dryRunDefault: Boolean(row.dry_run_default ?? row.dryRunDefault ?? 0),
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    uid: String(item.uid || ""),
+    agentId: String(item.agent_id ?? item.agentId ?? ""),
+    displayName: String(item.display_name ?? item.displayName ?? ""),
+    provider: String(item.provider ?? "generic"),
+    role: String(item.role ?? "assistant"),
+    instructions: String(item.instructions ?? ""),
+    status: validateStatus(item.status),
+    allowedScopes: parseScopes(item.allowed_scopes ?? item.allowedScopes, []),
+    defaultHandoffState: String(item.default_handoff_state ?? item.defaultHandoffState ?? ""),
+    reviewRequired: Boolean(item.review_required ?? item.reviewRequired ?? 0),
+    dryRunDefault: Boolean(item.dry_run_default ?? item.dryRunDefault ?? 0),
+    createdAt: String(item.created_at ?? item.createdAt ?? ""),
+    updatedAt: String(item.updated_at ?? item.updatedAt ?? ""),
   };
 }
 
-function normalizeConnection(row) {
-  if (!row) return null;
+function normalizeConnection(row: unknown): AgentConnectionRecord | null {
+  if (!row || typeof row !== "object") return null;
+  const item = asRecord(row);
   return {
-    clientId: row.client_id ?? row.clientId,
-    uid: row.uid,
-    agentId: row.agent_id ?? row.agentId,
-    clientName: row.client_name ?? row.clientName,
-    scopes: parseScopes(row.scopes ?? row.scopes, []),
-    firstConnectedAt: row.first_connected_at ?? row.firstConnectedAt,
-    lastUsedAt: row.last_used_at ?? row.lastUsedAt ?? "",
-    revokedAt: row.revoked_at ?? row.revokedAt ?? null,
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    clientId: String(item.client_id ?? item.clientId ?? ""),
+    uid: String(item.uid || ""),
+    agentId: String(item.agent_id ?? item.agentId ?? ""),
+    clientName: String(item.client_name ?? item.clientName ?? ""),
+    scopes: parseScopes(item.scopes, []),
+    firstConnectedAt: String(item.first_connected_at ?? item.firstConnectedAt ?? ""),
+    lastUsedAt: String(item.last_used_at ?? item.lastUsedAt ?? ""),
+    revokedAt: item.revoked_at ?? item.revokedAt ? String(item.revoked_at ?? item.revokedAt) : null,
+    createdAt: String(item.created_at ?? item.createdAt ?? ""),
+    updatedAt: String(item.updated_at ?? item.updatedAt ?? ""),
   };
 }
 
-async function getAgentRow(env, uid, agentId) {
+async function getAgentRow(env: WorkerEnv, uid: string, agentId: string): Promise<unknown> {
   if (env.QUESTFORGE_DB) {
     return env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_agents WHERE uid = ? AND agent_id = ?").bind(uid, agentId).first();
   }
   return memory(env).agents.get(agentKey(uid, agentId));
 }
 
-async function getConnectionRow(env, uid, clientId) {
+async function getConnectionRow(env: WorkerEnv, uid: string, clientId: string): Promise<unknown> {
   if (env.QUESTFORGE_DB) {
     return env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND client_id = ?").bind(uid, clientId).first();
   }
   return memory(env).connections.get(`${uid}:${clientId}`);
 }
 
-async function countActiveAgents(env, uid) {
+async function countActiveAgents(env: WorkerEnv, uid: string): Promise<number> {
   if (env.QUESTFORGE_DB) {
-    const row = await env.QUESTFORGE_DB.prepare("SELECT COUNT(*) AS count FROM agent_registry_agents WHERE uid = ? AND status <> 'archived'").bind(uid).first();
+    const row = await env.QUESTFORGE_DB.prepare("SELECT COUNT(*) AS count FROM agent_registry_agents WHERE uid = ? AND status <> 'archived'").bind(uid).first<JsonRecord>();
     return Number(row?.count || 0);
   }
   return [...memory(env).agents.values()].filter((agent) => agent.uid === uid && agent.status !== "archived").length;
 }
 
-async function revokeAgentConnections(env, uid, agentId, revokedAt) {
+async function revokeAgentConnections(env: WorkerEnv, uid: string, agentId: string, revokedAt: string): Promise<void> {
   if (env.QUESTFORGE_DB) {
     await env.QUESTFORGE_DB.prepare("UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL")
       .bind(revokedAt, revokedAt, uid, agentId).run();
@@ -186,22 +231,22 @@ async function revokeAgentConnections(env, uid, agentId, revokedAt) {
   }
 }
 
-export async function listAgents(env, uid, { includeArchived = false } = {}) {
-  let rows;
+export async function listAgents(env: WorkerEnv, uid: string, { includeArchived = false }: { includeArchived?: boolean } = {}): Promise<AgentRecord[]> {
+  let rows: unknown[];
   if (env.QUESTFORGE_DB) {
     const statement = includeArchived
       ? env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_agents WHERE uid = ? ORDER BY created_at DESC").bind(uid)
       : env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_agents WHERE uid = ? AND status <> 'archived' ORDER BY created_at DESC").bind(uid);
-    rows = (await statement.all()).results || [];
+    rows = (await statement.all<JsonRecord>()).results || [];
   } else {
     rows = [...memory(env).agents.values()]
       .filter((agent) => agent.uid === uid && (includeArchived || agent.status !== "archived"))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
-  return rows.map(normalizeAgent);
+  return rows.map(normalizeAgent).filter((agent): agent is AgentRecord => Boolean(agent));
 }
 
-export async function getAgent(env, uid, agentId, { includeArchived = false } = {}) {
+export async function getAgent(env: WorkerEnv, uid: string, agentId: string, { includeArchived = false }: { includeArchived?: boolean } = {}): Promise<AgentRecord> {
   const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
   if (!agent || (agent.status === "archived" && !includeArchived)) {
     throw agentError(404, "agent_not_found", "Agent was not found.");
@@ -209,7 +254,7 @@ export async function getAgent(env, uid, agentId, { includeArchived = false } = 
   return agent;
 }
 
-export async function createAgent(env, uid, input = {}) {
+export async function createAgent(env: WorkerEnv, uid: string, input: AgentInput = {}): Promise<AgentRecord | null> {
   assertSafeKeys(input, CREATE_AGENT_KEYS, "agent creation");
   const agentId = validateAgentId(input.agentId);
   const displayName = cleanString(input.displayName, 40, "display_name", { required: true });
@@ -218,7 +263,7 @@ export async function createAgent(env, uid, input = {}) {
   const instructions = cleanString(input.instructions, 4000, "instructions");
   const status = input.status === undefined ? "active" : validateStatus(input.status);
   if (status !== "active") throw agentError(400, "agent_status_invalid", "New agents must start as active.");
-  const allowedScopes = validateScopes(input.allowedScopes, ALLOWED_AGENT_SCOPES);
+  const allowedScopes = validateScopes(input.allowedScopes, [...ALLOWED_AGENT_SCOPES]);
   const defaultHandoffState = cleanString(input.defaultHandoffState, 20, "default_handoff_state") || "ready";
   if (!HANDOFF_STATES.has(defaultHandoffState)) throw agentError(400, "default_handoff_state_invalid", "Default handoff state is invalid.");
   const reviewRequired = input.reviewRequired === undefined ? true : coerceBoolean(input.reviewRequired, "review_required");
@@ -273,7 +318,7 @@ export async function createAgent(env, uid, input = {}) {
   return normalizeAgent(row);
 }
 
-export async function updateAgent(env, uid, agentId, patch = {}) {
+export async function updateAgent(env: WorkerEnv, uid: string, agentId: string, patch: AgentInput = {}): Promise<AgentRecord> {
   assertSafeKeys(patch, UPDATE_AGENT_KEYS, "agent update");
   const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
   if (!agent) throw agentError(404, "agent_not_found", "Agent was not found.");
@@ -310,6 +355,7 @@ export async function updateAgent(env, uid, agentId, patch = {}) {
     await env.QUESTFORGE_DB.batch(statements);
   } else {
     const stored = memory(env).agents.get(agentKey(uid, agentId));
+    if (!stored) throw agentError(404, "agent_not_found", "Agent was not found.");
     stored.displayName = displayName;
     stored.provider = provider;
     stored.role = role;
@@ -325,22 +371,22 @@ export async function updateAgent(env, uid, agentId, patch = {}) {
   return getAgent(env, uid, agentId, { includeArchived: true });
 }
 
-export async function listAgentConnections(env, uid, agentId) {
+export async function listAgentConnections(env: WorkerEnv, uid: string, agentId: string): Promise<AgentConnectionRecord[]> {
   if (!(await getAgentRow(env, uid, agentId))) {
     throw agentError(404, "agent_not_found", "Agent was not found.");
   }
   let rows;
   if (env.QUESTFORGE_DB) {
-    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND agent_id = ? ORDER BY first_connected_at DESC").bind(uid, agentId).all()).results || [];
+    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND agent_id = ? ORDER BY first_connected_at DESC").bind(uid, agentId).all<JsonRecord>()).results || [];
   } else {
     rows = [...memory(env).connections.values()]
       .filter((connection) => connection.uid === uid && connection.agentId === agentId)
       .sort((a, b) => b.firstConnectedAt.localeCompare(a.firstConnectedAt));
   }
-  return rows.map(normalizeConnection);
+  return rows.map(normalizeConnection).filter((connection): connection is AgentConnectionRecord => Boolean(connection));
 }
 
-export async function linkAgentConnection(env, uid, agentId, input = {}) {
+export async function linkAgentConnection(env: WorkerEnv, uid: string, agentId: string, input: AgentInput = {}): Promise<AgentConnectionRecord | null> {
   assertSafeKeys(input, LINK_CONNECTION_KEYS, "agent connection");
   const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
   if (!agent) throw agentError(404, "agent_not_found", "Agent was not found.");
@@ -351,9 +397,9 @@ export async function linkAgentConnection(env, uid, agentId, input = {}) {
   const firstConnectedAt = String(input.firstConnectedAt || nowIso(env));
   const lastUsedAt = String(input.lastUsedAt || "");
 
-  const existing = await getConnectionRow(env, uid, clientId);
+  const existing = normalizeConnection(await getConnectionRow(env, uid, clientId));
   if (existing) {
-    if (existing.uid === uid && (existing.agent_id ?? existing.agentId) === agentId) {
+    if (existing.uid === uid && existing.agentId === agentId) {
       return normalizeConnection(existing);
     }
     throw agentError(409, "agent_client_linked", "This client is already linked to another agent.");
@@ -394,7 +440,7 @@ export async function linkAgentConnection(env, uid, agentId, input = {}) {
   return normalizeConnection(row);
 }
 
-export async function unlinkAgentConnection(env, uid, clientId) {
+export async function unlinkAgentConnection(env: WorkerEnv, uid: string, clientId: string): Promise<AgentConnectionRecord | null> {
   const connection = normalizeConnection(await getConnectionRow(env, uid, clientId));
   if (!connection || connection.uid !== uid) {
     throw agentError(404, "agent_connection_not_found", "Agent connection was not found.");
@@ -406,13 +452,14 @@ export async function unlinkAgentConnection(env, uid, clientId) {
       .bind(revokedAt, revokedAt, uid, clientId).run();
   } else {
     const stored = memory(env).connections.get(`${uid}:${clientId}`);
+    if (!stored) throw agentError(404, "agent_connection_not_found", "Agent connection was not found.");
     stored.revokedAt = revokedAt;
     stored.updatedAt = revokedAt;
   }
   return normalizeConnection({ ...connection, revokedAt, updatedAt: revokedAt });
 }
 
-export async function noteAgentConnectionUse(env, uid, clientId, { at } = {}) {
+export async function noteAgentConnectionUse(env: WorkerEnv, uid: string, clientId: string, { at }: { at?: string } = {}): Promise<AgentConnectionRecord | null> {
   const connection = normalizeConnection(await getConnectionRow(env, uid, clientId));
   if (!connection || connection.uid !== uid) {
     throw agentError(404, "agent_connection_not_found", "Agent connection was not found.");
@@ -424,13 +471,14 @@ export async function noteAgentConnectionUse(env, uid, clientId, { at } = {}) {
       .bind(lastUsedAt, lastUsedAt, uid, clientId).run();
   } else {
     const stored = memory(env).connections.get(`${uid}:${clientId}`);
+    if (!stored) throw agentError(404, "agent_connection_not_found", "Agent connection was not found.");
     stored.lastUsedAt = lastUsedAt;
     stored.updatedAt = lastUsedAt;
   }
   return normalizeConnection({ ...connection, lastUsedAt, updatedAt: lastUsedAt });
 }
 
-export async function getAgentForClient(env, uid, clientId) {
+export async function getAgentForClient(env: WorkerEnv, uid: string, clientId: string): Promise<AgentRecord | null> {
   const connection = normalizeConnection(await getConnectionRow(env, uid, clientId));
   if (!connection || connection.revokedAt) return null;
   const agent = normalizeAgent(await getAgentRow(env, connection.uid, connection.agentId));
@@ -439,5 +487,5 @@ export async function getAgentForClient(env, uid, clientId) {
 }
 
 export function resetAgentMemoryForTests() {
-  memoryByEnv = new WeakMap();
+  memoryByEnv = new WeakMap<object, AgentMemory>();
 }

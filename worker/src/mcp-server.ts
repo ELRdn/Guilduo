@@ -1,8 +1,10 @@
-// @ts-nocheck
 import { McpServer, ResourceTemplate, fromJsonSchema } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { callMcpTool, MCP_TOOLS } from "./index.ts";
+import type { AuthIdentity } from "./security.ts";
+import type { WorkerEnv } from "./worker-types.ts";
+import type { AuthInfo, CallToolResult, JsonSchemaType, McpRequestContext, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
 const SERVER_INFO = { name: "questforge-mcp-next", version: "2.7.0" };
 const ROUTE = "/mcp-next";
@@ -13,7 +15,18 @@ const dateString = z.string().regex(DATE_PATTERN, "Use YYYY-MM-DD.");
 
 const GENERIC_OUTPUT_SCHEMA = z.object({}).catchall(z.unknown());
 
-function hostRules(env) {
+type McpContext = unknown;
+type McpToolArguments = Record<string, unknown>;
+type McpJsonSchema = StandardSchemaWithJSON<Record<string, unknown>, Record<string, unknown>>;
+type McpFactoryContext = {
+  authInfo?: AuthInfo & {
+    env?: WorkerEnv;
+    context?: McpContext;
+    identity?: AuthIdentity;
+  };
+};
+
+function hostRules(env: WorkerEnv): { allowedHostnames: string[]; allowedOriginHostnames: string[] } {
   const hosts = new Set(["localhost", "127.0.0.1", "[::1]", "worker.test"]);
   const origins = new Set(["localhost", "127.0.0.1", "[::1]"]);
   const configured = String(env?.PUBLIC_BASE_URL || "").trim();
@@ -26,54 +39,59 @@ function hostRules(env) {
   return { allowedHostnames: [...hosts], allowedOriginHostnames: [...origins] };
 }
 
-function conciseText(value) {
+function conciseText(value: unknown): string {
   if (value === undefined) return "OK";
   const text = JSON.stringify(value, null, 2);
   if (text.length <= MAX_TEXT_LENGTH) return text;
   return `${text.slice(0, MAX_TEXT_LENGTH)}\n… (truncated; full data is in structuredContent)`;
 }
 
-function safeToolError(error) {
-  const message = typeof error?.message === "string" && error.message.trim() ? error.message.trim() : "QuestForge tool failed.";
+function safeToolError(error: unknown): string {
+  const item = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const message = typeof item.message === "string" && item.message.trim() ? item.message.trim() : "QuestForge tool failed.";
   return message.slice(0, 500);
 }
 
-async function runTool(name, args, env, context, identity) {
+async function runTool(name: string, args: McpToolArguments, env: WorkerEnv, context: McpContext, identity: AuthIdentity): Promise<CallToolResult> {
   try {
     const value = await callMcpTool(name, args || {}, env, context, identity);
     return { content: [{ type: "text", text: conciseText(value) }], structuredContent: value, isError: false };
-  } catch (error) {
+  } catch (error: unknown) {
     const message = safeToolError(error);
+    const item = error && typeof error === "object" ? error as Record<string, unknown> : {};
     return {
       content: [{ type: "text", text: message }],
-      structuredContent: { error: { code: error?.code || "tool_error", message } },
+      structuredContent: { error: { code: item.code || "tool_error", message } },
       isError: true,
     };
   }
 }
 
-function registerToolHandlers(server, env, context, identity) {
+function registerToolHandlers(server: McpServer, env: WorkerEnv, context: McpContext, identity: AuthIdentity): void {
   for (const tool of MCP_TOOLS) {
-    server.registerTool(tool.name, {
+    const inputSchema = fromJsonSchema<Record<string, unknown>>(tool.inputSchema as JsonSchemaType) as McpJsonSchema;
+    const outputSchema = (tool.outputSchema ? fromJsonSchema<Record<string, unknown>>(tool.outputSchema as JsonSchemaType) : GENERIC_OUTPUT_SCHEMA) as McpJsonSchema;
+    server.registerTool<McpJsonSchema, McpJsonSchema>(tool.name, {
       title: tool.title,
       description: tool.description,
-      inputSchema: fromJsonSchema(tool.inputSchema),
-      outputSchema: tool.outputSchema ? fromJsonSchema(tool.outputSchema) : GENERIC_OUTPUT_SCHEMA,
+      inputSchema,
+      outputSchema,
       annotations: tool.annotations,
-    }, (args) => runTool(tool.name, args, env, context, identity));
+    }, (args: McpToolArguments) => runTool(tool.name, args, env, context, identity));
   }
 }
 
-function resourceJson(uri, value, error) {
+function resourceJson(uri: URL, value?: unknown, error?: unknown): { contents: Array<{ uri: string; mimeType: string; text: string }> } {
+  const errorRecord = error && typeof error === "object" ? error as Record<string, unknown> : {};
   const text = error
-    ? JSON.stringify({ error: { code: error.code || "resource_error", message: error.message || "QuestForge resource unavailable." } }, null, 2)
+    ? JSON.stringify({ error: { code: errorRecord.code || "resource_error", message: errorRecord.message || "QuestForge resource unavailable." } }, null, 2)
     : JSON.stringify(value, null, 2);
   return { contents: [{ uri: uri.href, mimeType: "application/json", text }] };
 }
 
-function registerResources(server, env, context, identity) {
-  const readSafe = async (uri, loader) => {
-    try { return resourceJson(uri, await loader()); } catch (error) { return resourceJson(uri, undefined, error); }
+function registerResources(server: McpServer, env: WorkerEnv, context: McpContext, identity: AuthIdentity): void {
+  const readSafe = async (uri: URL, loader: () => Promise<unknown>) => {
+    try { return resourceJson(uri, await loader()); } catch (error: unknown) { return resourceJson(uri, undefined, error); }
   };
 
   server.registerResource(
@@ -100,7 +118,8 @@ function registerResources(server, env, context, identity) {
       list: async () => {
         try {
           const page = await callMcpTool("list_quests", { view: "all", limit: 200 }, env, context, identity);
-          return { resources: (page.quests || []).map((quest) => ({ uri: `questforge://quest/${encodeURIComponent(quest.id)}`, name: quest.title || quest.id })) };
+          const quests = Array.isArray(page?.quests) ? page.quests as Array<{ id?: unknown; title?: unknown }> : [];
+          return { resources: quests.map((quest) => ({ uri: `questforge://quest/${encodeURIComponent(String(quest.id || ""))}`, name: String(quest.title || quest.id || "Quest") })) };
         } catch { return { resources: [] }; }
       },
     }),
@@ -151,15 +170,15 @@ function registerResources(server, env, context, identity) {
   );
 }
 
-function promptMessages(text) {
+function promptMessages(text: string): { messages: Array<{ role: "user"; content: { type: "text"; text: string } }> } {
   return { messages: [{ role: "user", content: { type: "text", text } }] };
 }
 
 // Prompt argument schemas accept a missing `arguments` field (the protocol
 // allows it) by wrapping the strict object in `.optional()`.
-const OPTIONAL_ARGUMENT = (schema) => schema.optional();
+const OPTIONAL_ARGUMENT = <T extends z.ZodTypeAny>(schema: T): z.ZodOptional<T> => schema.optional();
 
-function registerPrompts(server) {
+function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "plan_today",
     { title: "Plan Today", description: "Plan today's QuestForge work from the daily brief.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ date: dateString.optional() })) },
@@ -302,8 +321,9 @@ function registerPrompts(server) {
   );
 }
 
-function buildQuestforgeServer(factoryContext) {
-  const { env, context, identity } = factoryContext?.authInfo || {};
+function buildQuestforgeServer(factoryContext: McpRequestContext): McpServer {
+  const authInfo = factoryContext.authInfo as (AuthInfo & { env?: WorkerEnv; context?: McpContext; identity?: AuthIdentity }) | undefined;
+  const { env, context, identity } = authInfo || {};
   const server = new McpServer(SERVER_INFO);
   if (env && context && identity) {
     registerToolHandlers(server, env, context, identity);
@@ -313,14 +333,15 @@ function buildQuestforgeServer(factoryContext) {
   return server;
 }
 
-export async function handleMcpNext(request, env, context, identity) {
+export async function handleMcpNext(request: Request, env: WorkerEnv, context: McpContext, identity: AuthIdentity): Promise<Response> {
   const handler = createMcpHandler(buildQuestforgeServer, {
     route: ROUTE,
     corsOptions: false,
     legacy: "stateless",
     ...hostRules(env),
   });
-  return handler.fetch(request, { authInfo: { env, context, identity } });
+  const authInfo = { env, context, identity } as unknown as AuthInfo;
+  return handler.fetch(request, { authInfo });
 }
 
 export { buildQuestforgeServer };
