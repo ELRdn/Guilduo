@@ -17,10 +17,10 @@ import type {
 } from "../types/questforge.ts";
 import { isQuestKind } from "../types/questforge.ts";
 
-type DomainRecord = Record<string, unknown>;
+export type DomainRecord = Record<string, unknown>;
 type RawQuest = Partial<Quest> & DomainRecord;
 
-interface DomainInput extends DomainRecord {
+export interface DomainInput extends DomainRecord {
   kind?: QuestKind;
   title?: string;
   notes?: string;

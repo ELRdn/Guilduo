@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {
   DomainError,
   archiveQuests,
@@ -24,6 +23,7 @@ import {
   todayText,
   transitionQuestHandoff,
 } from "../../server/questforge-domain.ts";
+import type { DomainInput, DomainRecord } from "../../server/questforge-domain.ts";
 import { mutateState, readState } from "./firebase-store.ts";
 import { authenticateRequest } from "./security.ts";
 import {
@@ -89,6 +89,7 @@ import {
   retryDeliveries,
   validateManifest,
 } from "./extensions.ts";
+import type { WebhookEvent } from "./extensions.ts";
 import {
   acceptFriendRequest,
   acceptPartyInvite,
@@ -106,6 +107,92 @@ import {
   sendFriendRequest,
   upsertProfile,
 } from "./social-store.ts";
+import type { FocusInput } from "./toggl-focus.ts";
+import type { AuthIdentity } from "./security.ts";
+import type { AgentRecord } from "./agent-store.ts";
+import type { JsonRecord, WorkerEnv, WorkerError } from "./worker-types.ts";
+import { isQuest } from "../../types/questforge.ts";
+import type { Quest, QuestForgeState } from "../../types/questforge.ts";
+
+type WorkerIdentity = AuthIdentity & { agent?: AgentRecord };
+type WorkerContext = { waitUntil(promise: Promise<unknown>): void };
+type WorkerArgs = JsonRecord;
+type McpArgs = JsonRecord & {
+  questId?: string;
+  agentId?: string;
+  direction?: "up" | "down" | string;
+  dryRun?: boolean;
+  date?: string;
+  includeCalendar?: boolean;
+  period?: ReviewPeriod;
+  anchorDate?: string;
+  eventId?: string;
+  calendarId?: string;
+  overrides?: JsonRecord;
+  expectedUpdatedAt?: string;
+  expectedState?: string;
+  handoffState?: string;
+  note?: string;
+  blockedReason?: string;
+  artifactUrl?: string;
+  handle?: string;
+  receiverUid?: string;
+  requestId?: string;
+  decision?: "accept" | "decline" | string;
+  friendUid?: string;
+  memberUid?: string;
+  service?: string;
+  strategy?: string;
+  command?: string;
+  commandId?: string;
+  expectedTurn?: number;
+  postponeDays?: number;
+  eventType?: string;
+  cursor?: number | string;
+  limit?: number;
+};
+type JsonHeaders = Record<string, string>;
+type MutationResult = JsonRecord & { quest?: Quest; event?: JsonRecord; events?: JsonRecord[]; focus?: JsonRecord; external?: unknown };
+type ReviewPeriod = "day" | "week";
+
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? "");
+}
+
+function errorCode(error: unknown): string {
+  return error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "internal_error";
+}
+
+function errorStatus(error: unknown): number | undefined {
+  return error && typeof error === "object" && "status" in error && typeof error.status === "number" ? error.status : undefined;
+}
+
+async function requestRecord(request: Request): Promise<JsonRecord> {
+  return asRecord(await request.json().catch(() => null));
+}
+
+function webhookEvent(value: JsonRecord): WebhookEvent {
+  return { ...value, id: String(value.id || ""), type: String(value.type || "") };
+}
+
+function requiredString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new DomainError(400, `${field}_required`, `${field} is required.`);
+  return value;
+}
+
+function asDomainInput(value: JsonRecord): DomainInput {
+  // The MCP/REST boundary has already been reduced to a plain record; domain validation owns field validation.
+  return value as DomainInput;
+}
+
+function asFocusInput(value: JsonRecord): FocusInput {
+  // Focus-specific validators perform the runtime checks after this boundary conversion.
+  return value as FocusInput;
+}
 
 const QUEST_INPUT_PROPERTIES = {
   kind: { type: "string", enum: ["habit", "daily", "todo", "reward"] },
@@ -343,16 +430,19 @@ const MCP_TOOLS = [
   { name: "convert_calendar_event_to_quest", title: "Convert Calendar Event to Quest", description: "Create a QuestForge quest from a cached Calendar event and optional safe task-field overrides.", inputSchema: { type: "object", required: ["eventId"], properties: { eventId: { type: "string", minLength: 1 }, calendarId: { type: "string", minLength: 1 }, overrides: { type: "object", properties: CALENDAR_OVERRIDE_PROPERTIES, additionalProperties: false } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
 ];
 
-function json(value, status = 200, headers = {}) {
+function json(value: unknown, status = 200, headers: JsonHeaders = {}): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
 }
 
-function errorResponse(error) {
-  const status = Number(error.status || (error instanceof DomainError ? error.status : 500));
-  return json({ error: { code: error.code || "internal_error", message: status >= 500 ? "QuestForge server error." : error.message, details: error.details } }, status);
+function errorResponse(error: unknown): Response {
+  const status = Number(errorStatus(error) || (error instanceof DomainError ? error.status : 500));
+  const code = errorCode(error);
+  const details = error && typeof error === "object" && "details" in error ? error.details : undefined;
+  const message = errorMessage(error);
+  return json({ error: { code, message: status >= 500 ? "QuestForge server error." : message, details } }, status);
 }
 
-function corsHeaders(request, env) {
+function corsHeaders(request: Request, env: WorkerEnv): JsonHeaders {
   const origin = request.headers.get("origin");
   const allowed = String(env.ALLOWED_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173").split(",").map((item) => item.trim());
   const localDevelopmentOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin || "");
@@ -361,7 +451,7 @@ function corsHeaders(request, env) {
     : {};
 }
 
-function withCors(response, request, env) {
+function withCors(response: Response, request: Request, env: WorkerEnv): Response {
   const next = new Response(response.body, response);
   Object.entries(corsHeaders(request, env)).forEach(([key, value]) => next.headers.set(key, value));
   next.headers.set("access-control-allow-headers", "authorization,content-type,mcp-protocol-version");
@@ -369,18 +459,18 @@ function withCors(response, request, env) {
   return next;
 }
 
-async function acceptTelemetry(request, env) {
+async function acceptTelemetry(request: Request, env: WorkerEnv): Promise<Response> {
   if (request.method !== "POST") return json({ error: { code: "method_not_allowed", message: "POST is required." } }, 405);
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > 20000) return json({ error: { code: "payload_too_large", message: "Telemetry payload is too large." } }, 413);
-  const body = await request.json().catch(() => null);
-  const events = Array.isArray(body?.events) ? body.events.slice(0, 20) : [];
-  if (body?.schemaVersion !== 1 || !events.length) return json({ accepted: 0 }, 202);
-  const safeEvents = events.map((event) => {
+  const body = asRecord(await request.json().catch(() => null));
+  const events = Array.isArray(body.events) ? body.events.slice(0, 20).filter((event): event is JsonRecord => Boolean(event && typeof event === "object" && !Array.isArray(event))) : [];
+  if (body.schemaVersion !== 1 || !events.length) return json({ accepted: 0 }, 202);
+  const safeEvents = events.map((event: JsonRecord) => {
     const name = String(event?.name || "");
     const surface = String(event?.surface || "unknown").slice(0, 24);
     if (!TELEMETRY_EVENT_NAMES.has(name) || !/^[a-z0-9_-]+$/.test(surface)) return null;
-    const metrics = {};
+    const metrics: JsonRecord = {};
     for (const key of ["lcp", "cls", "inp", "duration", "count"]) {
       if (Number.isFinite(Number(event?.[key]))) metrics[key] = Math.round(Number(event[key]) * 100) / 100;
     }
@@ -388,18 +478,19 @@ async function acceptTelemetry(request, env) {
       if (typeof event?.[key] === "string" && event[key].length <= 40 && /^[a-z0-9_-]+$/i.test(event[key])) metrics[key] = event[key];
     }
     return { name, surface, metrics };
-  }).filter(Boolean);
+  }).filter((event): event is { name: string; surface: string; metrics: JsonRecord } => Boolean(event));
   if (!safeEvents.length) return json({ accepted: 0 }, 202);
-  if (env.QUESTFORGE_DB) {
+  const database = env.QUESTFORGE_DB;
+  if (database) {
     const createdAt = new Date().toISOString();
-    await env.QUESTFORGE_DB.batch(safeEvents.map((event) => env.QUESTFORGE_DB.prepare(
+    await database.batch(safeEvents.map((event) => database.prepare(
       "INSERT INTO telemetry_events (event_id, name, surface, metrics_json, created_at) VALUES (?, ?, ?, ?, ?)",
     ).bind(crypto.randomUUID(), event.name, event.surface, JSON.stringify(event.metrics), createdAt)));
   }
   return json({ accepted: safeEvents.length }, 202);
 }
 
-function assertTogglFocusWebConnection(request, env, identity) {
+function assertTogglFocusWebConnection(request: Request, env: WorkerEnv, identity: AuthIdentity): void {
   if (!identity || !["firebase", "dev"].includes(identity.authType)) {
     throw new DomainError(403, "focus_web_connection_required", "Toggl Focus API keys can only be connected from the QuestForge web app.");
   }
@@ -408,7 +499,7 @@ function assertTogglFocusWebConnection(request, env, identity) {
   }
 }
 
-function assertAgentRegistryWebMutation(request, env, identity) {
+function assertAgentRegistryWebMutation(request: Request, env: WorkerEnv, identity: AuthIdentity): void {
   if (!identity || !["firebase", "dev"].includes(identity.authType)) {
     throw new DomainError(403, "agent_registry_web_required", "Agent Registry settings can only be changed from the QuestForge web app.");
   }
@@ -417,7 +508,7 @@ function assertAgentRegistryWebMutation(request, env, identity) {
   }
 }
 
-async function identityWithAgentContext(env, identity) {
+async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity): Promise<WorkerIdentity> {
   if (identity?.authType !== "oauth" || !identity.clientId) return identity;
   await noteAuthorizedClientUse(env, identity);
   const agent = await getAgentForClient(env, identity.uid, identity.clientId);
@@ -427,44 +518,44 @@ async function identityWithAgentContext(env, identity) {
   return { ...identity, scopes: (identity.scopes || []).filter((scope) => allowed.has(scope)), agent };
 }
 
-async function assignQuestToAgent(env, identity, context, input) {
+async function assignQuestToAgent(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, input: WorkerArgs): Promise<JsonRecord> {
   assertScope(identity.scopes, "quests:write");
-  const agent = await getAgent(env, identity.uid, input.agentId);
+  const agent = await getAgent(env, identity.uid, String(input.agentId || ""));
   if (agent.status !== "active") throw new DomainError(409, "agent_inactive", "Only an active registered Agent can receive a Quest.");
   const state = await stateFor(env, identity);
-  const current = getQuest(state, input.questId).quest;
+  const current = getQuest(state, String(input.questId || "")).quest;
   if (input.expectedUpdatedAt && input.expectedUpdatedAt !== current.updatedAt) {
     throw new DomainError(409, "stale_quest", "The Quest changed before this assignment was applied.", { expectedUpdatedAt: input.expectedUpdatedAt, actualUpdatedAt: current.updatedAt });
   }
-  const patch = {
+  const patch: JsonRecord = {
     assignee: { type: "agent", id: agent.agentId, label: agent.displayName, handoffState: input.handoffState || agent.defaultHandoffState || "ready" },
     handoff: { ...current.handoff, note: input.note || current.handoff?.note || "" },
   };
   if (input.dryRun !== false) {
     const previewState = structuredClone(state);
-    return { dryRun: true, ...patchQuest(previewState, input.questId, patch, { source: "mcp", returnEvent: true }) };
+    return { dryRun: true, ...asRecord(patchQuest(previewState, String(input.questId), patch, { source: "mcp", returnEvent: true })) };
   }
   if (!input.expectedUpdatedAt) throw new DomainError(400, "expected_updated_at_required", "expectedUpdatedAt is required when executing an Agent assignment.");
   return { dryRun: false, ...await mutateAndNotify(env, identity, context, (next) => {
-    const latest = getQuest(next, input.questId).quest;
+    const latest = getQuest(next, String(input.questId)).quest;
     if (latest.updatedAt !== input.expectedUpdatedAt) throw new DomainError(409, "stale_quest", "The Quest changed before this assignment was applied.", { expectedUpdatedAt: input.expectedUpdatedAt, actualUpdatedAt: latest.updatedAt });
-    return patchQuest(next, input.questId, patch, { source: "mcp", returnEvent: true });
+    return patchQuest(next, String(input.questId), patch, { source: "mcp", returnEvent: true });
   }) };
 }
 
-function validDateValue(value) {
+function validDateValue(value: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
 }
 
-function addDaysText(dateText, amount) {
+function addDaysText(dateText: string, amount: number): string {
   const date = new Date(`${dateText}T00:00:00`);
   date.setDate(date.getDate() + amount);
   return todayText(date);
 }
 
-async function stateFor(env, identity) {
+async function stateFor(env: WorkerEnv, identity: WorkerIdentity): Promise<QuestForgeState> {
   const { payload } = await readState(env, identity);
-  if (!payload?.state) { const error = new Error("Open QuestForge and complete Firebase sync before connecting an AI client."); error.status = 409; error.code = "state_unavailable"; throw error; }
+  if (!payload?.state) throw Object.assign(new Error("Open QuestForge and complete Firebase sync before connecting an AI client."), { status: 409, code: "state_unavailable" });
   if (Number(payload.state.schemaVersion || 0) < 7) {
     const migrated = await mutateState(env, identity, (state) => {
       migrateState(state);
@@ -475,14 +566,15 @@ async function stateFor(env, identity) {
   return payload.state;
 }
 
-async function mutateAndNotify(env, identity, context, mutation) {
-  const { result } = await mutateState(env, identity, mutation);
-  const events = Array.isArray(result?.events) ? result.events : result?.event ? [result.event] : [];
-  for (const event of events) context.waitUntil(deliverEvent(env, identity.uid, event));
+async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, mutation: (state: QuestForgeState) => unknown | Promise<unknown>): Promise<MutationResult> {
+  const { result: rawResult } = await mutateState(env, identity, mutation);
+  const result = asRecord(rawResult) as MutationResult;
+  const events = Array.isArray(result.events) ? result.events : result.event ? [result.event] : [];
+  for (const event of events) context.waitUntil(deliverEvent(env, identity.uid, webhookEvent(asRecord(event))));
   return result;
 }
 
-async function routeApi(request, env, context, identity, path) {
+async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
   const method = request.method;
   if (path === "/v1/agents" && method === "GET") {
     assertScope(identity.scopes, "agents:read");
@@ -491,7 +583,7 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/agents" && method === "POST") {
     assertAgentRegistryWebMutation(request, env, identity);
-    return json({ agent: await createAgent(env, identity.uid, await request.json()) }, 201);
+    return json({ agent: await createAgent(env, identity.uid, await requestRecord(request)) }, 201);
   }
   if (path === "/v1/agent-connections" && method === "GET") {
     assertAgentRegistryWebMutation(request, env, identity);
@@ -507,7 +599,7 @@ async function routeApi(request, env, context, identity, path) {
   if (agentMatch && method === "PATCH") {
     assertAgentRegistryWebMutation(request, env, identity);
     const agentId = decodeURIComponent(agentMatch[1]);
-    const agent = await updateAgent(env, identity.uid, agentId, await request.json());
+    const agent = await updateAgent(env, identity.uid, agentId, await requestRecord(request));
     if (["disabled", "archived"].includes(agent.status)) {
       const connections = await listAgentConnections(env, identity.uid, agentId);
       await Promise.all(connections.map((connection) => revokeAuthorizedClient(env, identity.uid, connection.clientId)));
@@ -545,7 +637,7 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/profile" && method === "PATCH") {
     assertScope(identity.scopes, "profiles:write");
-    return json({ profile: await upsertProfile(env, identity.uid, await request.json()) });
+    return json({ profile: await upsertProfile(env, identity.uid, await requestRecord(request)) });
   }
   const profileHandleMatch = path.match(/^\/v1\/profiles\/([^/]+)$/);
   if (profileHandleMatch && method === "GET") {
@@ -562,8 +654,8 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/friend-requests" && method === "POST") {
     assertScope(identity.scopes, "friends:write");
-    const input = await request.json();
-    return json({ request: await sendFriendRequest(env, identity.uid, input.receiverUid) }, 201);
+    const input = await requestRecord(request);
+    return json({ request: await sendFriendRequest(env, identity.uid, String(input.receiverUid || "")) }, 201);
   }
   const friendDecisionMatch = path.match(/^\/v1\/friend-requests\/([^/]+)\/(accept|decline)$/);
   if (friendDecisionMatch && method === "POST") {
@@ -583,15 +675,15 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/party" && method === "POST") {
     assertScope(identity.scopes, "parties:write");
-    return json({ party: await createParty(env, identity.uid, await request.json()) }, 201);
+    return json({ party: await createParty(env, identity.uid, await requestRecord(request)) }, 201);
   }
   if (path === "/v1/party/invites" && method === "POST") {
     assertScope(identity.scopes, "parties:write");
-    return json(await inviteToParty(env, identity.uid, await request.json()), 201);
+    return json(await inviteToParty(env, identity.uid, await requestRecord(request)), 201);
   }
   if (path === "/v1/party/invites/accept" && method === "POST") {
     assertScope(identity.scopes, "parties:write");
-    return json({ party: await acceptPartyInvite(env, identity.uid, await request.json()) });
+    return json({ party: await acceptPartyInvite(env, identity.uid, await requestRecord(request)) });
   }
   if (path === "/v1/party/leave" && method === "POST") {
     assertScope(identity.scopes, "parties:write");
@@ -608,7 +700,7 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/battle/commands" && method === "POST") {
     assertScope(identity.scopes, "battle:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     if (input.dryRun !== false) return json(battleCommand(await stateFor(env, identity), input, { source: "api" }));
     return json(await mutateAndNotify(env, identity, context, (state) => battleCommand(state, input, { source: "api" })));
   }
@@ -619,14 +711,15 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/quests" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { source: "api", returnEvent: true }));
-    if (created.quest && await isTogglFocusAutoCreateEnabled(env, identity)) {
+    const createdQuest = created.quest;
+    if (createdQuest && await isTogglFocusAutoCreateEnabled(env, identity)) {
       try {
-        const synced = await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, created.quest.id, { dryRun: false }));
+        const synced = await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, createdQuest.id, { dryRun: false }));
         created.focus = { queued: false, synced: true, external: synced.external };
       } catch (error) {
-        created.focus = { queued: false, synced: false, error: error.code || "focus_sync_failed" };
+        created.focus = { queued: false, synced: false, error: errorCode(error) || "focus_sync_failed" };
       }
     }
     return json(created, 201);
@@ -643,32 +736,32 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/quests/batch-update" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     if (input.dryRun !== false) return json(batchUpdateQuests(await stateFor(env, identity), input, { source: "api" }));
     return json(await mutateAndNotify(env, identity, context, (state) => batchUpdateQuests(state, input, { source: "api" })));
   }
   if (path === "/v1/quests/batch-score" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     if (input.dryRun !== false) return json(batchScoreQuests(await stateFor(env, identity), input, { source: "api" }));
     return json(await mutateAndNotify(env, identity, context, (state) => batchScoreQuests(state, input, { source: "api" })));
   }
   if (path === "/v1/quests/archive" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     if (input.dryRun !== false) return json(archiveQuests(await stateFor(env, identity), input, { source: "api" }));
     return json(await mutateAndNotify(env, identity, context, (state) => archiveQuests(state, input, { source: "api" })));
   }
   const externalLinkMatch = path.match(/^\/v1\/quests\/([^/]+)\/external-links$/);
   if (externalLinkMatch && method === "POST") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     return json(await mutateAndNotify(env, identity, context, (state) => linkExternalRecord(state, decodeURIComponent(externalLinkMatch[1]), input, { source: "api" })), 201);
   }
   const togglFocusTaskMatch = path.match(/^\/v1\/quests\/([^/]+)\/toggl-focus-task$/);
   if (togglFocusTaskMatch && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
-    const input = await request.json();
+    const input = await requestRecord(request);
     const questId = decodeURIComponent(togglFocusTaskMatch[1]);
     if (input.dryRun !== false) return json(await syncQuestToTogglFocus(env, identity, await stateFor(env, identity), questId, input));
     return json(await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, questId, input)), 201);
@@ -676,13 +769,13 @@ async function routeApi(request, env, context, identity, path) {
   const questMatch = path.match(/^\/v1\/quests\/([^/]+)$/);
   if (questMatch && method === "PATCH") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     return json(await mutateAndNotify(env, identity, context, (state) => patchQuest(state, decodeURIComponent(questMatch[1]), input, { source: "api", returnEvent: true })));
   }
   const handoffMatch = path.match(/^\/v1\/quests\/([^/]+)\/handoff$/);
   if (handoffMatch && method === "POST") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
+    const input = await requestRecord(request);
     const questId = decodeURIComponent(handoffMatch[1]);
     const contextWithReviewer = { source: "api", reviewedBy: identity.uid };
     if (input.dryRun !== false) return json(transitionQuestHandoff(await stateFor(env, identity), questId, input, contextWithReviewer));
@@ -691,8 +784,9 @@ async function routeApi(request, env, context, identity, path) {
   const scoreMatch = path.match(/^\/v1\/quests\/([^/]+)\/score$/);
   if (scoreMatch && method === "POST") {
     assertScope(identity.scopes, "quests:write");
-    const input = await request.json();
-    return json(await mutateAndNotify(env, identity, context, (state) => scoreQuest(state, decodeURIComponent(scoreMatch[1]), input.direction || "up", { source: "api" })));
+    const input = await requestRecord(request);
+    const direction = input.direction === "down" ? "down" : "up";
+    return json(await mutateAndNotify(env, identity, context, (state) => scoreQuest(state, decodeURIComponent(scoreMatch[1]), direction, { source: "api" })));
   }
   if (path === "/v1/character" && method === "GET") {
     assertScope(identity.scopes, "character:read");
@@ -707,7 +801,7 @@ async function routeApi(request, env, context, identity, path) {
     assertScope(identity.scopes, "integrations:sync");
     if (isTogglFocusService(decodeURIComponent(connectMatch[1]))) {
       assertTogglFocusWebConnection(request, env, identity);
-      return json(await connectTogglFocus(env, identity, await request.json()));
+      return json(await connectTogglFocus(env, identity, await requestRecord(request)));
     }
     return json(await beginIntegrationConnect(env, identity, decodeURIComponent(connectMatch[1])));
   }
@@ -717,12 +811,12 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/integrations/toggl-focus/tracking/start" && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
-    const input = await request.json();
+    const input = await requestRecord(request);
     return json(await startTogglFocusTracking(env, identity, await stateFor(env, identity), input));
   }
   if (path === "/v1/integrations/toggl-focus/tracking/stop" && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
-    return json(await stopTogglFocusTracking(env, identity, await request.json()));
+    return json(await stopTogglFocusTracking(env, identity, await requestRecord(request)));
   }
   if (path === "/v1/integrations/toggl-focus/time-entries" && method === "GET") {
     assertScope(identity.scopes, "integrations:read");
@@ -731,13 +825,13 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/integrations/toggl-focus/attributions" && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
-    const input = await request.json();
+    const input = await requestRecord(request);
     if (input.dryRun !== false) return json(await previewTogglFocusAttribution(env, identity, await stateFor(env, identity), input));
     return json(await mutateAndNotify(env, identity, context, (state) => applyTogglFocusAttribution(env, identity, state, input)));
   }
   if (path === "/v1/integrations/toggl-focus/purge" && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
-    const input = await request.json();
+    const input = await requestRecord(request);
     if (input.dryRun !== false) return json(purgeManagedFocusLinks(await stateFor(env, identity), input, { source: "toggl-focus" }));
     return json(await mutateAndNotify(env, identity, context, (state) => purgeTogglFocus(env, identity, state, input)));
   }
@@ -755,8 +849,8 @@ async function routeApi(request, env, context, identity, path) {
   const integrationMatch = path.match(/^\/v1\/integrations\/([^/]+)$/);
   if (integrationMatch && method === "PATCH") {
     assertScope(identity.scopes, "integrations:sync");
-    if (isTogglFocusService(decodeURIComponent(integrationMatch[1]))) return json(await configureTogglFocus(env, identity, await request.json()));
-    return json(await configureIntegration(env, identity, decodeURIComponent(integrationMatch[1]), await request.json()));
+    if (isTogglFocusService(decodeURIComponent(integrationMatch[1]))) return json(await configureTogglFocus(env, identity, await requestRecord(request)));
+    return json(await configureIntegration(env, identity, decodeURIComponent(integrationMatch[1]), await requestRecord(request)));
   }
   if (path === "/v1/calendar/schedule" && method === "GET") {
     assertScope(identity.scopes, "integrations:read");
@@ -775,16 +869,17 @@ async function routeApi(request, env, context, identity, path) {
   const taskConflictMatch = path.match(/^\/v1\/quests\/([^/]+)\/google-tasks\/resolve$/);
   if (taskConflictMatch && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
-    const input = await request.json();
-    return json(await mutateAndNotify(env, identity, context, (state) => resolveGoogleTaskConflict(env, identity, state, decodeURIComponent(taskConflictMatch[1]), input.strategy)));
+    const input = await requestRecord(request);
+    return json(await mutateAndNotify(env, identity, context, (state) => resolveGoogleTaskConflict(env, identity, state, decodeURIComponent(taskConflictMatch[1]), String(input.strategy || ""))));
   }
   const syncMatch = path.match(/^\/v1\/integrations\/([^/]+)\/sync$/);
   if (syncMatch && method === "POST") {
     assertScope(identity.scopes, "integrations:sync");
-    const input = await request.json();
+    const input = await requestRecord(request);
     const dryRun = input.dryRun !== false;
-    if (dryRun) return json(await syncIntegration(env, identity, await stateFor(env, identity), decodeURIComponent(syncMatch[1]), input.direction || "import", true));
-    const result = await mutateAndNotify(env, identity, context, (state) => syncIntegration(env, identity, state, decodeURIComponent(syncMatch[1]), input.direction || "import", false));
+    const direction = String(input.direction || "import");
+    if (dryRun) return json(await syncIntegration(env, identity, await stateFor(env, identity), decodeURIComponent(syncMatch[1]), direction, true));
+    const result = await mutateAndNotify(env, identity, context, (state) => syncIntegration(env, identity, state, decodeURIComponent(syncMatch[1]), direction, false));
     return json(result);
   }
   if (path === "/v1/sync-events" && method === "GET") {
@@ -793,15 +888,15 @@ async function routeApi(request, env, context, identity, path) {
   }
   if (path === "/v1/events" && method === "GET") {
     assertScope(identity.scopes, "events:read");
-    return json({ events: listEvents(await stateFor(env, identity), new URL(request.url).searchParams.get("limit")) });
+    return json({ events: listEvents(await stateFor(env, identity), Number(new URL(request.url).searchParams.get("limit") || 50)) });
   }
   if (path === "/v1/webhooks" && method === "GET") { assertScope(identity.scopes, "webhooks:manage"); return json({ webhooks: await listWebhooks(env, identity.uid) }); }
-  if (path === "/v1/webhooks" && method === "POST") { assertScope(identity.scopes, "webhooks:manage"); return json({ webhook: await createWebhook(env, identity.uid, await request.json()) }, 201); }
+  if (path === "/v1/webhooks" && method === "POST") { assertScope(identity.scopes, "webhooks:manage"); return json({ webhook: await createWebhook(env, identity.uid, await requestRecord(request)) }, 201); }
   const webhookMatch = path.match(/^\/v1\/webhooks\/([^/]+)$/);
   if (webhookMatch && method === "DELETE") { assertScope(identity.scopes, "webhooks:manage"); await deleteWebhook(env, identity.uid, decodeURIComponent(webhookMatch[1])); return new Response(null, { status: 204 }); }
-  if (path === "/v1/plugins/validate" && method === "POST") { assertScope(identity.scopes, "plugins:manage"); return json(validateManifest(await request.json())); }
+  if (path === "/v1/plugins/validate" && method === "POST") { assertScope(identity.scopes, "plugins:manage"); return json(validateManifest(await requestRecord(request))); }
   if (path === "/v1/plugins" && method === "GET") { assertScope(identity.scopes, "plugins:manage"); return json({ plugins: await listPlugins(env, identity.uid) }); }
-  if (path === "/v1/plugins" && method === "POST") { assertScope(identity.scopes, "plugins:manage"); return json({ plugin: await installPlugin(env, identity.uid, await request.json()) }, 201); }
+  if (path === "/v1/plugins" && method === "POST") { assertScope(identity.scopes, "plugins:manage"); return json({ plugin: await installPlugin(env, identity.uid, await requestRecord(request)) }, 201); }
   return json({ error: { code: "not_found", message: "Endpoint not found." } }, 404);
 }
 
@@ -810,28 +905,29 @@ const SAFE_QUEST_OVERRIDE_KEYS = new Set([
   "estimatedMinutes", "actualMinutes", "completionCriteria", "nextAction", "impact", "isBlockingOthers",
 ]);
 
-function safeQuestOverrides(input) {
+function safeQuestOverrides(input: unknown): JsonRecord {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
-  const safe = {};
+  const source = input as JsonRecord;
+  const safe: JsonRecord = {};
   for (const key of Object.keys(input)) {
-    if (SAFE_QUEST_OVERRIDE_KEYS.has(key) && input[key] !== undefined) safe[key] = input[key];
+    if (SAFE_QUEST_OVERRIDE_KEYS.has(key) && source[key] !== undefined) safe[key] = source[key];
   }
   return safe;
 }
 
-function reviewSummary(state, period, anchorDate) {
+function reviewSummary(state: QuestForgeState, period: ReviewPeriod, anchorDate: string): JsonRecord {
   const from = period === "week" ? addDaysText(anchorDate, -6) : anchorDate;
-  const inRange = (text) => {
+  const inRange = (text: unknown): boolean => {
     const day = String(text || "").slice(0, 10);
     return day >= from && day <= anchorDate;
   };
   const events = state.taskEvents || [];
   const completed = (state.tasks || []).filter((task) => inRange(task.completedAt) || inRange(task.lastCompletedDate));
   const created = (state.tasks || []).filter((task) => inRange(task.createdAt));
-  const scored = events.filter((event) => inRange(event.at) && event.type === "quest.scored" && event.details?.rewardGranted === true);
+  const scored = events.filter((event) => inRange(event.at) && event.type === "quest.scored" && asRecord(event.details).rewardGranted === true);
   const failed = events.filter((event) => inRange(event.at) && event.type === "quest.failed");
   const focusMinutes = completed.reduce((sum, task) => sum + Number(task.actualMinutes || 0), 0);
-  const tagCounts = {};
+  const tagCounts: Record<string, number> = {};
   for (const task of completed) for (const tag of task.tags || []) tagCounts[tag] = (tagCounts[tag] || 0) + 1;
   return {
     period,
@@ -848,16 +944,17 @@ function reviewSummary(state, period, anchorDate) {
   };
 }
 
-async function calendarBrief(env, identity, date) {
+async function calendarBrief(env: WorkerEnv, identity: WorkerIdentity, date: string): Promise<JsonRecord> {
   try {
     assertScope(identity.scopes, "integrations:read");
     return { requested: true, available: true, schedule: await calendarSchedule(env, identity, date) };
   } catch (error) {
-    const missingScope = error.code === "insufficient_scope";
+    const code = errorCode(error);
+    const missingScope = code === "insufficient_scope";
     return {
       requested: true,
       available: false,
-      code: error.code || "integration_unavailable",
+      code: code || "integration_unavailable",
       reason: missingScope ? "missing_scope" : "integration_unavailable",
       action: missingScope
         ? "Connect with the integrations:read scope to include your Calendar schedule."
@@ -866,23 +963,27 @@ async function calendarBrief(env, identity, date) {
   }
 }
 
-async function convertCalendarEventWithOverrides(env, identity, state, args) {
+async function convertCalendarEventWithOverrides(env: WorkerEnv, identity: WorkerIdentity, state: QuestForgeState, args: WorkerArgs): Promise<JsonRecord> {
   if (args.calendarId) {
     const schedule = await calendarSchedule(env, identity, todayText());
-    const event = schedule.events.find((item) => item.externalId === args.eventId && item.calendarId === args.calendarId);
+    const event = schedule.events.find((item) => item.externalId === String(args.eventId || "") && item.calendarId === String(args.calendarId || ""));
     if (!event) throw new DomainError(404, "calendar_event_not_found", "Calendar event is not available in today's schedule cache for the requested calendar.");
   }
   const overrides = safeQuestOverrides(args.overrides);
-  const converted = await convertCalendarEvent(env, identity, state, args.eventId);
-  const events = [converted.event];
+  const converted = asRecord(await convertCalendarEvent(env, identity, state, String(args.eventId || "")));
+  const convertedQuest = converted.quest;
+  if (!isQuest(convertedQuest)) throw new DomainError(500, "calendar_conversion_invalid", "Calendar conversion returned an invalid Quest.");
+  const events: JsonRecord[] = [asRecord(converted.event)];
   if (Object.keys(overrides).length) {
-    converted.quest = patchQuest(state, converted.quest.id, overrides, { source: "mcp", countRollover: false, returnEvent: false });
-    events.push(state.taskEvents[0]);
+    const patched = patchQuest(state, convertedQuest.id, overrides, { source: "mcp", countRollover: false, returnEvent: false });
+    converted.quest = isQuest(patched) ? patched : convertedQuest;
+    const event = state.taskEvents[0];
+    if (event) events.push(event);
   }
   return { ...converted, events };
 }
 
-async function callMcpTool(name, args, env, context, identity) {
+async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<unknown> {
   if (name === "list_registered_agents") {
     assertScope(identity.scopes, "agents:read");
     return { agents: await listAgents(env, identity.uid) };
@@ -901,42 +1002,43 @@ async function callMcpTool(name, args, env, context, identity) {
     return assignQuestToAgent(env, identity, context, args);
   }
   if (name === "get_my_profile") { assertScope(identity.scopes, "profiles:read"); return { profile: await getOwnProfile(env, identity.uid) }; }
-  if (name === "find_profile_by_handle") { assertScope(identity.scopes, "profiles:read"); return { profile: await findProfileByHandle(env, args.handle) }; }
+  if (name === "find_profile_by_handle") { assertScope(identity.scopes, "profiles:read"); return { profile: await findProfileByHandle(env, requiredString(args.handle, "handle")) }; }
   if (name === "update_profile") { assertScope(identity.scopes, "profiles:write"); return { profile: await upsertProfile(env, identity.uid, args) }; }
   if (name === "list_friends") { assertScope(identity.scopes, "friends:read"); return { friends: await listFriends(env, identity.uid) }; }
   if (name === "list_friend_requests") { assertScope(identity.scopes, "friends:read"); return { requests: await listFriendRequests(env, identity.uid) }; }
-  if (name === "send_friend_request") { assertScope(identity.scopes, "friends:write"); return { request: await sendFriendRequest(env, identity.uid, args.receiverUid) }; }
+  if (name === "send_friend_request") { assertScope(identity.scopes, "friends:write"); return { request: await sendFriendRequest(env, identity.uid, requiredString(args.receiverUid, "receiverUid")) }; }
   if (name === "respond_friend_request") {
     assertScope(identity.scopes, "friends:write");
     const result = args.decision === "accept"
-      ? await acceptFriendRequest(env, identity.uid, args.requestId)
-      : await declineFriendRequest(env, identity.uid, args.requestId);
+      ? await acceptFriendRequest(env, identity.uid, requiredString(args.requestId, "requestId"))
+      : await declineFriendRequest(env, identity.uid, requiredString(args.requestId, "requestId"));
     return args.decision === "accept" ? { friends: result } : { requests: result };
   }
-  if (name === "remove_friend") { assertScope(identity.scopes, "friends:write"); return removeFriend(env, identity.uid, args.friendUid); }
+  if (name === "remove_friend") { assertScope(identity.scopes, "friends:write"); return removeFriend(env, identity.uid, requiredString(args.friendUid, "friendUid")); }
   if (name === "get_party") { assertScope(identity.scopes, "parties:read"); return { party: await getParty(env, identity.uid) }; }
   if (name === "create_party") { assertScope(identity.scopes, "parties:write"); return { party: await createParty(env, identity.uid, args) }; }
   if (name === "invite_party_member") { assertScope(identity.scopes, "parties:write"); return inviteToParty(env, identity.uid, args); }
   if (name === "accept_party_invite") { assertScope(identity.scopes, "parties:write"); return { party: await acceptPartyInvite(env, identity.uid, args) }; }
   if (name === "leave_party") { assertScope(identity.scopes, "parties:write"); return leaveParty(env, identity.uid); }
-  if (name === "remove_party_member") { assertScope(identity.scopes, "parties:write"); return { party: await removePartyMember(env, identity.uid, args.memberUid) }; }
+  if (name === "remove_party_member") { assertScope(identity.scopes, "parties:write"); return { party: await removePartyMember(env, identity.uid, requiredString(args.memberUid, "memberUid")) }; }
   if (name === "get_battle_session") { assertScope(identity.scopes, "battle:read"); return { session: getBattleSession(await stateFor(env, identity)) }; }
   if (name === "battle_command") {
     assertScope(identity.scopes, "battle:write");
-    if (args.dryRun !== false) return battleCommand(await stateFor(env, identity), args, { source: "mcp" });
-    return mutateAndNotify(env, identity, context, (state) => battleCommand(state, args, { source: "mcp" }));
+    if (args.dryRun !== false) return battleCommand(await stateFor(env, identity), asDomainInput(args), { source: "mcp" });
+    return mutateAndNotify(env, identity, context, (state) => battleCommand(state, asDomainInput(args), { source: "mcp" }));
   }
   if (name === "list_today_quests") { assertScope(identity.scopes, "quests:read"); return listQuestPage(await stateFor(env, identity), { view: "today", date: args.date }); }
-  if (name === "list_quests") { assertScope(identity.scopes, "quests:read"); return listQuestPage(await stateFor(env, identity), args); }
+  if (name === "list_quests") { assertScope(identity.scopes, "quests:read"); return listQuestPage(await stateFor(env, identity), asDomainInput(args)); }
   if (name === "create_quest") {
     assertScope(identity.scopes, "quests:write");
-    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, args, { source: "mcp", returnEvent: true }));
-    if (created.quest && await isTogglFocusAutoCreateEnabled(env, identity)) {
+    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, asDomainInput(args), { source: "mcp", returnEvent: true }));
+    const createdQuest = created.quest;
+    if (createdQuest && await isTogglFocusAutoCreateEnabled(env, identity)) {
       try {
-        const synced = await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, created.quest.id, { dryRun: false }));
+        const synced = await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, createdQuest.id, { dryRun: false }));
         created.focus = { queued: false, synced: true, external: synced.external };
       } catch (error) {
-        created.focus = { queued: false, synced: false, error: error.code || "focus_sync_failed" };
+        created.focus = { queued: false, synced: false, error: errorCode(error) || "focus_sync_failed" };
       }
     }
     return created;
@@ -944,31 +1046,31 @@ async function callMcpTool(name, args, env, context, identity) {
   if (name === "update_quest") {
     assertScope(identity.scopes, "quests:write");
     const { questId, ...patch } = args;
-    return mutateAndNotify(env, identity, context, (state) => patchQuest(state, questId, patch, { source: "mcp", returnEvent: true }));
+    return mutateAndNotify(env, identity, context, (state) => patchQuest(state, requiredString(questId, "questId"), asDomainInput(patch), { source: "mcp", returnEvent: true }));
   }
   if (name === "batch_update_quests") {
     assertScope(identity.scopes, "quests:write");
-    if (args.dryRun !== false) return batchUpdateQuests(await stateFor(env, identity), args, { source: "mcp" });
-    return mutateAndNotify(env, identity, context, (state) => batchUpdateQuests(state, args, { source: "mcp" }));
+    if (args.dryRun !== false) return batchUpdateQuests(await stateFor(env, identity), asDomainInput(args), { source: "mcp" });
+    return mutateAndNotify(env, identity, context, (state) => batchUpdateQuests(state, asDomainInput(args), { source: "mcp" }));
   }
   if (name === "batch_score_quests") {
     assertScope(identity.scopes, "quests:write");
-    if (args.dryRun !== false) return batchScoreQuests(await stateFor(env, identity), args, { source: "mcp" });
-    return mutateAndNotify(env, identity, context, (state) => batchScoreQuests(state, args, { source: "mcp" }));
+    if (args.dryRun !== false) return batchScoreQuests(await stateFor(env, identity), asDomainInput(args), { source: "mcp" });
+    return mutateAndNotify(env, identity, context, (state) => batchScoreQuests(state, asDomainInput(args), { source: "mcp" }));
   }
   if (name === "archive_quests") {
     assertScope(identity.scopes, "quests:write");
-    if (args.dryRun !== false) return archiveQuests(await stateFor(env, identity), args, { source: "mcp" });
-    return mutateAndNotify(env, identity, context, (state) => archiveQuests(state, args, { source: "mcp" }));
+    if (args.dryRun !== false) return archiveQuests(await stateFor(env, identity), asDomainInput(args), { source: "mcp" });
+    return mutateAndNotify(env, identity, context, (state) => archiveQuests(state, asDomainInput(args), { source: "mcp" }));
   }
   if (name === "link_external_record") {
     assertScope(identity.scopes, "quests:write");
     const { questId, ...link } = args;
-    return mutateAndNotify(env, identity, context, (state) => linkExternalRecord(state, questId, link, { source: "mcp" }));
+    return mutateAndNotify(env, identity, context, (state) => linkExternalRecord(state, requiredString(questId, "questId"), link as DomainRecord, { source: "mcp" }));
   }
-  if (name === "score_quest") { assertScope(identity.scopes, "quests:write"); return mutateAndNotify(env, identity, context, (state) => scoreQuest(state, args.questId, args.direction, { source: "mcp" })); }
+  if (name === "score_quest") { assertScope(identity.scopes, "quests:write"); return mutateAndNotify(env, identity, context, (state) => scoreQuest(state, requiredString(args.questId, "questId"), args.direction === "down" ? "down" : "up", { source: "mcp" })); }
   if (name === "get_character_state") { assertScope(identity.scopes, "character:read"); return { character: characterState(await stateFor(env, identity)) }; }
-  if (name === "buy_reward") { assertScope(identity.scopes, "rewards:write"); return mutateAndNotify(env, identity, context, (state) => buyReward(state, args.questId, { source: "mcp" })); }
+  if (name === "buy_reward") { assertScope(identity.scopes, "rewards:write"); return mutateAndNotify(env, identity, context, (state) => buyReward(state, requiredString(args.questId, "questId"), { source: "mcp" })); }
   if (name === "list_integrations") { assertScope(identity.scopes, "integrations:read"); return { integrations: await listIntegrations(env, identity) }; }
   if (name === "get_toggl_focus_status") {
     assertScope(identity.scopes, "integrations:read");
@@ -976,12 +1078,13 @@ async function callMcpTool(name, args, env, context, identity) {
   }
   if (name === "list_toggl_focus_entries") {
     assertScope(identity.scopes, "integrations:read");
-    return listTogglFocusEntries(env, identity, args);
+    return listTogglFocusEntries(env, identity, asFocusInput(args));
   }
   if (name === "sync_quest_to_toggl_focus") {
     assertScope(identity.scopes, "integrations:sync");
-    if (args.dryRun !== false) return syncQuestToTogglFocus(env, identity, await stateFor(env, identity), args.questId, args);
-    return mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, args.questId, args));
+    const questId = requiredString(args.questId, "questId");
+    if (args.dryRun !== false) return syncQuestToTogglFocus(env, identity, await stateFor(env, identity), questId, asFocusInput(args));
+    return mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, questId, asFocusInput(args)));
   }
   if (name === "get_toggl_focus_tracking") {
     assertScope(identity.scopes, "integrations:read");
@@ -989,45 +1092,47 @@ async function callMcpTool(name, args, env, context, identity) {
   }
   if (name === "start_toggl_focus_tracking") {
     assertScope(identity.scopes, "integrations:sync");
-    return startTogglFocusTracking(env, identity, await stateFor(env, identity), args);
+    return startTogglFocusTracking(env, identity, await stateFor(env, identity), asFocusInput(args));
   }
   if (name === "stop_toggl_focus_tracking") {
     assertScope(identity.scopes, "integrations:sync");
-    return stopTogglFocusTracking(env, identity, args);
+    return stopTogglFocusTracking(env, identity, asFocusInput(args));
   }
   if (name === "preview_toggl_attribution") {
     assertScope(identity.scopes, "integrations:read");
-    return previewTogglFocusAttribution(env, identity, await stateFor(env, identity), args);
+    return previewTogglFocusAttribution(env, identity, await stateFor(env, identity), asFocusInput(args));
   }
   if (name === "apply_toggl_attribution") {
     assertScope(identity.scopes, "integrations:sync");
-    if (args.dryRun !== false) return previewTogglFocusAttribution(env, identity, await stateFor(env, identity), args);
-    return mutateAndNotify(env, identity, context, (state) => applyTogglFocusAttribution(env, identity, state, args));
+    if (args.dryRun !== false) return previewTogglFocusAttribution(env, identity, await stateFor(env, identity), asFocusInput(args));
+    return mutateAndNotify(env, identity, context, (state) => applyTogglFocusAttribution(env, identity, state, asFocusInput(args)));
   }
   if (name === "get_toggl_estimate_insights") {
     assertScope(identity.scopes, "integrations:read");
     return getTogglFocusEstimateInsights(env, identity, await stateFor(env, identity));
   }
-  if (name === "preview_external_sync") { assertScope(identity.scopes, "integrations:read"); return syncIntegration(env, identity, await stateFor(env, identity), args.service, args.direction || "import", true); }
+  if (name === "preview_external_sync") { assertScope(identity.scopes, "integrations:read"); return syncIntegration(env, identity, await stateFor(env, identity), requiredString(args.service, "service"), String(args.direction || "import"), true); }
   if (name === "sync_external_service") {
     assertScope(identity.scopes, "integrations:sync");
-    if (args.dryRun !== false) return syncIntegration(env, identity, await stateFor(env, identity), args.service, args.direction || "import", true);
-    return mutateAndNotify(env, identity, context, (state) => syncIntegration(env, identity, state, args.service, args.direction || "import", false));
+    const service = requiredString(args.service, "service");
+    const direction = String(args.direction || "import");
+    if (args.dryRun !== false) return syncIntegration(env, identity, await stateFor(env, identity), service, direction, true);
+    return mutateAndNotify(env, identity, context, (state) => syncIntegration(env, identity, state, service, direction, false));
   }
   if (name === "get_quest") {
     assertScope(identity.scopes, "quests:read");
-    return getQuest(await stateFor(env, identity), args.questId);
+    return getQuest(await stateFor(env, identity), requiredString(args.questId, "questId"));
   }
   if (name === "get_quest_tree") {
     assertScope(identity.scopes, "quests:read");
-    return getQuestTree(await stateFor(env, identity), args);
+    return getQuestTree(await stateFor(env, identity), asDomainInput(args));
   }
   if (name === "get_daily_brief") {
     assertScope(identity.scopes, "quests:read");
     assertScope(identity.scopes, "character:read");
     const date = validDateValue(args.date) || todayText();
     const state = await stateFor(env, identity);
-    const brief = {
+    const brief: JsonRecord = {
       date,
       quests: listQuestPage(state, { view: "today", date }),
       character: characterState(state),
@@ -1046,13 +1151,14 @@ async function callMcpTool(name, args, env, context, identity) {
   }
   if (name === "list_agent_handoffs") {
     assertScope(identity.scopes, "quests:read");
-    return listAgentHandoffs(await stateFor(env, identity), args);
+    return listAgentHandoffs(await stateFor(env, identity), asDomainInput(args));
   }
   if (name === "transition_quest_handoff") {
     assertScope(identity.scopes, "quests:write");
     const input = { ...args, reviewedBy: identity.uid };
-    if (args.dryRun !== false) return transitionQuestHandoff(await stateFor(env, identity), args.questId, input, { source: "mcp", reviewedBy: identity.uid });
-    return mutateAndNotify(env, identity, context, (state) => transitionQuestHandoff(state, args.questId, input, { source: "mcp", reviewedBy: identity.uid }));
+    const questId = requiredString(args.questId, "questId");
+    if (args.dryRun !== false) return transitionQuestHandoff(await stateFor(env, identity), questId, asDomainInput(input), { source: "mcp", reviewedBy: identity.uid });
+    return mutateAndNotify(env, identity, context, (state) => transitionQuestHandoff(state, questId, asDomainInput(input), { source: "mcp", reviewedBy: identity.uid }));
   }
   if (name === "list_activity_events") {
     assertScope(identity.scopes, "events:read");
@@ -1076,21 +1182,22 @@ async function callMcpTool(name, args, env, context, identity) {
   throw new DomainError(404, "tool_not_found", `Unknown MCP tool: ${name}`);
 }
 
-async function handleMcp(request, env, context, identity) {
+async function handleMcp(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<Response> {
   if (request.method === "GET") return json({ name: "questforge-mcp", transport: "streamable-http", protocol: "2025-06-18" });
-  const message = await request.json();
+  const message = asRecord(await request.json().catch(() => null));
+  const params = asRecord(message.params);
   if (message.method === "notifications/initialized") return new Response(null, { status: 202 });
-  let result;
+  let result: unknown;
   if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.7.0" }, instructions: "Use QuestForge to organize quests, Quest Trees, registered Agents, daily plans, reviews, agent handoffs, profiles, friends, parties, command battles, and Toggl Focus. Read before writing. Preview Agent assignments, batch updates, batch scoring, archives, handoff transitions, battle commands, Focus tasks, timers, and time attribution before execution. Never request or accept API keys through MCP. Ask for confirmation before destructive actions. Quest deletion is not supported." };
   else if (message.method === "tools/list") result = { tools: MCP_TOOLS };
   else if (message.method === "tools/call") {
     try {
-      const value = await callMcpTool(message.params?.name, message.params?.arguments || {}, env, context, identity);
+      const value = await callMcpTool(String(params.name || ""), asRecord(params.arguments), env, context, identity);
       result = { content: [{ type: "text", text: JSON.stringify(value, null, 2) }], structuredContent: value, isError: false };
     } catch (error) {
       result = {
-        content: [{ type: "text", text: error.message || "QuestForge tool failed." }],
-        structuredContent: { error: { code: error.code || "tool_error", message: error.message } },
+        content: [{ type: "text", text: errorMessage(error) || "QuestForge tool failed." }],
+        structuredContent: { error: { code: errorCode(error) || "tool_error", message: errorMessage(error) } },
         isError: true,
       };
     }
@@ -1098,7 +1205,7 @@ async function handleMcp(request, env, context, identity) {
   return json({ jsonrpc: "2.0", id: message.id ?? null, result }, 200, { "mcp-protocol-version": "2025-06-18" });
 }
 
-async function handleRequest(request, env, context) {
+async function handleRequest(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.7.0", schemaVersion: 7, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
@@ -1124,30 +1231,30 @@ async function handleRequest(request, env, context) {
 }
 
 export default {
-  async fetch(request, env, context) {
+  async fetch(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
     try { return withCors(await handleRequest(request, env, context), request, env); }
     catch (error) { console.error(error); return withCors(errorResponse(error), request, env); }
   },
-  async scheduled(_controller, env, context) {
+  async scheduled(_controller: unknown, env: WorkerEnv, context: WorkerContext): Promise<void> {
     context.waitUntil(retryDeliveries(env));
     context.waitUntil(runScheduledIntegrations(env));
     context.waitUntil(purgeTelemetry(env));
   },
 };
 
-async function purgeTelemetry(env) {
+async function purgeTelemetry(env: WorkerEnv): Promise<void> {
   if (!env.QUESTFORGE_DB) return;
   await env.QUESTFORGE_DB.prepare("DELETE FROM telemetry_events WHERE created_at < datetime('now', '-90 days')").run();
 }
 
-async function runScheduledIntegrations(env) {
+async function runScheduledIntegrations(env: WorkerEnv): Promise<void> {
   const accounts = await listDueIntegrationAccounts(env, 20);
   for (const account of accounts) {
     try {
       const direction = account.service === "notion" ? "export" : account.service === "google-tasks" ? "bidirectional" : "import";
       await mutateState(env, { uid: account.uid }, (state) => syncIntegration(env, { uid: account.uid }, state, account.service, direction, false));
     } catch (error) {
-      console.error("Scheduled integration sync failed", { uid: account.uid, service: account.service, code: error.code || "sync_failed" });
+      console.error("Scheduled integration sync failed", { uid: account.uid, service: account.service, code: errorCode(error) || "sync_failed" });
     }
   }
 }

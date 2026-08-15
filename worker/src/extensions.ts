@@ -29,7 +29,7 @@ type WebhookRecord = {
   [key: string]: unknown;
 };
 
-type WebhookEvent = {
+export type WebhookEvent = {
   id: string;
   type: string;
   [key: string]: unknown;

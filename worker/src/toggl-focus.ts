@@ -71,7 +71,7 @@ type FocusRecord = JsonRecord & {
   email?: string;
 };
 
-type FocusInput = {
+export type FocusInput = {
   apiKey?: string;
   organizationId?: string | number;
   workspaceId?: string | number;

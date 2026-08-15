@@ -15,7 +15,7 @@ const dateString = z.string().regex(DATE_PATTERN, "Use YYYY-MM-DD.");
 
 const GENERIC_OUTPUT_SCHEMA = z.object({}).catchall(z.unknown());
 
-type McpContext = unknown;
+type McpContext = { waitUntil(promise: Promise<unknown>): void };
 type McpToolArguments = Record<string, unknown>;
 type McpJsonSchema = StandardSchemaWithJSON<Record<string, unknown>, Record<string, unknown>>;
 type McpFactoryContext = {
@@ -118,13 +118,18 @@ function registerResources(server: McpServer, env: WorkerEnv, context: McpContex
       list: async () => {
         try {
           const page = await callMcpTool("list_quests", { view: "all", limit: 200 }, env, context, identity);
-          const quests = Array.isArray(page?.quests) ? page.quests as Array<{ id?: unknown; title?: unknown }> : [];
+          const pageRecord = page && typeof page === "object" && !Array.isArray(page) ? page as Record<string, unknown> : {};
+          const quests = Array.isArray(pageRecord.quests) ? pageRecord.quests as Array<{ id?: unknown; title?: unknown }> : [];
           return { resources: quests.map((quest) => ({ uri: `questforge://quest/${encodeURIComponent(String(quest.id || ""))}`, name: String(quest.title || quest.id || "Quest") })) };
         } catch { return { resources: [] }; }
       },
     }),
     { title: "One Quest by ID", mimeType: "application/json", description: "One QuestForge quest, addressed by questId." },
-    (uri, variables) => readSafe(uri, () => callMcpTool("get_quest", { questId: variables.questId }, env, context, identity)),
+    (uri, variables) => {
+      const rawQuestId = variables.questId;
+      const questId = Array.isArray(rawQuestId) ? rawQuestId[0] : rawQuestId;
+      return readSafe(uri, () => callMcpTool("get_quest", { questId: String(questId || "") }, env, context, identity));
+    },
   );
   server.registerResource(
     "questforge-character",
