@@ -1013,7 +1013,7 @@ export function archiveQuests(state: QuestForgeState, input: DomainInput = {}, c
   return { dryRun: false, count: candidates.length, quests: candidates.map((task) => questOutput(task)), events };
 }
 
-export function linkExternalRecord(state: QuestForgeState, questId: string, input: DomainInput, context: DomainContext = {}): DomainRecord {
+export function linkExternalRecord(state: QuestForgeState, questId: string, input: DomainRecord, context: DomainContext = {}): DomainRecord {
   ensureState(state);
   const quest = state.tasks.find((task) => task.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");

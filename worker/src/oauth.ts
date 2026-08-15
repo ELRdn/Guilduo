@@ -1,22 +1,76 @@
-// @ts-nocheck
 import { ALL_SCOPES, getKv, randomToken, sha256, verifyFirebaseIdToken } from "./security.ts";
+import type { AuthIdentity } from "./security.ts";
+import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
 
-function json(value, status = 200, headers = {}) {
+type ClientRecord = { clientId: string; clientName: string; redirectUris: string[]; createdAt: number };
+type AuthorizationRequest = {
+  clientId: string;
+  redirectUri: string;
+  challenge: string;
+  state: string;
+  resource: string;
+  scopes: string[];
+  uid?: string;
+  email?: string;
+  firebaseIdToken?: string;
+  firebaseRefreshToken?: string;
+};
+type ClientGrant = { uid: string; clientId: string; clientName?: string; scopes: string[]; firstConnectedAt?: string; lastUsedAt?: string; revokedAt?: string; accessHash?: string; refreshHash?: string; email?: string; firebaseIdToken?: string; firebaseRefreshToken?: string; redirectUri?: string; challenge?: string };
+
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function asClient(value: unknown): ClientRecord | null {
+  const item = asRecord(value);
+  if (typeof item.clientId !== "string" || typeof item.clientName !== "string" || !Array.isArray(item.redirectUris)) return null;
+  return { clientId: item.clientId, clientName: item.clientName, redirectUris: item.redirectUris.filter((uri): uri is string => typeof uri === "string"), createdAt: Number(item.createdAt || 0) };
+}
+
+function asAuthorizationRequest(value: unknown): AuthorizationRequest | null {
+  const item = asRecord(value);
+  if (typeof item.clientId !== "string" || typeof item.redirectUri !== "string" || typeof item.challenge !== "string") return null;
+  return {
+    clientId: item.clientId,
+    redirectUri: item.redirectUri,
+    challenge: item.challenge,
+    state: typeof item.state === "string" ? item.state : "",
+    resource: typeof item.resource === "string" ? item.resource : "",
+    scopes: Array.isArray(item.scopes) ? item.scopes.filter((scope): scope is string => typeof scope === "string") : [],
+    ...(typeof item.uid === "string" ? { uid: item.uid } : {}),
+    ...(typeof item.email === "string" ? { email: item.email } : {}),
+    ...(typeof item.firebaseIdToken === "string" ? { firebaseIdToken: item.firebaseIdToken } : {}),
+    ...(typeof item.firebaseRefreshToken === "string" ? { firebaseRefreshToken: item.firebaseRefreshToken } : {}),
+  };
+}
+
+function asClientGrant(value: unknown): ClientGrant | null {
+  const item = asRecord(value);
+  if (typeof item.uid !== "string" || typeof item.clientId !== "string" || !Array.isArray(item.scopes)) return null;
+  return {
+    ...item,
+    uid: item.uid,
+    clientId: item.clientId,
+    scopes: item.scopes.filter((scope): scope is string => typeof scope === "string"),
+  } as ClientGrant;
+}
+
+function json(value: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
-function oauthBase(request, env) {
+function oauthBase(request: Request, env: WorkerEnv): string {
   return env.PUBLIC_BASE_URL || new URL(request.url).origin;
 }
 
-function allowedScopes(value) {
+function allowedScopes(value: unknown): string[] {
   const requested = String(value || "").split(/\s+/).filter(Boolean);
   return (requested.length ? requested : ALL_SCOPES).filter((scope) => ALL_SCOPES.includes(scope));
 }
 
-function isAllowedRedirectUri(value) {
+function isAllowedRedirectUri(value: unknown): value is string {
   try {
-    const uri = new URL(value);
+    const uri = new URL(String(value));
     if (uri.hash || uri.username || uri.password) return false;
     if (uri.protocol === "https:") return true;
     return uri.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(uri.hostname);
@@ -25,7 +79,7 @@ function isAllowedRedirectUri(value) {
   }
 }
 
-export function oauthMetadata(request, env) {
+export function oauthMetadata(request: Request, env: WorkerEnv) {
   const base = oauthBase(request, env);
   return {
     issuer: base,
@@ -41,7 +95,7 @@ export function oauthMetadata(request, env) {
   };
 }
 
-export function protectedResourceMetadata(request, env) {
+export function protectedResourceMetadata(request: Request, env: WorkerEnv) {
   const base = oauthBase(request, env);
   return {
     resource: `${base}/mcp`,
@@ -51,8 +105,8 @@ export function protectedResourceMetadata(request, env) {
   };
 }
 
-export async function registerClient(request, env) {
-  const input = await request.json();
+export async function registerClient(request: Request, env: WorkerEnv): Promise<Response> {
+  const input = asRecord(await request.json());
   const redirectUris = Array.isArray(input.redirect_uris) ? input.redirect_uris.filter(isAllowedRedirectUri) : [];
   if (!redirectUris.length) return json({ error: "invalid_redirect_uri" }, 400);
   const clientId = randomToken("qfc");
@@ -65,7 +119,7 @@ export async function registerClient(request, env) {
   return json({ client_id: clientId, client_name: input.client_name, redirect_uris: redirectUris, token_endpoint_auth_method: "none" }, 201);
 }
 
-export async function authorizePage(request, env) {
+export async function authorizePage(request: Request, env: WorkerEnv): Promise<Response> {
   const url = new URL(request.url);
   const requestedLanguage = url.searchParams.get("lang") || request.headers.get("accept-language") || "ja";
   const locale = requestedLanguage.toLowerCase().startsWith("ja") ? "ja" : "en";
@@ -86,10 +140,10 @@ export async function authorizePage(request, env) {
     connecting: "Connecting to Google...",
     failed: "Could not connect: ",
   };
-  const clientId = url.searchParams.get("client_id");
-  const redirectUri = url.searchParams.get("redirect_uri");
+  const clientId = url.searchParams.get("client_id") || "";
+  const redirectUri = url.searchParams.get("redirect_uri") || "";
   const challenge = url.searchParams.get("code_challenge");
-  const client = await getKv(env).get(`client:${clientId}`, "json");
+  const client = asClient(await getKv(env).get(`client:${clientId}`, "json"));
   if (!client || !client.redirectUris.includes(redirectUri) || !challenge || url.searchParams.get("code_challenge_method") !== "S256") {
     return new Response("Invalid OAuth request", { status: 400 });
   }
@@ -112,10 +166,13 @@ export async function authorizePage(request, env) {
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
-export async function approveAuthorization(request, env) {
-  const { requestId, idToken, firebaseRefreshToken } = await request.json();
+export async function approveAuthorization(request: Request, env: WorkerEnv): Promise<Response> {
+  const input = asRecord(await request.json());
+  const requestId = typeof input.requestId === "string" ? input.requestId : "";
+  const idToken = typeof input.idToken === "string" ? input.idToken : "";
+  const firebaseRefreshToken = typeof input.firebaseRefreshToken === "string" ? input.firebaseRefreshToken : "";
   const kv = getKv(env);
-  const pending = await kv.get(`authorize:${requestId}`, "json");
+  const pending = asAuthorizationRequest(await kv.get(`authorize:${requestId}`, "json"));
   if (!pending) return json({ error: "authorization_request_expired" }, 400);
   let identity;
   try { identity = await verifyFirebaseIdToken(idToken, env); } catch { return json({ error: "invalid_firebase_token" }, 401); }
@@ -129,15 +186,15 @@ export async function approveAuthorization(request, env) {
   return json({ redirect: redirect.toString() });
 }
 
-async function readClientGrantIndex(env, uid, clientId) {
-  return (await getKv(env).get(`user-client:${uid}:${clientId}`, "json")) || null;
+async function readClientGrantIndex(env: WorkerEnv, uid: string, clientId: string): Promise<ClientGrant | null> {
+  return asClientGrant(await getKv(env).get(`user-client:${uid}:${clientId}`, "json"));
 }
 
-async function writeClientGrantIndex(env, grant, tokenHashes) {
+async function writeClientGrantIndex(env: WorkerEnv, grant: ClientGrant, tokenHashes: { accessHash: string; refreshHash: string }): Promise<void> {
   const kv = getKv(env);
-  const client = await kv.get(`client:${grant.clientId}`, "json");
+  const client = asClient(await kv.get(`client:${grant.clientId}`, "json"));
   const key = `user-client:${grant.uid}:${grant.clientId}`;
-  const existing = await kv.get(key, "json");
+  const existing = asRecord(await kv.get(key, "json"));
   const now = new Date().toISOString();
   await kv.put(key, JSON.stringify({
     uid: grant.uid,
@@ -152,7 +209,7 @@ async function writeClientGrantIndex(env, grant, tokenHashes) {
   }), { expirationTtl: 2592000 });
 }
 
-function publicClientGrant(record) {
+function publicClientGrant(record: ClientGrant | null): JsonRecord | null {
   if (!record) return null;
   return {
     clientId: record.clientId,
@@ -164,32 +221,32 @@ function publicClientGrant(record) {
   };
 }
 
-export async function listAuthorizedClients(env, uid) {
+export async function listAuthorizedClients(env: WorkerEnv, uid: string): Promise<JsonRecord[]> {
   const kv = getKv(env);
   const result = await kv.list({ prefix: `user-client:${uid}:` });
-  const records = await Promise.all(result.keys.map((item) => kv.get(item.name, "json")));
-  return records.filter(Boolean).map(publicClientGrant).sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+  const records = await Promise.all(result.keys.map((item: { name: string }) => readClientGrantIndex(env, uid, item.name.replace(`user-client:${uid}:`, ""))));
+  return records.filter((record): record is ClientGrant => Boolean(record)).map(publicClientGrant).filter((record): record is JsonRecord => Boolean(record)).sort((a, b) => String(b.lastUsedAt || "").localeCompare(String(a.lastUsedAt || "")));
 }
 
-export async function getAuthorizedClient(env, uid, clientId) {
+export async function getAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
   const record = await readClientGrantIndex(env, uid, clientId);
   return record && !record.revokedAt ? publicClientGrant(record) : null;
 }
 
-export async function noteAuthorizedClientUse(env, identity) {
+export async function noteAuthorizedClientUse(env: WorkerEnv, identity: AuthIdentity): Promise<void> {
   if (identity?.authType !== "oauth" || !identity.uid || !identity.clientId) return;
   const kv = getKv(env);
   const key = `user-client:${identity.uid}:${identity.clientId}`;
-  const record = await kv.get(key, "json");
+  const record = await readClientGrantIndex(env, identity.uid, identity.clientId);
   if (!record || record.revokedAt) return;
   record.lastUsedAt = new Date().toISOString();
   await kv.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
 }
 
-export async function revokeAuthorizedClient(env, uid, clientId) {
+export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
   const kv = getKv(env);
   const key = `user-client:${uid}:${clientId}`;
-  const record = await kv.get(key, "json");
+  const record = await readClientGrantIndex(env, uid, clientId);
   if (!record) return null;
   await Promise.all([
     record.accessHash ? kv.delete(`access:${record.accessHash}`) : Promise.resolve(),
@@ -202,18 +259,18 @@ export async function revokeAuthorizedClient(env, uid, clientId) {
   return publicClientGrant(record);
 }
 
-async function refreshFirebaseSession(env, refreshToken) {
+async function refreshFirebaseSession(env: WorkerEnv, refreshToken: string): Promise<{ firebaseIdToken: string; firebaseRefreshToken: string }> {
   const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(env.FIREBASE_API_KEY || "")}`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
   });
   if (!response.ok) throw new Error("Unable to refresh the QuestForge login session");
-  const value = await response.json();
-  return { firebaseIdToken: value.id_token, firebaseRefreshToken: value.refresh_token || refreshToken };
+  const value = asRecord(await response.json());
+  return { firebaseIdToken: String(value.id_token || ""), firebaseRefreshToken: String(value.refresh_token || refreshToken) };
 }
 
-async function issueTokens(env, grant) {
+async function issueTokens(env: WorkerEnv, grant: ClientGrant): Promise<JsonRecord> {
   const kv = getKv(env);
   const accessToken = randomToken("qf");
   const refreshToken = randomToken("qfr");
@@ -230,21 +287,22 @@ async function issueTokens(env, grant) {
   return { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: expiresIn, scope: grant.scopes.join(" ") };
 }
 
-export async function tokenEndpoint(request, env) {
+export async function tokenEndpoint(request: Request, env: WorkerEnv): Promise<Response> {
   const body = await request.formData();
   const grantType = body.get("grant_type");
   const kv = getKv(env);
   if (grantType === "authorization_code") {
     const code = String(body.get("code") || "");
-    const grant = await kv.get(`code:${await sha256(code)}`, "json");
-    if (!grant || grant.clientId !== body.get("client_id") || grant.redirectUri !== body.get("redirect_uri")) return json({ error: "invalid_grant" }, 400);
+    const pending = asAuthorizationRequest(await kv.get(`code:${await sha256(code)}`, "json"));
+    if (!pending || !pending.uid || pending.clientId !== body.get("client_id") || pending.redirectUri !== body.get("redirect_uri")) return json({ error: "invalid_grant" }, 400);
+    const grant: ClientGrant = { ...pending, uid: pending.uid };
     if (await sha256(String(body.get("code_verifier") || "")) !== grant.challenge) return json({ error: "invalid_grant" }, 400);
     await kv.delete(`code:${await sha256(code)}`);
     return json(await issueTokens(env, grant), 200, { "cache-control": "no-store" });
   }
   if (grantType === "refresh_token") {
     const refreshToken = String(body.get("refresh_token") || "");
-    const grant = await kv.get(`refresh:${await sha256(refreshToken)}`, "json");
+    const grant = asClientGrant(await kv.get(`refresh:${await sha256(refreshToken)}`, "json"));
     if (!grant) return json({ error: "invalid_grant" }, 400);
     await kv.delete(`refresh:${await sha256(refreshToken)}`);
     return json(await issueTokens(env, grant), 200, { "cache-control": "no-store" });
@@ -252,14 +310,14 @@ export async function tokenEndpoint(request, env) {
   return json({ error: "unsupported_grant_type" }, 400);
 }
 
-export async function revokeToken(request, env) {
+export async function revokeToken(request: Request, env: WorkerEnv): Promise<Response> {
   const body = await request.formData();
   const token = String(body.get("token") || "");
   const hash = await sha256(token);
   const kv = getKv(env);
   const [accessRecord, refreshRecord] = await Promise.all([
-    kv.get(`access:${hash}`, "json"),
-    kv.get(`refresh:${hash}`, "json"),
+    kv.get<JsonRecord>(`access:${hash}`, "json"),
+    kv.get<JsonRecord>(`refresh:${hash}`, "json"),
   ]);
   await Promise.all([
     kv.delete(`access:${hash}`),
@@ -269,11 +327,11 @@ export async function revokeToken(request, env) {
   ]);
   const record = accessRecord || refreshRecord;
   if (record?.uid && record?.clientId) {
-    await revokeAuthorizedClient(env, record.uid, record.clientId);
+    await revokeAuthorizedClient(env, String(record.uid), String(record.clientId));
   }
   return new Response(null, { status: 200 });
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+function escapeHtml(value: unknown): string {
+  return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
 }

@@ -1,9 +1,13 @@
-// @ts-nocheck
 import {
   linkExternalRecord,
   purgeManagedFocusLinks,
   removeManagedFocusEntry,
 } from "../../server/questforge-domain.ts";
+import type {
+  ExternalLink,
+  Quest,
+  QuestForgeState,
+} from "../../types/questforge.ts";
 import {
   deleteTogglFocusAttribution,
   getIntegrationAccount,
@@ -16,69 +20,197 @@ import {
   saveTogglFocusAttribution,
   saveTogglFocusTaskLink,
 } from "./integration-store.ts";
+import type {
+  FocusAttribution,
+  FocusTaskLink,
+  IntegrationAccount,
+} from "./integration-store.ts";
+import type { AuthIdentity } from "./security.ts";
+import type { JsonRecord, WorkerEnv, WorkerError } from "./worker-types.ts";
 
 const SERVICE = "toggl-focus";
 const API_BASE = "https://focus.toggl.com/api";
 const MAX_ENTRY_DAYS = 30;
 const FOCUS_TASK_TYPE = "focus.task";
 const FOCUS_ENTRY_TYPE = "focus.time_entry";
-const ACTIVITY_CONTEXTS = Object.freeze([
+type Identity = string | Pick<AuthIdentity, "uid">;
+
+type FocusRecord = JsonRecord & {
+  data?: unknown;
+  items?: unknown;
+  results?: unknown;
+  id?: string | number;
+  name?: string;
+  title?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  task_id?: string | number;
+  task?: FocusRecord;
+  duration_minutes?: number;
+  duration_mins?: number;
+  duration?: number;
+  start?: string;
+  start_at?: string;
+  stop?: string;
+  end?: string;
+  end_at?: string;
+  tracked_at?: string;
+  deleted_at?: string;
+  project_id?: string | number;
+  running?: boolean;
+  time_entry?: FocusRecord;
+  entry?: FocusRecord;
+  current?: FocusRecord;
+  task_name?: string;
+  description?: string;
+  message?: string;
+  error?: string | FocusRecord;
+  details?: FocusRecord;
+  user?: FocusRecord;
+  user_id?: string | number;
+  email?: string;
+};
+
+type FocusInput = {
+  apiKey?: string;
+  organizationId?: string | number;
+  workspaceId?: string | number;
+  projectId?: string | number;
+  autoCreateTasks?: boolean;
+  days?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  includeTaskless?: boolean;
+  entryIds?: Array<string | number>;
+  questId?: string;
+  dryRun?: boolean;
+  expectedCurrentEntryId?: string;
+  expectedEntryId?: string;
+  end?: string;
+  [key: string]: unknown;
+};
+
+type FocusConfiguration = {
+  organizationId: string;
+  workspaceId: string;
+  projectId: string;
+  autoCreateTasks: boolean;
+};
+
+type FocusRequestOptions = {
+  method?: string;
+  body?: string;
+  headers?: Record<string, string>;
+};
+
+type ActivityContext = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+type NormalizedFocusEntry = {
+  id: string;
+  taskId: string;
+  taskName: string;
+  description: string;
+  durationMinutes: number;
+  startAt: string;
+  stopAt: string;
+  updatedAt: string;
+  deletedAt: string;
+  projectId: string;
+  running: boolean;
+  attribution?: FocusAttribution | null;
+};
+
+type FocusExternalLink = Pick<ExternalLink, "externalId"> & Partial<ExternalLink>;
+
+const ACTIVITY_CONTEXTS: readonly ActivityContext[] = Object.freeze([
   { id: "development", label: "Development", description: "コード、設計、デバッグ" },
   { id: "creative", label: "Creative", description: "デザイン、編集、制作" },
   { id: "ai-generation", label: "AI Generation", description: "生成、検証、プロンプト作業" },
   { id: "research", label: "Research", description: "調査、読書、比較" },
 ]);
 
-function integrationError(status, code, message, details) {
+function integrationError(status: number, code: string, message: string, details: unknown = undefined): WorkerError {
   return Object.assign(new Error(message), { status, code, details });
 }
 
-function normalizeIdentity(identity) {
+function normalizeIdentity(identity: Identity): { uid: string } {
   return typeof identity === "string" ? { uid: identity } : identity;
 }
 
-function asItems(value) {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.results)) return value.results;
+function asItems(value: unknown): FocusRecord[] {
+  if (Array.isArray(value)) return value.map(asObject).filter((item): item is FocusRecord => Boolean(item));
+  if (!value || typeof value !== "object") return [];
+  const record = value as JsonRecord;
+  for (const key of ["data", "items", "results"]) {
+    const items = record[key];
+    if (Array.isArray(items)) return items.map(asObject).filter((item): item is FocusRecord => Boolean(item));
+  }
   return [];
 }
 
-function asObject(value) {
-  if (value && typeof value === "object" && !Array.isArray(value?.data)) return value.data && typeof value.data === "object" ? value.data : value;
-  return null;
+function asObject(value: unknown): FocusRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as JsonRecord;
+  const data = record.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) return data as FocusRecord;
+  return record as FocusRecord;
 }
 
-function numericId(value, field, { required = true } = {}) {
+function errorDetails(error: unknown): FocusRecord {
+  if (!error || typeof error !== "object" || Array.isArray(error)) return {};
+  return asObject((error as JsonRecord).details) || {};
+}
+
+function responseMessage(value: unknown, fallback: string): string {
+  const record = asObject(value);
+  const error = record?.error;
+  const nested = typeof error === "object" ? asObject(error) : null;
+  return String(record?.message || nested?.message || (typeof error === "string" ? error : "") || fallback);
+}
+
+function settingText(settings: JsonRecord, key: string): string {
+  const value = settings[key];
+  return value === undefined || value === null ? "" : String(value);
+}
+
+function settingBool(settings: JsonRecord, key: string): boolean {
+  return Boolean(settings[key]);
+}
+
+function numericId(value: unknown, field: string, { required = true }: { required?: boolean } = {}): string {
   const id = String(value || "").trim();
   if (!id && !required) return "";
   if (!/^\d+$/.test(id)) throw integrationError(400, `invalid_focus_${field}`, `${field} must be a Toggl Focus numeric ID.`);
   return id;
 }
 
-function compact(object) {
+function compact(object: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && !value.length)));
 }
 
-function dateIso(dateText, end = false) {
+function dateIso(dateText: unknown, end = false): string {
   const date = String(dateText || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "";
   return `${date}T${end ? "23:59:59.999" : "00:00:00.000"}Z`;
 }
 
-function daysWindow(input = {}) {
+function daysWindow(input: FocusInput = {}): { days: number; dateFrom: string; dateTo: string } {
   const days = Math.max(1, Math.min(MAX_ENTRY_DAYS, Math.round(Number(input.days || MAX_ENTRY_DAYS))));
-  const to = input.dateTo && /^\d{4}-\d{2}-\d{2}$/.test(input.dateTo) ? input.dateTo : new Date().toISOString().slice(0, 10);
+  const to = input.dateTo && /^\d{4}-\d{2}-\d{2}$/.test(String(input.dateTo)) ? String(input.dateTo) : new Date().toISOString().slice(0, 10);
   const fromDate = new Date(`${to}T00:00:00Z`);
   fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
-  const from = input.dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(input.dateFrom)
-    ? input.dateFrom
+  const from = input.dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(String(input.dateFrom))
+    ? String(input.dateFrom)
     : fromDate.toISOString().slice(0, 10);
   return { days, dateFrom: from, dateTo: to };
 }
 
-async function focusJson(token, path, options = {}, attempt = 0) {
+async function focusJson(token: string, path: string, options: FocusRequestOptions = {}, attempt = 0): Promise<unknown> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -93,29 +225,29 @@ async function focusJson(token, path, options = {}, attempt = 0) {
     await new Promise((resolve) => setTimeout(resolve, Math.max(retryAfter * 1000, 250 * (2 ** attempt))));
     return focusJson(token, path, options, attempt + 1);
   }
-  const value = response.status === 204 ? null : await response.json().catch(() => ({}));
+  const value: unknown = response.status === 204 ? null : await response.json().catch(() => ({}));
   if (!response.ok) {
     const code = response.status === 401 ? "reconnect_required"
       : response.status === 403 ? "provider_permission_denied"
         : response.status === 429 ? "provider_rate_limited"
           : "provider_error";
-    throw integrationError(response.status === 401 ? 401 : response.status === 429 ? 429 : 502, code, value?.message || value?.error?.message || value?.error || `Toggl Focus returned HTTP ${response.status}`, { providerStatus: response.status });
+    throw integrationError(response.status === 401 ? 401 : response.status === 429 ? 429 : 502, code, responseMessage(value, `Toggl Focus returned HTTP ${response.status}`), { providerStatus: response.status });
   }
   return value;
 }
 
-async function focusAccount(env, identity, { requireConfiguration = true } = {}) {
+async function focusAccount(env: WorkerEnv, identity: Identity, { requireConfiguration = true }: { requireConfiguration?: boolean } = {}): Promise<{ uid: string; account: IntegrationAccount; token: string; configuration: FocusConfiguration }> {
   const { uid } = normalizeIdentity(identity);
   const account = await getIntegrationAccount(env, uid, SERVICE, { includeTokens: true });
   if (!account) throw integrationError(409, "integration_not_connected", "Connect Toggl Focus from the QuestForge web app first.");
   if (account.status === "reconnect_required") throw integrationError(401, "reconnect_required", "Reconnect Toggl Focus in QuestForge.");
   if (!account.accessToken) throw integrationError(503, "integration_vault_unavailable", "The Toggl Focus key could not be loaded.");
   const settings = account.settings || {};
-  const configuration = {
-    organizationId: String(settings.organizationId || ""),
-    workspaceId: String(settings.workspaceId || ""),
-    projectId: String(settings.projectId || ""),
-    autoCreateTasks: Boolean(settings.autoCreateTasks),
+  const configuration: FocusConfiguration = {
+    organizationId: settingText(settings, "organizationId"),
+    workspaceId: settingText(settings, "workspaceId"),
+    projectId: settingText(settings, "projectId"),
+    autoCreateTasks: settingBool(settings, "autoCreateTasks"),
   };
   if (requireConfiguration) {
     numericId(configuration.organizationId, "organizationId");
@@ -125,11 +257,11 @@ async function focusAccount(env, identity, { requireConfiguration = true } = {})
   return { uid, account, token: account.accessToken, configuration };
 }
 
-function focusPath(configuration, suffix = "") {
+function focusPath(configuration: FocusConfiguration, suffix = ""): string {
   return `/organizations/${encodeURIComponent(configuration.organizationId)}/workspaces/${encodeURIComponent(configuration.workspaceId)}${suffix}`;
 }
 
-function publicAccount(account) {
+function publicAccount(account: IntegrationAccount | null): Record<string, unknown> | null {
   if (!account) return null;
   return {
     status: account.status,
@@ -141,19 +273,19 @@ function publicAccount(account) {
   };
 }
 
-function focusTaskLink(task) {
+function focusTaskLink(task: Quest): ExternalLink | undefined {
   return (task.externalLinks || []).find((link) => link.service === SERVICE && (link.type === "task" || link.sourceType === FOCUS_TASK_TYPE));
 }
 
-function configuredFocusTaskLink(task, configuration) {
+function configuredFocusTaskLink(task: Quest, configuration: FocusConfiguration): ExternalLink | undefined {
   const link = focusTaskLink(task);
-  if (!link) return null;
+  if (!link) return undefined;
   const hasConnectionContext = Boolean(link.organizationId || link.workspaceId);
-  if (hasConnectionContext && (link.organizationId !== configuration.organizationId || link.workspaceId !== configuration.workspaceId)) return null;
+  if (hasConnectionContext && (link.organizationId !== configuration.organizationId || link.workspaceId !== configuration.workspaceId)) return undefined;
   return link;
 }
 
-function storedFocusTaskLink(link, configuration) {
+function storedFocusTaskLink(link: FocusTaskLink | null | undefined, configuration: FocusConfiguration): FocusExternalLink | null {
   if (!link || !link.focusTaskId) return null;
   if (link.organizationId !== configuration.organizationId || link.workspaceId !== configuration.workspaceId) return null;
   return {
@@ -167,22 +299,24 @@ function storedFocusTaskLink(link, configuration) {
   };
 }
 
-function focusEntryLink(task, entryId) {
+function focusEntryLink(task: Quest, entryId: string): ExternalLink | undefined {
   return (task.externalLinks || []).find((link) => link.service === SERVICE && link.externalId === String(entryId) && (link.type === "time_entry" || link.sourceType === FOCUS_ENTRY_TYPE));
 }
 
-function focusTaskEligible(task) {
-  return Boolean(task) && ["todo", "daily"].includes(task.kind)
+function focusTaskEligible(task: Quest | undefined): task is Quest {
+  if (!task) return false;
+  return ["todo", "daily"].includes(task.kind)
     && task.lifecycleState !== "archived"
     && task.lifecycleState !== "completed"
     && !task.done;
 }
 
-function attributionEligibleQuest(task) {
-  return Boolean(task) && ["todo", "daily"].includes(task.kind) && task.lifecycleState !== "archived";
+function attributionEligibleQuest(task: Quest | undefined): task is Quest {
+  if (!task) return false;
+  return ["todo", "daily"].includes(task.kind) && task.lifecycleState !== "archived";
 }
 
-function taskPayload(task, configuration, tagIds = []) {
+function taskPayload(task: Quest, configuration: FocusConfiguration, tagIds: number[] = []): Record<string, unknown> {
   const priority = task.impact === "high" ? "high" : task.impact === "low" ? "low" : "medium";
   const notes = [task.notes, task.nextAction ? `Next action: ${task.nextAction}` : "", task.completionCriteria ? `Done when: ${task.completionCriteria}` : ""]
     .filter(Boolean)
@@ -201,19 +335,19 @@ function taskPayload(task, configuration, tagIds = []) {
   });
 }
 
-function normalizedTask(remote) {
+function normalizedTask(remote: unknown): { id: string; name: string; updatedAt: string } {
   const value = asObject(remote) || {};
   return { id: String(value.id || value.task_id || ""), name: String(value.name || value.title || ""), updatedAt: String(value.updated_at || value.updatedAt || "") };
 }
 
-function entryDurationMinutes(entry) {
+function entryDurationMinutes(entry: FocusRecord): number {
   if (entry.duration_minutes != null) return Math.max(0, Math.round(Number(entry.duration_minutes) || 0));
   if (entry.duration_mins != null) return Math.max(0, Math.round(Number(entry.duration_mins) || 0));
   const seconds = Number(entry.duration || 0);
   return Math.max(0, Math.round(seconds / 60));
 }
 
-function normalizeEntry(raw) {
+function normalizeEntry(raw: unknown): NormalizedFocusEntry {
   const entry = asObject(raw) || {};
   const task = entry.task && typeof entry.task === "object" ? entry.task : {};
   return {
@@ -231,7 +365,7 @@ function normalizeEntry(raw) {
   };
 }
 
-function normalizeTracking(value) {
+function normalizeTracking(value: unknown): NormalizedFocusEntry | null {
   const raw = asObject(value);
   if (!raw || !Object.keys(raw).length) return null;
   const candidate = raw.time_entry || raw.entry || raw.current || raw;
@@ -239,25 +373,25 @@ function normalizeTracking(value) {
   return entry.id ? entry : null;
 }
 
-async function currentFocusTracking(token, configuration) {
+async function currentFocusTracking(token: string, configuration: FocusConfiguration): Promise<NormalizedFocusEntry | null> {
   try {
     return normalizeTracking(await focusJson(token, focusPath(configuration, "/tracking/current")));
   } catch (error) {
-    if (error?.details?.providerStatus === 404) return null;
+    if (errorDetails(error).providerStatus === 404) return null;
     throw error;
   }
 }
 
-async function focusTags(token, configuration, task) {
+async function focusTags(token: string, configuration: FocusConfiguration, task: Quest): Promise<number[]> {
   const tags = (task.tags || []).map((tag) => String(tag).trim()).filter(Boolean).slice(0, 6);
   if (!tags.length) return [];
   const response = await focusJson(token, `/workspaces/${encodeURIComponent(configuration.workspaceId)}/tags?per_page=100`);
-  const known = new Map(asItems(response).map((tag) => [String(tag.name || "").toLocaleLowerCase(), tag]));
-  const ids = [];
+  const known = new Map<string, FocusRecord>(asItems(response).map((tag) => [String(tag.name || "").toLocaleLowerCase(), tag]));
+  const ids: number[] = [];
   for (const name of tags) {
     let tag = known.get(name.toLocaleLowerCase());
     if (!tag) {
-      tag = asObject(await focusJson(token, `/workspaces/${encodeURIComponent(configuration.workspaceId)}/tags`, { method: "POST", body: JSON.stringify({ name }) }));
+      tag = asObject(await focusJson(token, `/workspaces/${encodeURIComponent(configuration.workspaceId)}/tags`, { method: "POST", body: JSON.stringify({ name }) })) || undefined;
       if (tag?.id) known.set(name.toLocaleLowerCase(), tag);
     }
     if (tag?.id != null) ids.push(Number(tag.id));
@@ -265,7 +399,7 @@ async function focusTags(token, configuration, task) {
   return ids;
 }
 
-function configuredTaskPreview(task, configuration, operation, link = focusTaskLink(task)) {
+function configuredTaskPreview(task: Quest, configuration: FocusConfiguration, operation: string, link: FocusExternalLink | null | undefined = focusTaskLink(task)): Record<string, unknown> {
   return {
     operation,
     questId: task.id,
@@ -276,7 +410,12 @@ function configuredTaskPreview(task, configuration, operation, link = focusTaskL
   };
 }
 
-export async function connectTogglFocus(env, identity, input = {}) {
+/* Legacy implementation below is replaced by the typed declarations above. */
+/*
+ * The original untyped helpers were kept in this patch context only so that
+ * the behavior can be compared while the rest of this file is migrated.
+ */
+export async function connectTogglFocus(env: WorkerEnv, identity: Identity, input: FocusInput = {}) {
   const { uid } = normalizeIdentity(identity);
   const apiKey = String(input.apiKey || "").trim();
   if (!/^toggl_sk_[A-Za-z0-9_-]{8,}$/.test(apiKey)) {
@@ -285,10 +424,10 @@ export async function connectTogglFocus(env, identity, input = {}) {
   const settings = asObject(await focusJson(apiKey, "/users/me/settings")) || {};
   const existing = await getIntegrationAccount(env, uid, SERVICE);
   const savedSettings = {
-    organizationId: input.organizationId !== undefined ? numericId(input.organizationId, "organizationId", { required: false }) : String(existing?.settings?.organizationId || ""),
-    workspaceId: input.workspaceId !== undefined ? numericId(input.workspaceId, "workspaceId", { required: false }) : String(existing?.settings?.workspaceId || ""),
-    projectId: input.projectId !== undefined ? numericId(input.projectId, "projectId", { required: false }) : String(existing?.settings?.projectId || ""),
-    autoCreateTasks: input.autoCreateTasks !== undefined ? Boolean(input.autoCreateTasks) : Boolean(existing?.settings?.autoCreateTasks),
+    organizationId: input.organizationId !== undefined ? numericId(input.organizationId, "organizationId", { required: false }) : settingText(existing?.settings || {}, "organizationId"),
+    workspaceId: input.workspaceId !== undefined ? numericId(input.workspaceId, "workspaceId", { required: false }) : settingText(existing?.settings || {}, "workspaceId"),
+    projectId: input.projectId !== undefined ? numericId(input.projectId, "projectId", { required: false }) : settingText(existing?.settings || {}, "projectId"),
+    autoCreateTasks: input.autoCreateTasks !== undefined ? Boolean(input.autoCreateTasks) : settingBool(existing?.settings || {}, "autoCreateTasks"),
   };
   const account = await saveIntegrationAccount(env, uid, SERVICE, {
     status: "connected",
@@ -303,13 +442,13 @@ export async function connectTogglFocus(env, identity, input = {}) {
   return { service: SERVICE, account: publicAccount(account), configurationRequired: !(savedSettings.organizationId && savedSettings.workspaceId) };
 }
 
-export async function configureTogglFocus(env, identity, input = {}) {
+export async function configureTogglFocus(env: WorkerEnv, identity: Identity, input: FocusInput = {}) {
   const { uid, account, token } = await focusAccount(env, identity, { requireConfiguration: false });
   const settings = {
-    organizationId: input.organizationId !== undefined ? numericId(input.organizationId, "organizationId", { required: false }) : String(account.settings?.organizationId || ""),
-    workspaceId: input.workspaceId !== undefined ? numericId(input.workspaceId, "workspaceId", { required: false }) : String(account.settings?.workspaceId || ""),
-    projectId: input.projectId !== undefined ? numericId(input.projectId, "projectId", { required: false }) : String(account.settings?.projectId || ""),
-    autoCreateTasks: input.autoCreateTasks !== undefined ? Boolean(input.autoCreateTasks) : Boolean(account.settings?.autoCreateTasks),
+    organizationId: input.organizationId !== undefined ? numericId(input.organizationId, "organizationId", { required: false }) : settingText(account.settings, "organizationId"),
+    workspaceId: input.workspaceId !== undefined ? numericId(input.workspaceId, "workspaceId", { required: false }) : settingText(account.settings, "workspaceId"),
+    projectId: input.projectId !== undefined ? numericId(input.projectId, "projectId", { required: false }) : settingText(account.settings, "projectId"),
+    autoCreateTasks: input.autoCreateTasks !== undefined ? Boolean(input.autoCreateTasks) : settingBool(account.settings, "autoCreateTasks"),
   };
   if (settings.organizationId && settings.workspaceId) {
     await focusJson(token, focusPath(settings, "/tasks?per_page=1"));
@@ -320,9 +459,9 @@ export async function configureTogglFocus(env, identity, input = {}) {
   return { service: SERVICE, account: publicAccount(updated), configurationRequired: !(settings.organizationId && settings.workspaceId) };
 }
 
-export async function listTogglFocusResources(env, identity) {
+export async function listTogglFocusResources(env: WorkerEnv, identity: Identity) {
   const { account, token, configuration } = await focusAccount(env, identity, { requireConfiguration: false });
-  const resources = [];
+  const resources: Array<{ id: string; type: "project" | "tag"; name: string; selected?: boolean }> = [];
   if (configuration.organizationId && configuration.workspaceId) {
     const [projectsResult, tagsResult] = await Promise.all([
       focusJson(token, focusPath(configuration, "/projects?per_page=100")),
@@ -341,9 +480,9 @@ export async function listTogglFocusResources(env, identity) {
   };
 }
 
-export async function syncQuestToTogglFocus(env, identity, state, questId, input = {}) {
+export async function syncQuestToTogglFocus(env: WorkerEnv, identity: Identity, state: QuestForgeState, questId: string, input: FocusInput = {}) {
   const { uid, token, configuration } = await focusAccount(env, identity);
-  const task = state.tasks.find((item) => item.id === questId);
+  const task = state.tasks.find((item: Quest) => item.id === questId);
   if (!focusTaskEligible(task)) throw integrationError(409, "focus_quest_not_eligible", "Only active To Do and Daily quests can be sent to Toggl Focus.");
   const durableLink = await getTogglFocusTaskLink(env, uid, task.id);
   const link = configuredFocusTaskLink(task, configuration) || storedFocusTaskLink(durableLink, configuration);
@@ -359,7 +498,7 @@ export async function syncQuestToTogglFocus(env, identity, state, questId, input
     try {
       remote = asObject(await focusJson(token, focusPath(configuration, `/tasks/${encodeURIComponent(link.externalId)}`), { method: "PATCH", body: JSON.stringify(payload) }));
     } catch (error) {
-      if (error?.details?.providerStatus !== 404) throw error;
+      if (errorDetails(error).providerStatus !== 404) throw error;
       effectiveOperation = "recreate";
       remote = asObject(await focusJson(token, focusPath(configuration, "/tasks"), { method: "POST", body: JSON.stringify(payload) }));
     }
@@ -393,7 +532,7 @@ export async function syncQuestToTogglFocus(env, identity, state, questId, input
   return { dryRun: false, operation: effectiveOperation, quest: result.quest, external: { id: normalized.id, name: normalized.name }, event: result.event };
 }
 
-export async function getTogglFocusTracking(env, identity) {
+export async function getTogglFocusTracking(env: WorkerEnv, identity: Identity) {
   const { token, configuration } = await focusAccount(env, identity, { requireConfiguration: false });
   if (!(configuration.organizationId && configuration.workspaceId)) {
     return { service: SERVICE, tracking: null, configuration, configurationRequired: true, activityContexts: ACTIVITY_CONTEXTS };
@@ -402,7 +541,7 @@ export async function getTogglFocusTracking(env, identity) {
   return { service: SERVICE, tracking: current, configuration, configurationRequired: false, activityContexts: ACTIVITY_CONTEXTS };
 }
 
-export async function startTogglFocusTracking(env, identity, state, input = {}) {
+export async function startTogglFocusTracking(env: WorkerEnv, identity: Identity, state: QuestForgeState, input: FocusInput = {}) {
   const { uid, token, configuration } = await focusAccount(env, identity);
   const quest = state.tasks.find((task) => task.id === input.questId);
   if (!focusTaskEligible(quest)) throw integrationError(409, "focus_quest_not_eligible", "Only active To Do and Daily quests can start a Focus timer.");
@@ -429,7 +568,7 @@ export async function startTogglFocusTracking(env, identity, state, input = {}) 
   return { dryRun: false, action: "started", questId: quest.id, tracking: started };
 }
 
-export async function stopTogglFocusTracking(env, identity, input = {}) {
+export async function stopTogglFocusTracking(env: WorkerEnv, identity: Identity, input: FocusInput = {}) {
   const { token, configuration } = await focusAccount(env, identity);
   const current = await currentFocusTracking(token, configuration);
   const dryRun = input.dryRun !== false;
@@ -448,7 +587,7 @@ export async function stopTogglFocusTracking(env, identity, input = {}) {
   return { dryRun: false, action: "stopped", stoppedEntryId: current.id };
 }
 
-export async function listTogglFocusEntries(env, identity, input = {}) {
+export async function listTogglFocusEntries(env: WorkerEnv, identity: Identity, input: FocusInput = {}) {
   const { token, configuration } = await focusAccount(env, identity);
   const window = daysWindow(input);
   const query = new URLSearchParams({ date_from: dateIso(window.dateFrom), date_to: dateIso(window.dateTo, true), per_page: String(Math.max(1, Math.min(200, Number(input.limit || 100)))) });
@@ -465,28 +604,28 @@ export async function listTogglFocusEntries(env, identity, input = {}) {
   };
 }
 
-function linkedQuestForFocusTask(state, focusTaskId, configuration, storedLink = null) {
+function linkedQuestForFocusTask(state: QuestForgeState, focusTaskId: string, configuration: FocusConfiguration, storedLink: FocusTaskLink | null | undefined = null): Quest | undefined {
   return state.tasks.find((task) => attributionEligibleQuest(task) && configuredFocusTaskLink(task, configuration)?.externalId === String(focusTaskId))
-    || (storedLink ? state.tasks.find((task) => task.id === storedLink.questId && attributionEligibleQuest(task)) : null);
+    || (storedLink ? state.tasks.find((task) => task.id === storedLink.questId && attributionEligibleQuest(task)) : undefined);
 }
 
-function linkedQuestForFocusEntry(state, entryId) {
+function linkedQuestForFocusEntry(state: QuestForgeState, entryId: string): Quest | undefined {
   return state.tasks.find((task) => focusEntryLink(task, entryId));
 }
 
-async function attributionCandidates(env, identity, state, input = {}) {
+async function attributionCandidates(env: WorkerEnv, identity: Identity, state: QuestForgeState, input: FocusInput = {}) {
   const listing = await listTogglFocusEntries(env, identity, input);
   const durableTaskLinks = new Map((await listTogglFocusTaskLinks(env, normalizeIdentity(identity).uid))
     .filter((link) => link.organizationId === listing.configuration.organizationId && link.workspaceId === listing.configuration.workspaceId)
     .map((link) => [link.focusTaskId, link]));
   const wanted = new Set((input.entryIds || []).map(String).filter(Boolean));
-  const explicitQuest = input.questId ? state.tasks.find((task) => task.id === input.questId) : null;
+  const explicitQuest = input.questId ? state.tasks.find((task) => task.id === input.questId) : undefined;
   if (input.questId && !attributionEligibleQuest(explicitQuest)) throw integrationError(409, "focus_quest_not_eligible", "Choose a non-archived To Do or Daily Quest for manual attribution.");
   const candidates = [];
   for (const entry of listing.entries.filter((entry) => !wanted.size || wanted.has(entry.id))) {
     const linked = linkedQuestForFocusEntry(state, entry.id);
     const direct = linkedQuestForFocusTask(state, entry.taskId, listing.configuration, durableTaskLinks.get(entry.taskId));
-    const stored = entry.attribution ? state.tasks.find((task) => task.id === entry.attribution.questId) : null;
+    const stored = entry.attribution?.questId ? state.tasks.find((task) => task.id === entry.attribution?.questId) : undefined;
     const target = linked || direct || stored || explicitQuest;
     const mode = linked || direct ? "direct" : stored ? "stored" : explicitQuest ? "manual" : "candidate";
     candidates.push({
@@ -500,7 +639,7 @@ async function attributionCandidates(env, identity, state, input = {}) {
   return { listing, candidates };
 }
 
-export async function previewTogglFocusAttribution(env, identity, state, input = {}) {
+export async function previewTogglFocusAttribution(env: WorkerEnv, identity: Identity, state: QuestForgeState, input: FocusInput = {}) {
   const { listing, candidates } = await attributionCandidates(env, identity, state, input);
   const ready = candidates.filter((candidate) => candidate.status === "ready");
   return {
@@ -513,7 +652,7 @@ export async function previewTogglFocusAttribution(env, identity, state, input =
   };
 }
 
-export async function applyTogglFocusAttribution(env, identity, state, input = {}) {
+export async function applyTogglFocusAttribution(env: WorkerEnv, identity: Identity, state: QuestForgeState, input: FocusInput = {}) {
   const dryRun = input.dryRun !== false;
   const preview = await previewTogglFocusAttribution(env, identity, state, input);
   if (dryRun) return preview;
@@ -561,23 +700,24 @@ export async function applyTogglFocusAttribution(env, identity, state, input = {
       direction: "import",
     }, { source: SERVICE, allowManagedFocus: true });
     events.push(linked.event);
-    results.push({ entryId: entry.id, questId: target.id, action: "attributed", actualMinutes: linked.quest.actualMinutes });
+    const linkedQuest = linked.quest as Quest;
+    results.push({ entryId: entry.id, questId: target.id, action: "attributed", actualMinutes: linkedQuest.actualMinutes });
   }
   return { dryRun: false, service: SERVICE, results, events, count: results.length };
 }
 
-export async function getTogglFocusEstimateInsights(env, identity, state) {
+export async function getTogglFocusEstimateInsights(env: WorkerEnv, identity: Identity, state: QuestForgeState) {
   await focusAccount(env, identity);
   const samples = state.tasks.filter((task) => ["completed", "archived"].includes(task.lifecycleState)
     && Number(task.actualMinutes || 0) > 0
     && (task.externalLinks || []).some((link) => link.service === SERVICE));
   if (samples.length < 3) return { available: false, sampleSize: samples.length, minimumSampleSize: 3, suggestions: [] };
-  const median = (values) => {
+  const median = (values: number[]): number => {
     const sorted = [...values].sort((a, b) => a - b);
     const middle = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
   };
-  const groups = new Map();
+  const groups = new Map<string, number[]>();
   for (const task of samples) {
     const keys = [`difficulty:${task.difficulty}`, `kind:${task.kind}`, ...(task.category ? [`category:${task.category}`] : [])];
     for (const key of keys) groups.set(key, [...(groups.get(key) || []), Number(task.actualMinutes)]);
@@ -589,7 +729,7 @@ export async function getTogglFocusEstimateInsights(env, identity, state) {
   return { available: true, sampleSize: samples.length, suggestions, note: "Suggestions only. Quest estimates are never changed automatically." };
 }
 
-export async function purgeTogglFocus(env, identity, state, input = {}) {
+export async function purgeTogglFocus(env: WorkerEnv, identity: Identity, state: QuestForgeState, input: FocusInput = {}) {
   const dryRun = input.dryRun !== false;
   const result = purgeManagedFocusLinks(state, { dryRun }, { source: SERVICE });
   if (!dryRun) {
@@ -602,13 +742,13 @@ export async function purgeTogglFocus(env, identity, state, input = {}) {
   return result;
 }
 
-export async function isTogglFocusAutoCreateEnabled(env, identity) {
+export async function isTogglFocusAutoCreateEnabled(env: WorkerEnv, identity: Identity): Promise<boolean> {
   try {
     const { account, configuration } = await focusAccount(env, identity, { requireConfiguration: false });
     return Boolean(account?.status === "connected" && configuration.autoCreateTasks && configuration.organizationId && configuration.workspaceId);
   } catch { return false; }
 }
 
-export function isTogglFocusService(service) {
+export function isTogglFocusService(service: string): boolean {
   return service === SERVICE;
 }
