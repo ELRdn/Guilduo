@@ -1,10 +1,11 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.join(__dirname, "..");
+
+type ContractTool = { name: string; outputSchema?: unknown; title?: string };
 
 const localeFiles = Object.freeze({
   ja: "ja.ts",
@@ -18,7 +19,7 @@ const localeFiles = Object.freeze({
   ru: "ru.ts",
 });
 
-function placeholderNames(message) {
+function placeholderNames(message: string): string[] {
   return [...String(message).matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]).sort();
 }
 
@@ -49,12 +50,12 @@ test("i18n supports nine locales with BCP 47 resolution and Intl formatting", as
 
 test("all locale catalogs have complete keys, placeholders, and valid ICU messages", async () => {
   const { IntlMessageFormat } = await import("intl-messageformat");
-  const english = (await import("../locales/en.ts")).default;
+  const english = (await import("../locales/en.ts")).default as Record<string, string>;
   const englishKeys = Object.keys(english);
   assert.equal(englishKeys.length, 484);
 
   for (const [locale, filename] of Object.entries(localeFiles)) {
-    const catalog = (await import(`../locales/${filename}`)).default;
+    const catalog = (await import(`../locales/${filename}`)).default as Record<string, string>;
     assert.deepEqual(Object.keys(catalog), englishKeys, `${locale} key order`);
     for (const key of englishKeys) {
       const expectedNames = placeholderNames(english[key]);
@@ -108,7 +109,7 @@ test("public examples omit local absolute paths and private deployment identifie
 
 test("generated contracts expose Agent Registry, social, Quest Tree, battle, and MCP v2.7 operations", () => {
   const openapi = JSON.parse(fs.readFileSync(path.join(root, "api/openapi.json"), "utf8"));
-  const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8"));
+  const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8")) as { version: string; tools: ContractTool[] };
   assert.equal(openapi.info.version, "2.7.0");
   assert.equal(mcp.version, "2.7.0");
   assert.equal(mcp.tools.length, 51);
@@ -123,8 +124,9 @@ test("generated contracts expose Agent Registry, social, Quest Tree, battle, and
   assert.ok(mcp.tools.some((tool) => tool.name === "get_toggl_focus_status"));
   assert.ok(mcp.tools.some((tool) => tool.name === "apply_toggl_attribution"));
   for (const name of ["get_daily_brief", "get_review_summary", "list_agent_handoffs", "list_activity_events", "get_calendar_schedule", "convert_calendar_event_to_quest"]) {
-    const tool = mcp.tools.find((candidate) => candidate.name === name);
+    const tool = mcp.tools.find((candidate: ContractTool) => candidate.name === name);
     assert.ok(tool, name);
+    if (!tool) throw new Error(`Missing MCP tool: ${name}`);
     assert.ok(tool.outputSchema, `${name} output schema`);
   }
 });

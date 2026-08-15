@@ -1,8 +1,10 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import type { QuestForgeState } from "../types/questforge.ts";
+import type { WorkerEnv } from "../worker/src/worker-types.ts";
+import { asQuestForgeState, required } from "./test-helpers.ts";
 
-const env = {
+const env: WorkerEnv = {
   DEV_BEARER_TOKEN: "integration-test-key",
   GOOGLE_CLIENT_ID: "google-client-id",
   GOOGLE_CLIENT_SECRET: "google-client-secret",
@@ -12,13 +14,13 @@ const env = {
   WEB_APP_URL: "https://app.example",
 };
 
-function state() {
+function state(): QuestForgeState {
   const now = new Date().toISOString();
-  return {
+  return asQuestForgeState({
     schemaVersion: 4, createdAt: now, updatedAt: now, tasks: [], taskEvents: [], syncEvents: [], rewardClaims: {},
     character: { level: 1, hp: 50, maxHp: 50, xp: 0, nextXp: 100, gems: 0 },
     battle: { mp: 0, maxMp: 80 }, boss: { hp: 100, maxHp: 100 },
-  };
+  });
 }
 
 test("integration vault encrypts provider tokens and isolates users", async () => {
@@ -28,7 +30,7 @@ test("integration vault encrypts provider tokens and isolates users", async () =
   assert.equal(await decryptSecret(env, encrypted), "top-secret-token");
 
   await saveIntegrationAccount(env, "vault-user-a", "google-calendar", { accessToken: "token-a", refreshToken: "refresh-a", settings: { autoSync: true } });
-  assert.equal((await getIntegrationAccount(env, "vault-user-a", "google-calendar", { includeTokens: true })).accessToken, "token-a");
+  assert.equal(required(await getIntegrationAccount(env, "vault-user-a", "google-calendar", { includeTokens: true })).accessToken, "token-a");
   assert.equal(await getIntegrationAccount(env, "vault-user-b", "google-calendar"), null);
 });
 
@@ -52,7 +54,7 @@ test("Calendar sync caches schedule blocks without creating quests", async () =>
   const uid = "calendar-user";
   await saveIntegrationAccount(env, uid, "google-calendar", { accessToken: "calendar-token", tokenExpiresAt: Date.now() + 3600000, settings: { calendarIds: ["primary"], autoSync: false } });
   const originalFetch = global.fetch;
-  global.fetch = async (url) => {
+  global.fetch = async (url: string | URL | Request) => {
     const value = String(url);
     if (value.includes("/users/me/calendarList")) return Response.json({ items: [{ id: "primary", summary: "Main", primary: true }] });
     if (value.includes("/calendars/primary/events")) return Response.json({ items: [{ id: "event-1", summary: "Design review", start: { dateTime: "2026-08-02T10:00:00+09:00" }, end: { dateTime: "2026-08-02T11:00:00+09:00" }, status: "confirmed", htmlLink: "https://calendar.google.com/event" }] });
@@ -60,8 +62,8 @@ test("Calendar sync caches schedule blocks without creating quests", async () =>
   };
   try {
     const current = state();
-    const preview = await syncIntegration(env, { uid }, current, "google-calendar", "import", true);
-    assert.equal(preview.preview[0].action, "schedule");
+    const preview = await syncIntegration(env, { uid }, current, "google-calendar", "import", true) as { preview: Array<{ action: string }> };
+    assert.equal(preview.preview[0]?.action, "schedule");
     assert.equal(current.tasks.length, 0);
     await syncIntegration(env, { uid }, current, "google-calendar", "import", false);
     const schedule = await calendarSchedule(env, { uid }, "2026-08-02");
@@ -76,13 +78,13 @@ test("Google Tasks dry-run is immutable and live sync imports without deleting",
   const uid = "tasks-user";
   await saveIntegrationAccount(env, uid, "google-tasks", { accessToken: "tasks-token", tokenExpiresAt: Date.now() + 3600000, settings: { taskListId: "list-1", autoSync: false } });
   const originalFetch = global.fetch;
-  global.fetch = async (url) => {
+  global.fetch = async (url: string | URL | Request) => {
     if (String(url).includes("/lists/list-1/tasks")) return Response.json({ items: [{ id: "remote-1", title: "Remote task", notes: "Keep it", due: "2026-08-05T00:00:00.000Z", status: "needsAction", updated: "2026-08-02T01:00:00.000Z", etag: "etag-1" }] });
     throw new Error(`Unexpected fetch: ${url}`);
   };
   try {
     const current = state();
-    const preview = await syncIntegration(env, { uid }, current, "google-tasks", "bidirectional", true);
+    const preview = await syncIntegration(env, { uid }, current, "google-tasks", "bidirectional", true) as { created: number };
     assert.equal(preview.created, 1);
     assert.equal(current.tasks.length, 0);
     await syncIntegration(env, { uid }, current, "google-tasks", "bidirectional", false);
@@ -98,11 +100,11 @@ test("Google Tasks conflict stays pending until the user chooses a side", async 
   await saveIntegrationAccount(env, uid, "google-tasks", { accessToken: "tasks-token", tokenExpiresAt: Date.now() + 3600000, settings: { taskListId: "list-conflict", autoSync: false } });
   const originalFetch = global.fetch;
   let remote = { id: "remote-conflict", title: "Original", notes: "", status: "needsAction", updated: "2026-08-02T01:00:00.000Z", etag: "etag-1" };
-  global.fetch = async (url, options = {}) => {
+  global.fetch = async (url: string | URL | Request, options: RequestInit = {}) => {
     const value = String(url);
     if (!value.includes("/lists/list-conflict/tasks")) throw new Error(`Unexpected fetch: ${value}`);
     if ((options.method || "GET") === "PATCH") {
-      remote = { ...remote, ...JSON.parse(options.body), updated: "2026-08-02T05:00:00.000Z", etag: "etag-3" };
+      remote = { ...remote, ...JSON.parse(String(options.body || "{}")) as Partial<typeof remote>, updated: "2026-08-02T05:00:00.000Z", etag: "etag-3" };
       return Response.json(remote);
     }
     if (value.endsWith("/remote-conflict")) return Response.json(remote);
@@ -129,7 +131,7 @@ test("Notion daily export previews before creating one log row", async () => {
   const { syncIntegration } = await import("../worker/src/integrations.ts");
   const uid = "notion-user";
   await saveIntegrationAccount(env, uid, "notion", { accessToken: "notion-token", tokenExpiresAt: 0, settings: { notionDataSourceId: "source-1", notionDatabaseId: "db-1", autoSync: false } });
-  const requests = [];
+  const requests: Array<{ url: string; method: string }> = [];
   const originalFetch = global.fetch;
   global.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), method: options.method || "GET" });

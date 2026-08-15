@@ -1,14 +1,16 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import type { QuestForgeState } from "../types/questforge.ts";
+import type { WorkerEnv } from "../worker/src/worker-types.ts";
+import { asQuestForgeState, hasErrorCode, required } from "./test-helpers.ts";
 
-const env = {
+const env: WorkerEnv = {
   DEV_BEARER_TOKEN: "toggl-focus-test-key",
 };
 
-function state() {
+function state(): QuestForgeState {
   const now = new Date().toISOString();
-  return {
+  return asQuestForgeState({
     schemaVersion: 6,
     createdAt: now,
     updatedAt: now,
@@ -19,10 +21,10 @@ function state() {
     character: { level: 1, hp: 50, maxHp: 50, xp: 0, nextXp: 100, gems: 0 },
     battle: { mp: 0, maxMp: 80 },
     boss: { hp: 100, maxHp: 100 },
-  };
+  });
 }
 
-async function connectableAccount(uid, settings = {}) {
+async function connectableAccount(uid: string, settings: Record<string, unknown> = {}) {
   const { saveIntegrationAccount } = await import("../worker/src/integration-store.ts");
   return saveIntegrationAccount(env, uid, "toggl-focus", {
     status: "connected",
@@ -43,18 +45,18 @@ test("Toggl Focus API keys stay encrypted and never appear in the public connect
   const { connectTogglFocus } = await import("../worker/src/toggl-focus.ts");
   const { getIntegrationAccount } = await import("../worker/src/integration-store.ts");
   const originalFetch = global.fetch;
-  global.fetch = async (url, options = {}) => {
+  global.fetch = async (url: string | URL | Request, options: RequestInit = {}) => {
     assert.match(String(url), /\/users\/me\/settings$/);
-    assert.equal(options.headers.authorization, "Bearer toggl_sk_test_123456789");
+    assert.equal(new Headers(options.headers).get("authorization"), "Bearer toggl_sk_test_123456789");
     return Response.json({ user: { id: 17, email: "focus@example.test" } });
   };
   try {
     const result = await connectTogglFocus(env, { uid: "focus-connect-user" }, { apiKey: "toggl_sk_test_123456789" });
     assert.equal(result.service, "toggl-focus");
     assert.equal(JSON.stringify(result).includes("toggl_sk_test_123456789"), false);
-    const privateAccount = await getIntegrationAccount(env, "focus-connect-user", "toggl-focus", { includeTokens: true });
+    const privateAccount = required(await getIntegrationAccount(env, "focus-connect-user", "toggl-focus", { includeTokens: true }));
     assert.equal(privateAccount.accessToken, "toggl_sk_test_123456789");
-    const publicAccount = await getIntegrationAccount(env, "focus-connect-user", "toggl-focus");
+    const publicAccount = required(await getIntegrationAccount(env, "focus-connect-user", "toggl-focus"));
     assert.equal(Object.hasOwn(publicAccount, "accessToken"), false);
   } finally {
     global.fetch = originalFetch;
@@ -71,17 +73,17 @@ test("Focus task creation is idempotent across a Firebase retry and keeps comple
     kind: "todo", title: "Focusへ送る", notes: "仕様を確認", dueDate: "2026-08-30",
     scheduledDate: "2026-08-20", estimatedMinutes: 45, impact: "high",
   });
-  const requests = [];
+  const requests: Array<{ url: string; method: string; body: string }> = [];
   const originalFetch = global.fetch;
-  global.fetch = async (url, options = {}) => {
+  global.fetch = async (url: string | URL | Request, options: RequestInit = {}) => {
     const value = String(url);
-    requests.push({ url: value, method: options.method || "GET", body: options.body || "" });
+    requests.push({ url: value, method: options.method || "GET", body: String(options.body || "") });
     if (value.includes("/tasks") && (options.method || "GET") === "POST") return Response.json({ id: 501, name: "Focusへ送る", updated_at: "2026-08-20T00:00:00.000Z" });
     if (value.includes("/tasks/501") && options.method === "PATCH") return Response.json({ id: 501, name: "Focusへ送る", updated_at: "2026-08-20T01:00:00.000Z" });
     throw new Error(`Unexpected Focus request: ${value}`);
   };
   try {
-    const preview = await syncQuestToTogglFocus(env, { uid }, current, quest.id, { dryRun: true });
+    const preview = await syncQuestToTogglFocus(env, { uid }, current, quest.id, { dryRun: true }) as unknown as { operation: string; task: { estimated_mins: number; priority: string } };
     assert.equal(preview.operation, "create");
     assert.equal(preview.task.estimated_mins, 45);
     assert.equal(preview.task.priority, "high");
@@ -97,7 +99,7 @@ test("Focus task creation is idempotent across a Firebase retry and keeps comple
     scoreQuest(current, quest.id, "up");
     await assert.rejects(
       () => syncQuestToTogglFocus(env, { uid }, current, quest.id, { dryRun: true }),
-      (error) => error.code === "focus_quest_not_eligible",
+      (error: unknown) => hasErrorCode(error, "focus_quest_not_eligible"),
     );
   } finally {
     global.fetch = originalFetch;
@@ -112,9 +114,9 @@ test("Focus timers require the exact current entry before another task can repla
   const current = state();
   const quest = createQuest(current, { kind: "todo", title: "タイマー対象" });
   linkExternalRecord(current, quest.id, { service: "toggl-focus", externalId: "501", type: "task", sourceType: "focus.task" }, { allowManagedFocus: true });
-  const requests = [];
+  const requests: Array<{ url: string; method: string }> = [];
   const originalFetch = global.fetch;
-  global.fetch = async (url, options = {}) => {
+  global.fetch = async (url: string | URL | Request, options: RequestInit = {}) => {
     const value = String(url);
     requests.push({ url: value, method: options.method || "GET" });
     if (value.endsWith("/tracking/current")) return Response.json({ id: "entry-other", task_id: "999", description: "Other work", duration: -120 });
@@ -150,24 +152,24 @@ test("Focus time entries are attributed once, override Track totals, and cannot 
   linkExternalRecord(current, first.id, { service: "toggl-focus", externalId: "501", type: "task", sourceType: "focus.task" }, { allowManagedFocus: true });
   assert.throws(
     () => linkExternalRecord(current, second.id, { service: "toggl-focus", externalId: "spoofed", type: "time_entry", durationMinutes: 60 }),
-    (error) => error.code === "managed_focus_link_required",
+      (error: unknown) => hasErrorCode(error, "managed_focus_link_required"),
   );
   const originalFetch = global.fetch;
-  global.fetch = async (url) => {
+  global.fetch = async (url: string | URL | Request) => {
     assert.match(String(url), /\/time-entries\?/);
     return Response.json({ data: [{ id: "entry-1", task_id: "501", duration: 1800, start: "2026-08-19T10:00:00Z", stop: "2026-08-19T10:30:00Z", updated_at: "2026-08-19T10:31:00Z" }] });
   };
   try {
     const preview = await previewTogglFocusAttribution(env, { uid }, current, { days: 30 });
     assert.equal(preview.summary.ready, 1);
-    const applied = await applyTogglFocusAttribution(env, { uid }, current, { dryRun: false, days: 30 });
+    const applied = await applyTogglFocusAttribution(env, { uid }, current, { dryRun: false, days: 30 }) as { count: number };
     assert.equal(applied.count, 1);
-    assert.equal(current.tasks.find((task) => task.id === first.id).actualMinutes, 30);
+    assert.equal(required(current.tasks.find((task) => task.id === first.id)).actualMinutes, 30);
     await applyTogglFocusAttribution(env, { uid }, current, { dryRun: false, days: 30 });
-    assert.equal(current.tasks.find((task) => task.id === first.id).actualMinutes, 30);
+    assert.equal(required(current.tasks.find((task) => task.id === first.id)).actualMinutes, 30);
     await assert.rejects(
       () => saveTogglFocusAttribution(env, uid, { entryId: "entry-1", questId: second.id, durationMinutes: 30 }),
-      (error) => error.code === "time_entry_already_attributed",
+      (error: unknown) => hasErrorCode(error, "time_entry_already_attributed"),
     );
   } finally {
     global.fetch = originalFetch;

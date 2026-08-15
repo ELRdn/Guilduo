@@ -1,4 +1,3 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -12,14 +11,14 @@ test("manifest has a stable root-scoped PWA identity", () => {
   assert.equal(manifest.id, "/index.html");
   assert.equal(manifest.start_url, "/");
   assert.equal(manifest.scope, "/");
-  assert.deepEqual(manifest.shortcuts.map((shortcut) => shortcut.url), ["/#tasks", "/#battle"]);
+  assert.deepEqual(manifest.shortcuts.map((shortcut: { url: string }) => shortcut.url), ["/#tasks", "/#battle"]);
 });
 
 test("English manifest keeps the same PWA identity and localized shortcuts", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.en.webmanifest"), "utf8"));
   assert.equal(manifest.lang, "en");
   assert.equal(manifest.id, "/index.html");
-  assert.deepEqual(manifest.shortcuts.map((shortcut) => shortcut.name), ["Quests", "Battle"]);
+  assert.deepEqual(manifest.shortcuts.map((shortcut: { name: string }) => shortcut.name), ["Quests", "Battle"]);
 });
 
 test("service worker uses the root navigation fallback", () => {
@@ -45,8 +44,8 @@ test("service worker upgrades an existing QuestForge client once", () => {
   assert.match(app, /updateViaCache: "none"/);
   assert.match(app, /showAppUpdateAvailable/);
   const noCachePaths = firebase.hosting.headers
-    .filter((entry) => entry.headers.some((header) => header.value.includes("no-store")))
-    .map((entry) => entry.source);
+    .filter((entry: { headers: Array<{ value: string }>; source: string }) => entry.headers.some((header) => header.value.includes("no-store")))
+    .map((entry: { source: string }) => entry.source);
   assert.deepEqual(noCachePaths, ["/", "/index.html", "/next", "/next/**"]);
 });
 

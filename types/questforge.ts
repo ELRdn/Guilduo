@@ -187,17 +187,30 @@ export interface BattleCommandInput {
 export interface BattleSession {
   schemaVersion: 1;
   character: Record<string, unknown>;
-  boss: Record<string, unknown>;
-  battle: Record<string, unknown>;
-  quests: Array<Record<string, unknown>>;
-  commands: Array<Record<string, unknown>>;
+  boss: Record<string, unknown> & { hp: number; maxHp: number };
+  battle: Record<string, unknown> & { mp: number; maxMp: number };
+  quests: Array<{
+    id: string;
+    title: string;
+    notes: string;
+    kind: QuestKind;
+    difficulty: QuestDifficulty;
+    mpGain: number;
+    eligible: boolean;
+  }>;
+  commands: Array<{ id: string; label: string; mpCost: number; enabled: boolean }>;
+}
+
+export interface MigrationSnapshot extends Record<string, unknown> {
+  schemaVersion: number;
+  tasks?: unknown[];
 }
 
 export interface MigrationSnapshots {
-  schema3To4?: Record<string, unknown>;
-  schema4To5?: Record<string, unknown>;
-  schema5To6?: Record<string, unknown>;
-  schema6To7?: Record<string, unknown>;
+  schema3To4?: MigrationSnapshot;
+  schema4To5?: MigrationSnapshot;
+  schema5To6?: MigrationSnapshot;
+  schema6To7?: MigrationSnapshot;
   [key: string]: unknown;
 }
 

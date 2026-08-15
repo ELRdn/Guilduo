@@ -1,4 +1,77 @@
-// @ts-nocheck
+interface BattleClass {
+  name: string;
+  sprite: string;
+  skill: string;
+  cost: number;
+  description: string;
+}
+
+type BattleCommandId = "attack" | "skill" | "guard" | "heal" | "burst";
+type TaskAction = "daily" | "todo" | "habit" | "toggl" | "missed";
+type BattleLogEntry = { kind: string; text: string };
+
+interface PrototypeBattleState {
+  classId: keyof typeof classData;
+  turn: number;
+  hp: number;
+  maxHp: number;
+  mp: number;
+  maxMp: number;
+  focus: number;
+  guard: number;
+  shield: number;
+  tasksCompleted: number;
+  battleEnded: boolean;
+  boss: {
+    name: string;
+    hp: number;
+    maxHp: number;
+    rage: number;
+    vulnerable: number;
+    poison: number;
+  };
+  log: BattleLogEntry[];
+}
+
+interface BattleElements {
+  playerName: HTMLElement;
+  playerSprite: HTMLImageElement;
+  playerHpText: HTMLElement;
+  playerMpText: HTMLElement;
+  playerHpBar: HTMLElement;
+  playerMpBar: HTMLElement;
+  playerStatusRow: HTMLElement;
+  bossName: HTMLElement;
+  bossSprite: HTMLImageElement;
+  bossHpText: HTMLElement;
+  bossHpBar: HTMLElement;
+  bossRageText: HTMLElement;
+  bossStatusRow: HTMLElement;
+  turnValue: HTMLElement;
+  taskCountText: HTMLElement;
+  mainMessage: HTMLElement;
+  battleLog: HTMLElement;
+  battleResultText: HTMLElement;
+  contractPreview: HTMLElement;
+  classSkillText: HTMLElement;
+  skillCommandName: HTMLElement;
+  skillCommandCost: HTMLElement;
+  commandButtons: NodeListOf<HTMLButtonElement>;
+  taskButtons: NodeListOf<HTMLButtonElement>;
+  classButtons: NodeListOf<HTMLButtonElement>;
+  resetBattleButton: HTMLButtonElement;
+}
+
+function getElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) throw new Error(`Battle prototype element not found: ${selector}`);
+  return element;
+}
+
+function getElements<T extends Element>(selector: string): NodeListOf<T> {
+  return document.querySelectorAll<T>(selector);
+}
+
 const classData = {
   sentinel: {
     name: "Sentinel",
@@ -42,9 +115,9 @@ const classData = {
     cost: 22,
     description: "大ダメージ + Shield",
   },
-};
+} as const satisfies Record<string, BattleClass>;
 
-const initialState = {
+const initialState: PrototypeBattleState = {
   classId: "sentinel",
   turn: 1,
   hp: 56,
@@ -72,57 +145,56 @@ const initialState = {
   ],
 };
 
-let state = clone(initialState);
+let state: PrototypeBattleState = clone(initialState);
 
-const els = {
-  playerName: document.querySelector("#playerName"),
-  playerSprite: document.querySelector("#playerSprite"),
-  playerHpText: document.querySelector("#playerHpText"),
-  playerMpText: document.querySelector("#playerMpText"),
-  playerHpBar: document.querySelector("#playerHpBar"),
-  playerMpBar: document.querySelector("#playerMpBar"),
-  playerStatusRow: document.querySelector("#playerStatusRow"),
-  bossName: document.querySelector("#bossName"),
-  bossSprite: document.querySelector("#bossSprite"),
-  bossHpText: document.querySelector("#bossHpText"),
-  bossHpBar: document.querySelector("#bossHpBar"),
-  bossRageText: document.querySelector("#bossRageText"),
-  bossStatusRow: document.querySelector("#bossStatusRow"),
-  turnValue: document.querySelector("#turnValue"),
-  taskCountText: document.querySelector("#taskCountText"),
-  mainMessage: document.querySelector("#mainMessage"),
-  battleLog: document.querySelector("#battleLog"),
-  battleResultText: document.querySelector("#battleResultText"),
-  contractPreview: document.querySelector("#contractPreview"),
-  classGrid: document.querySelector("#classGrid"),
-  classSkillText: document.querySelector("#classSkillText"),
-  skillCommandName: document.querySelector("#skillCommandName"),
-  skillCommandCost: document.querySelector("#skillCommandCost"),
-  commandButtons: document.querySelectorAll("[data-command]"),
-  taskButtons: document.querySelectorAll("[data-task-action]"),
-  classButtons: document.querySelectorAll("[data-class]"),
-  resetBattleButton: document.querySelector("#resetBattleButton"),
+const els: BattleElements = {
+  playerName: getElement("#playerName"),
+  playerSprite: getElement("#playerSprite"),
+  playerHpText: getElement("#playerHpText"),
+  playerMpText: getElement("#playerMpText"),
+  playerHpBar: getElement("#playerHpBar"),
+  playerMpBar: getElement("#playerMpBar"),
+  playerStatusRow: getElement("#playerStatusRow"),
+  bossName: getElement("#bossName"),
+  bossSprite: getElement("#bossSprite"),
+  bossHpText: getElement("#bossHpText"),
+  bossHpBar: getElement("#bossHpBar"),
+  bossRageText: getElement("#bossRageText"),
+  bossStatusRow: getElement("#bossStatusRow"),
+  turnValue: getElement("#turnValue"),
+  taskCountText: getElement("#taskCountText"),
+  mainMessage: getElement("#mainMessage"),
+  battleLog: getElement("#battleLog"),
+  battleResultText: getElement("#battleResultText"),
+  contractPreview: getElement("#contractPreview"),
+  classSkillText: getElement("#classSkillText"),
+  skillCommandName: getElement("#skillCommandName"),
+  skillCommandCost: getElement("#skillCommandCost"),
+  commandButtons: getElements<HTMLButtonElement>("[data-command]"),
+  taskButtons: getElements<HTMLButtonElement>("[data-task-action]"),
+  classButtons: getElements<HTMLButtonElement>("[data-class]"),
+  resetBattleButton: getElement("#resetBattleButton"),
 };
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function addLog(text, kind = "info") {
+function addLog(text: string, kind = "info"): void {
   state.log = [{ text, kind }, ...state.log].slice(0, 10);
 }
 
-function gainMp(amount, reason) {
+function gainMp(amount: number, reason: string): void {
   const before = state.mp;
   state.mp = clamp(state.mp + amount, 0, state.maxMp);
   addLog(`<strong>${reason}</strong> MP +${state.mp - before}`);
 }
 
-function takeDamage(amount, source) {
+function takeDamage(amount: number, source: string): void {
   let damage = amount;
   if (state.guard > 0) {
     damage = Math.ceil(damage / 2);
@@ -142,7 +214,7 @@ function takeDamage(amount, source) {
   }
 }
 
-function dealDamage(amount, source) {
+function dealDamage(amount: number, source: string): void {
   let damage = amount;
   if (state.boss.vulnerable > 0) {
     damage = Math.round(damage * 1.35);
@@ -158,9 +230,14 @@ function dealDamage(amount, source) {
   }
 }
 
-function completeTask(action) {
+function isTaskAction(value: string | undefined): value is TaskAction {
+  return value === "daily" || value === "todo" || value === "habit" || value === "toggl" || value === "missed";
+}
+
+function completeTask(action: string | undefined): void {
   if (state.battleEnded) return;
-  const table = {
+  if (!isTaskAction(action)) return;
+  const table: Partial<Record<TaskAction, () => void>> = {
     daily: () => {
       state.tasksCompleted += 1;
       state.focus += 1;
@@ -188,10 +265,15 @@ function completeTask(action) {
   render();
 }
 
-function useCommand(command) {
+function isBattleCommand(value: string | undefined): value is BattleCommandId {
+  return value === "attack" || value === "skill" || value === "guard" || value === "heal" || value === "burst";
+}
+
+function useCommand(command: string | undefined): void {
   if (state.battleEnded) return;
+  if (!isBattleCommand(command)) return;
   const currentClass = classData[state.classId];
-  const costs = {
+  const costs: Record<BattleCommandId, number> = {
     attack: 0,
     skill: currentClass.cost,
     guard: 6,
@@ -234,7 +316,7 @@ function useCommand(command) {
   render();
 }
 
-function useClassSkill(currentClass) {
+function useClassSkill(currentClass: BattleClass): void {
   if (state.classId === "sentinel") {
     dealDamage(22, currentClass.skill);
     state.guard += 1;
@@ -266,7 +348,7 @@ function useClassSkill(currentClass) {
   }
 }
 
-function enemyTurn() {
+function enemyTurn(): void {
   if (state.boss.poison > 0) {
     dealDamage(state.boss.poison, "毒");
     state.boss.poison -= 1;
@@ -287,36 +369,37 @@ function enemyTurn() {
   }
 }
 
-function setClass(classId) {
-  if (!classData[classId]) return;
-  state.classId = classId;
-  addLog(`${classData[classId].name} に変更。スキル: ${classData[classId].skill}`);
+function setClass(classId: string | undefined): void {
+  if (!classId || !(classId in classData)) return;
+  const typedClassId = classId as keyof typeof classData;
+  state.classId = typedClassId;
+  addLog(`${classData[typedClassId].name} に変更。スキル: ${classData[typedClassId].skill}`);
   render();
 }
 
-function resetBattle() {
+function resetBattle(): void {
   state = clone(initialState);
   render();
 }
 
-function flash(element, className) {
+function flash(element: HTMLElement, className: string): void {
   element.classList.remove(className);
   void element.offsetWidth;
   element.classList.add(className);
   window.setTimeout(() => element.classList.remove(className), 380);
 }
 
-function render() {
+function render(): void {
   const currentClass = classData[state.classId];
   els.playerName.textContent = `Astra / ${currentClass.name}`;
   els.playerSprite.src = currentClass.sprite;
   els.classSkillText.textContent = currentClass.skill;
   els.skillCommandName.textContent = currentClass.skill;
   els.skillCommandCost.textContent = `${currentClass.cost} MP / ${currentClass.description}`;
-  els.turnValue.textContent = state.turn;
+  els.turnValue.textContent = String(state.turn);
   els.taskCountText.textContent = `${state.tasksCompleted} completed`;
   els.bossName.textContent = state.boss.name;
-  els.bossRageText.textContent = state.boss.rage;
+  els.bossRageText.textContent = String(state.boss.rage);
 
   els.playerHpText.textContent = `${state.hp}/${state.maxHp}`;
   els.playerMpText.textContent = `${state.mp}/${state.maxMp}`;
@@ -340,9 +423,8 @@ function render() {
   });
   els.commandButtons.forEach((button) => {
     const command = button.dataset.command;
-    const cost = command === "skill"
-      ? currentClass.cost
-      : { attack: 0, guard: 6, heal: 14, burst: 40 }[command] || 0;
+    const costs: Record<BattleCommandId, number> = { attack: 0, skill: currentClass.cost, guard: 6, heal: 14, burst: 40 };
+    const cost = isBattleCommand(command) ? costs[command] : 0;
     button.disabled = state.battleEnded || state.mp < cost;
   });
   els.taskButtons.forEach((button) => {
@@ -364,7 +446,7 @@ function render() {
   els.contractPreview.textContent = JSON.stringify(createContractPreview(), null, 2);
 }
 
-function renderStatus(target, values) {
+function renderStatus(target: HTMLElement, values: string[]): void {
   target.innerHTML = "";
   values.filter(Boolean).forEach((value) => {
     const item = document.createElement("span");
@@ -374,7 +456,7 @@ function renderStatus(target, values) {
   });
 }
 
-function createContractPreview() {
+function createContractPreview(): Record<string, unknown> {
   return {
     resourceModel: {
       hp: state.hp,

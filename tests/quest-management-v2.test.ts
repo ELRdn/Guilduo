@@ -1,10 +1,11 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import type { Quest, QuestForgeState } from "../types/questforge.ts";
+import { asQuestForgeState, hasErrorCode, required } from "./test-helpers.ts";
 
-function legacyState(tasks = []) {
+function legacyState(tasks: unknown[] = []): QuestForgeState {
   const now = "2026-08-01T00:00:00.000Z";
-  return {
+  return asQuestForgeState({
     schemaVersion: 3,
     createdAt: now,
     updatedAt: now,
@@ -14,7 +15,11 @@ function legacyState(tasks = []) {
     rewardClaims: {},
     character: { level: 1, hp: 50, maxHp: 50, xp: 0, nextXp: 100, gems: 0 },
     battle: { mp: 0, maxMp: 80 },
-  };
+  });
+}
+
+function findQuest(state: QuestForgeState, id: string): Quest {
+  return required(state.tasks.find((task) => task.id === id), `Quest ${id}`);
 }
 
 test("schema v3 migration preserves history and separates planning from lifecycle", async () => {
@@ -29,17 +34,17 @@ test("schema v3 migration preserves history and separates planning from lifecycl
   migrateState(state, "2026-08-01");
 
   assert.equal(state.schemaVersion, 7);
-  assert.equal(state.migrationSnapshots.schema3To4.tasks.length, 4);
+  assert.equal(required(state.migrationSnapshots.schema3To4).tasks?.length, 4);
   assert.deepEqual(state.rewardClaims, {});
-  assert.equal(state.tasks.find((task) => task.id === "due").planningMode, "until_due");
-  assert.equal(state.tasks.find((task) => task.id === "due").scheduledDate, "2026-08-01");
-  assert.equal(state.tasks.find((task) => task.id === "backlog").planningState, "backlog");
-  assert.equal(state.tasks.find((task) => task.id === "finished").lifecycleState, "archived");
-  assert.equal(state.tasks.find((task) => task.id === "daily").lifecycleState, "active");
+  assert.equal(findQuest(state, "due").planningMode, "until_due");
+  assert.equal(findQuest(state, "due").scheduledDate, "2026-08-01");
+  assert.equal(findQuest(state, "backlog").planningState, "backlog");
+  assert.equal(findQuest(state, "finished").lifecycleState, "archived");
+  assert.equal(findQuest(state, "daily").lifecycleState, "active");
   assert.equal(state.tasks.every((task) => task.parentQuestId === ""), true);
   assert.equal(state.tasks.every((task) => task.handoff && task.handoff.note === ""), true);
-  assert.equal(state.migrationSnapshots.schema5To6.schemaVersion, 3);
-  assert.equal(state.migrationSnapshots.schema6To7.schemaVersion, 3);
+  assert.equal(required(state.migrationSnapshots.schema5To6).schemaVersion, 3);
+  assert.equal(required(state.migrationSnapshots.schema6To7).schemaVersion, 3);
 });
 
 test("quest views distinguish today, week, future, backlog, completed, and archive", async () => {
@@ -56,7 +61,7 @@ test("quest views distinguish today, week, future, backlog, completed, and archi
   assert.deepEqual(listQuestPage(state, { view: "backlog", date: "2026-08-01" }).quests.map((task) => task.title), ["バックログ"]);
 
   scoreQuest(state, today.id, "up", { date: "2026-08-01" });
-  assert.equal(state.tasks.find((task) => task.id === today.id).lifecycleState, "archived");
+  assert.equal(findQuest(state, today.id).lifecycleState, "archived");
   assert.equal(listQuestPage(state, { view: "completed" }).quests.length, 0);
   assert.equal(listQuestPage(state, { view: "archive" }).quests[0].id, today.id);
 });
@@ -71,13 +76,13 @@ test("single todos archive on completion while recurring work stays active", asy
   scoreQuest(state, oneOff.id, "up", { date: "2026-08-01" });
   scoreQuest(state, recurring.id, "up", { date: "2026-08-01" });
   scoreQuest(state, daily.id, "up", { date: "2026-08-01" });
-  assert.equal(state.tasks.find((task) => task.id === oneOff.id).lifecycleState, "archived");
-  assert.equal(state.tasks.find((task) => task.id === recurring.id).lifecycleState, "active");
-  assert.equal(state.tasks.find((task) => task.id === daily.id).lifecycleState, "active");
+  assert.equal(findQuest(state, oneOff.id).lifecycleState, "archived");
+  assert.equal(findQuest(state, recurring.id).lifecycleState, "active");
+  assert.equal(findQuest(state, daily.id).lifecycleState, "active");
 
   scoreQuest(state, oneOff.id, "down", { date: "2026-08-01" });
-  assert.equal(state.tasks.find((task) => task.id === oneOff.id).lifecycleState, "active");
-  assert.equal(state.tasks.find((task) => task.id === oneOff.id).archivedAt, "");
+  assert.equal(findQuest(state, oneOff.id).lifecycleState, "active");
+  assert.equal(findQuest(state, oneOff.id).archivedAt, "");
   const patched = patchQuest(state, oneOff.id, { lifecycleState: "completed" });
   assert.equal(patched.lifecycleState, "archived");
 });
@@ -90,10 +95,10 @@ test("batch updates are dry-run by default, atomic, and count explicit postponem
   const preview = batchUpdateQuests(state, { questIds: [quest.id], postponeDays: 1 });
   assert.equal(preview.dryRun, true);
   assert.equal(preview.quests[0].scheduledDate, "2026-08-02");
-  assert.equal(state.tasks.find((task) => task.id === quest.id).scheduledDate, "2026-08-01");
+  assert.equal(findQuest(state, quest.id).scheduledDate, "2026-08-01");
 
   assert.throws(() => batchUpdateQuests(state, { questIds: [quest.id, "missing"], postponeDays: 1, dryRun: false }), /Quest not found/);
-  assert.equal(state.tasks.find((task) => task.id === quest.id).scheduledDate, "2026-08-01");
+  assert.equal(findQuest(state, quest.id).scheduledDate, "2026-08-01");
 
   const updated = batchUpdateQuests(state, { questIds: [quest.id], postponeDays: 1, dryRun: false });
   assert.equal(updated.quests[0].scheduledDate, "2026-08-02");
@@ -141,7 +146,7 @@ test("Quest Tree validates parents, reports progress, and keeps the parent activ
   assert.equal(tree.summary.childrenTotal, 1);
   assert.equal(tree.summary.childrenCompleted, 0);
   assert.equal(tree.summary.progressPercent, 0);
-  assert.equal(state.tasks.find((task) => task.id === parent.id).lifecycleState, "active");
+  assert.equal(findQuest(state, parent.id).lifecycleState, "active");
 
   assert.equal(getQuestTree(state, { includeArchived: true }).summary.childrenTotal, 2);
   assert.equal(getQuestTree(state, { includeArchived: true }).summary.childrenCompleted, 1);

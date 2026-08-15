@@ -1,6 +1,6 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
+type CapturedRequest = { url: string; options: RequestInit & { headers?: Record<string, string> } };
 
 test("QuestForge CLI parses safe dry-run options and builds a quest payload", async () => {
   const cli = await import("../cli/questforge.ts");
@@ -24,16 +24,18 @@ test("QuestForge CLI parses safe dry-run options and builds a quest payload", as
 test("QuestForge CLI keeps writes as dry-run until --execute", async () => {
   const cli = await import("../cli/questforge.ts");
   const originalFetch = global.fetch;
-  const requests = [];
+  const requests: CapturedRequest[] = [];
   global.fetch = async (url, options = {}) => {
-    requests.push({ url: String(url), options });
+    requests.push({ url: String(url), options: options as CapturedRequest["options"] });
     return Response.json({ preview: [{ questId: "q-1" }], dryRun: true });
   };
   try {
-    const result = await cli.run(["quests", "complete", "q-1"], { QUESTFORGE_API_URL: "https://worker.example", QUESTFORGE_TOKEN: "secret" });
+    const result = await cli.run(["quests", "complete", "q-1"], { QUESTFORGE_API_URL: "https://worker.example", QUESTFORGE_TOKEN: "secret" }) as { dryRun: boolean };
     assert.equal(result.dryRun, true);
-    assert.match(requests[0].options.headers.authorization, /^Bearer /);
-    const body = JSON.parse(requests[0].options.body);
+    const request = requests[0];
+    assert.ok(request);
+    assert.match(request.options.headers?.authorization || "", /^Bearer /);
+    const body = JSON.parse(String(request.options.body || "{}"));
     assert.equal(body.dryRun, true);
   } finally { global.fetch = originalFetch; }
 });

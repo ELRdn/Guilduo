@@ -1,8 +1,12 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import type { JsonRecord, WorkerEnv } from "../worker/src/worker-types.ts";
+import type { AgentRecord } from "../worker/src/agent-store.ts";
+import { hasErrorCode, required } from "./test-helpers.ts";
 
-let agents;
+type AgentStore = typeof import("../worker/src/agent-store.ts");
+
+let agents: AgentStore;
 
 test.before(async () => {
   agents = await import("../worker/src/agent-store.ts");
@@ -10,8 +14,8 @@ test.before(async () => {
 
 test.beforeEach(() => agents?.resetAgentMemoryForTests());
 
-async function expectCode(promise, code) {
-  await assert.rejects(promise, (error) => error?.code === code);
+async function expectCode(promise: Promise<unknown>, code: string): Promise<void> {
+  await assert.rejects(promise, (error: unknown) => hasErrorCode(error, code));
 }
 
 function defaultAgent(agentId = "assistant") {
@@ -29,29 +33,30 @@ function defaultAgent(agentId = "assistant") {
 }
 
 test("new agents default to user-equivalent approved scopes", async () => {
-  const env = {};
-  const created = await agents.createAgent(env, "alpha", {
+  const env: WorkerEnv = {};
+  const created = required(await agents.createAgent(env, "alpha", {
     agentId: "codex",
     displayName: "Codex",
-  });
+  }));
   assert.ok(created.allowedScopes.includes("quests:write"));
   assert.ok(created.allowedScopes.includes("agents:read"));
   assert.ok(created.allowedScopes.includes("webhooks:manage"));
 });
 
-async function create(env, uid, agentId = "assistant", extra = {}) {
-  return agents.createAgent(env, uid, { ...defaultAgent(agentId), ...extra });
+async function create(env: WorkerEnv, uid: string, agentId = "assistant", extra: JsonRecord = {}): Promise<AgentRecord> {
+  const created = await agents.createAgent(env, uid, { ...defaultAgent(agentId), ...extra });
+  return required(created);
 }
 
 test("agent IDs are validated as lowercase ASCII slugs and are create-only", async () => {
-  const env = {};
+  const env: WorkerEnv = {};
   assert.equal(agents.validateAgentId("  My-Agent "), "my-agent");
   assert.equal(agents.validateAgentId("UPPER"), "upper");
-  assert.throws(() => agents.validateAgentId("has space"), (error) => error?.code === "agent_id_invalid");
-  assert.throws(() => agents.validateAgentId("-leading"), (error) => error?.code === "agent_id_invalid");
-  assert.throws(() => agents.validateAgentId("trailing-"), (error) => error?.code === "agent_id_invalid");
-  assert.throws(() => agents.validateAgentId(""), (error) => error?.code === "agent_id_required");
-  assert.throws(() => agents.validateAgentId("a".repeat(81)), (error) => error?.code === "agent_id_too_long");
+  assert.throws(() => agents.validateAgentId("has space"), (error: unknown) => hasErrorCode(error, "agent_id_invalid"));
+  assert.throws(() => agents.validateAgentId("-leading"), (error: unknown) => hasErrorCode(error, "agent_id_invalid"));
+  assert.throws(() => agents.validateAgentId("trailing-"), (error: unknown) => hasErrorCode(error, "agent_id_invalid"));
+  assert.throws(() => agents.validateAgentId(""), (error: unknown) => hasErrorCode(error, "agent_id_required"));
+  assert.throws(() => agents.validateAgentId("a".repeat(81)), (error: unknown) => hasErrorCode(error, "agent_id_too_long"));
 
   const created = await create(env, "alpha");
   assert.equal(created.agentId, "assistant");
@@ -61,7 +66,7 @@ test("agent IDs are validated as lowercase ASCII slugs and are create-only", asy
 });
 
 test("create, update, and link reject unknown and secret-like fields", async () => {
-  const env = {};
+  const env: WorkerEnv = {};
   await expectCode(create(env, "alpha", "good", { apiKey: "sk-123" }), "agent_secret_field_rejected");
   await expectCode(create(env, "alpha", "good", { token: "abc" }), "agent_secret_field_rejected");
   await expectCode(create(env, "alpha", "good", { password: "hunter2" }), "agent_secret_field_rejected");
@@ -80,7 +85,7 @@ test("create, update, and link reject unknown and secret-like fields", async () 
 });
 
 test("agents expose only approved fields and archived agents are readable only with includeArchived", async () => {
-  const env = {};
+  const env: WorkerEnv = {};
   const created = await create(env, "alpha", "main");
   assert.deepEqual(Object.keys(created).sort(), [
     "agentId", "allowedScopes", "createdAt", "defaultHandoffState", "displayName", "dryRunDefault",
@@ -108,7 +113,7 @@ test("agents expose only approved fields and archived agents are readable only w
 });
 
 test("archiving frees a slot and the limit counts only non-archived agents", async () => {
-  const env = { AGENT_NOW: "2026-01-01T00:00:00.000Z" };
+  const env: WorkerEnv = { AGENT_NOW: "2026-01-01T00:00:00.000Z" };
   for (let i = 0; i < 20; i += 1) await create(env, "alpha", `agent-${String(i).padStart(2, "0")}`);
   await expectCode(create(env, "alpha", "overflow"), "agent_limit_reached");
 
@@ -120,7 +125,7 @@ test("archiving frees a slot and the limit counts only non-archived agents", asy
 });
 
 test("agents are fully isolated per user", async () => {
-  const env = {};
+  const env: WorkerEnv = {};
   await create(env, "alpha", "main");
   await expectCode(agents.getAgent(env, "beta", "main"), "agent_not_found");
   assert.equal((await agents.listAgents(env, "beta")).length, 0);
@@ -134,7 +139,7 @@ test("agents are fully isolated per user", async () => {
 });
 
 test("update supports expectedUpdatedAt and returns a conflict on mismatch", async () => {
-  const env = { AGENT_NOW: "2026-02-01T00:00:00.000Z" };
+  const env: WorkerEnv = { AGENT_NOW: "2026-02-01T00:00:00.000Z" };
   const created = await create(env, "alpha", "main");
   await expectCode(
     agents.updateAgent(env, "alpha", "main", { displayName: "New", expectedUpdatedAt: "wrong-timestamp" }),
@@ -151,7 +156,7 @@ test("update supports expectedUpdatedAt and returns a conflict on mismatch", asy
 });
 
 test("disable and archive revoke all linked connections; unlink is idempotent", async () => {
-  const env = { AGENT_NOW: "2026-03-01T00:00:00.000Z" };
+  const env: WorkerEnv = { AGENT_NOW: "2026-03-01T00:00:00.000Z" };
   await create(env, "alpha", "main");
   await agents.linkAgentConnection(env, "alpha", "main", { clientId: "c1", clientName: "One", scopes: ["quests:read"] });
   await agents.linkAgentConnection(env, "alpha", "main", { clientId: "c2", clientName: "Two" });
@@ -165,9 +170,9 @@ test("disable and archive revoke all linked connections; unlink is idempotent", 
   assert.equal(await agents.getAgentForClient(env, "alpha", "c1"), null);
 
   await expectCode(agents.noteAgentConnectionUse(env, "alpha", "c1"), "agent_connection_revoked");
-  const firstUnlink = await agents.unlinkAgentConnection(env, "alpha", "c1");
+  const firstUnlink = required(await agents.unlinkAgentConnection(env, "alpha", "c1"));
   assert.equal(firstUnlink.revokedAt, "2026-03-02T00:00:00.000Z");
-  const secondUnlink = await agents.unlinkAgentConnection(env, "alpha", "c1");
+  const secondUnlink = required(await agents.unlinkAgentConnection(env, "alpha", "c1"));
   assert.equal(secondUnlink.revokedAt, "2026-03-02T00:00:00.000Z");
 
   env.AGENT_NOW = "2026-03-03T00:00:00.000Z";
@@ -181,15 +186,15 @@ test("disable and archive revoke all linked connections; unlink is idempotent", 
 });
 
 test("connections track client metadata without credentials and client IDs are unique per user", async () => {
-  const env = {};
+  const env: WorkerEnv = {};
   await create(env, "alpha", "main");
   await create(env, "alpha", "second");
 
-  const linked = await agents.linkAgentConnection(env, "alpha", "main", {
+  const linked = required(await agents.linkAgentConnection(env, "alpha", "main", {
     clientId: "client-1",
     clientName: "Local MCP",
     scopes: ["quests:read"],
-  });
+  }));
   assert.deepEqual(Object.keys(linked).sort(), [
     "agentId", "clientId", "clientName", "createdAt", "firstConnectedAt", "lastUsedAt", "revokedAt",
     "scopes", "uid", "updatedAt",
@@ -197,26 +202,26 @@ test("connections track client metadata without credentials and client IDs are u
   assert.equal(JSON.stringify(linked).includes("token"), false);
   assert.equal(linked.revokedAt, null);
 
-  const reused = await agents.linkAgentConnection(env, "alpha", "main", { clientId: "client-1", clientName: "Local MCP" });
+  const reused = required(await agents.linkAgentConnection(env, "alpha", "main", { clientId: "client-1", clientName: "Local MCP" }));
   assert.equal(reused.clientId, "client-1");
   await expectCode(
     agents.linkAgentConnection(env, "alpha", "second", { clientId: "client-1", clientName: "Local MCP" }),
     "agent_client_linked",
   );
 
-  const used = await agents.noteAgentConnectionUse(env, "alpha", "client-1", { at: "2026-04-01T00:00:00.000Z" });
+  const used = required(await agents.noteAgentConnectionUse(env, "alpha", "client-1", { at: "2026-04-01T00:00:00.000Z" }));
   assert.equal(used.lastUsedAt, "2026-04-01T00:00:00.000Z");
-  const agent = await agents.getAgentForClient(env, "alpha", "client-1");
+  const agent = required(await agents.getAgentForClient(env, "alpha", "client-1"));
   assert.equal(agent.agentId, "main");
   assert.equal(await agents.getAgentForClient(env, "alpha", "missing-client"), null);
 
   await create(env, "beta", "main");
-  const sameClientForAnotherUser = await agents.linkAgentConnection(env, "beta", "main", { clientId: "client-1", clientName: "Local MCP" });
+  const sameClientForAnotherUser = required(await agents.linkAgentConnection(env, "beta", "main", { clientId: "client-1", clientName: "Local MCP" }));
   assert.equal(sameClientForAnotherUser.uid, "beta");
 });
 
 test("connections cannot be linked to archived agents", async () => {
-  const env = {};
+  const env: WorkerEnv = {};
   await create(env, "alpha", "main");
   await agents.updateAgent(env, "alpha", "main", { status: "archived" });
   await expectCode(

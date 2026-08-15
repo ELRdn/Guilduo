@@ -342,7 +342,7 @@ function runEnemyTurn(state: MutableBattleState, effects: BattleEffect[]): void 
   }
 }
 
-function commandDescriptors(state: MutableBattleState): Array<Record<string, unknown>> {
+function commandDescriptors(state: MutableBattleState): Array<{ id: string; label: string; mpCost: number; enabled: boolean }> {
   const role = roleOf(state);
   const skill = battleSkill(role);
   return [

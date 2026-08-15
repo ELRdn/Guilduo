@@ -45,6 +45,12 @@ interface QuestForgeFirebaseApi {
   flushState: () => Promise<boolean>;
 }
 
+interface QuestForgeTelemetryApi {
+  getConsent?: () => "unknown" | "granted" | "denied";
+  setConsent?: (value: "unknown" | "granted" | "denied") => "unknown" | "granted" | "denied";
+  track?: (...args: unknown[]) => void;
+}
+
 interface QuestForgeSyncSnapshot {
   state: QuestForgeState;
   hadLocalStateAtStartup: boolean;
@@ -91,12 +97,16 @@ declare global {
     QuestForgeFirebase?: QuestForgeFirebaseApi;
   }
 
+  interface Navigator {
+    standalone?: boolean;
+  }
+
   var QuestForgeConfig: QuestForgeRuntimeConfig | undefined;
   var QuestForgeI18n: QuestForgeI18nApi | undefined;
   var QuestForgeCore: QuestForgeCoreApi | undefined;
   var QuestForgeBattleRules: QuestForgeBattleRulesApi | undefined;
   var QuestForgeBridge: QuestForgeBridgeApi | undefined;
-  var QuestForgeTelemetry: Record<string, unknown> | undefined;
+  var QuestForgeTelemetry: QuestForgeTelemetryApi | undefined;
   var QuestForgeFirebase: QuestForgeFirebaseApi | undefined;
 
   interface WindowEventMap {

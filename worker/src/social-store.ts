@@ -25,7 +25,7 @@ export interface OwnProfile extends PublicProfile {
 type FriendRequest = { id: string; senderUid: string; receiverUid: string; status: string; createdAt: string; updatedAt: string };
 type Friendship = { userLow: string; userHigh: string; createdAt: string };
 type PartyMember = PublicProfile & { role: string; joinedAt: string };
-type Party = { id: string; name: string; ownerUid: string; maxMembers: number; createdAt: string; updatedAt: string; members: PartyMember[] };
+export type Party = { id: string; name: string; ownerUid: string; maxMembers: number; createdAt: string; updatedAt: string; members: PartyMember[] };
 type StoredParty = Omit<Party, "members">;
 type StoredMember = { partyId: string; uid: string; role: string; joinedAt: string };
 type StoredInvite = { id: string; partyId: string; inviterUid: string; inviteeUid: string | null; tokenHash: string; status: string; expiresAt: string; createdAt: string; updatedAt: string };
@@ -132,7 +132,18 @@ function ownProfile(row: unknown): OwnProfile | null {
   };
 }
 
-function normalizeRequest(row: unknown, uid: string, counterpart: PublicProfile | null): JsonRecord {
+interface FriendRequestSummary extends JsonRecord {
+  id: string;
+  direction: string;
+  senderUid: string;
+  receiverUid: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  profile: PublicProfile | null;
+}
+
+function normalizeRequest(row: unknown, uid: string, counterpart: PublicProfile | null): FriendRequestSummary {
   const item = asRow(row);
   return {
     id: String(item.id || ""),
@@ -254,7 +265,7 @@ export async function upsertProfile(env: WorkerEnv, uid: string, patch: SocialIn
   return getOwnProfile(env, uid);
 }
 
-export async function sendFriendRequest(env: WorkerEnv, senderUid: string, receiverUid: string): Promise<JsonRecord> {
+export async function sendFriendRequest(env: WorkerEnv, senderUid: string, receiverUid: string): Promise<FriendRequestSummary> {
   if (senderUid === receiverUid) throw socialError(400, "friend_self", "You cannot send a friend request to yourself.");
   await requireProfile(env, senderUid);
   await requireProfile(env, receiverUid);
@@ -284,7 +295,7 @@ export async function sendFriendRequest(env: WorkerEnv, senderUid: string, recei
   return normalizeRequest({ id, senderUid, receiverUid, status: "pending", createdAt, updatedAt: createdAt }, senderUid, counterpart);
 }
 
-export async function listFriendRequests(env: WorkerEnv, uid: string): Promise<JsonRecord[]> {
+export async function listFriendRequests(env: WorkerEnv, uid: string): Promise<FriendRequestSummary[]> {
   if (env.QUESTFORGE_DB) {
     const rows = (await env.QUESTFORGE_DB.prepare(`SELECT r.*, p.uid AS p_uid, p.display_name AS p_display_name, p.handle AS p_handle,
       p.bio AS p_bio, p.avatar_role AS p_avatar_role, p.avatar_variant AS p_avatar_variant, p.avatar_url AS p_avatar_url, p.level AS p_level
@@ -509,7 +520,7 @@ export async function acceptPartyInvite(env: WorkerEnv, uid: string, input: Soci
   return getParty(env, uid);
 }
 
-export async function leaveParty(env: WorkerEnv, uid: string): Promise<JsonRecord> {
+export async function leaveParty(env: WorkerEnv, uid: string): Promise<{ left: boolean; partyId: string; nextOwnerUid: string | null }> {
   const party = await getParty(env, uid);
   if (!party) throw socialError(404, "party_not_found", "Party was not found.");
   const remaining = party.members.filter((member) => member.uid !== uid);

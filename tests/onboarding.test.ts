@@ -1,4 +1,3 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -53,5 +52,5 @@ test("the separated Unity prototype uses the versioned battle contract and an em
 
   assert.equal(contract.properties.schemaVersion.const, 1);
   assert.equal(fixture.schemaVersion, 1);
-  assert.ok(fixture.quests.some((quest) => quest.notes === "" && quest.eligible === true));
+  assert.ok(fixture.quests.some((quest: { notes: string; eligible: boolean }) => quest.notes === "" && quest.eligible === true));
 });

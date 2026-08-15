@@ -1,17 +1,30 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import type { Quest, QuestForgeState } from "../types/questforge.ts";
+import type { WorkerEnv } from "../worker/src/worker-types.ts";
+import { asQuestForgeState, json, required, type TestContext, type TestRequestOptions } from "./test-helpers.ts";
 
-const env = {
+type ApiQuestResponse = { quest: Quest };
+type ApiQuestListResponse = { quests: Quest[]; total?: number };
+type ApiBatchResponse = { dryRun: boolean; count: number; quests: Quest[] };
+type ApiScoreResponse = { quest: Quest; rewardGranted: boolean; reward: { gems: number; xp: number; mp: number } };
+type McpStructuredContent = { dryRun: boolean; quest: Quest; quests: Quest[]; summary: unknown };
+type McpCallResponse = { result: { structuredContent: McpStructuredContent; isError?: boolean } };
+type McpTool = { name: string; title?: string; outputSchema?: unknown };
+type McpListResponse = { result: { tools: McpTool[] } };
+type McpResourcesResponse = { resources: Array<{ uri: string }>; resourceTemplates?: Array<{ uriTemplate: string }> };
+type McpPromptsResponse = { prompts: Array<{ name: string }> };
+
+const env: WorkerEnv = {
   DEV_BEARER_TOKEN: "test-token",
   DEV_USER_ID: "test-user",
   FIREBASE_PROJECT_ID: "questforge-test",
   ALLOWED_ORIGINS: "http://localhost:5173",
 };
 
-function initialState() {
+function initialState(): QuestForgeState {
   const now = new Date().toISOString();
-  return {
+  return asQuestForgeState({
     schemaVersion: 3,
     createdAt: now,
     updatedAt: now,
@@ -22,14 +35,14 @@ function initialState() {
     character: { level: 1, hp: 50, maxHp: 50, xp: 0, nextXp: 100, gems: 0, ownedItems: [], equippedItems: [] },
     battle: { mp: 0, maxMp: 80 },
     boss: { hp: 100, maxHp: 100 },
-  };
+  });
 }
 
-function context() {
-  return { waitUntil(promise) { promise.catch(() => {}); } };
+function context(): TestContext {
+  return { waitUntil(promise: Promise<unknown>): void { promise.catch(() => {}); } };
 }
 
-async function call(path, options = {}) {
+async function call(path: string, options: TestRequestOptions = {}): Promise<Response> {
   const worker = (await import("../worker/src/index.ts")).default;
   return worker.fetch(new Request(`http://worker.test${path}`, {
     ...options,
@@ -53,54 +66,54 @@ test("REST create and score share production state and reward claims", async () 
     body: JSON.stringify({ kind: "todo", title: "APIを確認", difficulty: "medium", dueDate: "2026-07-31" }),
   });
   assert.equal(createdResponse.status, 201);
-  const created = await createdResponse.json();
+  const created = await json<ApiQuestResponse>(createdResponse);
 
   const scoreResponse = await call(`/v1/quests/${created.quest.id}/score`, {
     method: "POST",
     body: JSON.stringify({ direction: "up" }),
   });
   assert.equal(scoreResponse.status, 200);
-  const scored = await scoreResponse.json();
+  const scored = await json<ApiScoreResponse>(scoreResponse);
   assert.equal(scored.quest.done, true);
   assert.equal(scored.rewardGranted, true);
   assert.equal(scored.reward.gems, 11);
   assert.equal(scored.reward.mp, 30);
   assert.equal(scored.quest.lifecycleState, "archived");
 
-  const listed = await (await call("/v1/quests?done=true")).json();
+  const listed = await json<ApiQuestListResponse>(await call("/v1/quests?done=true"));
   assert.equal(listed.quests.length, 1);
   assert.equal(listed.quests[0].id, created.quest.id);
 });
 
 test("REST batch-score previews atomically and archives one-off todos", async () => {
-  const first = await (await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "todo", title: "一括To Do" }) })).json();
-  const daily = await (await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "daily", title: "一括日課" }) })).json();
-  const preview = await (await call("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds: [first.quest.id, daily.quest.id], direction: "up" }) })).json();
+  const first = await json<ApiQuestResponse>(await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "todo", title: "一括To Do" }) }));
+  const daily = await json<ApiQuestResponse>(await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "daily", title: "一括日課" }) }));
+  const preview = await json<ApiBatchResponse>(await call("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds: [first.quest.id, daily.quest.id], direction: "up" }) }));
   assert.equal(preview.dryRun, true);
   assert.equal(preview.count, 2);
-  assert.equal((await (await call("/v1/quests?view=all")).json()).quests.every((quest) => !quest.done), true);
-  const applied = await (await call("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds: [first.quest.id, daily.quest.id], direction: "up", dryRun: false }) })).json();
-  const byId = new Map(applied.quests.map((quest) => [quest.id, quest]));
-  assert.equal(byId.get(first.quest.id).lifecycleState, "archived");
-  assert.equal(byId.get(daily.quest.id).lifecycleState, "active");
+  assert.equal((await json<ApiQuestListResponse>(await call("/v1/quests?view=all"))).quests.every((quest: Quest) => !quest.done), true);
+  const applied = await json<ApiBatchResponse>(await call("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds: [first.quest.id, daily.quest.id], direction: "up", dryRun: false }) }));
+  const byId = new Map(applied.quests.map((quest: Quest) => [quest.id, quest]));
+  assert.equal(required(byId.get(first.quest.id)).lifecycleState, "archived");
+  assert.equal(required(byId.get(daily.quest.id)).lifecycleState, "active");
 });
 
 test("MCP batch-score uses the same automatic archive transition", async () => {
-  const created = await (await call("/v1/quests", {
+  const created = await json<ApiQuestResponse>(await call("/v1/quests", {
     method: "POST",
     body: JSON.stringify({ kind: "todo", title: "MCP一括完了" }),
-  })).json();
+  }));
   const previewResponse = await call("/mcp", {
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 21, method: "tools/call", params: { name: "batch_score_quests", arguments: { questIds: [created.quest.id], direction: "up" } } }),
   });
-  const preview = await previewResponse.json();
+  const preview = await json<McpCallResponse>(previewResponse);
   assert.equal(preview.result.structuredContent.dryRun, true);
   const appliedResponse = await call("/mcp", {
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 22, method: "tools/call", params: { name: "batch_score_quests", arguments: { questIds: [created.quest.id], direction: "up", dryRun: false } } }),
   });
-  const applied = await appliedResponse.json();
+  const applied = await json<McpCallResponse>(appliedResponse);
   assert.equal(applied.result.structuredContent.quests[0].lifecycleState, "archived");
 });
 
@@ -109,7 +122,7 @@ test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the 
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
-  const tools = await toolsResponse.json();
+  const tools = await json<McpListResponse>(toolsResponse);
   assert.equal(tools.result.tools.length, 51);
   assert.ok(tools.result.tools.some((tool) => tool.name === "create_quest"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "list_quests"));
@@ -123,13 +136,11 @@ test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the 
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_party"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "battle_command"));
   for (const name of ["get_toggl_focus_status", "list_toggl_focus_entries", "sync_quest_to_toggl_focus", "get_toggl_focus_tracking", "start_toggl_focus_tracking", "stop_toggl_focus_tracking", "preview_toggl_attribution", "apply_toggl_attribution", "get_toggl_estimate_insights"]) {
-    const tool = tools.result.tools.find((candidate) => candidate.name === name);
-    assert.ok(tool, name);
+    const tool = required(tools.result.tools.find((candidate: McpTool) => candidate.name === name));
     assert.ok(tool.outputSchema, `${name} output schema`);
   }
   for (const name of ["get_quest", "get_daily_brief", "get_review_summary", "list_agent_handoffs", "list_activity_events", "get_calendar_schedule", "convert_calendar_event_to_quest"]) {
-    const tool = tools.result.tools.find((candidate) => candidate.name === name);
-    assert.ok(tool, name);
+    const tool = required(tools.result.tools.find((candidate: McpTool) => candidate.name === name));
     assert.ok(tool.title, `${name} title`);
     assert.ok(tool.outputSchema, `${name} output schema`);
   }
@@ -138,20 +149,20 @@ test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the 
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_quest", arguments: { kind: "habit", title: "水を飲む" } } }),
   });
-  const result = await createResponse.json();
+  const result = await json<McpCallResponse>(createResponse);
   assert.equal(result.result.structuredContent.quest.title, "水を飲む");
   assert.equal(result.result.isError, false);
 });
 
-function parseMcpSse(text) {
-  const line = text.split("\n").find((item) => item.startsWith("data: "));
-  assert.ok(line, "MCP SSE response contains a data line");
-  return JSON.parse(line.slice(6));
+function parseMcpSse<T>(text: string): T {
+  const line = text.split("\n").find((item: string) => item.startsWith("data: "));
+  const dataLine = required(line, "MCP SSE data line");
+  return JSON.parse(dataLine.slice(6)) as T;
 }
 
 test("MCP v2.7 SDK lane exposes Agent resources, Focus resources, and workflow prompts", async () => {
   const headers = { host: "worker.test", accept: "application/json, text/event-stream" };
-  const mcpCall = async (method) => {
+  const mcpCall = async <T>(method: string): Promise<T> => {
     const response = await call("/mcp-next", {
       method: "POST",
       headers,
@@ -159,14 +170,14 @@ test("MCP v2.7 SDK lane exposes Agent resources, Focus resources, and workflow p
     });
     assert.equal(response.status, 200, method);
     assert.match(response.headers.get("content-type") || "", /text\/event-stream/);
-    return parseMcpSse(await response.text()).result;
+    return (parseMcpSse<{ result: T }>(await response.text())).result;
   };
 
-  const tools = await mcpCall("tools/list");
+  const tools = await mcpCall<{ tools: McpTool[] }>("tools/list");
   assert.equal(tools.tools.length, 51);
   assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 51);
 
-  const resources = await mcpCall("resources/list");
+  const resources = await mcpCall<McpResourcesResponse>("resources/list");
   assert.deepEqual(resources.resources.map((resource) => resource.uri).sort(), [
     "questforge://activity",
     "questforge://agent-handoffs",
@@ -179,10 +190,10 @@ test("MCP v2.7 SDK lane exposes Agent resources, Focus resources, and workflow p
     "questforge://toggl-focus/estimate-insights",
     "questforge://toggl-focus/status",
   ]);
-  const templates = await mcpCall("resources/templates/list");
-  assert.ok(templates.resourceTemplates.some((resource) => resource.uriTemplate === "questforge://quest/{questId}"));
+  const templates = await mcpCall<McpResourcesResponse>("resources/templates/list");
+  assert.ok((templates.resourceTemplates || []).some((resource) => resource.uriTemplate === "questforge://quest/{questId}"));
 
-  const prompts = await mcpCall("prompts/list");
+  const prompts = await mcpCall<McpPromptsResponse>("prompts/list");
   assert.deepEqual(prompts.prompts.map((prompt) => prompt.name).sort(), [
     "assign_registered_agent",
     "capture_quest",
@@ -195,7 +206,7 @@ test("MCP v2.7 SDK lane exposes Agent resources, Focus resources, and workflow p
 });
 
 test("REST v2 supports views, dry-run batches, archives, external links, and no quest deletion", async () => {
-  const created = await (await call("/v1/quests", {
+  const created = await json<ApiQuestResponse>(await call("/v1/quests", {
     method: "POST",
     body: JSON.stringify({
       kind: "todo",
@@ -208,39 +219,39 @@ test("REST v2 supports views, dry-run batches, archives, external links, and no 
       impact: "high",
       isBlockingOthers: true,
     }),
-  })).json();
+  }));
 
-  const today = await (await call("/v1/quests?view=today&date=2026-08-01")).json();
+  const today = await json<ApiQuestListResponse & { total: number }>(await call("/v1/quests?view=today&date=2026-08-01"));
   assert.equal(today.total, 1);
   assert.equal(today.quests[0].id, created.quest.id);
 
-  const preview = await (await call("/v1/quests/batch-update", {
+  const preview = await json<ApiBatchResponse>(await call("/v1/quests/batch-update", {
     method: "POST",
     body: JSON.stringify({ questIds: [created.quest.id], postponeDays: 1 }),
-  })).json();
+  }));
   assert.equal(preview.dryRun, true);
   assert.equal(preview.quests[0].scheduledDate, "2026-08-02");
-  const unchanged = await (await call("/v1/quests?view=all")).json();
+  const unchanged = await json<ApiQuestListResponse>(await call("/v1/quests?view=all"));
   assert.equal(unchanged.quests[0].scheduledDate, "2026-08-01");
 
-  const linked = await (await call(`/v1/quests/${created.quest.id}/external-links`, {
+  const linked = await json<ApiQuestResponse>(await call(`/v1/quests/${created.quest.id}/external-links`, {
     method: "POST",
     body: JSON.stringify({ service: "toggl-track", externalId: "entry-1", type: "time_entry", durationMinutes: 44 }),
-  })).json();
+  }));
   assert.equal(linked.quest.actualMinutes, 44);
 
   await call(`/v1/quests/${created.quest.id}/score`, { method: "POST", body: JSON.stringify({ direction: "up" }) });
-  const archivePreview = await (await call("/v1/quests/archive", {
+  const archivePreview = await json<ApiBatchResponse>(await call("/v1/quests/archive", {
     method: "POST",
     body: JSON.stringify({ questIds: [created.quest.id] }),
-  })).json();
+  }));
   assert.equal(archivePreview.dryRun, true);
   assert.equal(archivePreview.count, 1);
 
-  const archived = await (await call("/v1/quests/archive", {
+  const archived = await json<ApiBatchResponse>(await call("/v1/quests/archive", {
     method: "POST",
     body: JSON.stringify({ questIds: [created.quest.id], dryRun: false }),
-  })).json();
+  }));
   assert.equal(archived.quests[0].lifecycleState, "archived");
 
   const deleteResponse = await call(`/v1/quests/${created.quest.id}`, { method: "DELETE" });
@@ -248,17 +259,17 @@ test("REST v2 supports views, dry-run batches, archives, external links, and no 
 });
 
 test("REST and MCP share Quest Tree and Agent Handoff state transitions", async () => {
-  const root = await (await call("/v1/quests", {
+  const root = await json<ApiQuestResponse>(await call("/v1/quests", {
     method: "POST",
     body: JSON.stringify({ kind: "todo", title: "Phase 2 parent", assignee: { type: "agent", id: "OpenAI-Codex", label: "Codex", handoffState: "ready" } }),
-  })).json();
-  const child = await (await call("/v1/quests", {
+  }));
+  const child = await json<ApiQuestResponse>(await call("/v1/quests", {
     method: "POST",
     body: JSON.stringify({ kind: "todo", title: "Phase 2 child", parentQuestId: root.quest.id }),
-  })).json();
+  }));
 
   const treeResponse = await call("/v1/quests/tree");
-  const tree = await treeResponse.json();
+  const tree = await json<{ roots: Array<{ quest: Quest; children: Array<{ quest: Quest }> }>; summary: unknown }>(treeResponse);
   assert.equal(tree.roots[0].quest.id, root.quest.id);
   assert.equal(tree.roots[0].children[0].quest.id, child.quest.id);
 
@@ -266,27 +277,27 @@ test("REST and MCP share Quest Tree and Agent Handoff state transitions", async 
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_quest_tree", arguments: {} } }),
   });
-  const mcpTree = await mcpTreeResponse.json();
+  const mcpTree = await json<McpCallResponse>(mcpTreeResponse);
   assert.deepEqual(mcpTree.result.structuredContent.summary, tree.summary);
 
-  const preview = await (await call(`/v1/quests/${root.quest.id}/handoff`, {
+  const preview = await json<McpCallResponse["result"]["structuredContent"]>(await call(`/v1/quests/${root.quest.id}/handoff`, {
     method: "POST",
     body: JSON.stringify({ state: "working" }),
-  })).json();
+  }));
   assert.equal(preview.dryRun, true);
   assert.equal(preview.quest.assignee.handoffState, "working");
 
-  const applied = await (await call(`/v1/quests/${root.quest.id}/handoff`, {
+  const applied = await json<McpCallResponse["result"]["structuredContent"]>(await call(`/v1/quests/${root.quest.id}/handoff`, {
     method: "POST",
     body: JSON.stringify({ state: "working", expectedState: "ready", dryRun: false }),
-  })).json();
+  }));
   assert.equal(applied.quest.assignee.handoffState, "working");
 
   const mcpHandoffResponse = await call("/mcp", {
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "transition_quest_handoff", arguments: { questId: root.quest.id, state: "review_required", expectedState: "working" } } }),
   });
-  const mcpHandoff = await mcpHandoffResponse.json();
+  const mcpHandoff = await json<McpCallResponse>(mcpHandoffResponse);
   assert.equal(mcpHandoff.result.structuredContent.quest.assignee.handoffState, "review_required");
   assert.equal(mcpHandoff.result.structuredContent.dryRun, true);
 });
@@ -298,7 +309,7 @@ test("gateway rejects unauthenticated API and publishes OAuth metadata", async (
   assert.match(unauthorized.headers.get("www-authenticate"), /resource_metadata/);
 
   const metadata = await worker.fetch(new Request("http://worker.test/.well-known/oauth-authorization-server"), env, context());
-  const body = await metadata.json();
+  const body = await json<{ code_challenge_methods_supported: string[]; scopes_supported: string[] }>(metadata);
   assert.equal(body.code_challenge_methods_supported[0], "S256");
   assert.ok(body.scopes_supported.includes("quests:write"));
 });
@@ -322,7 +333,7 @@ test("OAuth tokens carry and rotate the delegated Firebase session", async () =>
   }), { expirationTtl: 300 });
 
   const originalFetch = global.fetch;
-  global.fetch = async (url, options) => {
+  global.fetch = async (url: string | URL | Request, options?: RequestInit) => {
     if (String(url).startsWith("https://securetoken.googleapis.com/")) {
       return new Response(JSON.stringify({ id_token: "fresh-firebase-id-token", refresh_token: "rotated-firebase-refresh-token" }), {
         status: 200,
@@ -345,10 +356,11 @@ test("OAuth tokens carry and rotate the delegated Firebase session", async () =>
       }),
     }), oauthEnv);
     assert.equal(issued.status, 200);
-    const tokens = await issued.json();
+    const tokens = await json<{ access_token: string; refresh_token: string }>(issued);
     const identity = await authenticateRequest(new Request("http://worker.test/mcp", {
       headers: { authorization: `Bearer ${tokens.access_token}` },
     }), oauthEnv);
+    if (!identity) throw new Error("OAuth identity was unexpectedly empty.");
     assert.equal(identity.uid, "test-user");
     assert.equal(identity.firebaseIdToken, "fresh-firebase-id-token");
 

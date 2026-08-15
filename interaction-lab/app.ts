@@ -1,4 +1,3 @@
-// @ts-nocheck
 import "../runtime-config.js";
 import { applyDocumentTranslations, getLocale, setLocale, t, SUPPORTED_LOCALES, LOCALE_METADATA } from "../i18n.ts";
 import {
@@ -18,15 +17,215 @@ import {
 } from "./repository.ts";
 import { currentUser, getIdToken, observeAuth, signIn, signOutUser } from "./auth.ts";
 
-const getTelemetryConsent = () => globalThis.QuestForgeTelemetry?.getConsent?.() || "unknown";
-const setTelemetryConsent = (value) => globalThis.QuestForgeTelemetry?.setConsent?.(value) || value;
-const trackTelemetry = (...args) => globalThis.QuestForgeTelemetry?.track?.(...args);
+type LabLocale = (typeof SUPPORTED_LOCALES)[number];
+type JsonRecord = Record<string, unknown>;
+type LabTelemetryConsent = "unknown" | "granted" | "denied";
+type LabView = "today" | "tree" | "battle" | "party" | "integrations" | "profile" | "settings";
+
+interface LabQuest {
+  id: string;
+  code: string;
+  kind: string;
+  title: string;
+  note: string;
+  progress: number;
+  owner: string;
+  mark: string;
+  state: string;
+  due: string;
+  focus: number;
+  reward: number;
+  xp: number;
+  difficulty: number;
+  children?: string[];
+  parent?: string;
+  raw?: { assignee?: { handoffState?: string; [key: string]: unknown }; [key: string]: unknown };
+  lifecycleState?: string;
+  completedAt?: string;
+  archivedAt?: string;
+  [key: string]: unknown;
+}
+
+interface LabAgent {
+  agentId: string;
+  displayName: string;
+  provider: string;
+  role: string;
+  instructions?: string;
+  status: string;
+  updatedAt?: string;
+  defaultHandoffState?: string;
+  [key: string]: unknown;
+}
+
+interface LabMcpClient {
+  clientId: string;
+  clientName: string;
+  scopes?: string[];
+  lastUsedAt?: string;
+  [key: string]: unknown;
+}
+
+interface LabAgentConnection {
+  clientId: string;
+  agentId: string;
+  revokedAt?: string;
+  clientName?: string;
+  scopes?: string[];
+  lastUsedAt?: string;
+  [key: string]: unknown;
+}
+
+interface LabProfile {
+  uid?: string;
+  displayName: string;
+  handle: string;
+  bio: string;
+  avatarRole?: string;
+  avatarVariant?: string;
+  avatarUrl?: string;
+  [key: string]: unknown;
+}
+
+interface LabPerson {
+  uid: string;
+  displayName: string;
+  handle?: string;
+  avatarUrl?: string;
+  [key: string]: unknown;
+}
+
+interface LabParty {
+  id?: string;
+  name?: string;
+  members?: LabPerson[];
+  [key: string]: unknown;
+}
+
+interface LabIntegration {
+  id: string;
+  providerId: string;
+  name: string;
+  short: string;
+  stateKey: string;
+  copyKey: string;
+  titleKey: string;
+  detailKey: string;
+  activityKeys: string[];
+  lastSync: string;
+  scope: string;
+  nextStepKey: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface LabPanelError {
+  index: number;
+  message: string;
+}
+
+interface LabBattleSession extends JsonRecord {
+  message?: string;
+  battle?: JsonRecord;
+}
+
+interface LabSettings {
+  typeScale: boolean;
+  density: boolean;
+  motion: boolean;
+  sound: boolean;
+}
+
+interface LabState {
+  view: LabView;
+  mp: number;
+  bossHp: number;
+  selectedQuestId: string;
+  selectedQuestIds: string[];
+  selectionAnchorId: string;
+  expanded: Set<string>;
+  mobileSheetOpen: boolean;
+  mobileMoreOpen: boolean;
+  showArchived: boolean;
+  detailMode: "sheet" | "modal";
+  priorityOnly: boolean;
+  sort: string;
+  timerSeconds: number;
+  timerId: number | null;
+  integration: string;
+  dataSource: string;
+  syncStatus: string;
+  gatewayUrl: string;
+  lastSyncAt: string;
+  authUser: { uid: string; email: string; displayName: string } | null;
+  remoteMode: boolean;
+  remoteOwnerUid: string;
+  remoteConnectionState: string;
+  remoteSnapshotAvailable: boolean;
+  autoConnectEnabled: boolean;
+  remoteIntegrations: LabIntegration[];
+  registeredAgents: LabAgent[];
+  agentConnections: { authorizedClients: LabMcpClient[]; connections: LabAgentConnection[] };
+  profile: LabProfile | null;
+  avatarDataUrl: string;
+  remoteParty: LabParty | null;
+  panelErrors: LabPanelError[];
+  battleSession: LabBattleSession | null;
+  battleTurn: number;
+  settings: LabSettings;
+  battleLog: string[];
+  quests: LabQuest[];
+  [key: string]: unknown;
+}
+
+type PartyMember = { name: string; identity: string; role: string; mark: string; state: string; task: string; avatar?: string; agentId?: string };
+interface RemoteSnapshot {
+  quests: JsonRecord[];
+  total: number;
+  character: JsonRecord;
+  battle: JsonRecord;
+  integrations: LabIntegration[];
+  profile: LabProfile | null;
+  party: LabParty | null;
+  agents: LabAgent[];
+  agentConnections: { authorizedClients: LabMcpClient[]; connections: LabAgentConnection[] };
+  panelErrors: LabPanelError[];
+}
+type LabElement = HTMLElement & {
+  value: string;
+  checked: boolean;
+  disabled: boolean;
+  files: FileList | null;
+  src: string;
+  alt: string;
+  close(): void;
+  showModal(): void;
+  reset(): void;
+  select(): void;
+  closest(selectors: string): LabElement | null;
+  addEventListener(type: string, listener: (event: LabEvent) => unknown, options?: boolean | AddEventListenerOptions): void;
+};
+
+type LabEvent = Event & {
+  currentTarget: LabElement;
+  target: LabElement;
+  key?: string;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  clientX: number;
+  clientY: number;
+};
+
+const getTelemetryConsent = (): LabTelemetryConsent => globalThis.QuestForgeTelemetry?.getConsent?.() || "unknown";
+const setTelemetryConsent = (value: LabTelemetryConsent): LabTelemetryConsent => globalThis.QuestForgeTelemetry?.setConsent?.(value) || value;
+const trackTelemetry = (...args: unknown[]): void => { globalThis.QuestForgeTelemetry?.track?.(...args); };
 const telemetryReady = import("../telemetry.ts").then(({ initializeTelemetry }) => {
   initializeTelemetry({ surface: "next" });
   globalThis.dispatchEvent?.(new CustomEvent("questforge:telemetry-ready"));
 }).catch(() => {});
 
-const state = {
+const state: LabState = {
   view: "today",
   mp: 68,
   bossHp: 71,
@@ -78,7 +277,7 @@ const state = {
   ]
 };
 
-const labLabels = Object.freeze({
+const labLabels: Readonly<Record<LabLocale, Readonly<Record<string, string>>>> = Object.freeze({
   ja: { today: "今日の作戦", tree: "Quest Tree", battle: "バトル", party: "パーティ", integrations: "連携", profile: "プロフィール", settings: "設定", more: "その他", detail: "詳細", close: "閉じる", reconnect: "再接続する", earlyAccess: "外部サービス連携は公開βに向けて準備中です。FirebaseログインとMCP接続は利用できます。" },
   en: { today: "Today's Ops", tree: "Quest Tree", battle: "Battle", party: "Party", integrations: "Connections", profile: "Profile", settings: "Settings", more: "More", detail: "Details", close: "Close", reconnect: "Reconnect", earlyAccess: "External service connections are in preparation for the public beta. Firebase login and MCP remain available." },
   es: { today: "Operación de hoy", tree: "Árbol de Quests", battle: "Batalla", party: "Grupo", integrations: "Conexiones", profile: "Perfil", settings: "Ajustes", more: "Más", detail: "Detalles", close: "Cerrar", reconnect: "Reconectar", earlyAccess: "Las conexiones externas están en preparación para la beta pública. El inicio de sesión Firebase y MCP siguen disponibles." },
@@ -90,7 +289,7 @@ const labLabels = Object.freeze({
   ru: { today: "Операция на сегодня", tree: "Дерево Quest", battle: "Бой", party: "Партия", integrations: "Подключения", profile: "Профиль", settings: "Настройки", more: "Ещё", detail: "Подробности", close: "Закрыть", reconnect: "Переподключить", earlyAccess: "Внешние подключения готовятся к публичной бета-версии. Вход Firebase и MCP доступны." },
 });
 
-const labTranslationKeys = Object.freeze({
+const labTranslationKeys: Readonly<Record<string, string>> = Object.freeze({
   all: "task.filter.all",
   treeHeading: "questTree.title",
   battleHeading: "battle.subtitle",
@@ -116,7 +315,7 @@ const labTranslationKeys = Object.freeze({
   save: "common.save",
 });
 
-const labExtraLabels = Object.freeze({
+const labExtraLabels: Readonly<Record<LabLocale, Readonly<Record<string, string>>>> = Object.freeze({
   ja: Object.freeze({ priority: "優先のみ", showArchived: "保管済みを表示", sortDue: "期限順", sortProgress: "進捗順", sortOwner: "担当順", hideArchived: "保管済みを隠す", collapse: "すべて閉じる", clearSelection: "選択解除", selectedSuffix: "件選択", complete: "完了", confirm: "確認", edit: "編集", archive: "保管", restore: "戻す", reconnecting: "再接続中…", authChecking: "Googleログインを確認中…", loginBefore: "Googleログイン前。ローカルモードで利用中", useLocal: "ローカルへ戻す", settingsHeading: "表示と運用の設定", displayHeading: "読みやすさ", feedbackHeading: "操作の手応え", shortcutsHeading: "よく使う場所", connectionHeading: "QuestForge本体と接続", agentHeadingFallback: "AIエージェント台帳", languageNote: "この端末だけで表示言語を切り替えます。Questデータは変わりません。", typeScale: "文字を大きめにする", typeScaleNote: "一覧・詳細・操作ボタンを読みやすくします。", density: "表示密度", densityNote: "情報を詰めすぎず、行間を少し広くします。", mobileDetail: "スマホのQuest詳細", mobileDetailNote: "下部シートとポップアップを切り替えて表示できます。", motion: "モーション", motionNote: "画面遷移と完了時の短い反応を表示します。", sound: "効果音", soundNote: "本体へ移植するときにテーマ別SEを使用します。", profileShortcut: "プロフィール", partyShortcut: "パーティ", integrationShortcut: "連携", on: "オン", off: "オフ", standard: "標準", sheet: "下から表示", modal: "ポップアップ", autoConnect: "起動時に本体へ自動接続", newAgent: "新規入力", link: "紐付け", unlink: "解除", agentSelect: "Agentを選択", mcpSelect: "MCPクライアントを選択", noAgent: "まだAgentが登録されていません。", noClients: "紐付け済みのMCPクライアントはありません。" }),
   en: Object.freeze({ priority: "Priority only", showArchived: "Show stored", sortDue: "Due date", sortProgress: "Progress", sortOwner: "Assignee", hideArchived: "Hide stored", collapse: "Collapse all", clearSelection: "Clear selection", selectedSuffix: " selected", complete: "Complete", confirm: "Review", edit: "Edit", archive: "Store", restore: "Restore", reconnecting: "Reconnecting…", authChecking: "Checking Google sign-in…", loginBefore: "Not signed in. Using local mode", useLocal: "Use local mode", settingsHeading: "Display and workflow settings", displayHeading: "Readability", feedbackHeading: "Interaction feedback", shortcutsHeading: "Shortcuts", connectionHeading: "Connect to QuestForge", agentHeadingFallback: "AI Agent Registry", languageNote: "Change the display language on this device only. Quest data is unchanged.", typeScale: "Larger text", typeScaleNote: "Make lists, details, and action buttons easier to read.", density: "Display density", densityNote: "Use more breathing room between information.", mobileDetail: "Mobile Quest details", mobileDetailNote: "Compare the bottom sheet and centered popup presentations.", motion: "Motion", motionNote: "Show short responses for navigation and completion.", sound: "Sound effects", soundNote: "Theme-based effects will be used in the main app.", profileShortcut: "Profile", partyShortcut: "Party", integrationShortcut: "Connections", on: "On", off: "Off", standard: "Standard", sheet: "Bottom sheet", modal: "Popup", autoConnect: "Reconnect on startup", newAgent: "New entry", link: "Link", unlink: "Unlink", agentSelect: "Select an Agent", mcpSelect: "Select an MCP client", noAgent: "No Agents registered yet.", noClients: "No linked MCP clients." }),
   es: Object.freeze({ complete: "Hecho", confirm: "Revisar", edit: "Editar", archive: "Archivar", restore: "Restaurar" }),
@@ -128,7 +327,7 @@ const labExtraLabels = Object.freeze({
   ru: Object.freeze({ complete: "Готово", confirm: "Проверить", edit: "Изменить", archive: "В архив", restore: "Вернуть" }),
 });
 
-const labContentLabels = Object.freeze({
+const labContentLabels: Readonly<Record<LabLocale, Readonly<Record<string, string>>>> = Object.freeze({
   ja: Object.freeze({
     dueUnset: "期限未設定", todayWord: "今日", tomorrowWord: "明日", minutesSuffix: "分", difficultyLabel: "難易度",
     selectQuest: "選択", questListAria: "今日のQuest一覧。フォーカスするとこの欄だけスクロールできます", selectQuestTitle: "Questを選択",
@@ -164,7 +363,7 @@ const labContentLabels = Object.freeze({
   ru: Object.freeze({ dueUnset: "Без срока", todayWord: "Сегодня", tomorrowWord: "Завтра", minutesSuffix: " мин", difficultyLabel: "Сложность", selectQuest: "Выбрать", questListAria: "Список Quest на сегодня. Переведите фокус сюда, чтобы прокручивать только задачи", selectQuestTitle: "Выберите Quest", selectQuestCopy: "Выберите строку, чтобы завершить, проверить или изменить её здесь.", open: "Открыть", openDetails: "Открыть сведения о Quest", closeDetails: "Закрыть сведения о Quest", treeCompanion: "Astra / персонаж-спутник", treeCached: "Показаны последние синхронизированные Quest. Изменения ждут переподключения.", treeRules: "Завершение родительского Quest не завершает дочерние автоматически.", battleQueueEmpty: "Нет Quest, которые дают MP.", partyCurrentQuest: "Текущий Quest", unassigned: "Не назначено", statusLabel: "Статус", estimate: "Оценка", partyCheckQuest: "Открыть назначенный Quest", profileTitleSuffix: " — профиль", accountPrefix: "Аккаунт: ", avatarAlt: " — аватар Sentinel", avatarLocal: "Настроено на этом устройстве", avatarDefault: "Используется значок по умолчанию", agentPrivateEmpty: "Войдите через Google и загрузите данные, чтобы управлять личным реестром Agent.", agentStatusActive: "Активен", agentStatusDisabled: "Отключён", agentStatusArchived: "В архиве", unlinked: "Не подключён", noInstructions: "Нет инструкции", connectedLabel: "Подключение", lastUpdated: "Обновлено", neverUpdated: "Не обновлялось", archiveAgent: "В архив", agentHintMany: " авторизованных MCP-клиентов найдено.", agentHintNone: "Авторизованных MCP-клиентов нет. Подключите MCP с этим аккаунтом, чтобы увидеть их здесь.", scopesUsed: "прав", lastUsed: "последнее использование", neverUsed: "никогда", panelLoadFailed: "Не удалось загрузить часть данных", panelKeep: "Список Quest сохранён.", retry: "Повторить", extraInfo: "Дополнительные данные", integrationPreparing: "Подготовка", settingsLarge: "Крупный", settingsRelaxed: "Свободный", ariaLanguage: "Язык интерфейса" })
 });
 
-const labFieldLabels = Object.freeze({
+const labFieldLabels: Readonly<Record<LabLocale, Readonly<Record<string, string>>>> = Object.freeze({
   ja: Object.freeze({ progressLabel: "進捗", rewardLabel: "報酬" }),
   en: Object.freeze({ progressLabel: "Progress", rewardLabel: "Rewards" }),
   es: Object.freeze({ progressLabel: "Progreso", rewardLabel: "Recompensa" }),
@@ -176,7 +375,7 @@ const labFieldLabels = Object.freeze({
   ru: Object.freeze({ progressLabel: "Прогресс", rewardLabel: "Награда" }),
 });
 
-const labStaticLabels = Object.freeze({
+const labStaticLabels: Readonly<Record<LabLocale, Readonly<Record<string, string>>>> = Object.freeze({
   ja: Object.freeze({ tasksHeading: "今やるQuestを選ぶ", demoData: "デモデータ", notSynced: "未同期", localDevice: "この端末", remoteMode: "QuestForge本体", remoteStale: "QuestForge本体（再接続待ち）", profileSettings: "表示と通知を設定", profileRoleNote: "Astraは操作するキャラクター。アカウント名はあなた自身です。", changeAvatar: "キャラクターアイコンを変更", campaignTitle: "QuestForgeの公開準備", campaignProgress: "72% / 3つの子Questのうち1つを完了", openTree: "Quest Treeを開く", accountStatus: "同期と安全性", storageLocation: "保存先", firebaseSync: "Firebase同期", externalConnections: "外部連携", aiConnection: "AI接続", checkConnections: "連携を確認", autoConnectTitle: "起動時に本体へ自動接続", autoConnectCopy: "この端末のQuestForge起動時に自動で同期します。", lastSync: "最終同期", currentStorage: "現在の保存先" }),
   en: Object.freeze({ tasksHeading: "Choose today's Quests", demoData: "Demo data", notSynced: "Not synced yet", localDevice: "This device", remoteMode: "QuestForge", remoteStale: "QuestForge (reconnecting)", profileSettings: "Display and notification settings", profileRoleNote: "Astra is the character you operate. The account name is you.", changeAvatar: "Change character icon", campaignTitle: "QuestForge public beta", campaignProgress: "72% / 1 of 3 child Quests complete", openTree: "Open Quest Tree", accountStatus: "Sync and safety", storageLocation: "Storage", firebaseSync: "Firebase sync", externalConnections: "External connections", aiConnection: "AI connection", checkConnections: "Check connections", autoConnectTitle: "Reconnect QuestForge on startup", autoConnectCopy: "Sync automatically when QuestForge starts on this device.", lastSync: "Last sync", currentStorage: "Current storage" }),
   es: Object.freeze({ tasksHeading: "Elige las Quests de hoy", demoData: "Datos de demo", notSynced: "Aún no sincronizado", localDevice: "Este dispositivo", remoteMode: "QuestForge", remoteStale: "QuestForge (reconectando)", profileSettings: "Ajustes de pantalla y avisos", profileRoleNote: "Astra es el personaje que manejas. El nombre de la cuenta eres tú.", changeAvatar: "Cambiar icono del personaje", campaignTitle: "Beta pública de QuestForge", campaignProgress: "72% / 1 de 3 sub-Quests completada", openTree: "Abrir árbol de Quests", accountStatus: "Sincronización y seguridad", storageLocation: "Almacenamiento", firebaseSync: "Sincronización Firebase", externalConnections: "Conexiones externas", aiConnection: "Conexión de IA", checkConnections: "Comprobar conexiones", autoConnectTitle: "Reconectar QuestForge al iniciar", autoConnectCopy: "Sincroniza automáticamente al iniciar QuestForge en este dispositivo.", lastSync: "Última sincronización", currentStorage: "Almacenamiento actual" }),
@@ -188,7 +387,7 @@ const labStaticLabels = Object.freeze({
   ru: Object.freeze({ tasksHeading: "Выберите Quest на сегодня", demoData: "Демо-данные", notSynced: "Ещё не синхронизировано", localDevice: "Это устройство", remoteMode: "QuestForge", remoteStale: "QuestForge (переподключение)", profileSettings: "Настройки отображения и уведомлений", profileRoleNote: "Astra — персонаж, которым вы управляете. Имя аккаунта — это вы.", changeAvatar: "Изменить значок персонажа", campaignTitle: "Публичная бета QuestForge", campaignProgress: "72% / 1 из 3 дочерних Quest завершён", openTree: "Открыть дерево Quest", accountStatus: "Синхронизация и безопасность", storageLocation: "Хранилище", firebaseSync: "Синхронизация Firebase", externalConnections: "Внешние подключения", aiConnection: "Подключение ИИ", checkConnections: "Проверить подключения", autoConnectTitle: "Подключать QuestForge при запуске", autoConnectCopy: "Автоматически синхронизировать при запуске QuestForge на этом устройстве.", lastSync: "Последняя синхронизация", currentStorage: "Текущее хранилище" })
 });
 
-function labText(key, variables = {}) {
+function labText(key: string, variables: Record<string, unknown> = {}): string {
   const translationKey = labTranslationKeys[key];
   if (translationKey) {
     const translated = t(translationKey, variables);
@@ -199,15 +398,16 @@ function labText(key, variables = {}) {
 
 function applyLabLocale() {
   const locale = getLocale();
-  applyDocumentTranslations(document);
+  applyDocumentTranslations();
   document.documentElement.lang = LOCALE_METADATA[locale]?.tag || locale;
   const select = $("#labLocaleSelect");
   if (select) select.value = locale;
-  const labels = { today: "today", tree: "tree", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
+  const labels: Record<LabView, string> = { today: "today", tree: "tree", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
   const moreLabel = $("#mobileMoreToggle b");
   if (moreLabel) moreLabel.textContent = labText("more");
   $$('[data-view]').forEach((button) => {
-    const key = labels[button.dataset.view];
+    const view = button.dataset.view;
+    const key = view && view in labels ? labels[view as LabView] : undefined;
     const textNode = button.querySelector("b") || button.querySelector("span:last-child");
     if (key && textNode) textNode.textContent = labText(key);
   });
@@ -236,7 +436,8 @@ function applyLabLocale() {
 
 const savedLabState = readLabState();
 const savedRemoteState = Boolean(savedLabState?.dataSource === "remote" || savedLabState?.remoteMode === true);
-const savedRemoteOwnerUid = String(savedLabState?.remoteOwnerUid || savedLabState?.authUser?.uid || "").trim();
+const savedAuthUser = asJsonRecord(savedLabState?.authUser);
+const savedRemoteOwnerUid = String(savedLabState?.remoteOwnerUid || savedAuthUser.uid || "").trim();
 const savedRemoteStatePayload = savedRemoteState && savedLabState ? JSON.parse(JSON.stringify(savedLabState)) : null;
 if (savedLabState) {
   Object.assign(state, savedLabState);
@@ -310,42 +511,46 @@ try {
   // Keep the default view when local storage is unavailable.
 }
 
-const partyMembers = [
+const partyMembers: PartyMember[] = [
   { name: "Astra", identity: "HUMAN / PLAYER", role: "相棒キャラ Astra / Sentinel", mark: "AS", state: "working", task: "Forge Opsの採用フローを決める", avatar: "../assets/avatar-role-femme-sentinel.webp" },
   { name: "Cyan", identity: "AGENT / ENGINEER", role: "UI / 実装", mark: "C/", state: "review", task: "Pixel 9の操作を返却" },
   { name: "Archivist", identity: "AGENT / ARCHIVIST", role: "翻訳 / 記録", mark: "A", state: "working", task: "長い表示文を確認中" },
   { name: "Operator", identity: "AGENT / OPERATOR", role: "MCP / 連携", mark: "O", state: "blocked", task: "接続設定を待機中" }
 ];
 
-const integrations = [
+const integrations: LabIntegration[] = [
   { id: "calendar", providerId: "google-calendar", name: "Google Calendar", short: "GC", stateKey: "integration.status.connected", copyKey: "service.google-calendar.description", titleKey: "service.google-calendar.type", detailKey: "service.google-calendar.rule1", activityKeys: ["service.google-calendar.rule1", "service.google-calendar.rule2", "service.google-calendar.rule3"], lastSync: "2026-08-14T16:30:00", scope: "2 calendars", nextStepKey: "integration.preview" },
   { id: "tasks", providerId: "google-tasks", name: "Google Tasks", short: "GT", stateKey: "integration.status.admin_setup_required", copyKey: "service.google-tasks.description", titleKey: "service.google-tasks.type", detailKey: "service.google-tasks.rule3", activityKeys: ["service.google-tasks.rule1", "service.google-tasks.rule2", "service.google-tasks.rule3"], lastSync: "", scope: "1 task list", nextStepKey: "integration.resource" },
   { id: "notion", providerId: "notion", name: "Notion", short: "N", stateKey: "integration.status.planned", copyKey: "service.notion.description", titleKey: "service.notion.type", detailKey: "service.notion.rule1", activityKeys: ["service.notion.rule1", "service.notion.rule2", "service.notion.rule3"], lastSync: "", scope: "QuestForge Logs", nextStepKey: "integration.resource" },
   { id: "focus", providerId: "toggl-focus", name: "Toggl Focus", short: "TF", stateKey: "integration.status.connected", copyKey: "service.toggl-focus.description", titleKey: "service.toggl-focus.type", detailKey: "service.toggl-focus.rule3", activityKeys: ["service.toggl-focus.rule1", "service.toggl-focus.rule2", "service.toggl-focus.rule3"], lastSync: "2026-08-14T16:20:00", scope: "Focus session", nextStepKey: "integration.preview" }
 ];
 
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => [...document.querySelectorAll(selector)];
-const quest = (id) => state.quests.find((item) => item.id === id);
+const $ = <T extends Element = LabElement>(selector: string): T => {
+  const element = document.querySelector<T>(selector);
+  if (!element) throw new Error(`Interaction Lab element not found: ${selector}`);
+  return element;
+};
+const $$ = <T extends Element = LabElement>(selector: string): T[] => [...document.querySelectorAll<T>(selector)];
+const quest = (id: string): LabQuest | undefined => state.quests.find((item) => item.id === id);
 const repository = new QuestForgeRepository({ baseUrl: state.gatewayUrl, getToken: getIdToken });
 const externalOAuthEnabled = globalThis.QuestForgeConfig?.externalOAuthEnabled === true;
-let remoteLoadPromise = null;
+let remoteLoadPromise: Promise<boolean> | null = null;
 let observedUid = "";
 
 function persistState() {
   writeLabState(state);
 }
 
-function formatSyncTime(value = new Date()) {
+function formatSyncTime(value: string | number | Date = new Date()): string {
   return new Intl.DateTimeFormat(getLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
-function setSyncStatus(status, message = "") {
+function setSyncStatus(status: string, message = ""): void {
   state.syncStatus = status;
   const statusNode = $("#dataSourceStatus");
   const userNode = $("#connectionUser");
   if (statusNode) {
-    const labels = {
+    const labels: Record<string, string> = {
       "local-only": labText("localOnly"),
       synced: labText("synced"),
       syncing: labText("syncing"),
@@ -423,7 +628,7 @@ function restoreLocalBackupState() {
   return true;
 }
 
-function restoreRemoteCacheForUser(uid) {
+function restoreRemoteCacheForUser(uid: string): boolean {
   const ownerUid = String(uid || "").trim();
   if (!ownerUid) return false;
   if (savedRemoteStatePayload && savedRemoteOwnerUid === ownerUid) {
@@ -447,27 +652,128 @@ function restoreRemoteCacheForUser(uid) {
   }
   const cached = readRemoteSnapshot(ownerUid);
   if (!cached?.snapshot) return false;
-  if (cached.gatewayUrl) {
+  if (typeof cached.gatewayUrl === "string" && cached.gatewayUrl) {
     state.gatewayUrl = cached.gatewayUrl;
     repository.setBaseUrl(cached.gatewayUrl);
   }
-  hydrateRemoteSnapshot(cached.snapshot, { saveLocalBackup: false, connectionState: "reconnecting" });
-  if (cached.savedAt) state.lastSyncAt = formatSyncTime(cached.savedAt);
+  hydrateRemoteSnapshot(normalizeRemoteSnapshot(cached.snapshot), { saveLocalBackup: false, connectionState: "reconnecting" });
+  if (typeof cached.savedAt === "string" && cached.savedAt) state.lastSyncAt = formatSyncTime(cached.savedAt);
   return true;
 }
 
 let remoteLoadGeneration = 0;
 
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
+function escapeHtml(value: unknown): string {
+  const replacements: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" };
+  return String(value ?? "").replace(/[&<>'"]/g, (character) => replacements[character] || character);
 }
 
-function difficultyValue(value) {
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function isLabView(value: string | undefined): value is LabView {
+  return value === "today" || value === "tree" || value === "battle" || value === "party" || value === "integrations" || value === "profile" || value === "settings";
+}
+
+function closestLabElement(event: LabEvent, selector: string): LabElement | null {
+  return (event.target as Element).closest(selector) as LabElement | null;
+}
+
+function asJsonRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function asJsonRecordArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.map(asJsonRecord) : [];
+}
+
+function stringField(record: JsonRecord, key: string, fallback = ""): string {
+  const value = record[key];
+  return typeof value === "string" ? value : value == null ? fallback : String(value);
+}
+
+function numberField(record: JsonRecord, key: string, fallback = 0): number {
+  const value = Number(record[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeRemoteSnapshot(value: unknown): RemoteSnapshot {
+  const record = asJsonRecord(value);
+  const integrations = asJsonRecordArray(record.integrations).map((item) => ({
+    id: stringField(item, "id"),
+    providerId: stringField(item, "providerId"),
+    name: stringField(item, "name"),
+    short: stringField(item, "short"),
+    stateKey: stringField(item, "stateKey"),
+    copyKey: stringField(item, "copyKey"),
+    titleKey: stringField(item, "titleKey"),
+    detailKey: stringField(item, "detailKey"),
+    activityKeys: Array.isArray(item.activityKeys) ? item.activityKeys.map(String) : [],
+    lastSync: stringField(item, "lastSync"),
+    scope: stringField(item, "scope"),
+    nextStepKey: stringField(item, "nextStepKey"),
+    status: typeof item.status === "string" ? item.status : undefined,
+  }));
+  const profileValue = record.profile;
+  const profileRecord = profileValue && typeof profileValue === "object" && !Array.isArray(profileValue) ? asJsonRecord(profileValue) : null;
+  const profile: LabProfile | null = profileRecord ? {
+    displayName: stringField(profileRecord, "displayName"),
+    handle: stringField(profileRecord, "handle"),
+    bio: stringField(profileRecord, "bio"),
+    avatarRole: stringField(profileRecord, "avatarRole"),
+    avatarVariant: stringField(profileRecord, "avatarVariant"),
+    avatarUrl: stringField(profileRecord, "avatarUrl"),
+    ...profileRecord,
+  } : null;
+  const agents = asJsonRecordArray(record.agents).map((item) => ({
+    agentId: stringField(item, "agentId"),
+    displayName: stringField(item, "displayName", stringField(item, "agentId")),
+    provider: stringField(item, "provider", "generic"),
+    role: stringField(item, "role", "assistant"),
+    instructions: stringField(item, "instructions"),
+    status: stringField(item, "status", "active"),
+    updatedAt: stringField(item, "updatedAt"),
+    defaultHandoffState: stringField(item, "defaultHandoffState", "ready"),
+    ...item,
+  }));
+  const connectionRecord = asJsonRecord(record.agentConnections);
+  const authorizedClients = asJsonRecordArray(connectionRecord.authorizedClients).map((item) => ({
+    clientId: stringField(item, "clientId"),
+    clientName: stringField(item, "clientName", stringField(item, "clientId")),
+    scopes: Array.isArray(item.scopes) ? item.scopes.map(String) : [],
+    lastUsedAt: stringField(item, "lastUsedAt"),
+    ...item,
+  }));
+  const connections = asJsonRecordArray(connectionRecord.connections).map((item) => ({
+    clientId: stringField(item, "clientId"),
+    agentId: stringField(item, "agentId"),
+    revokedAt: stringField(item, "revokedAt"),
+    ...item,
+  }));
+  const partyValue = record.party;
+  const party = partyValue && typeof partyValue === "object" && !Array.isArray(partyValue) ? asJsonRecord(partyValue) as LabParty : null;
+  const panelErrors = asJsonRecordArray(record.panelErrors).map((item) => ({ index: numberField(item, "index"), message: stringField(item, "message", "読み込みに失敗しました。") }));
+  return {
+    quests: asJsonRecordArray(record.quests),
+    total: numberField(record, "total"),
+    character: asJsonRecord(record.character),
+    battle: asJsonRecord(record.battle),
+    integrations,
+    profile,
+    party,
+    agents,
+    agentConnections: { authorizedClients, connections },
+    panelErrors,
+  };
+}
+
+function difficultyValue(value: unknown): number {
   if (typeof value === "number") return Math.max(1, Math.min(5, value));
   return { trivial: 1, easy: 2, medium: 3, hard: 4, very_hard: 5 }[String(value || "").toLowerCase()] || 2;
 }
 
-function displayDue(value) {
+function displayDue(value: unknown): string {
   if (!value) return labText("dueUnset");
   const raw = String(value);
   const datePart = raw.slice(0, 10);
@@ -483,8 +789,10 @@ function displayDue(value) {
   return `${prefix} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-function isDueSoon(value) {
-  const raw = String(value?.raw?.dueDate || value?.raw?.scheduledDate || value?.due || value || "");
+function isDueSoon(value: unknown): boolean {
+  const task = value && typeof value === "object" ? value as LabQuest : null;
+  const rawRecord = asJsonRecord(task?.raw);
+  const raw = String(rawRecord.dueDate || rawRecord.scheduledDate || task?.due || value || "");
   if (!raw) return false;
   const datePart = raw.slice(0, 10);
   const today = new Date();
@@ -494,52 +802,61 @@ function isDueSoon(value) {
   return datePart === todayKey || datePart === tomorrow.toISOString().slice(0, 10);
 }
 
-function remoteState(task) {
-  const handoff = task.assignee?.handoffState || task.handoff?.state || task.handoffState;
-  if (task.lifecycleState === "archived") return "archived";
-  if (task.lifecycleState === "completed" || task.done) return "completed";
+function remoteState(task: JsonRecord): string {
+  const assignee = asJsonRecord(task.assignee);
+  const handoff = stringField(assignee, "handoffState", stringField(asJsonRecord(task.handoff), "state", stringField(task, "handoffState")));
+  const lifecycleState = stringField(task, "lifecycleState");
+  if (lifecycleState === "archived") return "archived";
+  if (lifecycleState === "completed" || task.done === true) return "completed";
   if (handoff === "review_required") return "review";
   if (handoff === "blocked") return "blocked";
   if (handoff === "working") return "working";
   return "ready";
 }
 
-function remoteQuestToLab(task, index = 0) {
-  const parent = task.parentQuestId || "";
-  const progress = Number(task.progressPercent ?? task.progress ?? task.childrenSummary?.progressPercent ?? 0);
-  const owner = task.assignee?.label || task.assignee?.displayName || task.assignee?.name || task.assignee?.id || task.assignee?.agentId || "Astra";
-  const kind = parent ? "sub" : task.kind === "todo" ? "side" : "main";
-  const reward = Number(task.mpGain ?? task.reward?.mp ?? task.reward ?? (task.kind === "habit" ? 6 : task.kind === "daily" ? 14 : 20));
+function remoteQuestToLab(task: JsonRecord, index = 0): LabQuest {
+  const assignee = asJsonRecord(task.assignee);
+  const summary = asJsonRecord(task.childrenSummary);
+  const rewardObject = asJsonRecord(task.reward);
+  const parent = stringField(task, "parentQuestId");
+  const progress = numberField(task, "progressPercent", numberField(task, "progress", numberField(summary, "progressPercent")));
+  const owner = stringField(assignee, "label", stringField(assignee, "displayName", stringField(assignee, "name", stringField(assignee, "id", stringField(assignee, "agentId", "Astra")))));
+  const sourceKind = stringField(task, "kind");
+  const kind = parent ? "sub" : sourceKind === "todo" ? "side" : "main";
+  const defaultReward = sourceKind === "habit" ? 6 : sourceKind === "daily" ? 14 : 20;
+  const reward = numberField(task, "mpGain", numberField(rewardObject, "mp", numberField(task, "reward", defaultReward)));
+  const done = task.done === true;
+  const lifecycleState = stringField(task, "lifecycleState", done ? "completed" : "active");
   return {
-    id: task.id,
-    code: task.code || (parent ? `01.${index + 1}` : String(index + 1).padStart(2, "0")),
+    id: stringField(task, "id", `quest-${index + 1}`),
+    code: stringField(task, "code", parent ? `01.${index + 1}` : String(index + 1).padStart(2, "0")),
     kind,
     parent,
-    title: task.title || "名称未設定のQuest",
-    note: task.notes || "",
-    progress: task.lifecycleState === "completed" || task.done ? 100 : Math.max(0, Math.min(100, Math.round(progress))),
+    title: stringField(task, "title", "名称未設定のQuest"),
+    note: stringField(task, "notes"),
+    progress: lifecycleState === "completed" || done ? 100 : Math.max(0, Math.min(100, Math.round(progress))),
     owner,
     mark: partyMember(owner)?.mark || owner.slice(0, 2).toUpperCase(),
     state: remoteState(task),
-    due: displayDue(task.dueDate || task.scheduledDate),
-    focus: Number(task.estimatedMinutes || 30),
+    due: displayDue(stringField(task, "dueDate", stringField(task, "scheduledDate"))),
+    focus: numberField(task, "estimatedMinutes", 30),
     reward: Number.isFinite(reward) ? reward : 14,
-    xp: Number(task.xpGain || task.xp || 60),
+    xp: numberField(task, "xpGain", numberField(task, "xp", 60)),
     difficulty: difficultyValue(task.difficulty),
     children: [],
-    lifecycleState: task.lifecycleState || (task.done ? "completed" : "active"),
+    lifecycleState,
     parentQuestId: parent,
-    updatedAt: task.updatedAt || "",
+    updatedAt: stringField(task, "updatedAt"),
     raw: task,
     remote: true,
   };
 }
 
-function hydrateRemoteSnapshot(snapshot, { saveLocalBackup = true, connectionState = "synced" } = {}) {
+function hydrateRemoteSnapshot(snapshot: RemoteSnapshot, { saveLocalBackup = true, connectionState = "synced" }: { saveLocalBackup?: boolean; connectionState?: string } = {}): void {
   if (saveLocalBackup) writeLocalBackup(state);
-  const remoteQuests = (snapshot.quests || []).map((item, index) => remoteQuestToLab(item, index));
-  remoteQuests.forEach((item) => {
-    item.children = remoteQuests.filter((child) => child.parent === item.id).map((child) => child.id);
+  const remoteQuests = (snapshot.quests || []).map((item: JsonRecord, index: number) => remoteQuestToLab(item, index));
+  remoteQuests.forEach((item: LabQuest) => {
+    item.children = remoteQuests.filter((child: LabQuest) => child.parent === item.id).map((child: LabQuest) => child.id);
   });
   state.quests = remoteQuests;
   state.remoteIntegrations = snapshot.integrations || [];
@@ -549,11 +866,13 @@ function hydrateRemoteSnapshot(snapshot, { saveLocalBackup = true, connectionSta
   if (snapshot.profile) state.avatarDataUrl = snapshot.profile.avatarUrl || "";
   state.remoteParty = snapshot.party || null;
   state.panelErrors = snapshot.panelErrors || [];
-  state.battleSession = snapshot.battle || null;
-  state.battleTurn = Number(snapshot.battle?.battle?.turn || 1);
-  state.battleLog = snapshot.battle?.battle?.log || state.battleLog;
-  state.mp = Number(snapshot.battle?.battle?.mp ?? snapshot.character?.mp ?? state.mp);
-  state.bossHp = Number(snapshot.battle?.boss?.hp ?? snapshot.character?.boss?.hp ?? state.bossHp);
+  state.battleSession = snapshot.battle as LabBattleSession;
+  const battleRecord = asJsonRecord(snapshot.battle.battle);
+  const bossRecord = asJsonRecord(snapshot.battle.boss);
+  state.battleTurn = numberField(battleRecord, "turn", 1);
+  state.battleLog = Array.isArray(battleRecord.log) ? battleRecord.log.map(String) : state.battleLog;
+  state.mp = numberField(battleRecord, "mp", numberField(snapshot.character, "mp", state.mp));
+  state.bossHp = numberField(bossRecord, "hp", numberField(asJsonRecord(snapshot.character.boss), "hp", state.bossHp));
   state.remoteMode = true;
   state.dataSource = "remote";
   state.remoteOwnerUid = state.authUser?.uid || state.remoteOwnerUid;
@@ -590,7 +909,7 @@ async function performRemoteLoad({ announce = true, source = "manual" } = {}) {
     }
     const snapshot = await repository.loadSnapshot();
     if (generation !== remoteLoadGeneration || !state.authUser) return false;
-    hydrateRemoteSnapshot(snapshot, { connectionState: "synced" });
+    hydrateRemoteSnapshot(normalizeRemoteSnapshot(snapshot), { connectionState: "synced" });
     writeRemoteSnapshot(state.authUser.uid, snapshot, inputUrl);
     if (source === "manual") {
       writeAutoConnectPreference(state.authUser.uid, true);
@@ -634,10 +953,11 @@ async function loadRemoteData(options = {}) {
   }
 }
 
-function applyRemoteResponse(response) {
+function applyRemoteResponse(response: JsonRecord): void {
   if (response?.quest) {
-    const index = state.quests.findIndex((item) => item.id === response.quest.id);
-    const next = remoteQuestToLab(response.quest, Math.max(0, index));
+    const responseQuest = asJsonRecord(response.quest);
+    const index = state.quests.findIndex((item: LabQuest) => item.id === stringField(responseQuest, "id"));
+    const next = remoteQuestToLab(responseQuest, Math.max(0, index));
     if (index >= 0) {
       // Single-quest responses do not include the full tree. Keep the existing child links until the next snapshot.
       next.children = state.quests[index].children || [];
@@ -645,8 +965,9 @@ function applyRemoteResponse(response) {
     }
   }
   if (Array.isArray(response?.quests)) {
-    response.quests.forEach((remoteQuest) => {
-      const index = state.quests.findIndex((item) => item.id === remoteQuest.id);
+    response.quests.forEach((value: unknown) => {
+      const remoteQuest = asJsonRecord(value);
+      const index = state.quests.findIndex((item: LabQuest) => item.id === stringField(remoteQuest, "id"));
       const next = remoteQuestToLab(remoteQuest, Math.max(0, index));
       if (index >= 0) {
         next.children = state.quests[index].children || [];
@@ -657,16 +978,19 @@ function applyRemoteResponse(response) {
     });
     state.quests.forEach((item) => { item.children = state.quests.filter((child) => child.parent === item.id).map((child) => child.id); });
   }
-  const battle = response?.session?.battle || response?.battle?.battle || response?.battle;
-  const boss = response?.session?.boss || response?.battle?.boss || response?.boss;
+  const session = asJsonRecord(response.session);
+  const responseBattle = asJsonRecord(response.battle);
+  const battle = asJsonRecord(session.battle || responseBattle.battle || response.battle);
+  const boss = asJsonRecord(session.boss || responseBattle.boss || response.boss);
   if (battle) {
-    state.battleSession = response.session || state.battleSession;
+    state.battleSession = session as LabBattleSession;
     state.battleTurn = Number(battle.turn || state.battleTurn);
-    state.battleLog = battle.log || state.battleLog;
+    state.battleLog = Array.isArray(battle.log) ? battle.log.map(String) : state.battleLog;
     state.mp = Number(battle.mp ?? state.mp);
   }
   if (boss) state.bossHp = Number(boss.hp ?? state.bossHp);
-  if (response?.character?.mp != null) state.mp = Number(response.character.mp);
+  const responseCharacter = asJsonRecord(response.character);
+  if (responseCharacter.mp != null) state.mp = Number(responseCharacter.mp);
   state.lastSyncAt = formatSyncTime();
   setSyncStatus("synced");
   persistState();
@@ -687,41 +1011,42 @@ function renderConnection() {
   setSyncStatus(state.syncStatus);
 }
 
-function stateLabel(value) {
-  const keys = { ready: "task.handoffStates.ready", working: "task.handoffStates.working", blocked: "task.handoffStates.blocked", review: "task.handoffStates.review_required", completed: "task.done", archived: "task.summary.archive" };
+function stateLabel(value: string): string {
+  const keys: Record<string, string> = { ready: "task.handoffStates.ready", working: "task.handoffStates.working", blocked: "task.handoffStates.blocked", review: "task.handoffStates.review_required", completed: "task.done", archived: "task.summary.archive" };
   const key = keys[value] || keys.ready;
   const translated = t(key);
   return translated === key ? (labLabels[getLocale()]?.[value] || labLabels.ja[value] || value) : translated;
 }
 
-function pill(value) {
+function pill(value: string): string {
   return '<span class="state-pill" data-state="' + value + '">' + stateLabel(value) + "</span>";
 }
 
-function partyMember(name) {
+function partyMember(name: string): PartyMember | undefined {
   const members = activePartyMembers();
   return members.find((member) => member.name === name) || members.find((member) => member.identity === "HUMAN / PLAYER" && ["self", "自分", "Astra"].includes(String(name || "")));
 }
 
-function activePartyMembers() {
+function activePartyMembers(): PartyMember[] {
   if (!state.remoteMode) return partyMembers.map((member) => member.name === "Astra" && state.avatarDataUrl ? { ...member, avatar: state.avatarDataUrl } : member);
   const playerName = state.profile?.displayName || state.authUser?.displayName || "あなた";
-  const player = { name: playerName, identity: "HUMAN / PLAYER", role: "相棒キャラ Astra / Sentinel", mark: playerName.slice(0, 2).toUpperCase(), state: "working", task: "QuestForgeを運用中", avatar: state.avatarDataUrl || state.profile?.avatarUrl || "../assets/avatar-role-femme-sentinel.webp" };
+  const player: PartyMember = { name: playerName, identity: "HUMAN / PLAYER", role: "相棒キャラ Astra / Sentinel", mark: playerName.slice(0, 2).toUpperCase(), state: "working", task: "QuestForgeを運用中", avatar: state.avatarDataUrl || state.profile?.avatarUrl || "../assets/avatar-role-femme-sentinel.webp" };
   return [player, ...(state.registeredAgents || []).filter((agent) => agent.status !== "archived").map((agent) => {
     const assigned = state.quests.find((item) => item.raw?.assignee?.id === agent.agentId);
-    return { name: agent.displayName, agentId: agent.agentId, identity: `AGENT / ${String(agent.provider || "generic").toUpperCase()}`, role: agent.role || "assistant", mark: agent.displayName.slice(0, 2).toUpperCase(), state: assigned?.state || (agent.status === "disabled" ? "blocked" : "ready"), task: assigned?.title || agent.instructions || "割り当て待ち" };
+    return { name: agent.displayName, agentId: agent.agentId, identity: `AGENT / ${String(agent.provider || "generic").toUpperCase()}`, role: agent.role || "assistant", mark: agent.displayName.slice(0, 2).toUpperCase(), state: assigned?.state || (agent.status === "disabled" ? "blocked" : "ready"), task: assigned?.title || agent.instructions || "割り当て待ち" } satisfies PartyMember;
   })];
 }
 
-function questKind(item) {
+function questKind(item: LabQuest): string {
   return item.kind || (item.parent ? "sub" : "side");
 }
 
-function questKindLabel(item) {
-  return { main: "MAIN", sub: "SUB", side: "SIDE" }[questKind(item)] || "SIDE";
+function questKindLabel(item: LabQuest): string {
+  const labels: Record<string, string> = { main: "MAIN", sub: "SUB", side: "SIDE" };
+  return labels[questKind(item)] || "SIDE";
 }
 
-function questGameMeta(item) {
+function questGameMeta(item: LabQuest): string {
   const difficulty = Math.max(1, Math.min(5, Number(item.difficulty) || 2));
   return '<div class="quest-game-meta">' +
     '<span class="difficulty" aria-label="' + escapeHtml(labText("difficultyLabel")) + ' ' + difficulty + ' / 5">' + "◆".repeat(difficulty) + "◇".repeat(5 - difficulty) + "</span>" +
@@ -729,15 +1054,17 @@ function questGameMeta(item) {
   "</div>";
 }
 
-function notify(message) {
+let notifyTimer: number | null = null;
+
+function notify(message: string): void {
   const toast = $("#toast");
   toast.textContent = message;
   toast.hidden = false;
-  clearTimeout(notify.timer);
-  notify.timer = setTimeout(() => { toast.hidden = true; }, 2600);
+  if (notifyTimer !== null) window.clearTimeout(notifyTimer);
+  notifyTimer = window.setTimeout(() => { toast.hidden = true; notifyTimer = null; }, 2600);
 }
 
-function visibleQuests() {
+function visibleQuests(): LabQuest[] {
   const archiveFiltered = state.quests.filter((item) => state.showArchived || item.lifecycleState !== "archived");
   const visibleIds = new Set(archiveFiltered.map((item) => item.id));
   let items = archiveFiltered.filter((item) => (!item.parent || visibleIds.has(item.parent)) && (!item.parent || state.expanded.has(item.parent)));
@@ -749,11 +1076,12 @@ function visibleQuests() {
   return items;
 }
 
-function sourceQuestKind(item) {
-  return item?.raw?.kind || (item?.kind === "side" || item?.kind === "sub" ? "todo" : item?.kind);
+function sourceQuestKind(item: LabQuest): string {
+  const sourceKind = item.raw?.kind;
+  return typeof sourceKind === "string" ? sourceKind : (item.kind === "side" || item.kind === "sub" ? "todo" : item.kind);
 }
 
-function isOneOffTodo(item) {
+function isOneOffTodo(item: LabQuest): boolean {
   return sourceQuestKind(item) === "todo" && (item?.raw?.repeat || "none") === "none";
 }
 
@@ -768,19 +1096,20 @@ function normalizeLabQuestStates() {
   if (changed) persistState();
 }
 
-function selectionItems() {
+function selectionItems(): LabQuest[] {
   const visibleIds = new Set(visibleQuests().map((item) => item.id));
   return state.quests.filter((item) => state.selectedQuestIds.includes(item.id) && visibleIds.has(item.id));
 }
 
-function updateSelection(ids) {
+function updateSelection(ids: string[]): void {
   state.selectedQuestIds = [...new Set(ids)].filter(Boolean).slice(0, 100);
   persistState();
   renderQuestList();
   renderBulkSelection();
 }
 
-function toggleQuestSelection(id, event = {}) {
+function toggleQuestSelection(id: string | undefined, event: Pick<LabEvent, "shiftKey" | "ctrlKey" | "metaKey"> = { shiftKey: false, ctrlKey: false, metaKey: false }): void {
+  if (!id) return;
   const items = visibleQuests();
   const index = items.findIndex((item) => item.id === id);
   if (index < 0) return;
@@ -890,7 +1219,7 @@ function renderQuestList() {
 
 function renderSelected() {
   const item = quest(state.selectedQuestId);
-  const sheet = document.querySelector(".selected-panel");
+  const sheet = $(".selected-panel");
   if (!item) {
     $("#selectedTitle").textContent = labText("selectQuestTitle");
     $("#selectedDescription").textContent = labText("selectQuestCopy");
@@ -937,7 +1266,7 @@ function renderSelected() {
   $("#selectedSheetToggle").setAttribute("aria-label", state.mobileSheetOpen ? labText("closeDetails") : labText("openDetails"));
 }
 
-function memberAvatar(member) {
+function memberAvatar(member: PartyMember): string {
   return member.avatar
     ? '<span class="agent-avatar has-avatar"><img src="' + member.avatar + '" alt="" /></span>'
     : '<span class="agent-avatar">' + member.mark + "</span>";
@@ -953,8 +1282,8 @@ function renderAgents() {
   $("#reviewCounter").textContent = String(count);
 }
 
-function renderTreeNote(treeQuests) {
-  const profile = state.profile || {};
+function renderTreeNote(treeQuests: LabQuest[]): void {
+  const profile: LabProfile = state.profile || { displayName: "", handle: "", bio: "" };
   const accountName = state.remoteMode
     ? profile.displayName || state.authUser?.displayName || "あなた"
     : state.authUser?.displayName || "ゲスト";
@@ -1018,15 +1347,15 @@ function renderBattle() {
     : "<p>" + escapeHtml(labText("battleQueueEmpty")) + "</p>";
   $("#battleLog").innerHTML = state.battleLog.slice(0, 4).map((entry) => "<li>" + escapeHtml(entry) + "</li>").join("");
   $("#battleBossHp").textContent = String(state.bossHp);
-  $("#battleBossMeter").value = state.bossHp;
+  $("#battleBossMeter").value = String(state.bossHp);
   $("#battleMp").textContent = String(state.mp);
-  $("#battleMpMeter").value = state.mp;
+  $("#battleMpMeter").value = String(state.mp);
   $("#topbarMp").textContent = String(state.mp);
   $("#sidebarMp").textContent = state.mp + " / 100";
   $("#bossMp").textContent = String(state.mp);
-  $("#topbarMpMeter").value = state.mp;
-  const costs = { attack: 0, skill: 18, guard: 6, heal: 14, burst: 40 };
-  $$("[data-command]").forEach((button) => { button.disabled = state.bossHp <= 0 || state.mp < costs[button.dataset.command]; });
+  $("#topbarMpMeter").value = String(state.mp);
+  const costs: Record<string, number> = { attack: 0, skill: 18, guard: 6, heal: 14, burst: 40 };
+  $$(`[data-command]`).forEach((button) => { button.disabled = state.bossHp <= 0 || state.mp < (costs[button.dataset.command || ""] || 0); });
 }
 
 function renderParty() {
@@ -1053,8 +1382,8 @@ function renderParty() {
   ].map((item) => '<li><b>' + item[0] + "</b><span>" + item[1] + "</span><small>" + item[2] + "</small></li>").join("");
 }
 
-function renderProfile() {
-  const profile = state.profile || {};
+function renderProfile(): void {
+  const profile: LabProfile = state.profile || { displayName: "", handle: "", bio: "" };
   const accountName = profile.displayName || state.authUser?.displayName || "ひろなお";
   const characterName = "Astra";
   const avatar = state.avatarDataUrl || state.profile?.avatarUrl || "../assets/avatar-role-femme-sentinel.webp";
@@ -1072,7 +1401,7 @@ function renderProfile() {
   if (profileName) profileName.textContent = characterName;
   const profileButton = document.querySelector(".profile-button");
   if (profileButton) profileButton.setAttribute("aria-label", `${characterName}${labText("profileTitleSuffix")} (${labText("accountPrefix")}${accountName})`);
-  const sidebarImage = document.querySelector(".sidebar-profile .profile-avatar img");
+  const sidebarImage = $(".sidebar-profile .profile-avatar img");
   if (sidebarImage) { sidebarImage.src = avatar; sidebarImage.alt = ""; }
 }
 
@@ -1084,7 +1413,7 @@ function renderAgentRegistry() {
     return;
   }
   const connections = state.agentConnections?.connections || [];
-  const statusText = { active: labText("agentStatusActive"), disabled: labText("agentStatusDisabled"), archived: labText("agentStatusArchived") };
+  const statusText: Record<string, string> = { active: labText("agentStatusActive"), disabled: labText("agentStatusDisabled"), archived: labText("agentStatusArchived") };
   list.innerHTML = (state.registeredAgents || []).map((agent) => {
     const linked = connections.filter((connection) => connection.agentId === agent.agentId && !connection.revokedAt);
     const linkedText = linked.length ? linked.map((connection) => escapeHtml(connection.clientName || connection.clientId)).join("、") : labText("unlinked");
@@ -1126,7 +1455,7 @@ function renderIntegrations() {
     '<button type="button" class="integration-card ' + (item.id === state.integration ? "is-selected" : "") + '" data-integration="' + item.id + '">' +
       "<span>" + item.short + "</span><strong>" + item.name + "</strong><small>" + escapeHtml(t(item.copyKey)) + "</small><b>" + escapeHtml(externalOAuthEnabled ? (remoteByService.get(item.providerId)?.status || t(item.stateKey)) : labText("integrationPreparing")) + "</b></button>"
   ).join("");
-  const selected = integrations.find((item) => item.id === state.integration);
+  const selected = integrations.find((item) => item.id === state.integration) || integrations[0];
   $("#integrationKicker").textContent = selected.name.toUpperCase();
   $("#integrationTitle").textContent = t(selected.titleKey);
   $("#integrationDescription").textContent = t(selected.detailKey);
@@ -1200,7 +1529,7 @@ function applySettings() {
   renderSelected();
 }
 
-function setMobileMore(open) {
+function setMobileMore(open: boolean): void {
   state.mobileMoreOpen = open;
   const menu = $("#mobileMoreMenu");
   const toggle = $("#mobileMoreToggle");
@@ -1209,13 +1538,13 @@ function setMobileMore(open) {
   toggle.setAttribute("aria-expanded", String(open));
 }
 
-function setView(view) {
+function setView(view: LabView): void {
   state.view = view;
   state.mobileSheetOpen = false;
   document.body.classList.remove("is-detail-modal");
   document.body.classList.toggle("is-today-view", view === "today");
   document.body.classList.toggle("is-tree-view", view === "tree");
-  const titles = { today: "today", tree: "tree", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
+  const titles: Record<LabView, string> = { today: "today", tree: "tree", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
   $("#pageTitle").textContent = labText(titles[view]);
   $$("[data-panel]").forEach((panel) => {
     const active = panel.dataset.panel === view;
@@ -1233,7 +1562,8 @@ function setView(view) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function selectQuest(id) {
+function selectQuest(id: string | undefined): void {
+  if (!id) return;
   state.selectedQuestId = id;
   state.selectionAnchorId = id;
   state.mobileSheetOpen = state.detailMode === "modal";
@@ -1270,7 +1600,7 @@ async function completeSelectedQuest() {
   renderAll();
 }
 
-function confirmBulkAction(action, items, preview) {
+function confirmBulkAction(action: string, items: LabQuest[], preview: JsonRecord): boolean {
   const count = Number(preview?.count ?? items.length);
   return window.confirm(`${count}件を「${action}」します。報酬・状態を確認して実行しますか？`);
 }
@@ -1314,7 +1644,7 @@ async function bulkCompleteQuests() {
   }
 }
 
-async function bulkLifecycleQuests(action) {
+async function bulkLifecycleQuests(action: "archive" | "restore"): Promise<void> {
   const restoring = action === "restore";
   const items = selectionItems().filter((item) => isOneOffTodo(item) && (restoring
     ? item.lifecycleState === "archived" || item.state === "archived"
@@ -1362,15 +1692,18 @@ async function bulkLifecycleQuests(action) {
   }
 }
 
-async function battleCommand(command) {
-  const commands = {
+type LabBattleCommand = "attack" | "skill" | "guard" | "heal" | "burst";
+
+async function battleCommand(command: string | undefined): Promise<void> {
+  if (!command || !["attack", "skill", "guard", "heal", "burst"].includes(command)) return;
+  const commands: Record<LabBattleCommand, { cost: number; damage: number; label: string }> = {
     attack: { cost: 0, damage: 9, label: "たたかう" },
     skill: { cost: 18, damage: 24, label: "Aegis Break" },
     guard: { cost: 6, damage: 0, label: "まもる" },
     heal: { cost: 14, damage: 0, label: "かいふく" },
     burst: { cost: 40, damage: 46, label: "バースト" }
   };
-  const current = commands[command];
+  const current = commands[command as LabBattleCommand];
   if (!current || state.mp < current.cost || state.bossHp <= 0) return;
   if (!ensureRemoteWritable()) return;
   if (state.remoteMode) {
@@ -1378,7 +1711,9 @@ async function battleCommand(command) {
       setSyncStatus("syncing");
       const response = await repository.battleCommand(command, state.battleTurn, `lab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       applyRemoteResponse(response);
-      $("#battleMessage").textContent = response?.effects?.message || (response?.session?.battle?.ended ? "勝利。次のボスを選ぼう。" : current.label + "を実行しました。");
+      const effects = asJsonRecord(response.effects);
+      const sessionBattle = asJsonRecord(asJsonRecord(response.session).battle);
+      $("#battleMessage").textContent = stringField(effects, "message") || (sessionBattle.ended ? "勝利。次のボスを選ぼう。" : current.label + "を実行しました。");
     } catch (error) {
       setSyncStatus("error", error instanceof QuestForgeApiError ? error.message : "バトルコマンドに失敗しました。");
       notify(error instanceof QuestForgeApiError ? error.message : "バトルコマンドに失敗しました。データは変更していません。");
@@ -1404,7 +1739,7 @@ function toggleTimer() {
     notify("集中タイマーを一時停止しました。");
     return;
   }
-  state.timerId = setInterval(() => {
+  state.timerId = window.setInterval(() => {
     state.timerSeconds = Math.max(0, state.timerSeconds - 1);
     renderTimer();
     if (!state.timerSeconds) {
@@ -1430,20 +1765,21 @@ function openEdit() {
   $("#editQuestId").value = item.id;
   $("#editQuestTitle").value = item.title;
   $("#editQuestNotes").value = item.note || "";
-  $("#editQuestDue").value = item.raw?.dueDate || "";
+  $("#editQuestDue").value = String(item.raw?.dueDate || "");
   $("#editQuestParent").innerHTML = '<option value="">ルートQuest</option>' + state.quests.filter((candidate) => candidate.id !== item.id && !candidate.parent).map((candidate) => '<option value="' + escapeHtml(candidate.id) + '">' + escapeHtml(candidate.title) + '</option>').join("");
   $("#editQuestParent").value = item.parent || "";
   $("#editQuestAgent").innerHTML = '<option value="">自分で担当</option>' + (state.registeredAgents || []).filter((agent) => agent.status === "active").map((agent) => '<option value="' + escapeHtml(agent.agentId) + '">' + escapeHtml(agent.displayName) + '</option>').join("");
-  $("#editQuestAgent").value = item.raw?.assignee?.id || "";
-  $("#editQuestHandoff").value = item.raw?.assignee?.handoffState || "none";
+  $("#editQuestAgent").value = String(item.raw?.assignee?.id || "");
+  $("#editQuestHandoff").value = String(item.raw?.assignee?.handoffState || "none");
   $("#editDialog").showModal();
 }
 
 async function refreshAgentRegistry() {
   const [agents, connections] = await Promise.all([repository.listAgents(true), repository.listAgentConnections()]);
-  state.registeredAgents = agents.agents || [];
-  state.agentConnections = connections;
-  if ((connections.authorizedClients || []).length || (connections.connections || []).length) trackTelemetry("mcp_connection_success", { source: "next" });
+  state.registeredAgents = normalizeRemoteSnapshot({ agents: asJsonRecord(agents).agents }).agents;
+  const normalizedConnections = normalizeRemoteSnapshot({ agentConnections: connections }).agentConnections;
+  state.agentConnections = normalizedConnections;
+  if (normalizedConnections.authorizedClients.length || normalizedConnections.connections.length) trackTelemetry("mcp_connection_success", { source: "next" });
   renderAll();
 }
 
@@ -1456,7 +1792,7 @@ function openReview() {
   $("#reviewNote").focus();
 }
 
-async function addQuest(data) {
+async function addQuest(data: FormData): Promise<void> {
   const title = String(data.get("title") || "").trim();
   if (!title) return;
   const owner = String(data.get("owner") || "");
@@ -1481,7 +1817,7 @@ async function addQuest(data) {
         ...(selectedAgent ? { assignee: { type: "agent", id: selectedAgent.agentId, label: selectedAgent.displayName, handoffState: selectedAgent.defaultHandoffState || "ready" } } : {}),
       });
       if (response?.quest) {
-        const created = remoteQuestToLab(response.quest, state.quests.length);
+        const created = remoteQuestToLab(asJsonRecord(response.quest), state.quests.length);
         state.quests.push(created);
         state.selectedQuestId = created.id;
       }
@@ -1523,54 +1859,57 @@ async function addQuest(data) {
   notify(title + "を追加しました。");
 }
 
-$$("[data-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+$$<LabElement>("[data-view]").forEach((button) => button.addEventListener("click", () => {
+  if (isLabView(button.dataset.view)) setView(button.dataset.view);
+}));
 
-$("#questList").addEventListener("click", (event) => {
-  const checkbox = event.target.closest("[data-select-quest]");
+$("#questList").addEventListener("click", (event: LabEvent) => {
+  const checkbox = closestLabElement(event, "[data-select-quest]");
   if (checkbox) {
     event.preventDefault();
     event.stopPropagation();
     toggleQuestSelection(checkbox.dataset.selectQuest, event);
     return;
   }
-  const toggle = event.target.closest("[data-toggle]");
+  const toggle = closestLabElement(event, "[data-toggle]");
   if (toggle) {
     const id = toggle.dataset.toggle;
+    if (!id) return;
     if (state.expanded.has(id)) state.expanded.delete(id);
     else state.expanded.add(id);
     renderQuestList();
     return;
   }
-  const row = event.target.closest("[data-quest]");
+  const row = closestLabElement(event, "[data-quest]");
   if (row) {
     if (event.shiftKey || event.ctrlKey || event.metaKey) toggleQuestSelection(row.dataset.quest, event);
     else selectQuest(row.dataset.quest);
   }
 });
 
-$("#questList").addEventListener("keydown", (event) => {
-  if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-quest]")) {
+$("#questList").addEventListener("keydown", (event: LabEvent) => {
+  if ((event.key === "Enter" || event.key === " ") && (event.target as Element).matches("[data-quest]")) {
     event.preventDefault();
-    selectQuest(event.target.dataset.quest);
+    selectQuest((event.target as LabElement).dataset.quest);
   }
 });
 
-$("#treeList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-tree-select]");
+$("#treeList").addEventListener("click", (event: LabEvent) => {
+  const button = closestLabElement(event, "[data-tree-select]");
   if (!button) return;
   selectQuest(button.dataset.treeSelect);
   setView("today");
 });
 
-$("#agentList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-agent]");
+$("#agentList").addEventListener("click", (event: LabEvent) => {
+  const button = closestLabElement(event, "[data-agent]");
   if (!button) return;
   const member = partyMembers.find((item) => item.name === button.dataset.agent);
   if (member) notify(member.name + ": " + member.task);
 });
 
-$("#partyList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-party-agent]");
+$("#partyList").addEventListener("click", (event: LabEvent) => {
+  const button = closestLabElement(event, "[data-party-agent]");
   if (!button) return;
   const target = state.quests.find((item) => item.owner === button.dataset.partyAgent);
   if (target) {
@@ -1581,10 +1920,10 @@ $("#partyList").addEventListener("click", (event) => {
   }
 });
 
-$("#integrationList").addEventListener("click", (event) => {
-  const card = event.target.closest("[data-integration]");
+$("#integrationList").addEventListener("click", (event: LabEvent) => {
+  const card = closestLabElement(event, "[data-integration]");
   if (!card) return;
-  state.integration = card.dataset.integration;
+  state.integration = card.dataset.integration || state.integration;
   renderIntegrations();
 });
 
@@ -1613,10 +1952,11 @@ $("#bulkCompleteButton")?.addEventListener("click", bulkCompleteQuests);
 $("#bulkArchiveButton")?.addEventListener("click", () => bulkLifecycleQuests("archive"));
 $("#bulkRestoreButton")?.addEventListener("click", () => bulkLifecycleQuests("restore"));
 
-$("#sortButton").addEventListener("click", (event) => {
+$("#sortButton").addEventListener("click", (event: LabEvent) => {
   const values = ["due", "progress", "owner"];
   state.sort = values[(values.indexOf(state.sort) + 1) % values.length];
-  event.currentTarget.textContent = { due: labText("sortDue"), progress: labText("sortProgress"), owner: labText("sortOwner") }[state.sort];
+  const sortLabels: Record<string, string> = { due: labText("sortDue"), progress: labText("sortProgress"), owner: labText("sortOwner") };
+  event.currentTarget.textContent = sortLabels[state.sort] || labText("sortDue");
   renderQuestList();
 });
 
@@ -1641,8 +1981,8 @@ $("#resetBattle").addEventListener("click", () => {
   renderBattle();
 });
 
-async function runIntegrationAction(dryRun) {
-  const selected = integrations.find((item) => item.id === state.integration);
+async function runIntegrationAction(dryRun: boolean): Promise<void> {
+  const selected = integrations.find((item) => item.id === state.integration) || integrations[0];
   if (!selected) return;
   if (!externalOAuthEnabled) {
     notify("外部サービス連携は公開βでは準備中です。接続APIは次のロードマップで有効化します。");
@@ -1653,16 +1993,20 @@ async function runIntegrationAction(dryRun) {
     return;
   }
   if (!ensureRemoteWritable()) return;
-  const service = { calendar: "google-calendar", tasks: "google-tasks", notion: "notion", focus: "toggl-focus" }[state.integration];
+  const serviceMap: Record<string, string> = { calendar: "google-calendar", tasks: "google-tasks", notion: "notion", focus: "toggl-focus" };
+  const service = serviceMap[state.integration];
   if (!service || service === "toggl-focus") {
     notify(selected.name + "はこの画面の同期API対象外です。連携画面から設定してください。");
     return;
   }
   try {
     setSyncStatus("syncing");
-    const direction = { "google-calendar": "import", "google-tasks": "bidirectional", notion: "export" }[service] || "import";
+    const directionMap: Record<string, string> = { "google-calendar": "import", "google-tasks": "bidirectional", notion: "export" };
+    const direction = directionMap[service] || "import";
     const response = dryRun ? await repository.previewSync(service, direction) : await repository.syncService(service, direction);
-    const count = response?.summary?.created ?? response?.summary?.updated ?? response?.changes?.length;
+    const summary = asJsonRecord(response.summary);
+    const changes = Array.isArray(response.changes) ? response.changes : [];
+    const count = summary.created ?? summary.updated ?? changes.length;
     state.lastSyncAt = formatSyncTime();
     setSyncStatus("synced");
     persistState();
@@ -1678,7 +2022,8 @@ $("#previewButton").addEventListener("click", () => runIntegrationAction(true));
 $("#syncButton").addEventListener("click", () => runIntegrationAction(false));
 
 $$("[data-setting]").forEach((button) => button.addEventListener("click", () => {
-  const key = button.dataset.setting;
+  const key = button.dataset.setting as keyof LabSettings | undefined;
+  if (!key) return;
   state.settings[key] = !state.settings[key];
   localStorage.setItem("questforge-interaction-settings", JSON.stringify(state.settings));
   applySettings();
@@ -1709,12 +2054,12 @@ $("#selectedBackdrop").addEventListener("click", () => {
   state.mobileSheetOpen = false;
   renderSelected();
 });
-document.addEventListener("keydown", (event) => {
+document.addEventListener("keydown", ((event: LabEvent) => {
   if (event.key === "Escape" && state.detailMode === "modal" && state.mobileSheetOpen) {
     state.mobileSheetOpen = false;
     renderSelected();
   }
-});
+}) as EventListener);
 $("#timerButton").addEventListener("click", toggleTimer);
 $("#openAddDialog").addEventListener("click", openAdd);
 $("#mobileAdd").addEventListener("click", openAdd);
@@ -1734,7 +2079,7 @@ $("#archiveQuestButton").addEventListener("click", async () => {
       if (!restoring && !state.showArchived) reconcileSelectedQuest();
       renderAll();
       notify(item.title + (restoring ? "を戻しました。" : "を保管しました。"));
-    } catch (error) { notify(error?.message || "保管操作に失敗しました。"); }
+    } catch (error) { notify(errorMessage(error, "保管操作に失敗しました。")); }
     return;
   }
   item.lifecycleState = restoring ? "active" : "archived";
@@ -1753,7 +2098,7 @@ $("#archiveQuestButton").addEventListener("click", async () => {
   renderAll(); persistState();
 });
 $("#cancelEdit").addEventListener("click", () => $("#editDialog").close());
-$("#editForm").addEventListener("submit", async (event) => {
+$("#editForm").addEventListener("submit", async (event: LabEvent) => {
   event.preventDefault();
   const item = quest($("#editQuestId").value);
   if (!item) return;
@@ -1766,9 +2111,9 @@ $("#editForm").addEventListener("submit", async (event) => {
       applyRemoteResponse(await repository.updateQuest(item.id, patch));
       if (agent) trackTelemetry("agent_assignment_success", { source: "next" });
     }
-    else Object.assign(item, { title: patch.title, note: patch.notes, parent: patch.parentQuestId, owner: agent?.displayName || "Astra", state: remoteState({ assignee: patch.assignee }) });
+    else Object.assign(item, { title: patch.title, note: patch.notes, parent: patch.parentQuestId, owner: agent?.displayName || "Astra", state: remoteState(asJsonRecord({ assignee: patch.assignee })) });
     $("#editDialog").close(); renderAll(); persistState(); notify("Questを更新しました。");
-  } catch (error) { notify(error?.message || "Questの更新に失敗しました。"); }
+  } catch (error) { notify(errorMessage(error, "Questの更新に失敗しました。")); }
 });
 
 function resetAgentForm() {
@@ -1777,8 +2122,8 @@ function resetAgentForm() {
   $("#agentIdInput").disabled = false;
 }
 
-function resizeAvatar(file) {
-  return new Promise((resolve, reject) => {
+function resizeAvatar(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("アイコンを読み込めませんでした。"));
     reader.onload = () => {
@@ -1790,6 +2135,10 @@ function resizeAvatar(file) {
         canvas.width = size;
         canvas.height = size;
         const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("画像編集用のキャンバスを初期化できませんでした。"));
+          return;
+        }
         context.clearRect(0, 0, size, size);
         const scale = Math.min(size / image.width, size / image.height);
         const width = Math.round(image.width * scale);
@@ -1799,13 +2148,17 @@ function resizeAvatar(file) {
         if (result.length > 700000) reject(new Error("画像を小さくしてから設定してください。"));
         else resolve(result);
       };
+      if (typeof reader.result !== "string") {
+        reject(new Error("画像データを読み込めませんでした。"));
+        return;
+      }
       image.src = reader.result;
     };
     reader.readAsDataURL(file);
   });
 }
 
-$("#profileAvatarInput").addEventListener("change", async (event) => {
+$("#profileAvatarInput").addEventListener("change", async (event: LabEvent) => {
   const file = event.currentTarget.files?.[0];
   if (!file) return;
   if (!file.type.startsWith("image/") || file.size > 4 * 1024 * 1024) {
@@ -1826,9 +2179,9 @@ $("#profileAvatarInput").addEventListener("change", async (event) => {
           avatarVariant: state.profile?.avatarVariant || "femme",
           avatarUrl: state.avatarDataUrl,
         });
-        state.profile = response?.profile || state.profile;
+        state.profile = normalizeRemoteSnapshot({ profile: response.profile }).profile || state.profile;
       } catch (error) {
-        notify(error?.message || "アイコンは端末に保存しましたが、本体同期に失敗しました。");
+        notify(errorMessage(error, "アイコンは端末に保存しましたが、本体同期に失敗しました。"));
       }
     }
     renderProfile();
@@ -1836,29 +2189,32 @@ $("#profileAvatarInput").addEventListener("change", async (event) => {
     renderParty();
     notify("相棒キャラのアイコンをこの端末に設定しました。");
   } catch (error) {
-    notify(error.message || "アイコンの設定に失敗しました。");
+    notify(errorMessage(error, "アイコンの設定に失敗しました。"));
   } finally {
     event.currentTarget.value = "";
   }
 });
 
-$("#agentConnectionList").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-agent-unlink]");
+$("#agentConnectionList").addEventListener("click", async (event: LabEvent) => {
+  const button = closestLabElement(event, "[data-agent-unlink]");
   if (!button || !state.remoteMode) return;
   if (!ensureRemoteWritable()) return;
   try {
-    await repository.unlinkAgentConnection(button.dataset.agentUnlink, button.dataset.clientUnlink);
+    const agentId = button.dataset.agentUnlink;
+    const clientId = button.dataset.clientUnlink;
+    if (!agentId || !clientId) return;
+    await repository.unlinkAgentConnection(agentId, clientId);
     await refreshAgentRegistry();
     notify("MCPクライアントの紐付けを解除しました。");
   } catch (error) {
-    notify(error?.message || "MCP接続の紐付けを解除できませんでした。");
+    notify(errorMessage(error, "MCP接続の紐付けを解除できませんでした。"));
   }
 });
 
 $("#agentFormReset").addEventListener("click", resetAgentForm);
-$("#agentRegistryList").addEventListener("click", async (event) => {
-  const edit = event.target.closest("[data-agent-edit]");
-  const archive = event.target.closest("[data-agent-archive]");
+$("#agentRegistryList").addEventListener("click", async (event: LabEvent) => {
+  const edit = closestLabElement(event, "[data-agent-edit]");
+  const archive = closestLabElement(event, "[data-agent-archive]");
   const agentId = edit?.dataset.agentEdit || archive?.dataset.agentArchive;
   const agent = (state.registeredAgents || []).find((item) => item.agentId === agentId);
   if (!agent) return;
@@ -1867,10 +2223,10 @@ $("#agentRegistryList").addEventListener("click", async (event) => {
     $("#agentNameInput").value = agent.displayName; $("#agentProviderInput").value = agent.provider; $("#agentRoleInput").value = agent.role; $("#agentInstructionsInput").value = agent.instructions || "";
   } else {
     if (!ensureRemoteWritable()) return;
-    try { await repository.updateAgent(agent.agentId, { status: "archived", expectedUpdatedAt: agent.updatedAt }); await refreshAgentRegistry(); notify("Agentと関連MCP接続をアーカイブしました。"); } catch (error) { notify(error?.message || "Agentをアーカイブできませんでした。"); }
+    try { await repository.updateAgent(agent.agentId, { status: "archived", expectedUpdatedAt: agent.updatedAt }); await refreshAgentRegistry(); notify("Agentと関連MCP接続をアーカイブしました。"); } catch (error) { notify(errorMessage(error, "Agentをアーカイブできませんでした。")); }
   }
 });
-$("#agentForm").addEventListener("submit", async (event) => {
+$("#agentForm").addEventListener("submit", async (event: LabEvent) => {
   event.preventDefault();
   if (!state.remoteMode) { notify("Agent登録はQuestForge本体へ接続後に利用できます。"); return; }
   if (!ensureRemoteWritable()) return;
@@ -1879,11 +2235,12 @@ $("#agentForm").addEventListener("submit", async (event) => {
   try {
     if (editingId) {
       const current = state.registeredAgents.find((agent) => agent.agentId === editingId);
+      if (!current) throw new Error("編集対象のAgentが見つかりません。");
       const { agentId: _immutable, ...patch } = input;
       await repository.updateAgent(editingId, { ...patch, expectedUpdatedAt: current.updatedAt });
     } else await repository.createAgent(input);
     resetAgentForm(); await refreshAgentRegistry(); notify("Agent台帳を保存しました。");
-  } catch (error) { notify(error?.message || "Agent台帳を保存できませんでした。"); }
+  } catch (error) { notify(errorMessage(error, "Agent台帳を保存できませんでした。")); }
 });
 $("#linkAgentClient").addEventListener("click", async () => {
   const agentId = $("#agentLinkInput").value;
@@ -1895,16 +2252,16 @@ $("#linkAgentClient").addEventListener("click", async () => {
     notify(`このMCPクライアントは${existing.agentId}に紐付いています。先に現在の紐付けを解除してください。`);
     return;
   }
-  try { await repository.linkAgentConnection(agentId, clientId); await refreshAgentRegistry(); notify("MCPクライアントをAgentへ紐付けました。"); } catch (error) { notify(error?.message || "MCP接続を紐付けできませんでした。"); }
+  try { await repository.linkAgentConnection(agentId, clientId); await refreshAgentRegistry(); notify("MCPクライアントをAgentへ紐付けました。"); } catch (error) { notify(errorMessage(error, "MCP接続を紐付けできませんでした。")); }
 });
 
-$("#addForm").addEventListener("submit", (event) => {
+$("#addForm").addEventListener("submit", (event: LabEvent) => {
   event.preventDefault();
   addQuest(new FormData($("#addForm")));
   $("#addDialog").close();
 });
 
-async function updateReview(accepted) {
+async function updateReview(accepted: boolean): Promise<void> {
   const item = quest(state.selectedQuestId);
   if (!item) return;
   const note = $("#reviewNote").value.trim();
@@ -1930,7 +2287,7 @@ async function updateReview(accepted) {
   renderAll();
 }
 
-$("#reviewForm").addEventListener("submit", async (event) => {
+$("#reviewForm").addEventListener("submit", async (event: LabEvent) => {
   event.preventDefault();
   await updateReview(true);
   $("#reviewDialog").close();
@@ -1947,7 +2304,7 @@ $("#signInButton").addEventListener("click", async () => {
     notify("Googleログインが完了しました。本体データを読み込めます。");
   } catch (error) {
     notify("Googleログインを完了できませんでした。ローカルモードはそのまま使えます。");
-    setSyncStatus("error", error?.message || "Googleログインに失敗しました。");
+    setSyncStatus("error", errorMessage(error, "Googleログインに失敗しました。"));
   }
 });
 
@@ -1983,7 +2340,7 @@ $("#useLocalButton").addEventListener("click", () => {
   renderAll();
   notify("ローカルモードへ戻りました。リモートの変更は保持されています。");
 });
-$("#autoConnectToggle").addEventListener("change", async (event) => {
+$("#autoConnectToggle").addEventListener("change", async (event: LabEvent) => {
   const enabled = Boolean(event.currentTarget.checked);
   const uid = state.authUser?.uid;
   if (!uid) {
@@ -2010,7 +2367,7 @@ $("#autoConnectToggle").addEventListener("change", async (event) => {
   await loadRemoteData({ announce: false, source: "auto" });
   if (state.remoteConnectionState === "synced") notify("起動時の本体自動接続をオンにしました。");
 });
-$("#gatewayUrlInput").addEventListener("change", (event) => {
+$("#gatewayUrlInput").addEventListener("change", (event: LabEvent) => {
   state.gatewayUrl = event.currentTarget.value.trim() || gatewayDefaultUrl();
   repository.setBaseUrl(state.gatewayUrl);
   try {
@@ -2021,11 +2378,11 @@ $("#gatewayUrlInput").addEventListener("change", (event) => {
   renderConnection();
 });
 
-$("#labLocaleSelect")?.addEventListener("change", (event) => {
+$("#labLocaleSelect")?.addEventListener("change", (event: LabEvent) => {
   setLocale(event.currentTarget.value);
 });
 
-$("#telemetryConsentToggle")?.addEventListener("change", (event) => {
+$("#telemetryConsentToggle")?.addEventListener("change", (event: LabEvent) => {
   setTelemetryConsent(event.currentTarget.checked ? "granted" : "denied");
   applySettings();
 });

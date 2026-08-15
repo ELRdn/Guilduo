@@ -1,17 +1,20 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import type { QuestForgeState } from "../types/questforge.ts";
+import { asQuestForgeState, hasErrorCode, required } from "./test-helpers.ts";
 
-let domain;
-let battleRules;
+type Domain = typeof import("../server/questforge-domain.ts");
+type BattleRules = typeof import("../shared/battle-rules.ts");
+let domain: Domain;
+let battleRules: BattleRules;
 
 test.before(async () => {
   domain = await import("../server/questforge-domain.ts");
   battleRules = await import("../shared/battle-rules.ts");
 });
 
-function state(overrides = {}) {
-  return {
+function state(overrides: Record<string, unknown> = {}): QuestForgeState {
+  return asQuestForgeState({
     schemaVersion: 4,
     tasks: [],
     taskEvents: [],
@@ -24,7 +27,7 @@ function state(overrides = {}) {
     boss: { currentId: "h3", hp: 100, maxHp: 100, defeatedIds: [], defeatCount: 0, battleLog: [] },
     battle: { turn: 1, mp: 80, maxMp: 80, focus: 0, guard: 0, shield: 0, rage: 0, vulnerable: 0, poison: 0, ended: false, log: [] },
     ...overrides,
-  };
+  });
 }
 
 test("schema v6 migration assigns existing quests to self and preserves migration snapshots", () => {
@@ -32,9 +35,9 @@ test("schema v6 migration assigns existing quests to self and preserves migratio
   domain.migrateState(current, "2026-08-09");
   assert.equal(current.schemaVersion, 7);
   assert.deepEqual(current.tasks[0].assignee, { type: "self", id: "self", label: "自分", handoffState: "none" });
-  assert.equal(current.migrationSnapshots.schema4To5.schemaVersion, 4);
-  assert.equal(current.migrationSnapshots.schema5To6.schemaVersion, 4);
-  assert.equal(current.migrationSnapshots.schema6To7.schemaVersion, 4);
+  assert.equal(required(current.migrationSnapshots.schema4To5).schemaVersion, 4);
+  assert.equal(required(current.migrationSnapshots.schema5To6).schemaVersion, 4);
+  assert.equal(required(current.migrationSnapshots.schema6To7).schemaVersion, 4);
   assert.equal(current.tasks[0].parentQuestId, "");
   assert.equal(current.tasks[0].handoff.note, "");
 });
@@ -93,7 +96,7 @@ test("executed battle commands reject stale turns and replay command IDs safely"
   const replay = domain.battleCommand(current, { command: "guard", expectedTurn: 1, commandId: "cmd-1", dryRun: false }, { source: "test" });
   assert.equal(replay.replayed, true);
   assert.equal(current.character.hp, hpAfterFirst);
-  assert.throws(() => domain.battleCommand(current, { command: "attack", expectedTurn: 1, commandId: "cmd-2", dryRun: false }), (error) => error.code === "battle_turn_stale");
+  assert.throws(() => domain.battleCommand(current, { command: "attack", expectedTurn: 1, commandId: "cmd-2", dryRun: false }), (error: unknown) => hasErrorCode(error, "battle_turn_stale"));
 });
 
 test("all six role skills execute with their declared MP cost", () => {
@@ -108,7 +111,7 @@ test("all six role skills execute with their declared MP cost", () => {
 
 test("battle execution requires a command ID and enough MP", () => {
   const current = state();
-  assert.throws(() => domain.battleCommand(current, { command: "attack", expectedTurn: 1, dryRun: false }), (error) => error.code === "battle_command_id_required");
+  assert.throws(() => domain.battleCommand(current, { command: "attack", expectedTurn: 1, dryRun: false }), (error: unknown) => hasErrorCode(error, "battle_command_id_required"));
   current.battle.mp = 0;
-  assert.throws(() => domain.battleCommand(current, { command: "burst", expectedTurn: 1, commandId: "burst", dryRun: false }), (error) => error.code === "battle_mp_insufficient");
+  assert.throws(() => domain.battleCommand(current, { command: "burst", expectedTurn: 1, commandId: "burst", dryRun: false }), (error: unknown) => hasErrorCode(error, "battle_mp_insufficient"));
 });

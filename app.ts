@@ -1,16 +1,326 @@
-// @ts-nocheck
+import type {
+  BattleState,
+  BossState,
+  CharacterState,
+  Quest,
+  QuestForgeState,
+} from "./types/questforge.ts";
+
+type JsonRecord = Record<string, unknown>;
+
+interface EquipmentOffset {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+interface AppState extends QuestForgeState {
+  sortMode: string;
+  taskFilter: string;
+  theme: string;
+  preferences: {
+    soundEnabled: boolean;
+    motionEnabled: boolean;
+    [key: string]: unknown;
+  };
+  lastProcessedDate: string;
+  lastRolloverSummary: {
+    date: string;
+    reset: number;
+    advanced: number;
+  };
+  storage: {
+    driver: string;
+    syncStatus: string;
+    lastSavedAt: string;
+    lastLoadedAt: string;
+    cloudProvider: string;
+    [key: string]: unknown;
+  };
+  integrations: {
+    selectedService: string;
+    direction: string;
+    connected: JsonRecord;
+    [key: string]: unknown;
+  };
+  character: CharacterState & {
+    nextXp: number;
+    ownedItems: string[];
+    equippedItems: string[];
+    equipmentOffsets: Record<string, EquipmentOffset>;
+    motion: string;
+  };
+  boss: BossState & {
+    currentId: string;
+    rotationEnabled: boolean;
+  };
+  battle: BattleState;
+  party: JsonRecord[];
+  inventory: JsonRecord[];
+  syncEvents: JsonRecord[];
+  taskEvents: JsonRecord[];
+  rewardClaims: Record<string, string>;
+}
+
+interface StorageDriver {
+  id: string;
+  label: string;
+  enabled?: boolean;
+  load: () => unknown;
+  save: (nextState: AppState) => void;
+}
+
+interface GatewayRecord extends JsonRecord {
+  id?: string;
+  uid?: string;
+  status?: string;
+  account?: GatewayRecord;
+  url?: string;
+  events?: string[];
+  enabled?: boolean;
+  manifest?: JsonRecord;
+  level?: number;
+  displayName?: string;
+  handle?: string;
+  bio?: string;
+  name?: string;
+  role?: string;
+  power?: string;
+  ownerUid?: string;
+  maxMembers?: number;
+  members?: GatewayRecord[];
+  profile?: GatewayRecord;
+  party?: GatewayRecord & { members?: GatewayRecord[] };
+  friends?: GatewayRecord[];
+  requests?: GatewayRecord[];
+  integrations?: GatewayIntegration[];
+  webhooks?: GatewayRecord[];
+  plugins?: GatewayRecord[];
+}
+
+interface GatewayIntegration extends GatewayRecord {
+  id: string;
+  status?: string;
+}
+
+interface GatewayRuntime {
+  status: string;
+  webhooks: GatewayRecord[];
+  plugins: GatewayRecord[];
+  integrations: GatewayIntegration[];
+  integrationResources: Record<string, unknown>;
+  integrationPreviewed: Record<string, boolean>;
+  calendarEvents: GatewayRecord[];
+  profile: GatewayRecord | null;
+  friends: GatewayRecord[];
+  friendRequests: GatewayRecord[];
+  party: (GatewayRecord & { members?: GatewayRecord[] }) | null;
+  friendSearchResult: GatewayRecord | null;
+  socialError: string;
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+interface AppAudioNote {
+  frequency: number;
+  duration: number;
+  gain: number;
+  offset?: number;
+}
+
+interface AppAudioProfile {
+  wave: OscillatorType;
+  press: AppAudioNote[];
+  theme: AppAudioNote[];
+  success: AppAudioNote[];
+  restore: AppAudioNote[];
+  battle: AppAudioNote[];
+}
+
+interface BossDefinition {
+  id: string;
+  name: string;
+  label: string;
+  threat: string;
+  src: string;
+  maxHp: number;
+  rewardGems: number;
+  rewardXp: number;
+  weakKind: Quest["kind"];
+  description: string;
+}
+
+interface ClassOption {
+  id: string;
+  name: string;
+  label: string;
+  description: string;
+  defaultMotion: string;
+}
+
+interface BattleSkillOption {
+  name: string;
+  cost: number;
+  description: string;
+}
+
+interface AvatarVariant {
+  id: string;
+  name: string;
+  baseSrc: string;
+  lineupSrc: string;
+}
+
+interface MotionOption {
+  id: string;
+  name: string;
+  className: string;
+}
+
+interface IntegrationAdapter {
+  id: string;
+  name: string;
+  shortName: string;
+  type: string;
+  auth: string;
+  status: string;
+  recommendedDirection: string;
+  scope: string;
+  description: string;
+  rules: string[];
+}
+
+interface ShopItem {
+  id: string;
+  slot: string;
+  type: string;
+  name: string;
+  price: number;
+  asset?: string;
+  affinity: string;
+  description: string;
+}
+
+interface AppError extends Error {
+  code?: string;
+  status?: number;
+  details?: unknown;
+}
+
+interface PreviewFeedbackOptions {
+  sound?: boolean;
+  motion?: boolean;
+}
+
+interface BattleOptions {
+  resetHp?: boolean;
+  resetBoss?: boolean;
+  autoRotate?: boolean;
+  rotationEnabled?: boolean;
+}
+
+interface PendingBossEffect {
+  damage: number;
+  defeated: boolean;
+  reward: string;
+}
+
+interface TaskFormValues {
+  kind: Quest["kind"];
+  title: string;
+  notes: string;
+  dueDate: string;
+  difficulty: Quest["difficulty"];
+  repeat: Quest["repeat"];
+  tags: string[];
+  assignee: unknown;
+  parentQuestId: string;
+  handoff: unknown;
+}
+
+type TaskDialogInput = Partial<Quest>;
+type EquipmentPlacement = { x?: number; y?: number; size?: number };
+
+interface GatewayFetchOptions extends RequestInit {
+  headers?: Record<string, string>;
+}
+
+interface SaveStateOptions {
+  emitCloud?: boolean;
+}
+
+interface ToastOptions {
+  onAction?: () => void;
+  actionLabel?: string;
+  duration?: number;
+}
+
+interface AppViewOptions {
+  render?: boolean;
+}
+
+interface AppEvent extends Event {
+  currentTarget: AppElement;
+  target: EventTarget & Element;
+  clientX: number;
+  clientY: number;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  key: string;
+}
+
+type AppElement = HTMLElement & {
+  value: string;
+  checked: boolean;
+  disabled: boolean;
+  files: FileList | null;
+  src: string;
+  alt: string;
+  href: string;
+  content: string;
+  open: boolean;
+  options: HTMLOptionsCollection;
+  selectedOptions: HTMLCollectionOf<HTMLOptionElement>;
+  showModal: () => void;
+  close: () => void;
+  reset: () => void;
+  select: () => void;
+};
+
+function q<T extends Element = AppElement>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) throw new Error(`QuestForge UI element not found: ${selector}`);
+  return element;
+}
+
+function qa<T extends Element = AppElement>(selector: string): T[] {
+  return Array.from(document.querySelectorAll<T>(selector));
+}
+
+function asJsonRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function asJsonRecordArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter((entry): entry is JsonRecord => Boolean(entry && typeof entry === "object" && !Array.isArray(entry))) : [];
+}
+
 const storageKey = "questforge-prototype-state";
-const trackTelemetry = (...args) => globalThis.QuestForgeTelemetry?.track?.(...args);
+const trackTelemetry = (...args: unknown[]) => globalThis.QuestForgeTelemetry?.track?.(...args);
 const appearanceStorageKey = "questforge-appearance-mode";
 const appearanceModes = ["light", "dark", "system"];
 const appVersion = "2026.08.14-public-beta";
 const productionGatewayUrl = String(globalThis.QuestForgeConfig?.gatewayUrl || "").replace(/\/$/, "");
 const externalOAuthEnabled = globalThis.QuestForgeConfig?.externalOAuthEnabled === true;
 const hadLocalStateAtStartup = Boolean(localStorage.getItem(storageKey));
-const core = globalThis.QuestForgeCore;
-const battleRules = globalThis.QuestForgeBattleRules;
-const i18n = globalThis.QuestForgeI18n;
-const currentSchemaVersion = core?.CURRENT_SCHEMA_VERSION || 2;
+const core = globalThis.QuestForgeCore ?? (() => { throw new Error("QuestForge core is not ready"); })();
+const battleRules = globalThis.QuestForgeBattleRules ?? (() => { throw new Error("QuestForge battle rules are not ready"); })();
+const i18n = globalThis.QuestForgeI18n ?? (() => { throw new Error("QuestForge i18n is not ready"); })();
+const currentSchemaVersion = core.CURRENT_SCHEMA_VERSION || 2;
 const initialTimestamp = new Date().toISOString();
 
 const defaultState = {
@@ -168,11 +478,11 @@ const defaultState = {
     { name: "Focus Ring", type: "Trinket", power: "+2 WIS" },
     { name: "Daily Sigil", type: "Badge", power: "+5 Streak" },
   ],
-};
+} as unknown as AppState;
 
-let state;
+let state: AppState;
 
-const storageDrivers = {
+const storageDrivers: Record<string, StorageDriver> = {
   local: {
     id: "local",
     label: "この端末だけ",
@@ -197,259 +507,259 @@ const storageDrivers = {
   },
 };
 
-function getStorageDriver(driverId = "local") {
+function getStorageDriver(driverId = "local"): StorageDriver {
   const driver = storageDrivers[driverId] || storageDrivers.local;
   return driver.enabled === false ? storageDrivers.local : driver;
 }
 
 const els = {
-  hpValue: document.querySelector("#hpValue"),
-  xpValue: document.querySelector("#xpValue"),
-  gemValue: document.querySelector("#gemValue"),
-  streakValue: document.querySelector("#streakValue"),
-  characterName: document.querySelector("#characterName"),
-  characterClass: document.querySelector("#characterClass"),
-  avatarImage: document.querySelector("#avatarImage"),
-  characterPreviewImage: document.querySelector("#characterPreviewImage"),
-  gemBalance: document.querySelector("#gemBalance"),
-  shopGemBalance: document.querySelector("#shopGemBalance"),
-  variantSelect: document.querySelector("#variantSelect"),
-  classSelect: document.querySelector("#classSelect"),
-  personalitySelect: document.querySelector("#personalitySelect"),
-  motionSelect: document.querySelector("#motionSelect"),
-  classLineupImage: document.querySelector("#classLineupImage"),
-  classGrid: document.querySelector("#classGrid"),
-  avatarStage: document.querySelector(".avatar-stage"),
-  avatarPreviewStage: document.querySelector(".avatar-preview-stage"),
-  avatarStack: document.querySelector("#avatarStack"),
-  avatarPreviewStack: document.querySelector("#avatarPreviewStack"),
-  avatarEquipChips: document.querySelector("#avatarEquipChips"),
-  previewEquipChips: document.querySelector("#previewEquipChips"),
-  equipmentCalibrator: document.querySelector("#equipmentCalibrator"),
-  equipmentDragToggle: document.querySelector("#equipmentDragToggle"),
-  equipmentAdjustSelect: document.querySelector("#equipmentAdjustSelect"),
-  equipmentOffsetX: document.querySelector("#equipmentOffsetX"),
-  equipmentOffsetY: document.querySelector("#equipmentOffsetY"),
-  equipmentScale: document.querySelector("#equipmentScale"),
-  equipmentResetButton: document.querySelector("#equipmentResetButton"),
-  equipmentResetAllButton: document.querySelector("#equipmentResetAllButton"),
-  shopGrid: document.querySelector("#shopGrid"),
-  randomizeCharacter: document.querySelector("#randomizeCharacter"),
-  brandTagline: document.querySelector("#brandTagline"),
-  themeKicker: document.querySelector("#themeKicker"),
-  themeHeroTitle: document.querySelector("#themeHeroTitle"),
-  themeHeroCopy: document.querySelector("#themeHeroCopy"),
-  themeOptions: document.querySelectorAll("[data-theme-option]"),
-  appearanceControl: document.querySelector("#appearanceControl"),
-  appearanceButton: document.querySelector("#appearanceButton"),
-  appearanceIcon: document.querySelector("#appearanceIcon"),
-  appearanceMenu: document.querySelector("#appearanceMenu"),
-  appearanceOptions: document.querySelectorAll("[data-appearance-option]"),
-  localeSelect: document.querySelector("#localeSelect"),
-  themeColorMeta: document.querySelector('meta[name="theme-color"]'),
-  feedbackSettingsButton: document.querySelector("#feedbackSettingsButton"),
-  feedbackDialog: document.querySelector("#feedbackDialog"),
-  closeFeedbackDialog: document.querySelector("#closeFeedbackDialog"),
-  soundEnabledToggle: document.querySelector("#soundEnabledToggle"),
-  motionEnabledToggle: document.querySelector("#motionEnabledToggle"),
-  previewSoundButton: document.querySelector("#previewSoundButton"),
-  previewMotionButton: document.querySelector("#previewMotionButton"),
-  audioDiagnosticStatus: document.querySelector("#audioDiagnosticStatus"),
-  testWebAudioButton: document.querySelector("#testWebAudioButton"),
-  testMediaAudioButton: document.querySelector("#testMediaAudioButton"),
-  telemetryConsentToggle: document.querySelector("#telemetryConsentToggle"),
-  telemetryConsentStatus: document.querySelector("#telemetryConsentStatus"),
-  feedbackPreviewCard: document.querySelector("#feedbackPreviewCard"),
-  installAppButton: document.querySelector("#installAppButton"),
-  bossImage: document.querySelector("#bossImage"),
-  bossName: document.querySelector("#bossName"),
-  bossReward: document.querySelector("#bossReward"),
-  bossHitText: document.querySelector("#bossHitText"),
-  bossMeter: document.querySelector("#bossMeter"),
-  bossPreviewImage: document.querySelector("#bossPreviewImage"),
-  bossPreviewName: document.querySelector("#bossPreviewName"),
-  bossPreviewDescription: document.querySelector("#bossPreviewDescription"),
-  bossThreatLabel: document.querySelector("#bossThreatLabel"),
-  bossHpText: document.querySelector("#bossHpText"),
-  bossRewardText: document.querySelector("#bossRewardText"),
-  bossDefeatCount: document.querySelector("#bossDefeatCount"),
-  bossGrid: document.querySelector("#bossGrid"),
-  bossRotationStatus: document.querySelector("#bossRotationStatus"),
-  randomBossButton: document.querySelector("#randomBossButton"),
-  lockBossButton: document.querySelector("#lockBossButton"),
-  habitList: document.querySelector("#habitList"),
-  dailyList: document.querySelector("#dailyList"),
-  todoList: document.querySelector("#todoList"),
-  rewardList: document.querySelector("#rewardList"),
-  archiveButton: document.querySelector("#archiveButton"),
-  archiveCount: document.querySelector("#archiveCount"),
-  archiveDialog: document.querySelector("#archiveDialog"),
-  archiveList: document.querySelector("#archiveList"),
-  closeArchiveDialog: document.querySelector("#closeArchiveDialog"),
-  partyGrid: document.querySelector("#partyGrid"),
-  publicHandle: document.querySelector("#publicHandle"),
-  sourceCodeLink: document.querySelector("#sourceCodeLink"),
-  socialConnectionStatus: document.querySelector("#socialConnectionStatus"),
-  socialAuthMessage: document.querySelector("#socialAuthMessage"),
-  profileForm: document.querySelector("#profileForm"),
-  profileDisplayName: document.querySelector("#profileDisplayName"),
-  profileHandle: document.querySelector("#profileHandle"),
-  profileBio: document.querySelector("#profileBio"),
-  profileFormMessage: document.querySelector("#profileFormMessage"),
-  friendSearchForm: document.querySelector("#friendSearchForm"),
-  friendHandleSearch: document.querySelector("#friendHandleSearch"),
-  friendSearchResult: document.querySelector("#friendSearchResult"),
-  friendRequestList: document.querySelector("#friendRequestList"),
-  friendList: document.querySelector("#friendList"),
-  partyHeading: document.querySelector("#partyHeading"),
-  partyCreateForm: document.querySelector("#partyCreateForm"),
-  partyNameInput: document.querySelector("#partyNameInput"),
-  partyInviteForm: document.querySelector("#partyInviteForm"),
-  partyInviteHandle: document.querySelector("#partyInviteHandle"),
-  partyInviteResult: document.querySelector("#partyInviteResult"),
-  partyInviteLink: document.querySelector("#partyInviteLink"),
-  copyPartyInviteButton: document.querySelector("#copyPartyInviteButton"),
-  partyAcceptForm: document.querySelector("#partyAcceptForm"),
-  partyInviteToken: document.querySelector("#partyInviteToken"),
-  leavePartyButton: document.querySelector("#leavePartyButton"),
-  partyMessage: document.querySelector("#partyMessage"),
-  inventoryGrid: document.querySelector("#inventoryGrid"),
-  taskDialog: document.querySelector("#taskDialog"),
-  taskForm: document.querySelector("#taskForm"),
-  dialogTitle: document.querySelector("#dialogTitle"),
-  editingTaskId: document.querySelector("#editingTaskId"),
-  taskKind: document.querySelector("#taskKind"),
-  taskTitle: document.querySelector("#taskTitle"),
-  taskNotes: document.querySelector("#taskNotes"),
-  taskDueDate: document.querySelector("#taskDueDate"),
-  taskRepeat: document.querySelector("#taskRepeat"),
-  taskTags: document.querySelector("#taskTags"),
-  taskDifficulty: document.querySelector("#taskDifficulty"),
-  taskAssignee: document.querySelector("#taskAssignee"),
-  taskHumanOptions: document.querySelector("#taskHumanOptions"),
-  taskAssigneeCustomRow: document.querySelector("#taskAssigneeCustomRow"),
-  taskAssigneeCustomLabel: document.querySelector("#taskAssigneeCustomLabel"),
-  taskHandoffRow: document.querySelector("#taskHandoffRow"),
-  taskHandoffReady: document.querySelector("#taskHandoffReady"),
-  taskParentQuest: document.querySelector("#taskParentQuest"),
-  taskChildrenList: document.querySelector("#taskChildrenList"),
-  taskChildrenItems: document.querySelector("#taskChildrenItems"),
-  taskHandoffStateRow: document.querySelector("#taskHandoffStateRow"),
-  taskHandoffState: document.querySelector("#taskHandoffState"),
-  taskHandoffDetails: document.querySelector("#taskHandoffDetails"),
-  taskHandoffNote: document.querySelector("#taskHandoffNote"),
-  taskBlockedReason: document.querySelector("#taskBlockedReason"),
-  taskArtifactUrl: document.querySelector("#taskArtifactUrl"),
-  questTreePanel: document.querySelector("#questTreePanel"),
-  questTreeList: document.querySelector("#questTreeList"),
-  questTreeIncludeArchived: document.querySelector("#questTreeIncludeArchived"),
-  refreshQuestTreeButton: document.querySelector("#refreshQuestTreeButton"),
-  cancelDialog: document.querySelector("#cancelDialog"),
-  archiveTaskButton: document.querySelector("#archiveTaskButton"),
-  importButton: document.querySelector("#importButton"),
-  importFileInput: document.querySelector("#importFileInput"),
-  exportButton: document.querySelector("#exportButton"),
-  mobileMenuButton: document.querySelector("#mobileMenuButton"),
-  mobileMoreButton: document.querySelector("#mobileMoreButton"),
-  sidebar: document.querySelector(".sidebar"),
-  undoToast: document.querySelector("#undoToast"),
-  undoToastMessage: document.querySelector("#undoToastMessage"),
-  toastActionButton: document.querySelector("#toastActionButton"),
-  closeToastButton: document.querySelector("#closeToastButton"),
-  sortMode: document.querySelector("#sortMode"),
-  taskSummaryRow: document.querySelector("#taskSummaryRow"),
-  taskFilterOptions: document.querySelectorAll("[data-task-filter]"),
-  viewTitle: document.querySelector("#viewTitle"),
-  currentDateLabel: document.querySelector("#currentDateLabel"),
-  rolloverStatus: document.querySelector("#rolloverStatus"),
-  runRolloverButton: document.querySelector("#runRolloverButton"),
-  battleLogList: document.querySelector("#battleLogList"),
-  battlePlayerName: document.querySelector("#battlePlayerName"),
-  battlePlayerSprite: document.querySelector("#battlePlayerSprite"),
-  battlePlayerHpText: document.querySelector("#battlePlayerHpText"),
-  battlePlayerMpText: document.querySelector("#battlePlayerMpText"),
-  battlePlayerHpBar: document.querySelector("#battlePlayerHpBar"),
-  battlePlayerMpBar: document.querySelector("#battlePlayerMpBar"),
-  battlePlayerStatusRow: document.querySelector("#battlePlayerStatusRow"),
-  battleBossName: document.querySelector("#battleBossName"),
-  battleBossSprite: document.querySelector("#battleBossSprite"),
-  battleBossHpText: document.querySelector("#battleBossHpText"),
-  battleBossHpBar: document.querySelector("#battleBossHpBar"),
-  battleBossRageText: document.querySelector("#battleBossRageText"),
-  battleBossStatusRow: document.querySelector("#battleBossStatusRow"),
-  battleDamageText: document.querySelector("#battleDamageText"),
-  battleResourceText: document.querySelector("#battleResourceText"),
-  battlePlayerDamageText: document.querySelector("#battlePlayerDamageText"),
-  battleTurnValue: document.querySelector("#battleTurnValue"),
-  battleMainMessage: document.querySelector("#battleMainMessage"),
-  battleCombatLog: document.querySelector("#battleCombatLog"),
-  battleResultText: document.querySelector("#battleResultText"),
-  battleSkillCommandName: document.querySelector("#battleSkillCommandName"),
-  battleSkillCommandCost: document.querySelector("#battleSkillCommandCost"),
-  battleClassSkillText: document.querySelector("#battleClassSkillText"),
-  battleTaskQueue: document.querySelector("#battleTaskQueue"),
-  battleClassGrid: document.querySelector("#battleClassGrid"),
-  battleContractPreview: document.querySelector("#battleContractPreview"),
-  battleCommandButtons: document.querySelectorAll("[data-battle-command]"),
-  battleResetButton: document.querySelector("#battleResetButton"),
-  battleRandomBossButton: document.querySelector("#battleRandomBossButton"),
-  integrationOnboarding: document.querySelector("#integrationOnboarding"),
-  integrationOnboardingDescription: document.querySelector("#integrationOnboardingDescription"),
-  integrationLoginButton: document.querySelector("#integrationLoginButton"),
-  integrationStepLogin: document.querySelector("#integrationStepLogin"),
-  integrationStepConnect: document.querySelector("#integrationStepConnect"),
-  integrationStepResource: document.querySelector("#integrationStepResource"),
-  integrationStepSync: document.querySelector("#integrationStepSync"),
-  integrationSetupMessage: document.querySelector("#integrationSetupMessage"),
-  integrationHubGrid: document.querySelector("#integrationHubGrid"),
-  syncServiceSelect: document.querySelector("#syncServiceSelect"),
-  syncDirectionSelect: document.querySelector("#syncDirectionSelect"),
-  syncRuleSummary: document.querySelector("#syncRuleSummary"),
-  syncPreviewList: document.querySelector("#syncPreviewList"),
-  syncLogList: document.querySelector("#syncLogList"),
-  connectIntegrationButton: document.querySelector("#connectIntegrationButton"),
-  disconnectIntegrationButton: document.querySelector("#disconnectIntegrationButton"),
-  previewLiveSyncButton: document.querySelector("#previewLiveSyncButton"),
-  runLiveSyncButton: document.querySelector("#runLiveSyncButton"),
-  integrationResourcePanel: document.querySelector("#integrationResourcePanel"),
-  integrationResourceTitle: document.querySelector("#integrationResourceTitle"),
-  integrationResourceList: document.querySelector("#integrationResourceList"),
-  integrationAccountLabel: document.querySelector("#integrationAccountLabel"),
-  integrationAutoSync: document.querySelector("#integrationAutoSync"),
-  saveIntegrationSettingsButton: document.querySelector("#saveIntegrationSettingsButton"),
-  togglFocusConnectDialog: document.querySelector("#togglFocusConnectDialog"),
-  togglFocusConnectForm: document.querySelector("#togglFocusConnectForm"),
-  togglFocusApiKey: document.querySelector("#togglFocusApiKey"),
-  togglFocusConnectMessage: document.querySelector("#togglFocusConnectMessage"),
-  cancelTogglFocusConnect: document.querySelector("#cancelTogglFocusConnect"),
-  cancelTogglFocusConnectButton: document.querySelector("#cancelTogglFocusConnectButton"),
-  saveTogglFocusConnect: document.querySelector("#saveTogglFocusConnect"),
-  calendarAgenda: document.querySelector("#calendarAgenda"),
-  calendarAgendaList: document.querySelector("#calendarAgendaList"),
-  refreshCalendarAgendaButton: document.querySelector("#refreshCalendarAgendaButton"),
-  integrationModeLabel: document.querySelector("#integrationModeLabel"),
-  apiGatewayStatus: document.querySelector("#apiGatewayStatus"),
-  mcpEndpointInput: document.querySelector("#mcpEndpointInput"),
-  copyMcpUrlButton: document.querySelector("#copyMcpUrlButton"),
-  checkMcpConnectionButton: document.querySelector("#checkMcpConnectionButton"),
-  mcpConnectionNote: document.querySelector("#mcpConnectionNote"),
-  gatewayUrlInput: document.querySelector("#gatewayUrlInput"),
-  saveGatewayButton: document.querySelector("#saveGatewayButton"),
-  openMcpEndpointLink: document.querySelector("#openMcpEndpointLink"),
-  gatewayOutput: document.querySelector("#gatewayOutput"),
-  webhookUrlInput: document.querySelector("#webhookUrlInput"),
-  webhookEventSelect: document.querySelector("#webhookEventSelect"),
-  createWebhookButton: document.querySelector("#createWebhookButton"),
-  webhookList: document.querySelector("#webhookList"),
-  pluginManifestInput: document.querySelector("#pluginManifestInput"),
-  installPluginButton: document.querySelector("#installPluginButton"),
-  pluginList: document.querySelector("#pluginList"),
-  pluginDashboardSlot: document.querySelector("#pluginDashboardSlot"),
-  pluginIntegrationSlot: document.querySelector("#pluginIntegrationSlot"),
-  pluginQuestDetailSlot: document.querySelector("#pluginQuestDetailSlot"),
+  hpValue: q("#hpValue"),
+  xpValue: q("#xpValue"),
+  gemValue: q("#gemValue"),
+  streakValue: q("#streakValue"),
+  characterName: q("#characterName"),
+  characterClass: q("#characterClass"),
+  avatarImage: q("#avatarImage"),
+  characterPreviewImage: q("#characterPreviewImage"),
+  gemBalance: q("#gemBalance"),
+  shopGemBalance: q("#shopGemBalance"),
+  variantSelect: q("#variantSelect"),
+  classSelect: q("#classSelect"),
+  personalitySelect: q("#personalitySelect"),
+  motionSelect: q("#motionSelect"),
+  classLineupImage: q("#classLineupImage"),
+  classGrid: q("#classGrid"),
+  avatarStage: q(".avatar-stage"),
+  avatarPreviewStage: q(".avatar-preview-stage"),
+  avatarStack: q("#avatarStack"),
+  avatarPreviewStack: q("#avatarPreviewStack"),
+  avatarEquipChips: q("#avatarEquipChips"),
+  previewEquipChips: q("#previewEquipChips"),
+  equipmentCalibrator: q("#equipmentCalibrator"),
+  equipmentDragToggle: q("#equipmentDragToggle"),
+  equipmentAdjustSelect: q("#equipmentAdjustSelect"),
+  equipmentOffsetX: q("#equipmentOffsetX"),
+  equipmentOffsetY: q("#equipmentOffsetY"),
+  equipmentScale: q("#equipmentScale"),
+  equipmentResetButton: q("#equipmentResetButton"),
+  equipmentResetAllButton: q("#equipmentResetAllButton"),
+  shopGrid: q("#shopGrid"),
+  randomizeCharacter: q("#randomizeCharacter"),
+  brandTagline: q("#brandTagline"),
+  themeKicker: q("#themeKicker"),
+  themeHeroTitle: q("#themeHeroTitle"),
+  themeHeroCopy: q("#themeHeroCopy"),
+  themeOptions: qa("[data-theme-option]"),
+  appearanceControl: q("#appearanceControl"),
+  appearanceButton: q("#appearanceButton"),
+  appearanceIcon: q("#appearanceIcon"),
+  appearanceMenu: q("#appearanceMenu"),
+  appearanceOptions: qa("[data-appearance-option]"),
+  localeSelect: q("#localeSelect"),
+  themeColorMeta: q('meta[name="theme-color"]'),
+  feedbackSettingsButton: q("#feedbackSettingsButton"),
+  feedbackDialog: q("#feedbackDialog"),
+  closeFeedbackDialog: q("#closeFeedbackDialog"),
+  soundEnabledToggle: q("#soundEnabledToggle"),
+  motionEnabledToggle: q("#motionEnabledToggle"),
+  previewSoundButton: q("#previewSoundButton"),
+  previewMotionButton: q("#previewMotionButton"),
+  audioDiagnosticStatus: q("#audioDiagnosticStatus"),
+  testWebAudioButton: q("#testWebAudioButton"),
+  testMediaAudioButton: q("#testMediaAudioButton"),
+  telemetryConsentToggle: q("#telemetryConsentToggle"),
+  telemetryConsentStatus: q("#telemetryConsentStatus"),
+  feedbackPreviewCard: q("#feedbackPreviewCard"),
+  installAppButton: q("#installAppButton"),
+  bossImage: q("#bossImage"),
+  bossName: q("#bossName"),
+  bossReward: q("#bossReward"),
+  bossHitText: q("#bossHitText"),
+  bossMeter: q("#bossMeter"),
+  bossPreviewImage: q("#bossPreviewImage"),
+  bossPreviewName: q("#bossPreviewName"),
+  bossPreviewDescription: q("#bossPreviewDescription"),
+  bossThreatLabel: q("#bossThreatLabel"),
+  bossHpText: q("#bossHpText"),
+  bossRewardText: q("#bossRewardText"),
+  bossDefeatCount: q("#bossDefeatCount"),
+  bossGrid: q("#bossGrid"),
+  bossRotationStatus: q("#bossRotationStatus"),
+  randomBossButton: q("#randomBossButton"),
+  lockBossButton: q("#lockBossButton"),
+  habitList: q("#habitList"),
+  dailyList: q("#dailyList"),
+  todoList: q("#todoList"),
+  rewardList: q("#rewardList"),
+  archiveButton: q("#archiveButton"),
+  archiveCount: q("#archiveCount"),
+  archiveDialog: q("#archiveDialog"),
+  archiveList: q("#archiveList"),
+  closeArchiveDialog: q("#closeArchiveDialog"),
+  partyGrid: q("#partyGrid"),
+  publicHandle: q("#publicHandle"),
+  sourceCodeLink: q("#sourceCodeLink"),
+  socialConnectionStatus: q("#socialConnectionStatus"),
+  socialAuthMessage: q("#socialAuthMessage"),
+  profileForm: q("#profileForm"),
+  profileDisplayName: q("#profileDisplayName"),
+  profileHandle: q("#profileHandle"),
+  profileBio: q("#profileBio"),
+  profileFormMessage: q("#profileFormMessage"),
+  friendSearchForm: q("#friendSearchForm"),
+  friendHandleSearch: q("#friendHandleSearch"),
+  friendSearchResult: q("#friendSearchResult"),
+  friendRequestList: q("#friendRequestList"),
+  friendList: q("#friendList"),
+  partyHeading: q("#partyHeading"),
+  partyCreateForm: q("#partyCreateForm"),
+  partyNameInput: q("#partyNameInput"),
+  partyInviteForm: q("#partyInviteForm"),
+  partyInviteHandle: q("#partyInviteHandle"),
+  partyInviteResult: q("#partyInviteResult"),
+  partyInviteLink: q("#partyInviteLink"),
+  copyPartyInviteButton: q("#copyPartyInviteButton"),
+  partyAcceptForm: q("#partyAcceptForm"),
+  partyInviteToken: q("#partyInviteToken"),
+  leavePartyButton: q("#leavePartyButton"),
+  partyMessage: q("#partyMessage"),
+  inventoryGrid: q("#inventoryGrid"),
+  taskDialog: q("#taskDialog"),
+  taskForm: q("#taskForm"),
+  dialogTitle: q("#dialogTitle"),
+  editingTaskId: q("#editingTaskId"),
+  taskKind: q("#taskKind"),
+  taskTitle: q("#taskTitle"),
+  taskNotes: q("#taskNotes"),
+  taskDueDate: q("#taskDueDate"),
+  taskRepeat: q("#taskRepeat"),
+  taskTags: q("#taskTags"),
+  taskDifficulty: q("#taskDifficulty"),
+  taskAssignee: q("#taskAssignee"),
+  taskHumanOptions: q("#taskHumanOptions"),
+  taskAssigneeCustomRow: q("#taskAssigneeCustomRow"),
+  taskAssigneeCustomLabel: q("#taskAssigneeCustomLabel"),
+  taskHandoffRow: q("#taskHandoffRow"),
+  taskHandoffReady: q("#taskHandoffReady"),
+  taskParentQuest: q("#taskParentQuest"),
+  taskChildrenList: q("#taskChildrenList"),
+  taskChildrenItems: q("#taskChildrenItems"),
+  taskHandoffStateRow: q("#taskHandoffStateRow"),
+  taskHandoffState: q("#taskHandoffState"),
+  taskHandoffDetails: q("#taskHandoffDetails"),
+  taskHandoffNote: q("#taskHandoffNote"),
+  taskBlockedReason: q("#taskBlockedReason"),
+  taskArtifactUrl: q("#taskArtifactUrl"),
+  questTreePanel: q("#questTreePanel"),
+  questTreeList: q("#questTreeList"),
+  questTreeIncludeArchived: q("#questTreeIncludeArchived"),
+  refreshQuestTreeButton: q("#refreshQuestTreeButton"),
+  cancelDialog: q("#cancelDialog"),
+  archiveTaskButton: q("#archiveTaskButton"),
+  importButton: q("#importButton"),
+  importFileInput: q("#importFileInput"),
+  exportButton: q("#exportButton"),
+  mobileMenuButton: q("#mobileMenuButton"),
+  mobileMoreButton: q("#mobileMoreButton"),
+  sidebar: q(".sidebar"),
+  undoToast: q("#undoToast"),
+  undoToastMessage: q("#undoToastMessage"),
+  toastActionButton: q("#toastActionButton"),
+  closeToastButton: q("#closeToastButton"),
+  sortMode: q("#sortMode"),
+  taskSummaryRow: q("#taskSummaryRow"),
+  taskFilterOptions: qa("[data-task-filter]"),
+  viewTitle: q("#viewTitle"),
+  currentDateLabel: q("#currentDateLabel"),
+  rolloverStatus: q("#rolloverStatus"),
+  runRolloverButton: q("#runRolloverButton"),
+  battleLogList: q("#battleLogList"),
+  battlePlayerName: q("#battlePlayerName"),
+  battlePlayerSprite: q("#battlePlayerSprite"),
+  battlePlayerHpText: q("#battlePlayerHpText"),
+  battlePlayerMpText: q("#battlePlayerMpText"),
+  battlePlayerHpBar: q("#battlePlayerHpBar"),
+  battlePlayerMpBar: q("#battlePlayerMpBar"),
+  battlePlayerStatusRow: q("#battlePlayerStatusRow"),
+  battleBossName: q("#battleBossName"),
+  battleBossSprite: q("#battleBossSprite"),
+  battleBossHpText: q("#battleBossHpText"),
+  battleBossHpBar: q("#battleBossHpBar"),
+  battleBossRageText: q("#battleBossRageText"),
+  battleBossStatusRow: q("#battleBossStatusRow"),
+  battleDamageText: q("#battleDamageText"),
+  battleResourceText: q("#battleResourceText"),
+  battlePlayerDamageText: q("#battlePlayerDamageText"),
+  battleTurnValue: q("#battleTurnValue"),
+  battleMainMessage: q("#battleMainMessage"),
+  battleCombatLog: q("#battleCombatLog"),
+  battleResultText: q("#battleResultText"),
+  battleSkillCommandName: q("#battleSkillCommandName"),
+  battleSkillCommandCost: q("#battleSkillCommandCost"),
+  battleClassSkillText: q("#battleClassSkillText"),
+  battleTaskQueue: q("#battleTaskQueue"),
+  battleClassGrid: q("#battleClassGrid"),
+  battleContractPreview: q("#battleContractPreview"),
+  battleCommandButtons: qa("[data-battle-command]"),
+  battleResetButton: q("#battleResetButton"),
+  battleRandomBossButton: q("#battleRandomBossButton"),
+  integrationOnboarding: q("#integrationOnboarding"),
+  integrationOnboardingDescription: q("#integrationOnboardingDescription"),
+  integrationLoginButton: q("#integrationLoginButton"),
+  integrationStepLogin: q("#integrationStepLogin"),
+  integrationStepConnect: q("#integrationStepConnect"),
+  integrationStepResource: q("#integrationStepResource"),
+  integrationStepSync: q("#integrationStepSync"),
+  integrationSetupMessage: q("#integrationSetupMessage"),
+  integrationHubGrid: q("#integrationHubGrid"),
+  syncServiceSelect: q("#syncServiceSelect"),
+  syncDirectionSelect: q("#syncDirectionSelect"),
+  syncRuleSummary: q("#syncRuleSummary"),
+  syncPreviewList: q("#syncPreviewList"),
+  syncLogList: q("#syncLogList"),
+  connectIntegrationButton: q("#connectIntegrationButton"),
+  disconnectIntegrationButton: q("#disconnectIntegrationButton"),
+  previewLiveSyncButton: q("#previewLiveSyncButton"),
+  runLiveSyncButton: q("#runLiveSyncButton"),
+  integrationResourcePanel: q("#integrationResourcePanel"),
+  integrationResourceTitle: q("#integrationResourceTitle"),
+  integrationResourceList: q("#integrationResourceList"),
+  integrationAccountLabel: q("#integrationAccountLabel"),
+  integrationAutoSync: q("#integrationAutoSync"),
+  saveIntegrationSettingsButton: q("#saveIntegrationSettingsButton"),
+  togglFocusConnectDialog: q("#togglFocusConnectDialog"),
+  togglFocusConnectForm: q("#togglFocusConnectForm"),
+  togglFocusApiKey: q("#togglFocusApiKey"),
+  togglFocusConnectMessage: q("#togglFocusConnectMessage"),
+  cancelTogglFocusConnect: q("#cancelTogglFocusConnect"),
+  cancelTogglFocusConnectButton: q("#cancelTogglFocusConnectButton"),
+  saveTogglFocusConnect: q("#saveTogglFocusConnect"),
+  calendarAgenda: q("#calendarAgenda"),
+  calendarAgendaList: q("#calendarAgendaList"),
+  refreshCalendarAgendaButton: q("#refreshCalendarAgendaButton"),
+  integrationModeLabel: q("#integrationModeLabel"),
+  apiGatewayStatus: q("#apiGatewayStatus"),
+  mcpEndpointInput: q("#mcpEndpointInput"),
+  copyMcpUrlButton: q("#copyMcpUrlButton"),
+  checkMcpConnectionButton: q("#checkMcpConnectionButton"),
+  mcpConnectionNote: q("#mcpConnectionNote"),
+  gatewayUrlInput: q("#gatewayUrlInput"),
+  saveGatewayButton: q("#saveGatewayButton"),
+  openMcpEndpointLink: q("#openMcpEndpointLink"),
+  gatewayOutput: q("#gatewayOutput"),
+  webhookUrlInput: q("#webhookUrlInput"),
+  webhookEventSelect: q("#webhookEventSelect"),
+  createWebhookButton: q("#createWebhookButton"),
+  webhookList: q("#webhookList"),
+  pluginManifestInput: q("#pluginManifestInput"),
+  installPluginButton: q("#installPluginButton"),
+  pluginList: q("#pluginList"),
+  pluginDashboardSlot: q("#pluginDashboardSlot"),
+  pluginIntegrationSlot: q("#pluginIntegrationSlot"),
+  pluginQuestDetailSlot: q("#pluginQuestDetailSlot"),
 };
 
-const viewTitles = {
+const viewTitles: Record<string, string> = {
   tasks: "今日のクエスト",
   bosses: "ボス図鑑",
   battle: "MPコマンドバトル",
@@ -460,21 +770,21 @@ const viewTitles = {
   integrations: "AI・サービス連携",
 };
 
-const difficultyLabels = {
+const difficultyLabels: Record<string, string> = {
   trivial: "軽い",
   easy: "易しい",
   medium: "普通",
   hard: "重い",
 };
 
-const taskKindLabels = {
+const taskKindLabels: Record<string, string> = {
   habit: "習慣ログ",
   daily: "今日の約束",
   todo: "一回クエスト",
   reward: "ごほうび交換",
 };
 
-const repeatLabels = {
+const repeatLabels: Record<string, string> = {
   none: "繰り返しなし",
   daily: "毎日",
   weekdays: "平日",
@@ -482,13 +792,13 @@ const repeatLabels = {
   monthly: "毎月",
 };
 
-const syncDirectionLabels = {
+const syncDirectionLabels: Record<string, string> = {
   import: "インポート",
   export: "エクスポート",
   bidirectional: "双方向",
 };
 
-const classOptions = [
+const classOptions: ClassOption[] = [
   {
     id: "sentinel",
     name: "Sentinel",
@@ -533,7 +843,7 @@ const classOptions = [
   },
 ];
 
-const battleSkillOptions = {
+const battleSkillOptions: Record<string, BattleSkillOption> = {
   sentinel: {
     name: "Aegis Break",
     cost: 18,
@@ -566,12 +876,12 @@ const battleSkillOptions = {
   },
 };
 
-const avatarVariants = [
+const avatarVariants: AvatarVariant[] = [
   { id: "masc", name: "Masc base", baseSrc: "./assets/avatar-masc-48.webp", lineupSrc: "./assets/class-lineup-48.webp" },
   { id: "femme", name: "Femme base", baseSrc: "./assets/avatar-femme-48.webp", lineupSrc: "./assets/class-lineup-femme-48.webp" },
 ];
 
-const personalityTypes = [
+const personalityTypes: string[] = [
   "INTJ",
   "INTP",
   "ENTJ",
@@ -590,14 +900,14 @@ const personalityTypes = [
   "ESFP",
 ];
 
-const motionOptions = [
+const motionOptions: MotionOption[] = [
   { id: "calm", name: "静かにぷかぷか", className: "float-calm" },
   { id: "spark", name: "きらっと浮遊", className: "float-spark" },
   { id: "focus", name: "集中スキャン", className: "float-focus" },
   { id: "bouncy", name: "元気にぽよん", className: "float-bouncy" },
 ];
 
-const integrationAdapters = [
+const integrationAdapters: IntegrationAdapter[] = [
   {
     id: "google-calendar",
     name: "Google Calendar",
@@ -712,7 +1022,7 @@ const integrationAdapters = [
   },
 ];
 
-const slotLabels = {
+const slotLabels: Record<string, string> = {
   back: "背中",
   hand: "手持ち",
   chest: "胸",
@@ -721,7 +1031,7 @@ const slotLabels = {
   aura: "オーラ",
 };
 
-const shopItems = [
+const shopItems: ShopItem[] = [
   {
     id: "cloak-sage",
     slot: "back",
@@ -786,7 +1096,7 @@ const shopItems = [
   { id: "logic-sparks", slot: "aura", type: "オーラ", name: "Logic Sparks", price: 45, affinity: "Tタイプ", description: "T寄りのシャープな性格表現に合う粒子。" },
 ];
 
-const equipmentBasePlacements = {
+const equipmentBasePlacements: Record<string, { x: number; y: number; size: number }> = {
   "cloak-sage": { x: 50, y: 61, size: 66 },
   journal: { x: 76, y: 63, size: 27 },
   "gem-brooch": { x: 50, y: 52, size: 13 },
@@ -795,7 +1105,7 @@ const equipmentBasePlacements = {
   "clockwork-arm": { x: 28, y: 66, size: 27 },
 };
 
-const equipmentRolePlacements = {
+const equipmentRolePlacements: Record<string, Record<string, EquipmentPlacement>> = {
   sentinel: {
     "cloak-sage": { y: 1, size: -2 },
     journal: { x: 2, y: 2, size: -2 },
@@ -828,7 +1138,7 @@ const equipmentRolePlacements = {
   },
 };
 
-const equipmentVariantPlacements = {
+const equipmentVariantPlacements: Record<string, Record<string, EquipmentPlacement>> = {
   femme: {
     "cloak-sage": { y: -1, size: -2 },
     journal: { x: -1, size: -2 },
@@ -844,7 +1154,7 @@ const equipmentVariantPlacements = {
   },
 };
 
-const bossOptions = [
+const bossOptions: BossDefinition[] = [
   {
     id: "d",
     name: "Dark Quest Knight",
@@ -908,22 +1218,27 @@ const bossOptions = [
 ];
 
 const bossRotationMs = 12000;
-let bossRotationTimer;
-let pendingBossEffect = null;
+let bossRotationTimer: number | null = null;
+let pendingBossEffect: PendingBossEffect | null = null;
 let selectedEquipmentId = "";
-let equipmentDragState = null;
+let equipmentDragState: {
+  itemId: string;
+  startX: number;
+  startY: number;
+  offset: EquipmentOffset;
+} | null = null;
 let activeViewId = "tasks";
-let undoToastTimer = null;
-let toastActionHandler = null;
-let feedbackPreviewTimer = null;
-let appUpdateFallbackTimer = null;
+let undoToastTimer: number | null = null;
+let toastActionHandler: (() => void) | null = null;
+let feedbackPreviewTimer: number | null = null;
+let appUpdateFallbackTimer: number | null = null;
 let lastStateFingerprint = "";
 let suppressCloudSaveEvent = false;
-let deferredInstallPrompt = null;
-let interactionAudioContext = null;
+let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
+let interactionAudioContext: AudioContext | null = null;
 const gatewayStorageKey = "questforge-api-gateway-url";
 const focusAutoSyncQueueKey = "questforge-toggl-focus-sync-queue";
-let gatewayRuntime = {
+let gatewayRuntime: GatewayRuntime = {
   status: "offline",
   webhooks: [],
   plugins: [],
@@ -938,7 +1253,7 @@ let gatewayRuntime = {
   friendSearchResult: null,
   socialError: "",
 };
-let lastAudioDiagnostic = { route: "none", status: "not-tested", at: "" };
+let lastAudioDiagnostic: { route: string; status: string; at: string } = { route: "none", status: "not-tested", at: "" };
 
 state = loadState();
 if (els.sourceCodeLink && globalThis.QuestForgeConfig?.sourceUrl) {
@@ -967,20 +1282,20 @@ globalThis.QuestForgeBridge = {
   },
 };
 
-function readFocusAutoSyncQueue() {
+function readFocusAutoSyncQueue(): string[] {
   try {
     const value = JSON.parse(sessionStorage.getItem(focusAutoSyncQueueKey) || "[]");
     return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
   } catch { return []; }
 }
 
-function writeFocusAutoSyncQueue(ids) {
+function writeFocusAutoSyncQueue(ids: string[]): void {
   sessionStorage.setItem(focusAutoSyncQueueKey, JSON.stringify([...new Set(ids)].slice(-50)));
 }
 
-function shouldAutoCreateFocusTask(task) {
+function shouldAutoCreateFocusTask(task: Quest | null | undefined): boolean {
   const focus = gatewayRuntime.integrations?.find((item) => item.id === "toggl-focus");
-  const settings = focus?.account?.settings || {};
+  const settings = asJsonRecord(focus?.account?.settings);
   const hasCurrentFocusTask = (task?.externalLinks || []).some((link) => link.service === "toggl-focus"
     && (link.type === "task" || link.sourceType === "focus.task")
     && (!link.organizationId || (link.organizationId === settings.organizationId && link.workspaceId === settings.workspaceId)));
@@ -1009,14 +1324,14 @@ async function flushFocusAutoSyncQueue() {
   if (remaining.length !== queue.length) await refreshGatewayRuntime();
 }
 
-function queueFocusAutoSync(task) {
+function queueFocusAutoSync(task: Quest): void {
   if (!externalOAuthEnabled) return;
   if (!shouldAutoCreateFocusTask(task)) return;
   writeFocusAutoSyncQueue([...readFocusAutoSyncQueue(), task.id]);
   window.setTimeout(() => { flushFocusAutoSyncQueue().catch(() => {}); }, 1200);
 }
 
-const themePresets = {
+const themePresets: Record<string, { label: string; tagline: string; heroTitle: string; heroCopy: string }> = {
   arcane: {
     label: "A / Calm Arcane OS",
     tagline: "Calm Arcane OS",
@@ -1040,7 +1355,7 @@ const themePresets = {
   },
 };
 
-const feedbackProfiles = {
+const feedbackProfiles: Record<string, AppAudioProfile> = {
   arcane: {
     wave: "sine",
     press: [{ frequency: 622, duration: 0.055, gain: 0.026 }],
@@ -1106,14 +1421,16 @@ const feedbackProfiles = {
   },
 };
 
-function getInteractionAudioContext() {
+function getInteractionAudioContext(): AudioContext | null {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return null;
   if (!interactionAudioContext) interactionAudioContext = new AudioContextClass();
   return interactionAudioContext;
 }
 
-function playInteractionCue(cue) {
+type AudioCue = "press" | "theme" | "success" | "restore" | "battle";
+
+function playInteractionCue(cue: AudioCue): void {
   if (!state.preferences?.soundEnabled) return;
   const context = getInteractionAudioContext();
   if (!context) return;
@@ -1127,7 +1444,7 @@ function playInteractionCue(cue) {
   schedule();
 }
 
-function scheduleAudioNotes(context, profile, notes) {
+function scheduleAudioNotes(context: AudioContext, profile: Pick<AppAudioProfile, "wave">, notes: AppAudioNote[]): void {
   try {
     notes.forEach((note) => {
       const oscillator = context.createOscillator();
@@ -1150,7 +1467,7 @@ function scheduleAudioNotes(context, profile, notes) {
   }
 }
 
-function updateAudioDiagnostic(route, status) {
+function updateAudioDiagnostic(route: string, status: string): void {
   lastAudioDiagnostic = { route, status, at: new Date().toLocaleTimeString("ja-JP") };
   if (!els.audioDiagnosticStatus) return;
   const contextState = interactionAudioContext?.state || "未作成";
@@ -1180,7 +1497,7 @@ function createTestToneWavUrl() {
   const sampleCount = Math.floor(sampleRate * duration);
   const buffer = new ArrayBuffer(44 + sampleCount * 2);
   const view = new DataView(buffer);
-  const writeText = (offset, text) => [...text].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
+  const writeText = (offset: number, text: string): void => [...text].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
   writeText(0, "RIFF");
   view.setUint32(4, 36 + sampleCount * 2, true);
   writeText(8, "WAVEfmt ");
@@ -1224,7 +1541,7 @@ function canPlayMotion() {
     && !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
 
-function applyButtonPressFeedback(button) {
+function applyButtonPressFeedback(button: AppElement): void {
   if (!button || button.disabled) return;
   if (canPlayMotion()) {
     button.classList.remove("is-pressed");
@@ -1237,14 +1554,15 @@ function applyButtonPressFeedback(button) {
 
 function registerButtonFeedback() {
   document.addEventListener("click", (event) => {
-    const button = event.target.closest?.("button");
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest("button") as AppElement | null;
     if (button && !button.hasAttribute("data-feedback-silent")) {
       applyButtonPressFeedback(button);
     }
   }, true);
 }
 
-function previewFeedback(options = {}) {
+function previewFeedback(options: PreviewFeedbackOptions = {}): void {
   if (options.sound) {
     if (state.preferences?.soundEnabled) {
       playInteractionCue("success");
@@ -1259,7 +1577,7 @@ function previewFeedback(options = {}) {
     return;
   }
 
-  window.clearTimeout(feedbackPreviewTimer);
+  if (feedbackPreviewTimer !== null) window.clearTimeout(feedbackPreviewTimer);
   els.feedbackPreviewCard.classList.remove("is-previewing");
   void els.feedbackPreviewCard.offsetWidth;
   els.feedbackPreviewCard.classList.add("is-previewing");
@@ -1268,7 +1586,7 @@ function previewFeedback(options = {}) {
   }, 620);
 }
 
-function loadState() {
+function loadState(): AppState {
   try {
     const driver = getStorageDriver("local");
     const loaded = driver.load();
@@ -1285,20 +1603,20 @@ function loadState() {
   }
 }
 
-function cloneDefaultState() {
+function cloneDefaultState(): AppState {
   if (typeof structuredClone === "function") {
     return structuredClone(defaultState);
   }
   return JSON.parse(JSON.stringify(defaultState));
 }
 
-function cloneStateValue(value) {
+function cloneStateValue<T>(value: T): T {
   if (typeof structuredClone === "function") return structuredClone(value);
-  return JSON.parse(JSON.stringify(value));
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function stateSyncFingerprint(value) {
-  const snapshot = cloneStateValue(value);
+function stateSyncFingerprint(value: AppState): string {
+  const snapshot = cloneStateValue(value) as Partial<AppState>;
   delete snapshot.updatedAt;
   delete snapshot.storage;
   return JSON.stringify(snapshot);
@@ -1313,7 +1631,7 @@ function getDeviceId() {
   return next;
 }
 
-function saveState(options = {}) {
+function saveState(options: SaveStateOptions = {}): void {
   const driver = getStorageDriver(state.storage?.driver);
   const fingerprint = stateSyncFingerprint(state);
   const contentChanged = fingerprint !== lastStateFingerprint;
@@ -1337,7 +1655,8 @@ function saveState(options = {}) {
   }
 }
 
-function normalizeState(nextState) {
+function normalizeState(rawState: unknown): AppState {
+  let nextState = rawState as AppState;
   if (!nextState || typeof nextState !== "object" || Array.isArray(nextState)) {
     nextState = cloneDefaultState();
   }
@@ -1461,8 +1780,9 @@ function normalizeState(nextState) {
     ? Math.min(nextState.battle.maxMp, Math.max(0, nextState.battle.mp))
     : 12;
   ["focus", "guard", "shield", "rage", "vulnerable", "poison"].forEach((key) => {
-    nextState.battle[key] = Number.isFinite(nextState.battle[key])
-      ? Math.max(0, nextState.battle[key])
+    const currentValue = Number(nextState.battle[key]);
+    nextState.battle[key] = Number.isFinite(currentValue)
+      ? Math.max(0, currentValue)
       : 0;
   });
   nextState.battle.ended = Boolean(nextState.battle.ended);
@@ -1588,13 +1908,14 @@ function normalizeState(nextState) {
   return nextState;
 }
 
-function normalizeTaskAssignee(value) {
-  if (!value || typeof value !== "object" || !["self", "human", "agent"].includes(value.type)) {
+function normalizeTaskAssignee(value: unknown): Quest["assignee"] {
+  const input = asJsonRecord(value);
+  if (!value || typeof value !== "object" || !["self", "human", "agent"].includes(String(input.type))) {
     return { type: "self", id: "self", label: "自分", handoffState: "none" };
   }
-  const type = value.type;
-  const label = String(value.label || (type === "self" ? "自分" : value.id || "Agent")).trim().slice(0, 80);
-  const rawId = String(value.id || (type === "self" ? "self" : "")).trim();
+  const type = String(input.type) as Quest["assignee"]["type"];
+  const label = String(input.label || (type === "self" ? "自分" : input.id || "Agent")).trim().slice(0, 80);
+  const rawId = String(input.id || (type === "self" ? "self" : "")).trim();
   const id = type === "agent" && (rawId === "custom" || rawId.startsWith("custom:"))
     ? normalizeCustomAgentId(rawId, label)
     : type === "agent" ? normalizeAgentId(rawId, label) : rawId.slice(0, 120);
@@ -1603,12 +1924,14 @@ function normalizeTaskAssignee(value) {
     type,
     id,
     label: type === "self" ? "自分" : label,
-    handoffState: ["none", "ready", "working", "blocked", "review_required", "accepted"].includes(value.handoffState) ? value.handoffState : "none",
+    handoffState: ["none", "ready", "working", "blocked", "review_required", "accepted"].includes(String(input.handoffState))
+      ? String(input.handoffState) as Quest["assignee"]["handoffState"]
+      : "none",
   };
 }
 
-function normalizeAgentId(value, label = "agent") {
-  const aliases = {
+function normalizeAgentId(value: unknown, label = "agent"): string {
+  const aliases: Record<string, string> = {
     "chat-gpt": "chatgpt", gpt: "chatgpt", "gpt-chat": "chatgpt",
     "gpt-codex": "codex", "openai-codex": "codex", "codex-cli": "codex",
     "claude-code": "claude", "anthropic-claude": "claude",
@@ -1620,7 +1943,7 @@ function normalizeAgentId(value, label = "agent") {
   return aliases[slug] || slug || `custom:${customSlug}`;
 }
 
-function normalizeCustomAgentId(rawId, label = "agent") {
+function normalizeCustomAgentId(rawId: unknown, label = "agent"): string {
   const source = String(rawId || "").trim().toLocaleLowerCase().startsWith("custom:")
     ? String(rawId).trim().slice(7)
     : label;
@@ -1629,8 +1952,8 @@ function normalizeCustomAgentId(rawId, label = "agent") {
   return `custom:${slug}`;
 }
 
-function normalizeTaskHandoff(value) {
-  const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+function normalizeTaskHandoff(value: unknown): Quest["handoff"] {
+  const input = asJsonRecord(value);
   return {
     note: String(input.note || "").trim().slice(0, 500),
     blockedReason: String(input.blockedReason || "").trim().slice(0, 500),
@@ -1642,11 +1965,11 @@ function normalizeTaskHandoff(value) {
   };
 }
 
-function taskTreeEligible(task) {
+function taskTreeEligible(task: Quest | null | undefined): boolean {
   return Boolean(task && ["habit", "daily", "todo"].includes(task.kind));
 }
 
-function taskIsDescendant(candidateId, ancestorId, seen = new Set()) {
+function taskIsDescendant(candidateId: string, ancestorId: string, seen: Set<string> = new Set()): boolean {
   if (!candidateId || seen.has(candidateId)) return false;
   seen.add(candidateId);
   const candidate = state.tasks.find((task) => task.id === candidateId);
@@ -1654,7 +1977,7 @@ function taskIsDescendant(candidateId, ancestorId, seen = new Set()) {
   return candidate.parentQuestId === ancestorId || taskIsDescendant(candidate.parentQuestId, ancestorId, seen);
 }
 
-function validParentForTask(task, parentQuestId) {
+function validParentForTask(task: Quest, parentQuestId: string): boolean {
   if (!parentQuestId) return true;
   const parent = state.tasks.find((item) => item.id === parentQuestId);
   const subtreeHeight = task?.id && task.id !== "__new_quest__" ? taskTreeHeight(task.id) : 1;
@@ -1663,21 +1986,21 @@ function validParentForTask(task, parentQuestId) {
     && taskTreeDepth(parentQuestId) + subtreeHeight <= 8);
 }
 
-function taskTreeDepth(taskId, seen = new Set()) {
+function taskTreeDepth(taskId: string, seen: Set<string> = new Set()): number {
   if (!taskId || seen.has(taskId)) return 9;
   seen.add(taskId);
   const task = state.tasks.find((item) => item.id === taskId);
   return task?.parentQuestId ? taskTreeDepth(task.parentQuestId, seen) + 1 : 1;
 }
 
-function taskTreeHeight(taskId, seen = new Set()) {
+function taskTreeHeight(taskId: string, seen: Set<string> = new Set()): number {
   if (!taskId || seen.has(taskId)) return 9;
   seen.add(taskId);
   const children = state.tasks.filter((task) => task.parentQuestId === taskId && taskTreeEligible(task));
   return children.length ? 1 + Math.max(...children.map((child) => taskTreeHeight(child.id, new Set(seen)))) : 1;
 }
 
-function repairTaskParentLinks(nextState) {
+function repairTaskParentLinks(nextState: AppState): void {
   const byId = new Map(nextState.tasks.map((task) => [task.id, task]));
   nextState.tasks.forEach((task) => {
     if (!task.parentQuestId || !byId.has(task.parentQuestId) || !taskTreeEligible(task) || !taskTreeEligible(byId.get(task.parentQuestId))) {
@@ -1685,7 +2008,7 @@ function repairTaskParentLinks(nextState) {
       return;
     }
     const seen = new Set([task.id]);
-    let current = task;
+    let current: Quest | undefined = task;
     let depth = 1;
     while (current?.parentQuestId) {
       if (seen.has(current.parentQuestId) || depth >= 8) {
@@ -1699,25 +2022,26 @@ function repairTaskParentLinks(nextState) {
   });
 }
 
-function normalizeEquipmentOffsets(offsets) {
+function normalizeEquipmentOffsets(offsets: unknown): Record<string, EquipmentOffset> {
   if (!offsets || typeof offsets !== "object") return {};
-  return Object.entries(offsets).reduce((normalized, [itemId, value]) => {
+  return Object.entries(asJsonRecord(offsets)).reduce<Record<string, EquipmentOffset>>((normalized, [itemId, value]) => {
     const item = shopItems.find((entry) => entry.id === itemId && entry.asset);
     if (!item || !value || typeof value !== "object") return normalized;
+    const input = asJsonRecord(value);
     normalized[itemId] = {
-      x: clampNumber(Number(value.x) || 0, -30, 30),
-      y: clampNumber(Number(value.y) || 0, -30, 30),
-      scale: clampNumber(Number(value.scale) || 0, -25, 40),
+      x: clampNumber(Number(input.x) || 0, -30, 30),
+      y: clampNumber(Number(input.y) || 0, -30, 30),
+      scale: clampNumber(Number(input.scale) || 0, -25, 40),
     };
     return normalized;
   }, {});
 }
 
-function clampNumber(value, min, max) {
+function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function applyScheduledRollover(nextState, options = {}) {
+function applyScheduledRollover(nextState: AppState, options: { force?: boolean } = {}): AppState {
   const today = currentDateText();
   if (!options.force && nextState.lastProcessedDate === today) {
     return nextState;
@@ -1754,16 +2078,16 @@ function applyScheduledRollover(nextState, options = {}) {
   return nextState;
 }
 
-function difficultyScale(difficulty) {
+function difficultyScale(difficulty: Quest["difficulty"]): number {
   return core.difficultyScale(difficulty);
 }
 
-function localizedTaskLabel(group, value, fallback = value) {
+function localizedTaskLabel(group: string, value: string, fallback = value): string {
   const translated = i18n?.t?.(`${group}.${value}`);
   return translated && translated !== `${group}.${value}` ? translated : fallback;
 }
 
-function recordTaskEvent(type, task, details = {}) {
+function recordTaskEvent(type: string, task: Quest, details: JsonRecord = {}): JsonRecord {
   const event = {
     id: createId(),
     type,
@@ -1777,7 +2101,7 @@ function recordTaskEvent(type, task, details = {}) {
   return event;
 }
 
-function scoreTask(taskId, direction) {
+function scoreTask(taskId: string, direction: string): void {
   const task = state.tasks.find((item) => item.id === taskId);
   if (!task) return;
 
@@ -1873,7 +2197,7 @@ function scoreTask(taskId, direction) {
   render();
 }
 
-function completeTaskFeedback(task) {
+function completeTaskFeedback(task: Quest): void {
   trackTelemetry("first_quest_complete", { source: "root" });
   playInteractionCue("success");
   saveState();
@@ -1895,12 +2219,12 @@ function completeTaskFeedback(task) {
   window.setTimeout(() => render(), 520);
 }
 
-function grantProgress(scale) {
+function grantProgress(scale: number): void {
   state.character.gems += Math.round(7 * scale);
   grantXp(Math.round(12 * scale));
 }
 
-function grantXp(amount) {
+function grantXp(amount: number): void {
   state.character.xp += amount;
   while (state.character.xp >= state.character.nextXp) {
     state.character.xp -= state.character.nextXp;
@@ -1911,18 +2235,18 @@ function grantXp(amount) {
   }
 }
 
-function bossDamageForTask(task, scale) {
-  const baseDamage = {
+function bossDamageForTask(task: Quest, scale: number): number {
+  const baseDamage = ({
     habit: 5,
     daily: 10,
     todo: 12,
-  }[task.kind] || 0;
+  } as Record<string, number>)[task.kind] || 0;
   const currentBoss = getBossOption(state.boss.currentId);
   const weakMultiplier = currentBoss.weakKind === task.kind ? 1.35 : 1;
   return Math.max(1, Math.round(baseDamage * scale * weakMultiplier));
 }
 
-function dealBossDamage(amount, task, options = {}) {
+function dealBossDamage(amount: number, task: { title: string; kind: string }, options: BattleOptions = {}): void {
   const currentBoss = getBossOption(state.boss.currentId);
   state.boss.maxHp = currentBoss.maxHp;
   state.boss.hp = Math.max(0, state.boss.hp - amount);
@@ -1970,7 +2294,7 @@ function dealBossDamage(amount, task, options = {}) {
   }
 }
 
-function addBattleLog(entry) {
+function addBattleLog(entry: JsonRecord): void {
   state.boss.battleLog = [
     {
       id: createId(),
@@ -1988,7 +2312,7 @@ function ensureBattleState() {
   return state.battle;
 }
 
-function getBattleSkill(roleId = state.character.role) {
+function getBattleSkill(roleId = state.character.role): BattleSkillOption {
   const resolvedRole = battleSkillOptions[roleId] ? roleId : "sentinel";
   const skill = battleSkillOptions[resolvedRole];
   return {
@@ -1997,21 +2321,21 @@ function getBattleSkill(roleId = state.character.role) {
   };
 }
 
-function battleMpForTask(task, scale) {
+function battleMpForTask(task: Quest, _scale: number): number {
   const currentBoss = getBossOption(state.boss.currentId);
   return battleRules?.battleMpForQuest(task, currentBoss.weakKind) ?? core.taskRewardDelta(task, currentBoss.weakKind).mp;
 }
 
-function gainBattleMp(amount, task) {
+function gainBattleMp(amount: number, task: Quest): void {
   const battle = ensureBattleState();
   const before = battle.mp;
   battle.mp = Math.min(battle.maxMp, Math.max(0, battle.mp + amount));
   const actualGain = battle.mp - before;
-  const focusGain = {
+  const focusGain = ({
     habit: 1,
     daily: 1,
     todo: 2,
-  }[task.kind] || 0;
+  } as Record<string, number>)[task.kind] || 0;
   battle.focus += focusGain;
   if (actualGain > 0 && activeViewId === "battle") {
     showBattleFloat(els.battleResourceText, `+${actualGain} MP`, "gain");
@@ -2021,7 +2345,7 @@ function gainBattleMp(amount, task) {
   );
 }
 
-function applyBattlePenalty(task, scale) {
+function applyBattlePenalty(task: Quest, scale: number): void {
   const battle = ensureBattleState();
   const hpLoss = task.kind === "habit"
     ? Math.round(4 * scale)
@@ -2034,12 +2358,12 @@ function applyBattlePenalty(task, scale) {
   }
 }
 
-function addCommandBattleLog(text, kind = "info") {
+function addCommandBattleLog(text: string, kind = "info"): void {
   const battle = ensureBattleState();
   battle.log = [{ text, kind }, ...(battle.log || [])].slice(0, 10);
 }
 
-function resetCommandBattle(options = {}) {
+function resetCommandBattle(options: BattleOptions = {}): void {
   const currentBoss = getBossOption(state.boss.currentId);
   state.battle = cloneDefaultState().battle;
   state.boss.rotationEnabled = false;
@@ -2050,7 +2374,7 @@ function resetCommandBattle(options = {}) {
   render();
 }
 
-function useBattleCommand(command) {
+function useBattleCommand(command: string): void {
   const battle = ensureBattleState();
   state.boss.rotationEnabled = false;
   try {
@@ -2077,15 +2401,16 @@ function useBattleCommand(command) {
     playInteractionCue(command === "burst" || state.boss.hp <= 0 ? "success" : "battle");
     flashBattleCommandFeedback();
   } catch (error) {
-    addCommandBattleLog(error.code === "battle_mp_insufficient"
+    const appError = error as AppError;
+    addCommandBattleLog(appError.code === "battle_mp_insufficient"
       ? i18n.t("battle.mpInsufficient")
-      : error.message || i18n.t("battle.commandFailed"), "danger");
+      : appError.message || i18n.t("battle.commandFailed"), "danger");
   }
   render();
 }
 
-function flashBattleCommandFeedback() {
-  const field = document.querySelector(".jrpg-field");
+function flashBattleCommandFeedback(): void {
+  const field = q(".jrpg-field");
   if (!field || !canPlayMotion()) return;
   field.classList.remove("is-commanding");
   void field.offsetWidth;
@@ -2130,7 +2455,7 @@ function useBattleSkill() {
   }
 }
 
-function dealCommandBattleDamage(amount, source) {
+function dealCommandBattleDamage(amount: number, source: string): void {
   const battle = ensureBattleState();
   let damage = amount;
   if (battle.vulnerable > 0) {
@@ -2150,7 +2475,7 @@ function dealCommandBattleDamage(amount, source) {
   }
 }
 
-function takeCommandBattleDamage(amount, source) {
+function takeCommandBattleDamage(amount: number, source: string): void {
   const battle = ensureBattleState();
   let damage = amount;
   if (battle.guard > 0) {
@@ -2213,13 +2538,13 @@ function renderCommandBattle() {
   els.battlePlayerMpText.textContent = `${battle.mp}/${battle.maxMp}`;
   els.battlePlayerHpBar.style.width = `${Math.max(0, Math.min(100, hpRatio * 100))}%`;
   els.battlePlayerMpBar.style.width = `${Math.max(0, Math.min(100, mpRatio * 100))}%`;
-  els.battleTurnValue.textContent = battle.turn;
+  els.battleTurnValue.textContent = String(battle.turn);
 
   els.battleBossName.textContent = currentBoss.name;
   els.battleBossSprite.src = currentBoss.src;
   els.battleBossHpText.textContent = `${state.boss.hp}/${currentBoss.maxHp}`;
   els.battleBossHpBar.style.width = `${Math.max(0, Math.min(100, bossHpRatio * 100))}%`;
-  els.battleBossRageText.textContent = battle.rage;
+  els.battleBossRageText.textContent = String(battle.rage);
 
   els.battleSkillCommandName.textContent = skill.name;
   els.battleSkillCommandCost.textContent = `${skill.cost} MP / ${skill.description}`;
@@ -2238,18 +2563,18 @@ function renderCommandBattle() {
     battle.poison ? `Poison ${battle.poison}` : "",
   ]);
 
-  els.battleMainMessage.innerHTML = localizeBattleLogText(battle.log[0]?.text) || i18n.t("battle.chooseCommand");
+  els.battleMainMessage.innerHTML = localizeBattleLogText(String(battle.log[0]?.text || "")) || i18n.t("battle.chooseCommand");
   els.battleCombatLog.innerHTML = "";
   (battle.log || []).slice(1).forEach((entry) => {
     const item = document.createElement("div");
-    item.className = entry.kind;
-    item.innerHTML = localizeBattleLogText(entry.text);
+    item.className = String(entry.kind || "");
+    item.innerHTML = localizeBattleLogText(String(entry.text || ""));
     els.battleCombatLog.appendChild(item);
   });
 
   els.battleCommandButtons.forEach((button) => {
     const command = button.dataset.battleCommand;
-    button.disabled = battleEnded || battle.mp < core.battleCommandCost(command, skill.cost);
+    button.disabled = battleEnded || battle.mp < core.battleCommandCost(command || "", skill.cost);
   });
 
   renderBattleTaskQueue();
@@ -2257,7 +2582,7 @@ function renderCommandBattle() {
   els.battleContractPreview.textContent = JSON.stringify(createBattleContractPreview(), null, 2);
 }
 
-function renderBattleStatus(target, values) {
+function renderBattleStatus(target: AppElement, values: string[]): void {
   target.innerHTML = "";
   values.filter(Boolean).forEach((value) => {
     const item = document.createElement("span");
@@ -2346,9 +2671,10 @@ function createBattleContractPreview() {
   const session = battleRules.createBattleSession(state);
   const boss = getBossOption(state.boss.currentId);
   session.boss.label = localizedBossField(boss, "label");
-  session.battle.log = (session.battle.log || []).map((entry) => ({
+  const battleLog = Array.isArray(session.battle.log) ? session.battle.log : [];
+  session.battle.log = battleLog.map((entry) => ({
     ...entry,
-    text: localizeBattleLogText(entry.text),
+    text: localizeBattleLogText(String(entry.text || "")),
   }));
   session.commands = (session.commands || []).map((command) => ({
     ...command,
@@ -2370,7 +2696,7 @@ function localizeBattleLogText(text = "") {
     .replace(/^敗北:/, `${i18n.t("battle.defeat")}:`);
 }
 
-function flashBattleSprite(element, className) {
+function flashBattleSprite(element: AppElement, className: string): void {
   if (!element || !canPlayMotion()) return;
   element.classList.remove(className);
   void element.offsetWidth;
@@ -2378,7 +2704,7 @@ function flashBattleSprite(element, className) {
   window.setTimeout(() => element.classList.remove(className), 380);
 }
 
-function showBattleFloat(element, text, kind = "damage") {
+function showBattleFloat(element: AppElement, text: string, kind = "damage"): void {
   if (!element) return;
   element.textContent = text;
   element.dataset.kind = kind;
@@ -2389,7 +2715,7 @@ function showBattleFloat(element, text, kind = "damage") {
   window.setTimeout(() => element.classList.remove("is-visible"), 760);
 }
 
-function redeemReward(task) {
+function redeemReward(task: Quest): void {
   const cost = task.cost || rewardCost(task.difficulty);
   if (state.character.gems < cost) {
     flashTask(task.id);
@@ -2399,11 +2725,22 @@ function redeemReward(task) {
   render();
 }
 
-function rewardCost(difficulty) {
+function rewardCost(difficulty: Quest["difficulty"]): number {
   return Math.round(25 * difficultyScale(difficulty));
 }
 
-function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags = [], assignee = null, parentQuestId = "", handoff = {}) {
+function addTask(
+  kind: Quest["kind"],
+  title: string,
+  notes: string,
+  dueDate: string,
+  difficulty: Quest["difficulty"],
+  repeat: Quest["repeat"] = "none",
+  tags: string[] | string = [],
+  assignee: unknown = null,
+  parentQuestId = "",
+  handoff: unknown = {},
+): Quest | null {
   if (!title.trim()) return null;
 
   const timestamp = new Date().toISOString();
@@ -2441,7 +2778,7 @@ function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags 
     assignmentReadyFor: "",
     createdAt: timestamp,
     updatedAt: timestamp,
-  };
+  } as unknown as Quest;
 
   if (kind === "daily" || kind === "todo") {
     task.done = false;
@@ -2462,13 +2799,13 @@ function addTask(kind, title, notes, dueDate, difficulty, repeat = "none", tags 
   return task;
 }
 
-function updateTask(taskId, values) {
+function updateTask(taskId: string, values: TaskFormValues): Quest | null {
   const task = state.tasks.find((item) => item.id === taskId);
   if (!task || !values.title.trim()) return null;
 
   const previousKind = task.kind;
   const previousAssignee = normalizeTaskAssignee(task.assignee);
-  const candidate = { ...task, kind: values.kind };
+  const candidate: Quest = { ...task, kind: values.kind };
   if (values.parentQuestId && !validParentForTask(candidate, values.parentQuestId)) {
     showToast("このQuestは親に設定できません。", { duration: 4200 });
     return null;
@@ -2502,15 +2839,15 @@ function updateTask(taskId, values) {
   }
   if (task.kind === "reward") {
     task.cost = rewardCost(task.difficulty);
-    delete task.done;
-    delete task.streak;
+    delete (task as Partial<Quest>).done;
+    delete (task as Partial<Quest>).streak;
   }
   if (task.kind !== "reward") {
-    delete task.cost;
+    delete (task as Partial<Quest>).cost;
   }
   if (previousKind !== task.kind && task.kind === "habit") {
-    delete task.done;
-    delete task.streak;
+    delete (task as Partial<Quest>).done;
+    delete (task as Partial<Quest>).streak;
   }
 
   recordTaskEvent("task.updated", task, { previousKind });
@@ -2519,7 +2856,7 @@ function updateTask(taskId, values) {
   return task;
 }
 
-function recordAssignmentReadyEvent(task, previousAssignee = null) {
+function recordAssignmentReadyEvent(task: Quest, previousAssignee: Quest["assignee"] | null = null): void {
   const assignee = normalizeTaskAssignee(task.assignee);
   if (assignee.type !== "agent" || assignee.handoffState !== "ready") return;
   const assignmentKey = `${assignee.type}:${assignee.id}`;
@@ -2528,7 +2865,7 @@ function recordAssignmentReadyEvent(task, previousAssignee = null) {
   recordTaskEvent("quest.assignment.ready", task, { assignee, previousAssignee });
 }
 
-const handoffStateLabels = {
+const handoffStateLabels: Record<string, string> = {
   none: "未設定",
   ready: "作業待ち",
   working: "作業中",
@@ -2537,7 +2874,7 @@ const handoffStateLabels = {
   accepted: "承認済み",
 };
 
-const handoffTransitions = {
+const handoffTransitions: Record<string, string[]> = {
   none: ["ready"],
   ready: ["working", "blocked"],
   working: ["blocked", "review_required"],
@@ -2546,12 +2883,12 @@ const handoffTransitions = {
   accepted: ["none"],
 };
 
-function canTransitionTaskHandoff(current, next) {
+function canTransitionTaskHandoff(current: string, next: string): boolean {
   return current === next || (handoffTransitions[current] || []).includes(next);
 }
 
-function handoffNextState(current, action) {
-  const transitions = {
+function handoffNextState(current: string, action: string): string {
+  const transitions: Record<string, Record<string, string>> = {
     none: { ready: "ready" },
     ready: { start: "working", block: "blocked" },
     working: { review: "review_required", block: "blocked" },
@@ -2562,7 +2899,7 @@ function handoffNextState(current, action) {
   return transitions[current]?.[action] || "";
 }
 
-function transitionTaskHandoff(task, nextState, details = {}) {
+function transitionTaskHandoff(task: Quest, nextState: string, details: unknown = {}): boolean {
   if (!task || task.assignee?.type !== "agent") return false;
   const current = task.assignee.handoffState || "none";
   const allowed = {
@@ -2571,8 +2908,8 @@ function transitionTaskHandoff(task, nextState, details = {}) {
   }[current] || [];
   if (current !== nextState && !allowed.includes(nextState)) return false;
   const now = new Date().toISOString();
-  task.assignee.handoffState = nextState;
-  task.handoff = normalizeTaskHandoff({ ...task.handoff, ...details });
+  task.assignee.handoffState = nextState as Quest["assignee"]["handoffState"];
+  task.handoff = normalizeTaskHandoff({ ...task.handoff, ...asJsonRecord(details) });
   if (nextState === "working") task.handoff.startedAt ||= now;
   if (nextState === "review_required") task.handoff.reviewRequestedAt = now;
   if (nextState === "accepted") {
@@ -2585,7 +2922,7 @@ function transitionTaskHandoff(task, nextState, details = {}) {
   return true;
 }
 
-function archiveTask(taskId) {
+function archiveTask(taskId: string): Quest | null {
   const task = state.tasks.find((item) => item.id === taskId);
   if (!task || task.kind !== "todo" || (task.repeat || "none") !== "none") return null;
   task.lifecycleState = "archived";
@@ -2604,56 +2941,58 @@ function createId() {
   return `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function getRole(roleId) {
+function getRole(roleId: string): ClassOption {
   return classOptions.find((role) => role.id === roleId) || classOptions[0];
 }
 
-function getVariant(variantId) {
+function getVariant(variantId: string): AvatarVariant {
   return avatarVariants.find((variant) => variant.id === variantId) || avatarVariants[0];
 }
 
-function getAvatarSrc(roleId, variantId) {
+function getAvatarSrc(roleId: string, variantId: string): string {
   if (variantId === "femme") {
     return `./assets/avatar-role-femme-${roleId}.webp`;
   }
   return `./assets/avatar-role-${roleId}.webp`;
 }
 
-function getMotion(motionId) {
+function getMotion(motionId: string): MotionOption {
   return motionOptions.find((motion) => motion.id === motionId) || motionOptions[0];
 }
 
-function localizedRoleField(role, field) {
+function localizedRoleField(role: ClassOption, field: string): string {
   const translated = i18n?.t?.(`role.${role.id}.${field}`);
-  return translated && translated !== `role.${role.id}.${field}` ? translated : role[field];
+  const fallback = String((role as unknown as JsonRecord)[field] || "");
+  return translated && translated !== `role.${role.id}.${field}` ? translated : fallback;
 }
 
-function localizedMotionName(motion) {
+function localizedMotionName(motion: MotionOption): string {
   const key = motion.id === "bouncy" ? "bounce" : motion.id;
   const translated = i18n?.t?.(`motion.${key}`);
   return translated && translated !== `motion.${key}` ? translated : motion.name;
 }
 
-function localizedSlot(item) {
+function localizedSlot(item: ShopItem): string {
   const translated = i18n?.t?.(`slot.${item.slot}`);
   return translated && translated !== `slot.${item.slot}` ? translated : slotLabels[item.slot] || item.type;
 }
 
-function localizedShopDescription(item) {
+function localizedShopDescription(item: ShopItem): string {
   const translated = i18n?.t?.(`shop.${item.id}.description`);
   return translated && translated !== `shop.${item.id}.description` ? translated : item.description;
 }
 
-function getBossOption(bossId) {
+function getBossOption(bossId: string): BossDefinition {
   return bossOptions.find((boss) => boss.id === bossId) || bossOptions[0];
 }
 
-function localizedBossField(boss, field) {
+function localizedBossField(boss: BossDefinition, field: string): string {
   const translated = i18n?.t?.(`boss.${boss.id}.${field}`);
-  return translated && translated !== `boss.${boss.id}.${field}` ? translated : boss[field];
+  const fallback = String((boss as unknown as JsonRecord)[field] || "");
+  return translated && translated !== `boss.${boss.id}.${field}` ? translated : fallback;
 }
 
-function setCurrentBoss(bossId, options = {}) {
+function setCurrentBoss(bossId: string, options: BattleOptions = {}): void {
   const previousPercent = state.boss.maxHp ? state.boss.hp / state.boss.maxHp : 1;
   const boss = getBossOption(bossId);
   state.boss.currentId = boss.id;
@@ -2666,7 +3005,7 @@ function setCurrentBoss(bossId, options = {}) {
   }
 }
 
-function pickRandomBossId(excludeId = "") {
+function pickRandomBossId(excludeId = ""): string {
   const pool = bossOptions.filter((boss) => boss.id !== excludeId);
   const candidates = pool.length ? pool : bossOptions;
   return candidates[Math.floor(Math.random() * candidates.length)].id;
@@ -2690,7 +3029,7 @@ function renderBoss() {
   els.bossThreatLabel.textContent = localizedBossField(boss, "threat");
   els.bossHpText.textContent = `${state.boss.hp}/${state.boss.maxHp}`;
   els.bossRewardText.textContent = `${boss.rewardGems} Gem / ${boss.rewardXp} XP / ${i18n.t("boss.weakness", { kind: localizedTaskLabel("kind", boss.weakKind, taskKindLabels[boss.weakKind]) })}`;
-  els.bossDefeatCount.textContent = state.boss.defeatCount;
+  els.bossDefeatCount.textContent = String(state.boss.defeatCount);
   els.bossRotationStatus.textContent = i18n.t(state.boss.rotationEnabled ? "boss.rotation" : "boss.locked");
   els.lockBossButton.textContent = i18n.t(state.boss.rotationEnabled ? "boss.challengeThis" : "boss.locked");
   els.bossMeter.style.width = `${Math.max(0, (state.boss.hp / state.boss.maxHp) * 100)}%`;
@@ -2739,7 +3078,8 @@ function renderBossGallery() {
         <button type="button">${i18n.t(active && !state.boss.rotationEnabled ? "boss.challenging" : "boss.challenge")}</button>
       </footer>
     `;
-    card.querySelector("button").addEventListener("click", () => {
+    const challengeButton = card.querySelector<HTMLButtonElement>("button");
+    challengeButton?.addEventListener("click", () => {
       setCurrentBoss(boss.id, { resetHp: true, rotationEnabled: false });
       render();
     });
@@ -2759,7 +3099,7 @@ function renderBattleLog() {
     const row = document.createElement("div");
     row.className = "battle-log-row";
     const time = document.createElement("span");
-    time.textContent = formatLogTime(log.at);
+    time.textContent = formatLogTime(String(log.at || ""));
     const result = document.createElement("strong");
     result.textContent = log.defeated ? "撃破" : `${log.damage} dmg`;
     const detail = document.createElement("p");
@@ -2791,7 +3131,7 @@ function playPendingBossEffect() {
   }, 760);
 }
 
-function buyOrEquipItem(itemId) {
+function buyOrEquipItem(itemId: string): void {
   const item = shopItems.find((entry) => entry.id === itemId);
   if (!item) return;
   const owned = state.character.ownedItems.includes(item.id);
@@ -2856,13 +3196,13 @@ function applyTheme() {
   renderFeedbackSettings();
 }
 
-const appearanceIcons = {
+const appearanceIcons: Record<string, string> = {
   light: "☀",
   dark: "☾",
   system: "◐",
 };
 
-const themeColorMap = {
+const themeColorMap: Record<string, Record<string, string>> = {
   arcane: { light: "#202735", dark: "#10151c" },
   soft: { light: "#232b31", dark: "#111715" },
   retro: { light: "#171b25", dark: "#0b0e15" },
@@ -2871,10 +3211,10 @@ const themeColorMap = {
 const colorSchemeQuery = typeof window.matchMedia === "function"
   ? window.matchMedia("(prefers-color-scheme: dark)")
   : null;
-let sessionAppearanceMode = null;
+let sessionAppearanceMode: string | null = null;
 
-function normalizeAppearanceMode(value) {
-  return appearanceModes.includes(value) ? value : "system";
+function normalizeAppearanceMode(value: unknown): string {
+  return typeof value === "string" && appearanceModes.includes(value) ? value : "system";
 }
 
 function getAppearanceMode() {
@@ -2914,7 +3254,7 @@ function applyAppearance() {
   els.themeColorMeta?.setAttribute("content", themeColors[resolved]);
 }
 
-function setAppearanceMenuOpen(open) {
+function setAppearanceMenuOpen(open: boolean): void {
   if (!els.appearanceMenu || !els.appearanceButton) return;
   els.appearanceMenu.hidden = !open;
   els.appearanceButton.setAttribute("aria-expanded", String(open));
@@ -2924,7 +3264,7 @@ function setAppearanceMenuOpen(open) {
   }
 }
 
-function setAppearanceMode(mode) {
+function setAppearanceMode(mode: unknown): void {
   const normalized = normalizeAppearanceMode(mode);
   sessionAppearanceMode = normalized;
   try {
@@ -2966,7 +3306,7 @@ function renderCharacter() {
   const avatarSrc = getAvatarSrc(state.character.role, state.character.variant);
   els.characterName.textContent = state.character.name;
   els.characterClass.textContent = `Level ${state.character.level} ${role.name} / ${state.character.personality}`;
-  if (els.publicHandle) els.publicHandle.textContent = gatewayRuntime.profile?.handle || (globalThis.QuestForgeFirebase?.getUser?.() ? i18n.t("account.handleMissing") : i18n.t("account.loggedOut"));
+  if (els.publicHandle) els.publicHandle.textContent = String(gatewayRuntime.profile?.handle || (globalThis.QuestForgeFirebase?.getUser?.() ? i18n.t("account.handleMissing") : i18n.t("account.loggedOut")));
   els.hpValue.textContent = `${state.character.hp}/${state.character.maxHp}`;
   els.xpValue.textContent = `${state.character.xp}/${state.character.nextXp}`;
   els.gemValue.textContent = `${state.character.gems}`;
@@ -2982,7 +3322,7 @@ function renderCharacter() {
 }
 
 function renderCharacterCustomizer() {
-  els.gemBalance.textContent = state.character.gems;
+  els.gemBalance.textContent = String(state.character.gems);
   if (!els.variantSelect.options.length) {
     avatarVariants.forEach((variant) => {
       els.variantSelect.appendChild(new Option(variant.name, variant.id));
@@ -3029,7 +3369,7 @@ function renderCharacterCustomizer() {
 }
 
 function renderShop() {
-  els.shopGemBalance.textContent = state.character.gems;
+  els.shopGemBalance.textContent = String(state.character.gems);
   els.shopGrid.innerHTML = "";
   shopItems.forEach((item) => {
     const owned = state.character.ownedItems.includes(item.id);
@@ -3059,12 +3399,12 @@ function renderShop() {
         <button type="button">${action}</button>
       </footer>
     `;
-    card.querySelector("button").addEventListener("click", () => buyOrEquipItem(item.id));
+    card.querySelector<HTMLButtonElement>("button")?.addEventListener("click", () => buyOrEquipItem(item.id));
     els.shopGrid.appendChild(card);
   });
 }
 
-function isRecommendedShopItem(item) {
+function isRecommendedShopItem(item: ShopItem): boolean {
   const role = getRole(state.character.role);
   const personality = state.character.personality || "";
   if (item.affinity?.includes(role.name)) return true;
@@ -3073,13 +3413,13 @@ function isRecommendedShopItem(item) {
   return false;
 }
 
-function updateAvatarMotion(image, className) {
+function updateAvatarMotion(image: AppElement, className: string): void {
   if (!image) return;
   image.classList.remove(...motionOptions.map((motion) => motion.className));
   image.classList.add(className);
 }
 
-function renderEquipmentEffects() {
+function renderEquipmentEffects(): void {
   const equippedItems = getEquippedItems();
   const stages = [els.avatarStage, els.avatarPreviewStage].filter(Boolean);
   const effectClasses = shopItems.map((item) => `has-${item.id}`);
@@ -3094,10 +3434,10 @@ function renderEquipmentEffects() {
     stage.classList.remove(...effectClasses);
     stage.classList.toggle("is-calibrating", Boolean(selectedEquipmentId && els.equipmentDragToggle?.checked));
     equippedItems.forEach((item) => stage.classList.add(`has-${item.id}`));
-    stage.querySelectorAll("[data-item-layer]").forEach((layer) => {
+    stage.querySelectorAll<AppElement>("[data-item-layer]").forEach((layer) => {
       const itemId = layer.dataset.itemLayer;
       const item = shopItems.find((entry) => entry.id === itemId);
-      const equipped = equippedIds.has(itemId);
+      const equipped = Boolean(itemId && equippedIds.has(itemId));
       layer.dataset.equipped = String(equipped);
       layer.dataset.selected = String(stage === els.avatarPreviewStage && itemId === selectedEquipmentId);
       if (item?.asset) {
@@ -3109,17 +3449,17 @@ function renderEquipmentEffects() {
   renderEquipmentChips(els.previewEquipChips, equippedItems);
 }
 
-function getEquippedItems() {
+function getEquippedItems(): ShopItem[] {
   return state.character.equippedItems
     .map((itemId) => shopItems.find((item) => item.id === itemId))
-    .filter(Boolean);
+    .filter((item): item is ShopItem => Boolean(item));
 }
 
-function getAdjustableEquipmentItems(items = getEquippedItems()) {
+function getAdjustableEquipmentItems(items: ShopItem[] = getEquippedItems()): ShopItem[] {
   return items.filter((item) => item.asset);
 }
 
-function getEquipmentPlacement(item) {
+function getEquipmentPlacement(item: ShopItem): { x: number; y: number; size: number } {
   const base = equipmentBasePlacements[item.id] || { x: 50, y: 50, size: 30 };
   const role = equipmentRolePlacements[state.character.role]?.[item.id] || {};
   const variant = equipmentVariantPlacements[state.character.variant]?.[item.id] || {};
@@ -3131,7 +3471,7 @@ function getEquipmentPlacement(item) {
   };
 }
 
-function applyEquipmentPlacement(layer, item) {
+function applyEquipmentPlacement(layer: AppElement, item: ShopItem): void {
   const placement = getEquipmentPlacement(item);
   layer.style.setProperty("--eq-x", `${placement.x}%`);
   layer.style.setProperty("--eq-y", `${placement.y}%`);
@@ -3139,11 +3479,11 @@ function applyEquipmentPlacement(layer, item) {
   layer.title = item.name;
 }
 
-function getEquipmentOffset(itemId) {
+function getEquipmentOffset(itemId: string): EquipmentOffset {
   return state.character.equipmentOffsets?.[itemId] || { x: 0, y: 0, scale: 0 };
 }
 
-function updateEquipmentOffset(itemId, partial) {
+function updateEquipmentOffset(itemId: string, partial: Partial<EquipmentOffset>): void {
   if (!itemId) return;
   state.character.equipmentOffsets = {
     ...(state.character.equipmentOffsets || {}),
@@ -3177,12 +3517,12 @@ function renderEquipmentCalibrator() {
   }
   els.equipmentAdjustSelect.value = selectedEquipmentId;
   const offset = getEquipmentOffset(selectedEquipmentId);
-  els.equipmentOffsetX.value = offset.x || 0;
-  els.equipmentOffsetY.value = offset.y || 0;
-  els.equipmentScale.value = offset.scale || 0;
+  els.equipmentOffsetX.value = String(offset.x || 0);
+  els.equipmentOffsetY.value = String(offset.y || 0);
+  els.equipmentScale.value = String(offset.scale || 0);
 }
 
-function renderEquipmentChips(target, items) {
+function renderEquipmentChips(target: AppElement, items: ShopItem[]): void {
   if (!target) return;
   target.innerHTML = "";
   if (!items.length) {
@@ -3200,8 +3540,8 @@ function renderEquipmentChips(target, items) {
   });
 }
 
-function renderTasks() {
-  const buckets = {
+function renderTasks(): void {
+  const buckets: Record<Quest["kind"], AppElement> = {
     habit: els.habitList,
     daily: els.dailyList,
     todo: els.todoList,
@@ -3219,7 +3559,7 @@ function renderTasks() {
   renderCalendarAgenda();
   renderArchiveDialog();
 
-  const visibleCounts = { habit: 0, daily: 0, todo: 0, reward: 0 };
+  const visibleCounts: Record<Quest["kind"], number> = { habit: 0, daily: 0, todo: 0, reward: 0 };
   [...state.tasks].filter(taskMatchesFilter).sort(compareTasks).forEach((task) => {
     if (!buckets[task.kind]) return;
     buckets[task.kind].appendChild(createTaskCard(task));
@@ -3227,25 +3567,26 @@ function renderTasks() {
   });
 
   Object.entries(buckets).forEach(([kind, bucket]) => {
-    if (visibleCounts[kind] === 0) {
-      bucket.appendChild(createEmptyTaskMessage(kind));
+    const taskKind = kind as Quest["kind"];
+    if (visibleCounts[taskKind] === 0) {
+      bucket.appendChild(createEmptyTaskMessage(taskKind));
     }
   });
 }
 
-function questTreeChildren(taskId, includeArchived) {
+function questTreeChildren(taskId: string, includeArchived: boolean): Quest[] {
   return state.tasks
     .filter((task) => task.parentQuestId === taskId && taskTreeEligible(task) && (includeArchived || task.lifecycleState !== "archived"))
     .sort(compareTasks);
 }
 
-function questTreeSummary(taskId, includeArchived) {
+function questTreeSummary(taskId: string, includeArchived: boolean): { total: number; completed: number; progress: number } {
   const children = questTreeChildren(taskId, includeArchived);
   const completed = children.filter((task) => ["completed", "archived"].includes(task.lifecycleState) || task.done).length;
   return { total: children.length, completed, progress: children.length ? Math.round((completed / children.length) * 100) : 0 };
 }
 
-function renderQuestTree() {
+function renderQuestTree(): void {
   if (!els.questTreeList) return;
   const includeArchived = Boolean(els.questTreeIncludeArchived?.checked);
   const roots = state.tasks
@@ -3261,7 +3602,7 @@ function renderQuestTree() {
   }
   const expanded = new Set(JSON.parse(localStorage.getItem("questforge-tree-expanded") || "[]"));
   const persistExpanded = () => localStorage.setItem("questforge-tree-expanded", JSON.stringify([...expanded]));
-  const buildNode = (task, depth = 0) => {
+  const buildNode = (task: Quest, depth = 0): HTMLElement => {
     const children = questTreeChildren(task.id, includeArchived);
     const summary = questTreeSummary(task.id, includeArchived);
     const row = document.createElement("div");
@@ -3318,7 +3659,7 @@ function renderQuestTree() {
   roots.forEach((task) => els.questTreeList.appendChild(buildNode(task)));
 }
 
-function renderCalendarAgenda() {
+function renderCalendarAgenda(): void {
   if (!els.calendarAgenda || !els.calendarAgendaList) return;
   const connected = gatewayRuntime.integrations?.some((item) => item.id === "google-calendar" && item.status === "connected");
   els.calendarAgenda.hidden = !connected;
@@ -3340,15 +3681,18 @@ function renderCalendarAgenda() {
     return;
   }
   events.forEach((event) => {
+    const eventRecord = asJsonRecord(event);
     const item = document.createElement("article");
     item.className = "calendar-agenda-item";
     const time = document.createElement("time");
-    time.textContent = event.allDay ? "終日" : `${event.startAt.slice(11, 16)}-${event.endAt.slice(11, 16)}`;
+    const startAt = String(eventRecord.startAt || "");
+    const endAt = String(eventRecord.endAt || "");
+    time.textContent = eventRecord.allDay ? "終日" : `${startAt.slice(11, 16)}-${endAt.slice(11, 16)}`;
     const copy = document.createElement("div");
     const title = document.createElement("strong");
-    title.textContent = event.title;
+    title.textContent = String(eventRecord.title || "");
     const meta = document.createElement("span");
-    meta.textContent = event.calendarName || "Google Calendar";
+    meta.textContent = String(eventRecord.calendarName || "Google Calendar");
     copy.append(title, meta);
     const convert = document.createElement("button");
     convert.type = "button";
@@ -3357,10 +3701,10 @@ function renderCalendarAgenda() {
     convert.addEventListener("click", async () => {
       convert.disabled = true;
       try {
-        await gatewayFetch(`/v1/calendar/events/${encodeURIComponent(event.externalId)}/convert`, { method: "POST" });
+        await gatewayFetch(`/v1/calendar/events/${encodeURIComponent(String(eventRecord.externalId || ""))}/convert`, { method: "POST" });
         showToast("予定からQuestを作成しました。");
       } catch (error) {
-        showToast(error.message, { duration: 6000 });
+        showToast((error as Error).message, { duration: 6000 });
       } finally { convert.disabled = false; }
     });
     item.append(time, copy, convert);
@@ -3368,7 +3712,7 @@ function renderCalendarAgenda() {
   });
 }
 
-function renderTaskSummary() {
+function renderTaskSummary(): void {
   if (!els.taskSummaryRow) return;
   const today = currentDateText();
   const activeTasks = state.tasks.filter((task) => task.lifecycleState === "active");
@@ -3386,7 +3730,7 @@ function renderTaskSummary() {
   `;
 }
 
-function taskMatchesFilter(task) {
+function taskMatchesFilter(task: Quest): boolean {
   if (["completed", "archived"].includes(task.lifecycleState)) return false;
   if (state.taskFilter === "today") {
     return task.kind !== "reward" && task.dueDate === currentDateText();
@@ -3395,7 +3739,7 @@ function taskMatchesFilter(task) {
     return isOverdue(task);
   }
   if (state.taskFilter === "upcoming") {
-    return task.kind !== "reward" && !task.done && task.dueDate && daysUntil(task.dueDate) >= 0 && daysUntil(task.dueDate) <= 7;
+    return Boolean(task.kind !== "reward" && !task.done && task.dueDate && daysUntil(task.dueDate) >= 0 && daysUntil(task.dueDate) <= 7);
   }
   if (state.taskFilter === "undone") {
     return task.kind === "reward" || !task.done;
@@ -3403,17 +3747,17 @@ function taskMatchesFilter(task) {
   return true;
 }
 
-function getArchivedTasks() {
+function getArchivedTasks(): Quest[] {
   return state.tasks
     .filter((task) => ["completed", "archived"].includes(task.lifecycleState))
     .sort((a, b) => archiveSortKey(b).localeCompare(archiveSortKey(a)));
 }
 
-function archiveSortKey(task) {
+function archiveSortKey(task: Quest): string {
   return task.lastCompletedDate || task.updatedAt || task.createdAt || "";
 }
 
-function renderArchiveDialog() {
+function renderArchiveDialog(): void {
   if (!els.archiveList || !els.archiveButton || !els.archiveCount) return;
   const tasks = getArchivedTasks();
   els.archiveCount.textContent = String(tasks.length);
@@ -3433,7 +3777,7 @@ function renderArchiveDialog() {
   });
 }
 
-function createArchiveTaskCard(task) {
+function createArchiveTaskCard(task: Quest): HTMLElement {
   const card = document.createElement("article");
   card.className = "archive-task-card";
 
@@ -3484,7 +3828,7 @@ function createArchiveTaskCard(task) {
   return card;
 }
 
-function formatArchiveCompletion(task) {
+function formatArchiveCompletion(task: Quest): string {
   const dateText = task.lastCompletedDate || "";
   if (!dateText) return i18n.t("archive.completionMissing");
   const date = new Date(`${dateText}T00:00:00`);
@@ -3510,7 +3854,7 @@ function closeArchiveDialog() {
   }
 }
 
-function restoreArchivedTask(taskId) {
+function restoreArchivedTask(taskId: string): void {
   const task = state.tasks.find((item) => item.id === taskId);
   if (!task || !["completed", "archived"].includes(task.lifecycleState)) return;
   task.done = false;
@@ -3525,7 +3869,7 @@ function restoreArchivedTask(taskId) {
   showToast(`「${task.title}」を未完了に戻しました。`, { duration: 3200 });
 }
 
-function createEmptyTaskMessage(kind) {
+function createEmptyTaskMessage(kind: string): HTMLElement {
   const item = document.createElement("div");
   item.className = "empty-task";
   const message = document.createElement("p");
@@ -3542,7 +3886,7 @@ function createEmptyTaskMessage(kind) {
   return item;
 }
 
-function compareTasks(a, b) {
+function compareTasks(a: Quest, b: Quest): number {
   if (state.sortMode === "dueDate") {
     return compareDueDate(a, b) || compareCreated(a, b);
   }
@@ -3558,18 +3902,18 @@ function compareTasks(a, b) {
   return compareCreated(a, b);
 }
 
-function compareDueDate(a, b) {
+function compareDueDate(a: Quest, b: Quest): number {
   if (!a.dueDate && !b.dueDate) return 0;
   if (!a.dueDate) return 1;
   if (!b.dueDate) return -1;
   return a.dueDate.localeCompare(b.dueDate);
 }
 
-function compareCreated(a, b) {
+function compareCreated(a: Quest, b: Quest): number {
   return a.createdAt.localeCompare(b.createdAt);
 }
 
-function createTaskCard(task) {
+function createTaskCard(task: Quest): HTMLElement {
   const card = document.createElement("article");
   card.className = "task-card";
   card.classList.add(`${task.kind}-card`);
@@ -3740,12 +4084,12 @@ function createTaskCard(task) {
         await gatewayFetch(`/v1/quests/${encodeURIComponent(task.id)}/google-tasks`, { method: "POST" });
         showToast("Google Tasksへ追加しました。");
       } catch (error) {
-        showToast(error.message, { duration: 6000 });
+        showToast((error as Error).message, { duration: 6000 });
       } finally { exportButton.disabled = false; }
     });
     card.appendChild(exportButton);
   }
-  if (task.kind === "todo" && tasksConnected && ["conflict", "remote_missing"].includes(googleTasksLink?.syncStatus)) {
+  if (task.kind === "todo" && tasksConnected && googleTasksLink && ["conflict", "remote_missing"].includes(googleTasksLink.syncStatus)) {
     const conflictActions = document.createElement("div");
     conflictActions.className = "task-external-conflict";
     const localButton = document.createElement("button");
@@ -3757,14 +4101,14 @@ function createTaskCard(task) {
     remoteButton.type = "button";
     remoteButton.textContent = "Google側を採用";
     remoteButton.hidden = googleTasksLink.syncStatus === "remote_missing";
-    const resolve = async (strategy) => {
+    const resolve = async (strategy: "local" | "remote"): Promise<void> => {
       localButton.disabled = true;
       remoteButton.disabled = true;
       try {
         await gatewayFetch(`/v1/quests/${encodeURIComponent(task.id)}/google-tasks/resolve`, { method: "POST", body: JSON.stringify({ strategy }) });
         showToast(strategy === "local" ? "QuestForge側の内容をGoogleへ反映しました。" : "Google側の内容を反映しました。");
       } catch (error) {
-        showToast(error.message, { duration: 6000 });
+        showToast((error as Error).message, { duration: 6000 });
       } finally {
         localButton.disabled = false;
         remoteButton.disabled = false;
@@ -3777,7 +4121,7 @@ function createTaskCard(task) {
   }
 
   const focusRuntime = gatewayRuntime.integrations?.find((item) => item.id === "toggl-focus" && item.status === "connected");
-  const focusSettings = focusRuntime?.account?.settings || {};
+  const focusSettings = asJsonRecord(focusRuntime?.account?.settings);
   const focusLink = (task.externalLinks || []).find((link) => link.service === "toggl-focus"
     && (link.type === "task" || link.sourceType === "focus.task")
     && (!link.organizationId || (link.organizationId === focusSettings.organizationId && link.workspaceId === focusSettings.workspaceId)));
@@ -3812,7 +4156,7 @@ function createTaskCard(task) {
         timer.disabled = true;
         try {
           const status = await gatewayFetch("/v1/integrations/toggl-focus/tracking");
-          const current = status.tracking;
+          const current = asJsonRecord(status.tracking);
           if (current?.taskId === focusLink.externalId) {
             const preview = await gatewayFetch("/v1/integrations/toggl-focus/tracking/stop", { method: "POST", body: JSON.stringify({ expectedEntryId: current.id, dryRun: true }) });
             if (preview.action === "stop" && window.confirm("このFocusタイマーを停止しますか？")) {
@@ -3822,8 +4166,9 @@ function createTaskCard(task) {
           } else {
             const preview = await gatewayFetch("/v1/integrations/toggl-focus/tracking/start", { method: "POST", body: JSON.stringify({ questId: task.id, dryRun: true }) });
             const expectedCurrentEntryId = preview.expectedCurrentEntryId || "";
+            const currentPreview = asJsonRecord(preview.current);
             const message = preview.action === "confirmation_required"
-              ? `「${preview.current.taskName || "別の作業"}」のタイマーを止めて開始しますか？`
+              ? `「${String(currentPreview.taskName || "別の作業")}」のタイマーを止めて開始しますか？`
               : `「${task.title}」のFocusタイマーを開始しますか？`;
             if (window.confirm(message)) {
               await gatewayFetch("/v1/integrations/toggl-focus/tracking/start", { method: "POST", body: JSON.stringify({ questId: task.id, expectedCurrentEntryId, dryRun: false }) });
@@ -3852,52 +4197,52 @@ function createTaskCard(task) {
   return card;
 }
 
-function formatDueDate(dateText) {
+function formatDueDate(dateText: string): string {
   const date = new Date(`${dateText}T00:00:00`);
   const shortDate = i18n?.formatDate?.(date, { year: undefined, month: "numeric", day: "numeric" }) || `${date.getMonth() + 1}/${date.getDate()}`;
   return i18n.t("task.due", { date: shortDate });
 }
 
-function isOverdue(task) {
+function isOverdue(task: Quest): boolean {
   if (!task.dueDate || task.done || task.kind === "reward") return false;
   return task.dueDate < currentDateText();
 }
 
-function currentDateText() {
+function currentDateText(): string {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
-function formatCurrentDateLabel() {
+function formatCurrentDateLabel(): string {
   const today = new Date(`${currentDateText()}T00:00:00`);
   return i18n?.formatDate?.(today) || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
-function nextDueDateForTask(task, fromDateText) {
+function nextDueDateForTask(task: Quest, fromDateText: string): string {
   return core.nextDueDateForTask(task, fromDateText);
 }
 
-function addDays(date, amount) {
+function addDays(date: Date, amount: number): Date {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
   return next;
 }
 
-function daysInMonth(date) {
+function daysInMonth(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
-function formatDateInput(date) {
+function formatDateInput(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function daysUntil(dateText) {
+function daysUntil(dateText: string): number {
   const today = new Date(`${currentDateText()}T00:00:00`);
   const target = new Date(`${dateText}T00:00:00`);
-  return Math.round((target - today) / 86400000);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
-function parseTags(value) {
+function parseTags(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 6);
   }
@@ -3908,30 +4253,30 @@ function parseTags(value) {
     .slice(0, 6);
 }
 
-function formatLogTime(dateText) {
+function formatLogTime(dateText: string): string {
   const date = new Date(dateText);
   if (Number.isNaN(date.getTime())) return "--:--";
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-function pill(text) {
+function pill(text: string): HTMLSpanElement {
   const item = document.createElement("span");
   item.className = "pill";
   item.textContent = text;
   return item;
 }
 
-function getSelectedIntegration() {
+function getSelectedIntegration(): IntegrationAdapter {
   return integrationAdapters.find((adapter) => adapter.id === state.integrations.selectedService) || integrationAdapters[0];
 }
 
-function getGatewayUrl() {
+function getGatewayUrl(): string {
   const stored = localStorage.getItem(gatewayStorageKey) || "";
   if (stored) return stored.replace(/\/$/, "");
   return productionGatewayUrl;
 }
 
-async function gatewayFetch(path, options = {}) {
+async function gatewayFetch(path: string, options: GatewayFetchOptions = {}): Promise<JsonRecord> {
   const base = getGatewayUrl();
   if (!base) throw new Error("Gateway URLを設定してください。");
   const token = await globalThis.QuestForgeFirebase?.getIdToken?.();
@@ -3943,48 +4288,50 @@ async function gatewayFetch(path, options = {}) {
       ...(options.headers || {}),
     },
   });
-  const body = response.status === 204 ? null : await response.json().catch(() => null);
+  const body = response.status === 204 ? {} : asJsonRecord(await response.json().catch(() => null));
   if (!response.ok) {
-    const error = new Error(body?.error?.message || `Gateway HTTP ${response.status}`);
-    error.code = body?.error?.code || "gateway_error";
-    error.status = response.status;
+    const error = Object.assign(new Error(String(asJsonRecord(body.error).message || `Gateway HTTP ${response.status}`)), {
+      code: String(asJsonRecord(body.error).code || "gateway_error"),
+      status: response.status,
+    }) as AppError;
     throw error;
   }
   return body;
 }
 
-function describeIntegrationError(error) {
-  if (error?.code === "provider_not_configured") {
+function describeIntegrationError(error: unknown): string {
+  const appError = error as Partial<AppError>;
+  if (appError?.code === "provider_not_configured") {
     return "この連携は管理者設定がまだ完了していません。OAuth設定を確認してください。";
   }
-  if (error?.code === "integration_configuration_required") {
+  if (appError?.code === "integration_configuration_required") {
     return "同期対象を選んでから設定を保存してください。";
   }
-  if (error?.code === "integration_not_connected") {
+  if (appError?.code === "integration_not_connected") {
     return "先にこのサービスを接続してください。";
   }
-  if (error?.code === "reconnect_required") {
+  if (appError?.code === "reconnect_required") {
     return "外部サービスの許可が切れています。再接続してください。";
   }
-  if (error?.code === "invalid_focus_api_key") {
+  if (appError?.code === "invalid_focus_api_key") {
     return "Toggl FocusのPersonal API keyを確認してください。toggl_sk_で始まる値が必要です。";
   }
-  if (["incomplete_focus_configuration", "invalid_focus_organizationId", "invalid_focus_workspaceId"].includes(error?.code)) {
+  if (["incomplete_focus_configuration", "invalid_focus_organizationId", "invalid_focus_workspaceId"].includes(appError?.code || "")) {
     return "Toggl Focusの組織IDとWorkspace IDは数字で入力してください。";
   }
-  if (error?.code === "focus_task_not_linked") {
+  if (appError?.code === "focus_task_not_linked") {
     return "先にこのQuestのFocusタスクを作成してください。";
   }
-  if (error?.code === "focus_quest_not_eligible") {
+  if (appError?.code === "focus_quest_not_eligible") {
     return "Focusへ送れるのは、未完了でアーカイブされていないTo Doまたは日課です。";
   }
-  if (error?.code === "time_entry_already_attributed") {
+  if (appError?.code === "time_entry_already_attributed") {
     return "このFocus実績はすでに別のQuestへ取り込まれています。";
   }
-  return error?.message || "連携処理に失敗しました。";
+  return appError?.message || "連携処理に失敗しました。";
 }
 
-function setGatewayStatus(status, message) {
+function setGatewayStatus(status: string, message: string): void {
   gatewayRuntime.status = status;
   if (els.apiGatewayStatus) {
     els.apiGatewayStatus.dataset.status = status;
@@ -3993,7 +4340,7 @@ function setGatewayStatus(status, message) {
   if (els.integrationModeLabel) els.integrationModeLabel.textContent = i18n.t(status === "online" ? "integration.mode.online" : "integration.mode.preview");
 }
 
-async function refreshGatewayRuntime() {
+async function refreshGatewayRuntime(): Promise<void> {
   const base = getGatewayUrl();
   if (els.gatewayUrlInput) els.gatewayUrlInput.value = base;
   if (els.mcpEndpointInput) els.mcpEndpointInput.value = `${base}/mcp`;
@@ -4023,9 +4370,9 @@ async function refreshGatewayRuntime() {
       gatewayFetch("/v1/webhooks"),
       gatewayFetch("/v1/plugins"),
     ]);
-    gatewayRuntime.integrations = integrations.integrations || [];
-    gatewayRuntime.webhooks = webhooks.webhooks || [];
-    gatewayRuntime.plugins = plugins.plugins || [];
+    gatewayRuntime.integrations = Array.isArray(integrations.integrations) ? integrations.integrations : [];
+    gatewayRuntime.webhooks = Array.isArray(webhooks.webhooks) ? webhooks.webhooks : [];
+    gatewayRuntime.plugins = Array.isArray(plugins.plugins) ? plugins.plugins : [];
     setGatewayStatus("online", i18n.t("gateway.online"));
     if (els.mcpConnectionNote) els.mcpConnectionNote.textContent = i18n.t("gateway.mcpConnected");
     els.gatewayOutput.textContent = `${health.service} ${health.version}\nREST: ${base}/v1/quests\nMCP: ${base}/mcp\nOAuth: ${base}/.well-known/oauth-authorization-server`;
@@ -4049,12 +4396,13 @@ async function refreshGatewayRuntime() {
     await flushFocusAutoSyncQueue().catch(() => {});
   } catch (error) {
     setGatewayStatus("error", i18n.t("gateway.error"));
-    if (els.mcpConnectionNote) els.mcpConnectionNote.textContent = i18n.t("gateway.checkFailed", { message: error.message });
-    if (els.gatewayOutput) els.gatewayOutput.textContent = error.message;
+    const message = (error as Error).message;
+    if (els.mcpConnectionNote) els.mcpConnectionNote.textContent = i18n.t("gateway.checkFailed", { message });
+    if (els.gatewayOutput) els.gatewayOutput.textContent = message;
   }
 }
 
-async function refreshCalendarSchedule() {
+async function refreshCalendarSchedule(): Promise<void> {
   if (!externalOAuthEnabled) {
     gatewayRuntime.calendarEvents = [];
     renderCalendarAgenda();
@@ -4067,7 +4415,7 @@ async function refreshCalendarSchedule() {
     return;
   }
   const schedule = await gatewayFetch(`/v1/calendar/schedule?date=${encodeURIComponent(currentDateText())}`);
-  gatewayRuntime.calendarEvents = schedule.events || [];
+  gatewayRuntime.calendarEvents = asJsonRecordArray(schedule.events);
   renderCalendarAgenda();
 }
 
@@ -4083,15 +4431,16 @@ function renderRuntimeWebhooks() {
     const item = document.createElement("article");
     item.className = "runtime-list-item";
     const title = document.createElement("strong");
-    title.textContent = hook.url;
+    title.textContent = String(hook.url || "");
     const meta = document.createElement("p");
-    meta.textContent = `${(hook.events || []).join(", ")} / ${hook.enabled ? "有効" : "停止"}`;
+    const events = Array.isArray(hook.events) ? hook.events.map(String).join(", ") : "";
+    meta.textContent = `${events} / ${hook.enabled ? "有効" : "停止"}`;
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "secondary-button";
     remove.textContent = "削除";
     remove.addEventListener("click", async () => {
-      await gatewayFetch(`/v1/webhooks/${encodeURIComponent(hook.id)}`, { method: "DELETE" });
+      await gatewayFetch(`/v1/webhooks/${encodeURIComponent(String(hook.id || ""))}`, { method: "DELETE" });
       gatewayRuntime.webhooks = hooks.filter((entry) => entry.id !== hook.id);
       renderRuntimeWebhooks();
     });
@@ -4100,7 +4449,7 @@ function renderRuntimeWebhooks() {
   });
 }
 
-function renderRuntimePlugins() {
+function renderRuntimePlugins(): void {
   if (!els.pluginList) return;
   els.pluginList.innerHTML = "";
   const plugins = gatewayRuntime.plugins || [];
@@ -4109,30 +4458,32 @@ function renderRuntimePlugins() {
     const item = document.createElement("article");
     item.className = "runtime-list-item";
     const title = document.createElement("strong");
-    title.textContent = plugin.manifest?.name || plugin.id;
+    const manifest = asJsonRecord(plugin.manifest);
+    title.textContent = String(manifest.name || plugin.id || "");
     const meta = document.createElement("p");
-    meta.textContent = (plugin.manifest?.permissions || []).join(", ");
+    meta.textContent = Array.isArray(manifest.permissions) ? manifest.permissions.map(String).join(", ") : "";
     item.append(title, meta);
     els.pluginList.appendChild(item);
   });
   renderPluginSlots(plugins);
 }
 
-function renderPluginSlots(plugins) {
-  document.querySelectorAll("[data-plugin-slot]").forEach((host) => {
-    const content = host.querySelector(".plugin-slot-content") || host;
-    content.querySelectorAll(".plugin-frame").forEach((frame) => frame.remove());
+function renderPluginSlots(plugins: GatewayRecord[]): void {
+  qa<AppElement>("[data-plugin-slot]").forEach((host) => {
+    const content = (host.querySelector<AppElement>(".plugin-slot-content") || host);
+    content.querySelectorAll<HTMLIFrameElement>(".plugin-frame").forEach((frame) => frame.remove());
     let mounted = 0;
     plugins.forEach((plugin) => {
-      (plugin.manifest?.uiSlots || []).filter((slot) => slot.slot === host.dataset.pluginSlot).forEach((slot) => {
+      const manifest = asJsonRecord(plugin.manifest);
+      asJsonRecordArray(manifest.uiSlots).filter((slot) => slot.slot === host.dataset.pluginSlot).forEach((slot) => {
         const frame = document.createElement("iframe");
         frame.className = "plugin-frame";
-        frame.title = `${plugin.manifest.name} / ${slot.slot}`;
+        frame.title = `${String(manifest.name || plugin.id || "Plugin")} / ${String(slot.slot || "")}`;
         frame.sandbox = "allow-scripts";
         frame.referrerPolicy = "no-referrer";
-        frame.src = slot.entry;
-        frame.dataset.pluginId = plugin.id;
-        frame.dataset.permissions = JSON.stringify(plugin.manifest.permissions || []);
+        frame.src = String(slot.entry || "");
+        frame.dataset.pluginId = String(plugin.id || "");
+        frame.dataset.permissions = JSON.stringify(Array.isArray(manifest.permissions) ? manifest.permissions : []);
         content.appendChild(frame);
         mounted += 1;
       });
@@ -4157,13 +4508,13 @@ async function previewLiveIntegration(run = false) {
   if (!run) {
     gatewayRuntime.integrationPreviewed[adapter.id] = true;
     els.syncPreviewList.innerHTML = "";
-    (result.preview || []).forEach((record) => {
+    asJsonRecordArray(result.preview).forEach((record) => {
       const item = document.createElement("article");
       item.className = "sync-preview-card";
       const title = document.createElement("strong");
-      title.textContent = record.title || record.content || "External record";
+      title.textContent = String(record.title || record.content || "External record");
       const detail = document.createElement("p");
-      detail.textContent = [record.action, record.reason, record.dueDate || record.startAt, record.sourceType].filter(Boolean).join(" / ");
+      detail.textContent = [record.action, record.reason, record.dueDate || record.startAt, record.sourceType].filter(Boolean).map(String).join(" / ");
       item.append(title, detail);
       els.syncPreviewList.appendChild(item);
     });
@@ -4178,35 +4529,38 @@ async function previewLiveIntegration(run = false) {
   await refreshGatewayRuntime();
 }
 
-window.addEventListener("message", async (event) => {
-  const frame = [...document.querySelectorAll(".plugin-frame")].find((item) => item.contentWindow === event.source);
-  if (!frame || event.data?.type !== "questforge:plugin-request") return;
-  const permissions = JSON.parse(frame.dataset.permissions || "[]");
-  const actions = {
+window.addEventListener("message", async (event: MessageEvent) => {
+  const frame = qa<HTMLIFrameElement>(".plugin-frame").find((item) => item.contentWindow === event.source);
+  if (!frame || !event.data || typeof event.data !== "object" || event.data.type !== "questforge:plugin-request") return;
+  const parsedPermissions: unknown = JSON.parse(frame.dataset.permissions || "[]");
+  const permissions = Array.isArray(parsedPermissions) ? parsedPermissions.map(String) : [];
+  const actions: Record<string, { permission: string; path: string }> = {
     "quests.list": { permission: "quests:read", path: "/v1/quests" },
     "character.get": { permission: "character:read", path: "/v1/character" },
     "events.list": { permission: "events:read", path: "/v1/events" },
   };
-  const action = actions[event.data.action];
-  let payload;
+  const action = actions[String(event.data.action)];
+  let payload: JsonRecord;
   try {
-    if (!action || !permissions.includes(action.permission)) throw new Error("拡張機能に必要な権限がありません。");
+    if (!action || !permissions.some((permission) => permission === action.permission)) throw new Error("拡張機能に必要な権限がありません。");
     payload = { ok: true, result: await gatewayFetch(action.path) };
   } catch (error) {
-    payload = { ok: false, error: error.message };
+    payload = { ok: false, error: (error as Error).message };
   }
-  event.source.postMessage({ type: "questforge:plugin-response", requestId: event.data.requestId, ...payload }, "*");
+  if (event.source && "postMessage" in event.source) {
+    event.source.postMessage({ type: "questforge:plugin-response", requestId: event.data.requestId, ...payload }, { targetOrigin: "*" });
+  }
 });
 
-function integrationResourceConfigured(adapter, runtime) {
-  const settings = runtime?.account?.settings || {};
+function integrationResourceConfigured(adapter: IntegrationAdapter, runtime: GatewayRecord): boolean {
+  const settings = asJsonRecord(runtime?.account?.settings);
   if (adapter.id === "google-calendar") return Array.isArray(settings.calendarIds) && settings.calendarIds.length > 0;
   if (adapter.id === "google-tasks") return Boolean(settings.taskListId);
   if (adapter.id === "notion") return Boolean(settings.parentPageId);
   return false;
 }
 
-function renderIntegrationOnboarding() {
+function renderIntegrationOnboarding(): void {
   if (!els.integrationOnboarding) return;
   const user = globalThis.QuestForgeFirebase?.getUser?.();
   const adapter = getSelectedIntegration();
@@ -4216,7 +4570,7 @@ function renderIntegrationOnboarding() {
   const resourceConfigured = connected && integrationResourceConfigured(adapter, runtime);
   const previewed = Boolean(gatewayRuntime.integrationPreviewed?.[adapter.id]);
   const publicBetaPaused = !externalOAuthEnabled;
-  const steps = [
+  const steps: Array<[AppElement, boolean]> = [
     [els.integrationStepLogin, Boolean(user)],
     [els.integrationStepConnect, publicBetaPaused ? false : Boolean(user && configurationReady && connected)],
     [els.integrationStepResource, publicBetaPaused ? false : Boolean(resourceConfigured)],
@@ -4287,7 +4641,7 @@ function renderIntegrationHub() {
       </div>
       <button type="button">${i18n.t(adapter.id === selected.id ? "integration.selected" : "integration.select")}</button>
     `;
-    card.querySelector("button").addEventListener("click", () => {
+    card.querySelector<HTMLButtonElement>("button")?.addEventListener("click", () => {
       state.integrations.selectedService = adapter.id;
       state.integrations.direction = adapter.recommendedDirection;
       render();
@@ -4302,31 +4656,33 @@ function renderIntegrationHub() {
   renderIntegrationOnboarding();
 }
 
-function integrationStatusLabel(status) {
+function integrationStatusLabel(status: string): string {
   const translated = i18n.t(`integration.status.${status}`);
   return translated === `integration.status.${status}` ? status : translated;
 }
 
-function localizedIntegrationField(adapter, field) {
+function localizedIntegrationField(adapter: IntegrationAdapter, field: string): string {
   const translated = i18n.t(`service.${adapter.id}.${field}`);
-  return translated === `service.${adapter.id}.${field}` ? adapter[field] : translated;
+  return translated === `service.${adapter.id}.${field}` ? String((adapter as unknown as JsonRecord)[field] || "") : translated;
 }
 
-function selectedRuntimeIntegration() {
+function selectedRuntimeIntegration(): GatewayIntegration {
   const selected = getSelectedIntegration();
   return gatewayRuntime.integrations?.find((item) => item.id === selected.id) || { id: selected.id, status: selected.status };
 }
 
-async function loadIntegrationResources(service) {
+async function loadIntegrationResources(service: string): Promise<JsonRecord[]> {
   const result = await gatewayFetch(`/v1/integrations/${encodeURIComponent(service)}/resources`);
-  gatewayRuntime.integrationResources[service] = result.resources || [];
+  const resources = asJsonRecordArray(result.resources);
+  gatewayRuntime.integrationResources[service] = resources;
   renderIntegrationResourcePanel(getSelectedIntegration());
-  return result.resources || [];
+  return resources;
 }
 
-function renderIntegrationResourcePanel(adapter) {
+function renderIntegrationResourcePanel(adapter: IntegrationAdapter): void {
   if (!els.integrationResourcePanel) return;
   const runtime = selectedRuntimeIntegration();
+  const runtimeSettings = asJsonRecord(runtime.account?.settings);
   const connected = runtime.status === "connected";
   const isFocus = adapter.id === "toggl-focus";
   const supported = ["google-calendar", "google-tasks", "notion", "toggl-focus"].includes(adapter.id);
@@ -4341,7 +4697,8 @@ function renderIntegrationResourcePanel(adapter) {
   els.previewLiveSyncButton.disabled = publicBetaPaused || !connected || isFocus;
   els.runLiveSyncButton.disabled = true;
   els.integrationResourcePanel.hidden = !connected;
-  if (els.integrationAutoSync?.closest("label")) els.integrationAutoSync.closest("label").hidden = isFocus;
+  const autoSyncLabel = els.integrationAutoSync.closest("label");
+  if (autoSyncLabel) autoSyncLabel.hidden = isFocus;
   if (els.integrationSetupMessage) {
     els.integrationSetupMessage.className = "integration-setup-message";
     if (publicBetaPaused) {
@@ -4354,7 +4711,7 @@ function renderIntegrationResourcePanel(adapter) {
       els.integrationSetupMessage.textContent = i18n.t("integration.setup.admin");
     } else if (!connected) {
       els.integrationSetupMessage.textContent = i18n.t("integration.setup.connect");
-    } else if (isFocus && !(runtime.account?.settings?.organizationId && runtime.account?.settings?.workspaceId)) {
+    } else if (isFocus && !(runtimeSettings.organizationId && runtimeSettings.workspaceId)) {
       els.integrationSetupMessage.textContent = "Focusの組織IDとWorkspace IDを入力して設定を保存してください。";
     } else {
       els.integrationSetupMessage.textContent = i18n.t("integration.setup.ready");
@@ -4362,13 +4719,13 @@ function renderIntegrationResourcePanel(adapter) {
   }
   if (!connected) return;
 
-  els.integrationAccountLabel.textContent = runtime.account?.providerAccountName || i18n.t("integration.connectedAccount");
-  els.integrationAutoSync.checked = Boolean(runtime.account?.settings?.autoSync);
+  els.integrationAccountLabel.textContent = String(runtime.account?.providerAccountName || i18n.t("integration.connectedAccount"));
+  els.integrationAutoSync.checked = Boolean(runtimeSettings.autoSync);
   els.integrationResourceList.innerHTML = "";
   if (isFocus) {
     els.integrationResourceTitle.textContent = "Toggl Focusの接続先";
-    const settings = runtime.account?.settings || {};
-    const makeField = (label, key, placeholder, optional = false) => {
+    const settings = runtimeSettings;
+    const makeField = (label: string, key: string, placeholder: string, optional = false): HTMLLabelElement => {
       const field = document.createElement("label");
       field.className = "focus-config-field";
       const caption = document.createElement("span");
@@ -4378,7 +4735,7 @@ function renderIntegrationResourcePanel(adapter) {
       input.inputMode = "numeric";
       input.pattern = "\\d*";
       input.dataset.focusSetting = key;
-      input.value = settings[key] || "";
+      input.value = String(settings[key] || "");
       input.placeholder = placeholder;
       field.append(caption, input);
       return field;
@@ -4404,7 +4761,7 @@ function renderIntegrationResourcePanel(adapter) {
     els.integrationResourceList.appendChild(note);
     return;
   }
-  const resources = gatewayRuntime.integrationResources[adapter.id] || [];
+  const resources = asJsonRecordArray(gatewayRuntime.integrationResources[adapter.id]);
   if (!resources.length) {
     const load = document.createElement("button");
     load.type = "button";
@@ -4425,17 +4782,18 @@ function renderIntegrationResourcePanel(adapter) {
     const input = document.createElement("input");
     input.type = adapter.id === "google-calendar" ? "checkbox" : "radio";
     input.name = `integration-resource-${adapter.id}`;
-    input.value = resource.id;
-    const settings = runtime.account?.settings || {};
-    input.checked = adapter.id === "google-calendar" ? (settings.calendarIds || []).includes(resource.id) : adapter.id === "google-tasks" ? settings.taskListId === resource.id : settings.parentPageId === resource.id;
+    input.value = String(resource.id || "");
+    const settings = runtimeSettings;
+    const calendarIds = Array.isArray(settings.calendarIds) ? settings.calendarIds.map(String) : [];
+    input.checked = adapter.id === "google-calendar" ? calendarIds.includes(String(resource.id || "")) : adapter.id === "google-tasks" ? settings.taskListId === resource.id : settings.parentPageId === resource.id;
     const text = document.createElement("span");
-    text.textContent = resource.name;
+    text.textContent = String(resource.name || "");
     label.append(input, text);
     els.integrationResourceList.appendChild(label);
   });
 }
 
-async function connectSelectedIntegration() {
+async function connectSelectedIntegration(): Promise<void> {
   if (!externalOAuthEnabled) throw new Error("外部サービス連携は公開βでは準備中です。");
   if (!globalThis.QuestForgeFirebase?.getUser?.()) throw new Error("先にQuestForgeへGoogleログインしてください。");
   const adapter = getSelectedIntegration();
@@ -4444,10 +4802,10 @@ async function connectSelectedIntegration() {
     return;
   }
   const result = await gatewayFetch(`/v1/integrations/${encodeURIComponent(adapter.id)}/connect`, { method: "POST" });
-  window.location.assign(result.authorizationUrl);
+  window.location.assign(String(result.authorizationUrl || ""));
 }
 
-function openTogglFocusConnectDialog() {
+function openTogglFocusConnectDialog(): void {
   if (!els.togglFocusConnectDialog) return;
   els.togglFocusConnectMessage.textContent = "";
   els.togglFocusApiKey.value = "";
@@ -4456,13 +4814,13 @@ function openTogglFocusConnectDialog() {
   window.setTimeout(() => els.togglFocusApiKey.focus(), 0);
 }
 
-function closeTogglFocusConnectDialog() {
+function closeTogglFocusConnectDialog(): void {
   els.togglFocusApiKey.value = "";
   if (typeof els.togglFocusConnectDialog.close === "function") els.togglFocusConnectDialog.close();
   else els.togglFocusConnectDialog.removeAttribute("open");
 }
 
-async function disconnectSelectedIntegration() {
+async function disconnectSelectedIntegration(): Promise<void> {
   if (!externalOAuthEnabled) {
     showToast("外部サービス連携は公開βでは準備中です。", { duration: 6000 });
     return;
@@ -4475,31 +4833,35 @@ async function disconnectSelectedIntegration() {
   showToast(`${adapter.name}の接続を解除しました。`);
 }
 
-async function saveSelectedIntegrationSettings() {
+async function saveSelectedIntegrationSettings(): Promise<void> {
   if (!externalOAuthEnabled) {
     showToast("外部サービス連携は公開βでは準備中です。", { duration: 6000 });
     return;
   }
   const adapter = getSelectedIntegration();
-  const selected = [...els.integrationResourceList.querySelectorAll("input:checked")].map((input) => input.value);
-  const body = adapter.id === "toggl-focus" ? {} : { autoSync: els.integrationAutoSync.checked };
+  const selected = Array.from(els.integrationResourceList.querySelectorAll<HTMLInputElement>("input:checked")).map((input) => input.value);
+  const body: JsonRecord = adapter.id === "toggl-focus" ? {} : { autoSync: els.integrationAutoSync.checked };
   if (adapter.id === "google-calendar") body.calendarIds = selected;
   if (adapter.id === "google-tasks") body.taskListId = selected[0] || "";
   if (adapter.id === "notion") { body.parentPageId = selected[0] || ""; body.createDatabase = true; }
   if (adapter.id === "toggl-focus") {
-    els.integrationResourceList.querySelectorAll("[data-focus-setting]").forEach((input) => {
-      body[input.dataset.focusSetting] = input.type === "checkbox" ? input.checked : input.value.trim();
+    els.integrationResourceList.querySelectorAll<HTMLInputElement>("[data-focus-setting]").forEach((input) => {
+      const key = input.dataset.focusSetting;
+      if (key) body[key] = input.type === "checkbox" ? input.checked : input.value.trim();
     });
   }
   const result = await gatewayFetch(`/v1/integrations/${encodeURIComponent(adapter.id)}`, { method: "PATCH", body: JSON.stringify(body) });
   const index = gatewayRuntime.integrations.findIndex((item) => item.id === adapter.id);
-  if (index >= 0) gatewayRuntime.integrations[index] = { ...gatewayRuntime.integrations[index], account: result.account, status: result.account.status };
+  if (index >= 0) {
+    const account = asJsonRecord(result.account) as GatewayRecord;
+    gatewayRuntime.integrations[index] = { ...gatewayRuntime.integrations[index], account, status: String(account.status || "connected") };
+  }
   gatewayRuntime.integrationPreviewed[adapter.id] = false;
   renderIntegrationHub();
   showToast(adapter.id === "notion" ? "QuestForge Logsを準備しました。" : adapter.id === "toggl-focus" ? "Toggl Focusの接続先を保存しました。" : "同期設定を保存しました。");
 }
 
-function renderSyncRuleSummary(adapter) {
+function renderSyncRuleSummary(adapter: IntegrationAdapter): void {
   els.syncRuleSummary.innerHTML = "";
   const heading = document.createElement("div");
   heading.className = "sync-rule-heading";
@@ -4517,7 +4879,7 @@ function renderSyncRuleSummary(adapter) {
   });
 }
 
-function renderSyncPreview(adapter) {
+function renderSyncPreview(adapter: IntegrationAdapter): void {
   els.syncPreviewList.innerHTML = "";
   if (adapter.id === "toggl-focus") {
     const runtime = gatewayRuntime.integrations?.find((item) => item.id === adapter.id);
@@ -4554,9 +4916,10 @@ function renderSyncPreview(adapter) {
   els.syncPreviewList.appendChild(empty);
 }
 
-function renderTogglFocusAttributionPreview(preview) {
+function renderTogglFocusAttributionPreview(preview: JsonRecord): void {
   els.syncPreviewList.innerHTML = "";
-  const ready = (preview.candidates || []).filter((candidate) => candidate.status === "ready");
+  const candidates = asJsonRecordArray(preview.candidates);
+  const ready = candidates.filter((candidate) => candidate.status === "ready");
   const heading = document.createElement("div");
   heading.className = "sync-rule-heading";
   const range = document.createElement("span");
@@ -4583,19 +4946,19 @@ function renderTogglFocusAttributionPreview(preview) {
     });
     els.syncPreviewList.appendChild(apply);
   }
-  (preview.candidates || []).forEach((candidate) => {
+  candidates.forEach((candidate) => {
     const item = document.createElement("article");
     item.className = "sync-preview-card";
-    const entry = candidate.entry || {};
+    const entry = asJsonRecord(candidate.entry);
     const title = document.createElement("strong");
-    title.textContent = entry.taskName || entry.description || "名前のないFocus記録";
+    title.textContent = String(entry.taskName || entry.description || "名前のないFocus記録");
     const details = document.createElement("p");
     details.textContent = `${entry.durationMinutes || 0}分 / ${candidate.questTitle || "未ひもづけ"}`;
     const footer = document.createElement("footer");
     const origin = document.createElement("span");
     origin.textContent = candidate.mode === "direct" ? "Focusタスクから自動候補" : "確認が必要な候補";
     const status = document.createElement("span");
-    status.textContent = candidate.status;
+    status.textContent = String(candidate.status || "");
     footer.append(origin, status);
     item.append(title, details, footer);
     if (candidate.status === "unlinked") {
@@ -4638,7 +5001,7 @@ function renderTogglFocusAttributionPreview(preview) {
   });
 }
 
-function renderSyncLogs() {
+function renderSyncLogs(): void {
   els.syncLogList.innerHTML = "";
   const logs = state.syncEvents || [];
   if (!logs.length) {
@@ -4653,19 +5016,19 @@ function renderSyncLogs() {
     const item = document.createElement("article");
     item.className = "sync-log-card";
     item.innerHTML = `
-      <span>${formatLogTime(log.at)} / ${adapter?.name || log.service}</span>
-      <strong>${i18n.t(`integration.direction.${log.direction}`) || syncDirectionLabels[log.direction] || log.direction}</strong>
+      <span>${formatLogTime(String(log.at || ""))} / ${adapter?.name || String(log.service || "")}</span>
+      <strong>${i18n.t(`integration.direction.${String(log.direction || "")}`) || syncDirectionLabels[String(log.direction || "")] || String(log.direction || "")}</strong>
       <p>作成 ${log.created} / 更新 ${log.updated} / スキップ ${log.skipped}</p>
     `;
     els.syncLogList.appendChild(item);
   });
 }
 
-function mergeTags(...groups) {
+function mergeTags(...groups: string[][]): string[] {
   return [...new Set(groups.flat().filter(Boolean))].slice(0, 8);
 }
 
-function renderParty() {
+function renderParty(): void {
   if (!els.partyGrid) return;
   const user = globalThis.QuestForgeFirebase?.getUser?.();
   const profile = gatewayRuntime.profile;
@@ -4677,13 +5040,13 @@ function renderParty() {
   els.socialAuthMessage.textContent = !connected
     ? i18n.t("social.authCopy")
     : gatewayRuntime.socialError || (profile ? "@handleは完全一致で検索されます。公開範囲はこの画面の項目だけです。" : "まず公開プロフィールを保存してください。");
-  els.profileForm.querySelectorAll("input, textarea, button").forEach((control) => { control.disabled = !connected; });
+  els.profileForm.querySelectorAll<AppElement>("input, textarea, button").forEach((control) => { control.disabled = !connected; });
   if (!els.profileForm.contains(document.activeElement)) {
     els.profileDisplayName.value = profile?.displayName || user?.displayName || state.character.name || "";
     els.profileHandle.value = profile?.handle?.replace(/^@/, "") || "";
     els.profileBio.value = profile?.bio || "";
   }
-  els.publicHandle.textContent = profile?.handle || (connected ? i18n.t("account.handleMissing") : i18n.t("account.loggedOut"));
+  els.publicHandle.textContent = String(profile?.handle || (connected ? i18n.t("account.handleMissing") : i18n.t("account.loggedOut")));
 
   renderFriendRequests();
   renderFriendList();
@@ -4693,26 +5056,26 @@ function renderParty() {
   els.partyAcceptForm.hidden = Boolean(party) || !connected || !profile;
   els.leavePartyButton.hidden = !party;
   els.partyInviteForm.hidden = !party || party.ownerUid !== user?.uid;
-  els.partyHeading.textContent = party ? `${party.name} (${party.members.length}/${party.maxMembers})` : i18n.t("party.createTitle");
+  els.partyHeading.textContent = party ? `${party.name || ""} (${party.members?.length || 0}/${party.maxMembers || 0})` : i18n.t("party.createTitle");
   (party?.members || []).forEach((member) => {
     const card = document.createElement("article");
     card.className = "party-card";
     const avatar = document.createElement("div");
     avatar.className = "party-mini";
-    avatar.textContent = member.displayName.slice(0, 2);
+    avatar.textContent = String(member.displayName || "").slice(0, 2);
     const copy = document.createElement("div");
     const name = document.createElement("strong");
-    name.textContent = member.displayName;
+    name.textContent = String(member.displayName || "");
     const meta = document.createElement("p");
     meta.textContent = `${member.handle} / ${member.role === "owner" ? "オーナー" : "メンバー"} / Lv.${member.level}`;
     copy.append(name, meta);
     card.append(avatar, copy);
-    if (party.ownerUid === user?.uid && member.uid !== user.uid) {
+    if (party && user && party.ownerUid === user.uid && member.uid && member.uid !== user.uid) {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "secondary-button";
       remove.textContent = i18n.t("common.remove");
-      remove.addEventListener("click", () => removeSocialPartyMember(member.uid));
+      remove.addEventListener("click", () => removeSocialPartyMember(member.uid || ""));
       card.appendChild(remove);
     }
     els.partyGrid.appendChild(card);
@@ -4720,11 +5083,11 @@ function renderParty() {
   populateTaskAssigneeOptions();
 }
 
-function socialPersonCopy(person, suffix = "") {
+function socialPersonCopy(person: GatewayRecord, suffix = ""): HTMLDivElement {
   const copy = document.createElement("div");
   copy.className = "social-person-copy";
   const name = document.createElement("strong");
-  name.textContent = person.displayName;
+  name.textContent = String(person.displayName || "");
   const meta = document.createElement("span");
   meta.textContent = `${person.handle || ""}${suffix ? ` / ${suffix}` : ""}`;
   copy.append(name, meta);
@@ -4742,16 +5105,17 @@ function renderFriendRequests() {
   requests.forEach((request) => {
     const row = document.createElement("div");
     row.className = "social-list-item";
-    row.appendChild(socialPersonCopy(request.profile, request.direction === "incoming" ? "受信" : "送信済み"));
+    const requestProfile = request.profile || {};
+    row.appendChild(socialPersonCopy(requestProfile, request.direction === "incoming" ? "受信" : "送信済み"));
     if (request.direction === "incoming") {
       const actions = document.createElement("div");
       actions.className = "social-actions";
-      for (const [decision, label] of [["accept", "承認"], ["decline", "拒否"]]) {
+      for (const [decision, label] of [["accept", "承認"], ["decline", "拒否"]] as Array<[string, string]>) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = decision === "accept" ? "primary-button" : "secondary-button";
         button.textContent = i18n.t(decision === "accept" ? "common.accept" : "common.decline");
-        button.addEventListener("click", () => respondToFriendRequest(request.id, decision));
+        button.addEventListener("click", () => respondToFriendRequest(request.id || "", decision));
         actions.appendChild(button);
       }
       row.appendChild(actions);
@@ -4776,7 +5140,7 @@ function renderFriendList() {
     remove.type = "button";
     remove.className = "secondary-button";
     remove.textContent = i18n.t("common.remove");
-    remove.addEventListener("click", () => removeSocialFriend(friend.uid));
+    remove.addEventListener("click", () => removeSocialFriend(friend.uid || ""));
     row.appendChild(remove);
     els.friendList.appendChild(row);
   });
@@ -4795,12 +5159,12 @@ function renderFriendSearchResult() {
   button.className = "primary-button";
   button.textContent = "友達申請";
   button.disabled = (gatewayRuntime.friends || []).some((friend) => friend.uid === person.uid);
-  button.addEventListener("click", () => sendSocialFriendRequest(person.uid));
+  button.addEventListener("click", () => sendSocialFriendRequest(person.uid || ""));
   row.appendChild(button);
   els.friendSearchResult.appendChild(row);
 }
 
-async function refreshSocialRuntime() {
+async function refreshSocialRuntime(): Promise<void> {
   const user = globalThis.QuestForgeFirebase?.getUser?.();
   if (!user) {
     Object.assign(gatewayRuntime, { profile: null, friends: [], friendRequests: [], party: null, friendSearchResult: null, socialError: "" });
@@ -4814,36 +5178,36 @@ async function refreshSocialRuntime() {
       gatewayFetch("/v1/friend-requests"),
       gatewayFetch("/v1/party"),
     ]);
-    gatewayRuntime.profile = profile.profile;
-    gatewayRuntime.friends = friends.friends || [];
-    gatewayRuntime.friendRequests = requests.requests || [];
-    gatewayRuntime.party = party.party;
+    gatewayRuntime.profile = profile.profile ? asJsonRecord(profile.profile) as GatewayRecord : null;
+    gatewayRuntime.friends = Array.isArray(friends.friends) ? friends.friends.map((entry) => asJsonRecord(entry) as GatewayRecord) : [];
+    gatewayRuntime.friendRequests = Array.isArray(requests.requests) ? requests.requests.map((entry) => asJsonRecord(entry) as GatewayRecord) : [];
+    gatewayRuntime.party = party.party ? asJsonRecord(party.party) as GatewayRecord & { members?: GatewayRecord[] } : null;
     gatewayRuntime.socialError = "";
   } catch (error) {
-    gatewayRuntime.socialError = `仲間機能へ接続できません: ${error.message}`;
+    gatewayRuntime.socialError = `仲間機能へ接続できません: ${(error as Error).message}`;
   }
   if (activeViewId === "party") renderParty();
 }
 
-async function respondToFriendRequest(requestId, decision) {
+async function respondToFriendRequest(requestId: string, decision: string): Promise<void> {
   await gatewayFetch(`/v1/friend-requests/${encodeURIComponent(requestId)}/${decision}`, { method: "POST" });
   await refreshSocialRuntime();
 }
 
-async function sendSocialFriendRequest(receiverUid) {
+async function sendSocialFriendRequest(receiverUid: string): Promise<void> {
   await gatewayFetch("/v1/friend-requests", { method: "POST", body: JSON.stringify({ receiverUid }) });
   gatewayRuntime.friendSearchResult = null;
   await refreshSocialRuntime();
   showToast("友達申請を送りました。");
 }
 
-async function removeSocialFriend(friendUid) {
+async function removeSocialFriend(friendUid: string): Promise<void> {
   if (!window.confirm("この友達との接続を解除しますか？")) return;
   await gatewayFetch(`/v1/friends/${encodeURIComponent(friendUid)}`, { method: "DELETE" });
   await refreshSocialRuntime();
 }
 
-async function removeSocialPartyMember(memberUid) {
+async function removeSocialPartyMember(memberUid: string): Promise<void> {
   if (!window.confirm("このメンバーをパーティから外しますか？")) return;
   await gatewayFetch(`/v1/party/members/${encodeURIComponent(memberUid)}`, { method: "DELETE" });
   await refreshSocialRuntime();
@@ -4863,8 +5227,8 @@ function renderInventory() {
   });
 }
 
-function flashTask(taskId) {
-  const card = document.querySelector(`[data-task-id="${taskId}"]`);
+function flashTask(taskId: string): void {
+  const card = q(`[data-task-id="${taskId}"]`);
   if (!card) return;
   card.animate(
     [
@@ -4877,8 +5241,8 @@ function flashTask(taskId) {
   );
 }
 
-function showToast(message, options = {}) {
-  window.clearTimeout(undoToastTimer);
+function showToast(message: string, options: ToastOptions = {}): void {
+  if (undoToastTimer !== null) window.clearTimeout(undoToastTimer);
   els.undoToastMessage.textContent = message;
   toastActionHandler = typeof options.onAction === "function" ? options.onAction : null;
   els.toastActionButton.hidden = !toastActionHandler;
@@ -4890,14 +5254,14 @@ function showToast(message, options = {}) {
   undoToastTimer = window.setTimeout(hideToast, duration);
 }
 
-function hideToast() {
-  window.clearTimeout(undoToastTimer);
+function hideToast(): void {
+  if (undoToastTimer !== null) window.clearTimeout(undoToastTimer);
   els.undoToast.hidden = true;
   els.toastActionButton.hidden = true;
   toastActionHandler = null;
 }
 
-function toggleMobileMenu(force) {
+function toggleMobileMenu(force?: boolean): void {
   const shouldOpen = typeof force === "boolean"
     ? force
     : !els.sidebar.classList.contains("mobile-open");
@@ -4906,13 +5270,13 @@ function toggleMobileMenu(force) {
   els.mobileMenuButton.setAttribute("aria-label", i18n.t(shouldOpen ? "nav.closeMenu" : "nav.openMenu"));
 }
 
-document.querySelectorAll("[data-add-kind]").forEach((button) => {
+qa<AppElement>("[data-add-kind]").forEach((button) => {
   button.addEventListener("click", () => {
-    openTaskDialog({ kind: button.dataset.addKind });
+    openTaskDialog({ kind: button.dataset.addKind as Quest["kind"] });
   });
 });
 
-document.querySelector("#newTaskButton").addEventListener("click", () => {
+q("#newTaskButton").addEventListener("click", () => {
   openTaskDialog({ kind: "todo", difficulty: "medium" });
 });
 
@@ -4932,7 +5296,7 @@ els.taskForm.addEventListener("submit", (event) => {
   }
   closeTaskDialog();
   requestAnimationFrame(() => {
-    document.querySelector(`[data-task-id="${task.id}"]`)?.scrollIntoView({
+    q(`[data-task-id="${task.id}"]`).scrollIntoView({
       behavior: "smooth",
       block: "center",
     });
@@ -4969,7 +5333,7 @@ els.sortMode.addEventListener("change", () => {
 
 els.taskFilterOptions.forEach((button) => {
   button.addEventListener("click", () => {
-    state.taskFilter = button.dataset.taskFilter;
+    state.taskFilter = button.dataset.taskFilter || "all";
     render();
   });
 });
@@ -4988,7 +5352,7 @@ els.runRolloverButton.addEventListener("click", () => {
 });
 
 els.battleCommandButtons.forEach((button) => {
-  button.addEventListener("click", () => useBattleCommand(button.dataset.battleCommand));
+  button.addEventListener("click", () => useBattleCommand(button.dataset.battleCommand || ""));
 });
 
 els.battleResetButton.addEventListener("click", () => {
@@ -5013,7 +5377,7 @@ els.syncDirectionSelect.addEventListener("change", () => {
 });
 
 els.integrationLoginButton?.addEventListener("click", () => {
-  document.querySelector("#syncSignInButton")?.click();
+  q("#syncSignInButton").click();
 });
 
 els.connectIntegrationButton.addEventListener("click", () => {
@@ -5103,12 +5467,13 @@ els.createWebhookButton.addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({ url: els.webhookUrlInput.value.trim(), events: [els.webhookEventSelect.value] }),
     });
-    gatewayRuntime.webhooks = [result.webhook, ...(gatewayRuntime.webhooks || [])];
+    const webhook = asJsonRecord(result.webhook) as GatewayRecord;
+    gatewayRuntime.webhooks = [webhook, ...(gatewayRuntime.webhooks || [])];
     els.webhookUrlInput.value = "";
     renderRuntimeWebhooks();
-    showToast(`Webhookを登録しました。署名Secret: ${result.webhook.secret}`, { duration: 12000 });
+    showToast(`Webhookを登録しました。署名Secret: ${String(webhook.secret || "")}`, { duration: 12000 });
   } catch (error) {
-    showToast(error.message, { duration: 6000 });
+    showToast((error as Error).message, { duration: 6000 });
   }
 });
 
@@ -5116,11 +5481,12 @@ els.installPluginButton.addEventListener("click", async () => {
   try {
     const manifest = JSON.parse(els.pluginManifestInput.value);
     const result = await gatewayFetch("/v1/plugins", { method: "POST", body: JSON.stringify(manifest) });
-    gatewayRuntime.plugins = [result.plugin, ...(gatewayRuntime.plugins || []).filter((plugin) => plugin.id !== result.plugin.id)];
+    const plugin = asJsonRecord(result.plugin) as GatewayRecord;
+    gatewayRuntime.plugins = [plugin, ...(gatewayRuntime.plugins || []).filter((entry) => entry.id !== plugin.id)];
     renderRuntimePlugins();
-    showToast(`${result.plugin.manifest.name}をsandboxへインストールしました。`);
+    showToast(`${String(asJsonRecord(plugin.manifest).name || "拡張機能")}をsandboxへインストールしました。`);
   } catch (error) {
-    showToast(error instanceof SyntaxError ? "Manifest JSONを確認してください。" : error.message, { duration: 6000 });
+    showToast(error instanceof SyntaxError ? "Manifest JSONを確認してください。" : (error as Error).message, { duration: 6000 });
   }
 });
 
@@ -5241,7 +5607,7 @@ els.lockBossButton.addEventListener("click", () => {
 
 els.themeOptions.forEach((button) => {
   button.addEventListener("click", () => {
-    state.theme = button.dataset.themeOption;
+    state.theme = button.dataset.themeOption || "soft";
     render();
     playInteractionCue("theme");
   });
@@ -5249,7 +5615,7 @@ els.themeOptions.forEach((button) => {
 
 els.appearanceButton.addEventListener("click", (event) => {
   event.stopPropagation();
-  setAppearanceMenuOpen(els.appearanceMenu.hidden);
+  setAppearanceMenuOpen(Boolean(els.appearanceMenu.hidden));
 });
 
 els.appearanceOptions.forEach((button) => {
@@ -5260,7 +5626,8 @@ els.appearanceOptions.forEach((button) => {
 });
 
 document.addEventListener("click", (event) => {
-  if (!els.appearanceControl?.contains(event.target)) setAppearanceMenuOpen(false);
+  const target = event.target instanceof Node ? event.target : null;
+  if (!els.appearanceControl?.contains(target)) setAppearanceMenuOpen(false);
 });
 
 document.addEventListener("keydown", (event) => {
@@ -5331,15 +5698,15 @@ els.testMediaAudioButton.addEventListener("click", () => {
   testMediaAudio();
 });
 
-function getFormValues() {
+function getFormValues(): TaskFormValues {
   return {
-    kind: els.taskKind.value,
+    kind: els.taskKind.value as Quest["kind"],
     title: els.taskTitle.value,
     notes: els.taskNotes.value,
     dueDate: els.taskDueDate.value,
-    repeat: els.taskRepeat.value,
+    repeat: els.taskRepeat.value as Quest["repeat"],
     tags: parseTags(els.taskTags.value),
-    difficulty: els.taskDifficulty.value,
+    difficulty: els.taskDifficulty.value as Quest["difficulty"],
     assignee: taskAssigneeFromForm(),
     parentQuestId: els.taskParentQuest?.value || "",
     handoff: normalizeTaskHandoff({
@@ -5350,7 +5717,7 @@ function getFormValues() {
   };
 }
 
-function taskAssigneeFromForm() {
+function taskAssigneeFromForm(): Quest["assignee"] {
   const [type = "self", ...idParts] = String(els.taskAssignee?.value || "self:self").split(":");
   const id = idParts.join(":") || "self";
   const option = els.taskAssignee?.selectedOptions?.[0];
@@ -5364,7 +5731,7 @@ function taskAssigneeFromForm() {
   });
 }
 
-function refreshTaskAssigneeFields() {
+function refreshTaskAssigneeFields(): void {
   if (!els.taskAssignee) return;
   const [type, ...idParts] = els.taskAssignee.value.split(":");
   const id = idParts.join(":");
@@ -5377,10 +5744,10 @@ function refreshTaskAssigneeFields() {
   }
 }
 
-function populateTaskParentOptions(selectedTask = null) {
+function populateTaskParentOptions(selectedTask: TaskDialogInput = {}) {
   if (!els.taskParentQuest) return;
   const currentId = selectedTask?.id || "";
-  const candidate = selectedTask?.id ? selectedTask : { id: "__new_quest__", kind: els.taskKind?.value || "todo" };
+  const candidate = (selectedTask?.id ? selectedTask : { id: "__new_quest__", kind: els.taskKind?.value || "todo" }) as Quest;
   els.taskParentQuest.innerHTML = "";
   els.taskParentQuest.appendChild(new Option("ルートQuest（親なし）", ""));
   state.tasks.filter((task) => taskTreeEligible(task)
@@ -5392,14 +5759,14 @@ function populateTaskParentOptions(selectedTask = null) {
   els.taskParentQuest.value = selectedTask?.parentQuestId || "";
 }
 
-function populateTaskAssigneeOptions(selectedAssignee = null) {
+function populateTaskAssigneeOptions(selectedAssignee: unknown = null): void {
   if (!els.taskHumanOptions || !els.taskAssignee) return;
   const current = normalizeTaskAssignee(selectedAssignee);
-  const people = new Map();
-  (gatewayRuntime.friends || []).forEach((person) => people.set(person.uid, person));
+  const people = new Map<string, GatewayRecord>();
+  (gatewayRuntime.friends || []).forEach((person) => { if (person.uid) people.set(person.uid, person); });
   const currentUser = globalThis.QuestForgeFirebase?.getUser?.();
   (gatewayRuntime.party?.members || []).forEach((person) => {
-    if (person.uid !== currentUser?.uid) people.set(person.uid, person);
+    if (person.uid && person.uid !== currentUser?.uid) people.set(person.uid, person);
   });
   els.taskHumanOptions.innerHTML = "";
   people.forEach((person) => {
@@ -5413,7 +5780,7 @@ function populateTaskAssigneeOptions(selectedAssignee = null) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = current.label;
-    const targetGroup = current.type === "agent" ? document.querySelector("#taskAgentOptions") : els.taskHumanOptions;
+    const targetGroup = current.type === "agent" ? q("#taskAgentOptions") : els.taskHumanOptions;
     targetGroup?.appendChild(option);
   }
   els.taskAssignee.value = [...els.taskAssignee.options].some((option) => option.value === value) ? value : "self:self";
@@ -5422,7 +5789,7 @@ function populateTaskAssigneeOptions(selectedAssignee = null) {
   refreshTaskAssigneeFields();
 }
 
-function openTaskDialog(task = {}) {
+function openTaskDialog(task: TaskDialogInput = {}): void {
   const isEditing = Boolean(task.id);
   els.taskDialog.dataset.mode = isEditing ? "edit" : "create";
   els.dialogTitle.textContent = i18n?.t?.(isEditing ? "task.edit" : "task.add") || (isEditing ? "タスク編集" : "タスク追加");
@@ -5455,7 +5822,7 @@ function openTaskDialog(task = {}) {
   requestAnimationFrame(() => els.taskTitle.focus());
 }
 
-function renderTaskChildren(task = {}) {
+function renderTaskChildren(task: TaskDialogInput = {}): void {
   if (!els.taskChildrenList || !els.taskChildrenItems) return;
   const children = task.id ? questTreeChildren(task.id, true) : [];
   els.taskChildrenItems.innerHTML = "";
@@ -5490,8 +5857,9 @@ window.addEventListener("questforge:locale-changed", () => {
   if (activeViewId === "integrations") refreshGatewayRuntime().catch(() => {});
 });
 
-function describeSocialError(error) {
-  return {
+function describeSocialError(error: unknown): string {
+  const appError = error as Partial<AppError>;
+  const messages: Record<string, string> = {
     handle_invalid: "@handleは半角英小文字・数字・_の3〜20文字で入力してください。",
     handle_reserved: "この@handleは予約済みです。別の名前を選んでください。",
     handle_taken: "この@handleはすでに使われています。",
@@ -5501,7 +5869,8 @@ function describeSocialError(error) {
     already_friends: "すでに友達です。",
     party_full: "このパーティは4人で満員です。",
     party_invite_expired: "招待の有効期限が切れています。",
-  }[error?.code] || error?.message || "処理を完了できませんでした。";
+  };
+  return messages[appError.code || ""] || appError.message || "処理を完了できませんでした。";
 }
 
 els.profileForm?.addEventListener("submit", async (event) => {
@@ -5519,7 +5888,7 @@ els.profileForm?.addEventListener("submit", async (event) => {
         level: state.character.level,
       }),
     });
-    gatewayRuntime.profile = result.profile;
+    gatewayRuntime.profile = result.profile ? asJsonRecord(result.profile) as GatewayRecord : null;
     els.profileFormMessage.textContent = "保存しました。";
     await refreshSocialRuntime();
   } catch (error) {
@@ -5532,7 +5901,7 @@ els.friendSearchForm?.addEventListener("submit", async (event) => {
   els.friendSearchResult.textContent = i18n.t("status.searching");
   try {
     const result = await gatewayFetch(`/v1/profiles/${encodeURIComponent(els.friendHandleSearch.value)}`);
-    gatewayRuntime.friendSearchResult = result.profile;
+    gatewayRuntime.friendSearchResult = result.profile ? asJsonRecord(result.profile) as GatewayRecord : null;
     if (!result.profile) els.friendSearchResult.textContent = "一致するプロフィールが見つかりません。";
     else renderFriendSearchResult();
   } catch (error) {
@@ -5556,10 +5925,11 @@ els.partyInviteForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
     const profile = await gatewayFetch(`/v1/profiles/${encodeURIComponent(els.partyInviteHandle.value)}`);
-    if (!profile.profile) throw Object.assign(new Error("一致するプロフィールが見つかりません。"), { code: "profile_not_found" });
-    const result = await gatewayFetch("/v1/party/invites", { method: "POST", body: JSON.stringify({ inviteeUid: profile.profile.uid }) });
+    const profileRecord = profile.profile ? asJsonRecord(profile.profile) as GatewayRecord : null;
+    if (!profileRecord?.uid) throw Object.assign(new Error("一致するプロフィールが見つかりません。"), { code: "profile_not_found" });
+    const result = await gatewayFetch("/v1/party/invites", { method: "POST", body: JSON.stringify({ inviteeUid: profileRecord.uid }) });
     const inviteUrl = new URL(window.location.href);
-    inviteUrl.searchParams.set("partyInvite", result.token);
+    inviteUrl.searchParams.set("partyInvite", String(result.token || ""));
     inviteUrl.hash = "party";
     els.partyInviteLink.value = inviteUrl.toString();
     els.partyInviteResult.hidden = false;
@@ -5620,7 +5990,7 @@ function updateInstallAppButton() {
 function registerInstallPrompt() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
-    deferredInstallPrompt = event;
+    deferredInstallPrompt = event as BeforeInstallPromptEvent;
     updateInstallAppButton();
   });
 
@@ -5645,13 +6015,13 @@ function registerInstallPrompt() {
   updateInstallAppButton();
 }
 
-function setActiveView(view, options = {}) {
+function setActiveView(view: string, options: AppViewOptions = {}): void {
   const nextView = viewTitles[view] ? view : "tasks";
   activeViewId = nextView;
-  document.querySelectorAll("[data-view]").forEach((item) => {
+  qa<AppElement>("[data-view]").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === nextView);
   });
-  document.querySelectorAll("[data-view-panel]").forEach((panel) => {
+  qa<AppElement>("[data-view-panel]").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.viewPanel === nextView);
   });
   els.viewTitle.textContent = i18n?.t?.(`view.${nextView}`) || viewTitles[nextView];
@@ -5663,9 +6033,9 @@ function setActiveView(view, options = {}) {
   }
 }
 
-document.querySelectorAll("[data-view]").forEach((button) => {
+qa<AppElement>("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
-    const view = button.dataset.view;
+    const view = button.dataset.view || "tasks";
     if (window.location.hash !== `#${view}`) {
       window.history.replaceState(null, "", `#${view}`);
     }
@@ -5740,7 +6110,7 @@ function registerServiceWorker() {
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== "QUESTFORGE_UPDATE_READY") return;
     if (event.data.version === appVersion) return;
-    window.clearTimeout(appUpdateFallbackTimer);
+    if (appUpdateFallbackTimer !== null) window.clearTimeout(appUpdateFallbackTimer);
     appUpdateFallbackTimer = window.setTimeout(() => {
       showAppUpdateAvailable(event.data.version);
     }, 1600);
@@ -5748,7 +6118,7 @@ function registerServiceWorker() {
 
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadControllerAtLoad) return;
-    window.clearTimeout(appUpdateFallbackTimer);
+    if (appUpdateFallbackTimer !== null) window.clearTimeout(appUpdateFallbackTimer);
     appUpdateFallbackTimer = window.setTimeout(() => {
       showAppUpdateAvailable();
     }, 1800);

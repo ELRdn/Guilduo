@@ -10,6 +10,9 @@ import type {
   Quest,
   QuestAssignee,
   CharacterState,
+  BattleState,
+  BattleEffect,
+  BattleSession,
   QuestDifficulty,
   QuestForgeState,
   QuestKind,
@@ -17,7 +20,28 @@ import type {
 } from "../types/questforge.ts";
 import { isQuestKind } from "../types/questforge.ts";
 
-export type DomainRecord = Record<string, unknown>;
+export interface DomainRecord {
+  quest?: Quest;
+  quests?: Quest[];
+  handoffs?: Quest[];
+  event?: DomainEvent | null;
+  events?: DomainEvent[];
+  roots?: QuestTreeNode[];
+  nodes?: Array<Quest & { depth: number }>;
+  summary?: QuestTreeSummary;
+  character?: CharacterState;
+  battle?: BattleState;
+  reward?: { gems: number; xp: number; mp: number };
+  rewardGranted?: boolean;
+  link?: ExternalLink;
+  dryRun?: boolean;
+  count?: number;
+  cost?: number;
+  total?: number;
+  limit?: number;
+  nextCursor?: string | null;
+  [key: string]: unknown;
+}
 type RawQuest = Partial<Quest> & DomainRecord;
 
 export interface DomainInput extends DomainRecord {
@@ -108,6 +132,29 @@ interface QuestTreeNode {
   children: QuestTreeNode[];
 }
 
+interface QuestTreeSummary {
+  childrenTotal: number;
+  childrenCompleted: number;
+  progressPercent: number;
+}
+
+interface QuestMutationResult extends DomainRecord {
+  quest: Quest;
+  event: DomainEvent;
+  events: DomainEvent[];
+}
+
+interface HandoffTransitionResult extends QuestMutationResult {
+  dryRun: boolean;
+}
+
+interface QuestTreeResult extends DomainRecord {
+  roots: QuestTreeNode[];
+  nodes: Array<Quest & { depth: number }>;
+  total: number;
+  summary: QuestTreeSummary;
+}
+
 interface QuestPage {
   quests: Quest[];
   total: number;
@@ -115,12 +162,30 @@ interface QuestPage {
   nextCursor: string | null;
 }
 
-interface ScoreResult extends DomainRecord {
+interface ScoreResult {
   quest: Quest;
   reward: { gems: number; xp: number; mp: number };
   rewardGranted: boolean;
-  character: DomainRecord;
-  battle: unknown;
+  character: CharacterState;
+  battle: BattleState;
+  event: DomainEvent;
+  [key: string]: unknown;
+}
+
+interface BattleCommandResult extends DomainRecord {
+  session: BattleSession;
+  effects: BattleEffect[];
+}
+
+interface BatchQuestResult extends DomainRecord {
+  dryRun: boolean;
+  count: number;
+  quests: Quest[];
+}
+
+interface ExternalLinkResult extends DomainRecord {
+  quest: Quest;
+  link: ExternalLink;
   event: DomainEvent;
 }
 
@@ -670,7 +735,7 @@ function treeSort(a: Quest, b: Quest): number {
     || a.id.localeCompare(b.id);
 }
 
-export function getQuestTree(state: QuestForgeState, query: DomainInput = {}): DomainRecord {
+export function getQuestTree(state: QuestForgeState, query: DomainInput = {}): QuestTreeResult {
   ensureState(state);
   const includeArchived = query.includeArchived === true || query.includeArchived === "true";
   const requestedDepth = query.maxDepth === undefined ? MAX_TREE_DEPTH : nonNegativeInteger(query.maxDepth, MAX_TREE_DEPTH);
@@ -733,7 +798,7 @@ export function listAgentHandoffs(state: QuestForgeState, query: DomainInput = {
   return { handoffs: handoffs.slice(offset, offset + limit).map((task) => questOutput(task, state)), total, limit, nextCursor: offset + limit < total ? String(offset + limit) : null };
 }
 
-export function transitionQuestHandoff(state: QuestForgeState, questId: string, input: DomainInput = {}, context: DomainContext = {}): DomainRecord {
+export function transitionQuestHandoff(state: QuestForgeState, questId: string, input: DomainInput = {}, context: DomainContext = {}): HandoffTransitionResult {
   const dryRun = input.dryRun !== false;
   const target = dryRun ? clone(state) : state;
   ensureState(target);
@@ -840,7 +905,9 @@ export function listQuests(state: QuestForgeState, query: DomainInput = {}): Que
   return listQuestPage(state, query).quests;
 }
 
-export function createQuest(state: QuestForgeState, input: unknown, context: DomainContext = {}): Quest | DomainRecord {
+export function createQuest(state: QuestForgeState, input: unknown, context: DomainContext & { returnEvent: true }): QuestMutationResult;
+export function createQuest(state: QuestForgeState, input: unknown, context?: DomainContext): Quest;
+export function createQuest(state: QuestForgeState, input: unknown, context: DomainContext = {}): Quest | QuestMutationResult {
   ensureState(state);
   const clean = validateQuestInput(input);
   const now = new Date().toISOString();
@@ -887,7 +954,9 @@ export function createQuest(state: QuestForgeState, input: unknown, context: Dom
   return context.returnEvent ? { quest: output, event: events[0], events } : output;
 }
 
-export function patchQuest(state: QuestForgeState, questId: string, input: unknown, context: DomainContext = {}): Quest | DomainRecord {
+export function patchQuest(state: QuestForgeState, questId: string, input: unknown, context: DomainContext & { returnEvent: true }): QuestMutationResult;
+export function patchQuest(state: QuestForgeState, questId: string, input: unknown, context?: DomainContext): Quest;
+export function patchQuest(state: QuestForgeState, questId: string, input: unknown, context: DomainContext = {}): Quest | QuestMutationResult {
   ensureState(state);
   const quest = state.tasks.find((item) => item.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
@@ -956,7 +1025,7 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
   return output;
 }
 
-export function batchUpdateQuests(state: QuestForgeState, input: DomainInput, context: DomainContext = {}): DomainRecord {
+export function batchUpdateQuests(state: QuestForgeState, input: DomainInput, context: DomainContext = {}): BatchQuestResult {
   ensureState(state);
   const questIds = [...new Set((input?.questIds || []).map(String).filter(Boolean))];
   if (!questIds.length) throw new DomainError(400, "quest_ids_required", "At least one questId is required.");
@@ -979,7 +1048,7 @@ export function batchUpdateQuests(state: QuestForgeState, input: DomainInput, co
   return { dryRun, count: quests.length, quests };
 }
 
-export function archiveQuests(state: QuestForgeState, input: DomainInput = {}, context: DomainContext = {}): DomainRecord {
+export function archiveQuests(state: QuestForgeState, input: DomainInput = {}, context: DomainContext = {}): BatchQuestResult {
   ensureState(state);
   const dryRun = input.dryRun !== false;
   const requested = [...new Set((input.questIds || []).map(String).filter(Boolean))];
@@ -1013,7 +1082,7 @@ export function archiveQuests(state: QuestForgeState, input: DomainInput = {}, c
   return { dryRun: false, count: candidates.length, quests: candidates.map((task) => questOutput(task)), events };
 }
 
-export function linkExternalRecord(state: QuestForgeState, questId: string, input: DomainRecord, context: DomainContext = {}): DomainRecord {
+export function linkExternalRecord(state: QuestForgeState, questId: string, input: DomainRecord, context: DomainContext = {}): ExternalLinkResult {
   ensureState(state);
   const quest = state.tasks.find((task) => task.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
@@ -1185,17 +1254,17 @@ export function buyReward(state: QuestForgeState, questId: string, context: Doma
   return { quest: questOutput(quest), cost, character: characterState(state), event };
 }
 
-export function characterState(state: QuestForgeState): DomainRecord {
+export function characterState(state: QuestForgeState): CharacterState {
   ensureState(state);
   return { ...state.character, mp: state.battle.mp, maxMp: state.battle.maxMp, boss: state.boss };
 }
 
-export function getBattleSession(state: QuestForgeState): unknown {
+export function getBattleSession(state: QuestForgeState): BattleSession {
   ensureState(state);
   return createBattleSession(state);
 }
 
-export function battleCommand(state: QuestForgeState, input: DomainInput, context: DomainContext = {}): DomainRecord {
+export function battleCommand(state: QuestForgeState, input: DomainInput, context: DomainContext = {}): BattleCommandResult {
   if (input?.dryRun !== false) {
     const previewState = clone(state);
     ensureState(previewState);

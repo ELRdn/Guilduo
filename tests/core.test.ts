@@ -1,4 +1,3 @@
-// @ts-nocheck
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const core = require("../questforge-core.ts");
@@ -42,7 +41,7 @@ test("battle MP and command costs use the shared production rules", () => {
 
 test("task events keep newest entries and respect the history limit", () => {
   const events = core.appendTaskEvent([{ id: "old" }], { id: "new" }, 2);
-  assert.deepEqual(events.map((event) => event.id), ["new", "old"]);
+  assert.deepEqual(events.map((event: { id: string }) => event.id), ["new", "old"]);
 });
 
 test("completed and archived lifecycle states remain distinct", () => {
