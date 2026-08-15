@@ -1,19 +1,45 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 import { pathToFileURL } from "node:url";
 
 export const DEFAULT_API_URL = "https://questforge-gateway.example.workers.dev";
 
-function optionValue(args, index, name) {
+interface CliOptions {
+  json: boolean;
+  execute: boolean;
+  tokenStdin: boolean;
+  url: string;
+  view: string;
+  search: string;
+  title?: string;
+  notes?: string;
+  dueDate?: string;
+  kind?: string;
+  estimatedMinutes?: number;
+  difficulty?: string;
+  expectedState?: string;
+  note?: string;
+  help?: boolean;
+}
+
+interface ParsedArgs {
+  positional: string[];
+  options: CliOptions;
+}
+
+interface QuestForgeRequestOptions extends RequestInit {
+  headers?: Record<string, string>;
+}
+
+function optionValue(args: string[], index: number, name: string): string {
   const value = args[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`${name}には値が必要です。`);
   return value;
 }
 
-export function parseArgs(argv) {
+export function parseArgs(argv: string[]): ParsedArgs {
   const positional = [];
-  const options = { json: false, execute: false, tokenStdin: false, url: "", view: "today", search: "" };
+  const options: CliOptions = { json: false, execute: false, tokenStdin: false, url: "", view: "today", search: "" };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--json") options.json = true;
@@ -37,13 +63,13 @@ export function parseArgs(argv) {
   return { positional, options };
 }
 
-async function readTokenFromStdin() {
-  const chunks = [];
+async function readTokenFromStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-export function buildQuestPayload(options) {
+export function buildQuestPayload(options: CliOptions): Record<string, unknown> {
   const title = String(options.title || "").trim();
   if (!title) throw new Error("Quest追加には --title が必要です。");
   const estimatedMinutes = Number(options.estimatedMinutes || 30);
@@ -66,12 +92,15 @@ export function buildQuestPayload(options) {
 }
 
 class QuestForgeApi {
-  constructor({ baseUrl, token = "" }) {
+  private readonly baseUrl: string;
+  private readonly token: string;
+
+  constructor({ baseUrl, token = "" }: { baseUrl: string; token?: string }) {
     this.baseUrl = String(baseUrl || DEFAULT_API_URL).replace(/\/$/, "");
     this.token = token;
   }
 
-  async request(path, options = {}) {
+  async request<T = unknown>(path: string, options: QuestForgeRequestOptions = {}): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...options,
       headers: {
@@ -82,13 +111,14 @@ class QuestForgeApi {
       },
     });
     const text = await response.text();
-    let body;
+    let body: unknown;
     try { body = text ? JSON.parse(text) : null; } catch { body = { message: text }; }
     if (!response.ok) {
-      const error = body?.error || {};
-      throw new Error(error.message || body?.message || `QuestForge API HTTP ${response.status}`);
+      const data = body && typeof body === "object" ? body as Record<string, unknown> : {};
+      const error = data.error && typeof data.error === "object" ? data.error as Record<string, unknown> : {};
+      throw new Error(String(error.message || data.message || `QuestForge API HTTP ${response.status}`));
     }
-    return body;
+    return body as T;
   }
 }
 
@@ -96,7 +126,7 @@ function usage() {
   return `QuestForge CLI 0.5\n\n使い方:\n  questforge doctor [--json]\n  questforge quests list [--view today|week|future|backlog|completed|archive|all] [--search 文字] [--json]\n  questforge quests add --title "..." [--due YYYY-MM-DD] [--execute] [--json]\n  questforge quests complete <questId> [--execute] [--json]\n  questforge agents list [--json]\n  questforge handoff <questId> <state> [--expected-state 状態] [--execute] [--json]\n  questforge mcp-config [--json]\n\n認証:\n  QUESTFORGE_API_URL  接続先Worker URL\n  QUESTFORGE_TOKEN     開発用Bearer token（本番はOAuth推奨）\n  --token-stdin        stdinから一度だけtokenを読む\n\n書き込みは安全のため確認結果だけを返します。実行する場合だけ --execute を付けます。`;
 }
 
-function output(value, asJson) {
+function output(value: unknown, asJson: boolean): void {
   if (asJson) {
     process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
     return;
@@ -106,7 +136,10 @@ function output(value, asJson) {
     return;
   }
   if (Array.isArray(value)) {
-    for (const item of value) process.stdout.write(`${item.id || "-"}\t${item.title || item.displayName || item.name || ""}\n`);
+    for (const item of value) {
+      const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      process.stdout.write(`${String(record.id || "-")}\t${String(record.title || record.displayName || record.name || "")}\n`);
+    }
     return;
   }
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -124,7 +157,7 @@ export function mcpConfig(baseUrl = process.env.QUESTFORGE_API_URL || DEFAULT_AP
   };
 }
 
-export async function run(argv, env = process.env) {
+export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<unknown> {
   const { positional, options } = parseArgs(argv);
   if (options.help || !positional.length) return usage();
   const token = options.tokenStdin ? await readTokenFromStdin() : String(env.QUESTFORGE_TOKEN || "");
@@ -138,7 +171,7 @@ export async function run(argv, env = process.env) {
     const params = new URLSearchParams({ view: options.view, limit: "200" });
     if (options.search) params.set("search", options.search);
     const response = await api.request(`/v1/quests?${params}`);
-    return response?.quests || response;
+    return (response as Record<string, unknown>)?.quests || response;
   }
   if (command === "quests" && subcommand === "add") {
     const payload = buildQuestPayload(options);
@@ -153,7 +186,7 @@ export async function run(argv, env = process.env) {
     });
   }
   if (command === "agents" && subcommand === "list") {
-    const response = await api.request("/v1/agents?includeArchived=true");
+    const response = await api.request<Record<string, unknown>>("/v1/agents?includeArchived=true");
     return response?.agents || response;
   }
   if (command === "handoff") {
@@ -167,9 +200,10 @@ export async function run(argv, env = process.env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  run(process.argv.slice(2)).then((value) => output(value, parseArgs(process.argv.slice(2)).options.json)).catch((error) => {
+  run(process.argv.slice(2)).then((value) => output(value, parseArgs(process.argv.slice(2)).options.json)).catch((error: unknown) => {
     const asJson = (() => { try { return parseArgs(process.argv.slice(2)).options.json; } catch { return false; } })();
-    output(asJson ? { ok: false, error: error.message } : `エラー: ${error.message}`, asJson);
+    const message = error instanceof Error ? error.message : String(error);
+    output(asJson ? { ok: false, error: message } : `エラー: ${message}`, asJson);
     process.exitCode = 1;
   });
 }

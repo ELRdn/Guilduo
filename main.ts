@@ -1,4 +1,3 @@
-// @ts-nocheck
 import "./runtime-config.js";
 import "./i18n-browser.ts";
 import "./shared/battle-rules-browser.ts";
@@ -12,8 +11,8 @@ import("./telemetry.ts").then(({ initializeTelemetry }) => {
 
 import("./firebase-client.ts").catch((error) => {
   console.warn("QuestForge Firebase module failed to load:", error);
-  const status = document.querySelector("#syncStatus");
-  const panel = document.querySelector("#syncPanel");
+  const status = document.querySelector<HTMLElement>("#syncStatus");
+  const panel = document.querySelector<HTMLElement>("#syncPanel");
   if (status) status.textContent = globalThis.QuestForgeI18n?.t?.("sync.local") || "Local storage";
   if (panel) panel.dataset.syncState = "error";
 });

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { initializeApp } from "firebase/app";
 import {
   GoogleAuthProvider,
@@ -8,6 +7,7 @@ import {
   setPersistence,
   signInWithPopup,
   signOut,
+  type User,
 } from "firebase/auth";
 import {
   get,
@@ -17,69 +17,96 @@ import {
   serverTimestamp,
   set,
   update,
+  type DatabaseReference,
 } from "firebase/database";
 import firebaseConfig from "./firebase-config.js";
 import { trackTelemetry } from "./telemetry.ts";
+import type { QuestForgeState } from "./types/questforge.ts";
+
+type RemoteStatePayload = {
+  clientUpdatedAt?: string;
+  state?: unknown;
+  [key: string]: unknown;
+};
+
+type SyncStatus = "local" | "syncing" | "synced" | "error";
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getDatabase(firebaseApp);
 const provider = new GoogleAuthProvider();
 
-const syncPanel = document.querySelector("#syncPanel");
-const syncStatus = document.querySelector("#syncStatus");
-const syncSignInButton = document.querySelector("#syncSignInButton");
-const syncSignOutButton = document.querySelector("#syncSignOutButton");
+const syncPanel = document.querySelector<HTMLElement>("#syncPanel");
+const syncStatus = document.querySelector<HTMLElement>("#syncStatus");
+const syncSignInButton = document.querySelector<HTMLButtonElement>("#syncSignInButton");
+const syncSignOutButton = document.querySelector<HTMLButtonElement>("#syncSignOutButton");
 const i18n = globalThis.QuestForgeI18n;
 
-let currentUser = null;
-let currentStateRef = null;
-let stopStateSubscription = null;
-let uploadTimer = null;
+let currentUser: User | null = null;
+let currentStateRef: DatabaseReference | null = null;
+let stopStateSubscription: (() => void) | null = null;
+let uploadTimer: number | null = null;
 let lastUploadedAt = "";
-let lastEntityFingerprints = new Map();
+let lastEntityFingerprints = new Map<string, string>();
 let currentSyncMessageKey = "sync.local";
 
 globalThis.QuestForgeFirebase = {
-  async getIdToken(forceRefresh = false) {
+  async getIdToken(forceRefresh = false): Promise<string> {
     return currentUser ? currentUser.getIdToken(forceRefresh) : "";
   },
   getUser() {
     return currentUser ? { uid: currentUser.uid, email: currentUser.email || "", displayName: currentUser.displayName || "" } : null;
   },
-  async flushState() {
+  async flushState(): Promise<boolean> {
     const bridge = getBridge();
     if (!currentUser || !currentStateRef || !bridge) return false;
-    window.clearTimeout(uploadTimer);
+    clearUploadTimer();
     await uploadState(bridge.getSyncSnapshot().state);
     return true;
   },
 };
 
-function getBridge() {
-  return globalThis.QuestForgeBridge;
+function getBridge(): NonNullable<typeof globalThis.QuestForgeBridge> | null {
+  return globalThis.QuestForgeBridge || null;
 }
 
-function setSyncUi(status, messageKey) {
-  syncPanel.dataset.syncState = status;
+function setSyncUi(status: SyncStatus, messageKey: string): void {
+  if (syncPanel) syncPanel.dataset.syncState = status;
   currentSyncMessageKey = messageKey;
-  syncStatus.textContent = i18n?.t?.(messageKey) || messageKey;
+  if (syncStatus) syncStatus.textContent = i18n?.t?.(messageKey) || messageKey;
 }
 
-function describeFirebaseError(error) {
-  if (error?.code === "auth/popup-closed-by-user") return "sync.error.cancelled";
-  if (error?.code === "auth/popup-blocked") return "sync.error.popupBlocked";
-  if (error?.code === "auth/unauthorized-domain") return "sync.error.domain";
-  if (error?.code === "PERMISSION_DENIED" || error?.code === "permission-denied") return "sync.error.permission";
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function toRemotePayload(value: unknown): RemoteStatePayload {
+  return asRecord(value) as RemoteStatePayload || {};
+}
+
+function readText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function stateUpdatedAt(value: unknown): string {
+  return readText(asRecord(value)?.updatedAt);
+}
+
+function describeFirebaseError(error: unknown): string {
+  const code = readText(asRecord(error)?.code);
+  if (code === "auth/popup-closed-by-user") return "sync.error.cancelled";
+  if (code === "auth/popup-blocked") return "sync.error.popupBlocked";
+  if (code === "auth/unauthorized-domain") return "sync.error.domain";
+  if (code === "PERMISSION_DENIED" || code === "permission-denied") return "sync.error.permission";
   return "sync.error.connection";
 }
 
-function cloudUpdatedAt(payload) {
-  return payload?.clientUpdatedAt || payload?.state?.updatedAt || "";
+function cloudUpdatedAt(payload: RemoteStatePayload): string {
+  return payload.clientUpdatedAt || stateUpdatedAt(payload.state);
 }
 
-async function uploadState(state) {
-  if (!currentUser || !currentStateRef || !state) return;
+async function uploadState(state: QuestForgeState): Promise<void> {
+  if (!currentUser || !currentStateRef) return;
   if (state.updatedAt && state.updatedAt === lastUploadedAt) return;
   setSyncUi("syncing", "sync.syncing");
   await set(currentStateRef, {
@@ -95,15 +122,15 @@ async function uploadState(state) {
   trackTelemetry("sync_success", { source: "firebase" });
 }
 
-function entityFingerprint(value) {
+function entityFingerprint(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-async function mirrorStateEntities(state) {
-  if (!currentUser || !state) return;
-  const updates = {};
-  const nextFingerprints = new Map();
-  const writeIfChanged = (path, value) => {
+async function mirrorStateEntities(state: QuestForgeState): Promise<void> {
+  if (!currentUser) return;
+  const updates: Record<string, unknown> = {};
+  const nextFingerprints = new Map<string, string>();
+  const writeIfChanged = (path: string, value: unknown): void => {
     const fingerprint = entityFingerprint(value);
     nextFingerprints.set(path, fingerprint);
     if (lastEntityFingerprints.get(path) !== fingerprint) updates[path] = value;
@@ -123,8 +150,8 @@ async function mirrorStateEntities(state) {
     integrations: state.integrations,
     updatedAt: state.updatedAt,
   });
-  writeIfChanged("entities/events/task", Object.fromEntries((state.taskEvents || []).map((event) => [event.id, event])));
-  writeIfChanged("entities/events/sync", Object.fromEntries((state.syncEvents || []).map((event) => [event.id, event])));
+  writeIfChanged("entities/events/task", Object.fromEntries((state.taskEvents || []).map((event) => [String(event.id || ""), event])));
+  writeIfChanged("entities/events/sync", Object.fromEntries((state.syncEvents || []).map((event) => [String(event.id || ""), event])));
   updates["entities/meta/updatedAt"] = serverTimestamp();
   updates["entities/meta/schemaVersion"] = state.schemaVersion || 3;
 
@@ -132,18 +159,24 @@ async function mirrorStateEntities(state) {
   lastEntityFingerprints = nextFingerprints;
 }
 
-async function preserveLegacySnapshot(user, remote) {
+async function preserveLegacySnapshot(user: User, remote: RemoteStatePayload): Promise<void> {
   const backupRef = ref(db, `users/${user.uid}/state/legacyBackupV3`);
   const backup = await get(backupRef);
-  if (!backup.exists() && remote?.state) {
+  if (!backup.exists() && asRecord(remote.state)) {
     await set(backupRef, { ...remote, preservedAt: serverTimestamp() });
   }
 }
 
-function scheduleUpload(state) {
-  window.clearTimeout(uploadTimer);
+function clearUploadTimer(): void {
+  if (uploadTimer !== null) window.clearTimeout(uploadTimer);
+  uploadTimer = null;
+}
+
+function scheduleUpload(state: QuestForgeState | undefined): void {
+  if (!state) return;
+  clearUploadTimer();
   uploadTimer = window.setTimeout(() => {
-    uploadState(state).catch((error) => {
+    uploadState(state).catch((error: unknown) => {
       console.warn("QuestForge Firebase upload failed:", error);
       setSyncUi("error", describeFirebaseError(error));
       trackTelemetry("sync_failure", { source: "firebase" });
@@ -151,16 +184,16 @@ function scheduleUpload(state) {
   }, 900);
 }
 
-function applyCloudState(payload) {
+function applyCloudState(payload: RemoteStatePayload): void {
   const bridge = getBridge();
-  if (!bridge || !payload?.state) return;
+  if (!bridge || !payload.state || typeof payload.state !== "object") return;
   bridge.applyCloudState(payload.state);
-  lastUploadedAt = payload.state.updatedAt || payload.clientUpdatedAt || "";
+  lastUploadedAt = stateUpdatedAt(payload.state) || payload.clientUpdatedAt || "";
   setSyncUi("synced", "sync.synced");
   trackTelemetry("sync_success", { source: "firebase" });
 }
 
-async function startStateSync(user) {
+async function startStateSync(user: User): Promise<void> {
   const bridge = getBridge();
   if (!bridge) throw new Error("QuestForge bridge is not ready");
 
@@ -171,7 +204,7 @@ async function startStateSync(user) {
   if (!remoteSnapshot.exists()) {
     await uploadState(local.state);
   } else {
-    const remote = remoteSnapshot.val();
+    const remote = toRemotePayload(remoteSnapshot.val() as unknown);
     await preserveLegacySnapshot(user, remote);
     const remoteDate = cloudUpdatedAt(remote);
     const localDate = local.state?.updatedAt || "";
@@ -188,7 +221,7 @@ async function startStateSync(user) {
   stopStateSubscription?.();
   stopStateSubscription = onValue(currentStateRef, (snapshot) => {
     if (!snapshot.exists()) return;
-    const remote = snapshot.val();
+    const remote = toRemotePayload(snapshot.val() as unknown);
     const remoteDate = cloudUpdatedAt(remote);
     const localDate = getBridge()?.getSyncSnapshot().state?.updatedAt || "";
     if (remoteDate > localDate && remoteDate !== lastUploadedAt) {
@@ -196,34 +229,38 @@ async function startStateSync(user) {
     } else {
       setSyncUi("synced", "sync.synced");
     }
-  }, (error) => {
+  }, (error: Error) => {
     console.warn("QuestForge Firebase subscription failed:", error);
     setSyncUi("error", describeFirebaseError(error));
     trackTelemetry("sync_failure", { source: "firebase" });
   });
 }
 
-syncSignInButton.addEventListener("click", async () => {
-  setSyncUi("syncing", "sync.connecting");
-  syncSignInButton.disabled = true;
-  try {
-    await signInWithPopup(auth, provider);
-  } catch (error) {
-    console.warn("QuestForge Firebase sign-in failed:", error);
-    setSyncUi("error", describeFirebaseError(error));
-  } finally {
-    syncSignInButton.disabled = false;
-  }
-});
+if (syncSignInButton) {
+  syncSignInButton.addEventListener("click", async () => {
+    setSyncUi("syncing", "sync.connecting");
+    syncSignInButton.disabled = true;
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error: unknown) {
+      console.warn("QuestForge Firebase sign-in failed:", error);
+      setSyncUi("error", describeFirebaseError(error));
+    } finally {
+      syncSignInButton.disabled = false;
+    }
+  });
+}
 
-syncSignOutButton.addEventListener("click", async () => {
-  syncSignOutButton.disabled = true;
-  try {
-    await signOut(auth);
-  } finally {
-    syncSignOutButton.disabled = false;
-  }
-});
+if (syncSignOutButton) {
+  syncSignOutButton.addEventListener("click", async () => {
+    syncSignOutButton.disabled = true;
+    try {
+      await signOut(auth);
+    } finally {
+      syncSignOutButton.disabled = false;
+    }
+  });
+}
 
 window.addEventListener("questforge:state-saved", (event) => {
   if (!currentUser) return;
@@ -235,39 +272,43 @@ setPersistence(auth, browserLocalPersistence)
     onAuthStateChanged(auth, async (user) => {
       currentUser = user;
       window.dispatchEvent(new CustomEvent("questforge:auth-changed", {
-        detail: { user: globalThis.QuestForgeFirebase.getUser() },
+        detail: { user: globalThis.QuestForgeFirebase?.getUser() || null },
       }));
       stopStateSubscription?.();
       stopStateSubscription = null;
       currentStateRef = null;
       lastEntityFingerprints = new Map();
-      window.clearTimeout(uploadTimer);
+      clearUploadTimer();
 
       if (!user) {
-        syncSignInButton.hidden = false;
-        syncSignOutButton.hidden = true;
-        syncSignOutButton.title = "";
+        if (syncSignInButton) syncSignInButton.hidden = false;
+        if (syncSignOutButton) {
+          syncSignOutButton.hidden = true;
+          syncSignOutButton.title = "";
+        }
         setSyncUi("local", "sync.local");
         return;
       }
 
-      syncSignInButton.hidden = true;
-      syncSignOutButton.hidden = false;
-      syncSignOutButton.title = user.email || user.displayName || i18n.t("sync.signOut");
+      if (syncSignInButton) syncSignInButton.hidden = true;
+      if (syncSignOutButton) {
+        syncSignOutButton.hidden = false;
+        syncSignOutButton.title = user.email || user.displayName || i18n?.t("sync.signOut") || "";
+      }
       setSyncUi("syncing", "sync.initial");
       try {
         await startStateSync(user);
-      } catch (error) {
+      } catch (error: unknown) {
         console.warn("QuestForge Firebase sync startup failed:", error);
         setSyncUi("error", describeFirebaseError(error));
       }
     });
   })
-  .catch((error) => {
+  .catch((error: unknown) => {
     console.warn("QuestForge Firebase persistence failed:", error);
     setSyncUi("error", describeFirebaseError(error));
   });
 
 window.addEventListener("questforge:locale-changed", () => {
-  setSyncUi(syncPanel.dataset.syncState || "local", currentSyncMessageKey);
+  setSyncUi((syncPanel?.dataset.syncState as SyncStatus | undefined) || "local", currentSyncMessageKey);
 });

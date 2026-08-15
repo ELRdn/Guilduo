@@ -1,25 +1,50 @@
-// @ts-nocheck
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { MCP_TOOLS } from "../worker/src/index.ts";
 
+interface OpenApiSchema {
+  type?: string | string[];
+  properties?: Record<string, OpenApiSchema>;
+  allOf?: OpenApiSchema[];
+  [key: string]: unknown;
+}
+
+interface OpenApiOperation extends OpenApiSchema {
+  parameters?: OpenApiSchema[];
+}
+
+interface OpenApiPath extends OpenApiSchema {
+  get?: OpenApiOperation;
+  post?: OpenApiOperation;
+  patch?: OpenApiOperation;
+  put?: OpenApiOperation;
+  delete?: OpenApiOperation;
+}
+
+interface OpenApiDocument extends OpenApiSchema {
+  paths: Record<string, OpenApiPath>;
+  components: { securitySchemes: OpenApiSchema; schemas: Record<string, OpenApiSchema> };
+}
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const apiDirectory = join(root, "api");
 const openApiPath = join(apiDirectory, "openapi.json");
-const openapi = JSON.parse(await readFile(openApiPath, "utf8"));
-openapi.components ||= openapi.paths?.components || { securitySchemes: {}, schemas: {} };
-if (openapi.paths?.components) delete openapi.paths.components;
+const openapi = JSON.parse(await readFile(openApiPath, "utf8")) as OpenApiDocument;
+const legacyComponents = (openapi.paths as OpenApiSchema).components as OpenApiDocument["components"] | undefined;
+openapi.components ||= legacyComponents || { securitySchemes: {}, schemas: {} };
+const pathContainer = openapi.paths as unknown as Record<string, unknown>;
+if (pathContainer.components) delete pathContainer.components;
 
-const jsonContent = (schema) => ({ content: { "application/json": { schema } } });
-const ok = (description, schema = { type: "object" }) => ({ "200": { description, ...jsonContent(schema) } });
-const body = (schema) => ({ required: true, ...jsonContent(schema) });
-const parameter = (name) => ({ name, in: "path", required: true, schema: { type: "string" } });
+const jsonContent = (schema: OpenApiSchema): OpenApiSchema => ({ content: { "application/json": { schema } } });
+const ok = (description: string, schema: OpenApiSchema = { type: "object" }): OpenApiSchema => ({ "200": { description, ...jsonContent(schema) } });
+const body = (schema: OpenApiSchema): OpenApiSchema => ({ required: true, ...jsonContent(schema) });
+const parameter = (name: string): OpenApiSchema => ({ name, in: "path", required: true, schema: { type: "string" } });
 
 const questListPath = openapi.paths["/v1/quests"];
 if (questListPath?.get) {
   questListPath.get.parameters ||= [];
-  const existingParameters = new Set(questListPath.get.parameters.map((item) => item.name));
+  const existingParameters = new Set(questListPath.get.parameters.map((item: OpenApiSchema) => String(item.name || "")));
   for (const item of [
     { name: "parentQuestId", in: "query", schema: { type: "string", maxLength: 120 } },
     { name: "rootOnly", in: "query", schema: { type: "boolean", default: false } },
@@ -155,9 +180,12 @@ Object.assign(openapi.paths, {
   },
 });
 
-const scopes = openapi.components.securitySchemes.oauth2.flows.authorizationCode.scopes;
-openapi.components.securitySchemes.oauth2.flows.authorizationCode.authorizationUrl = "https://your-questforge-worker.example.workers.dev/oauth/authorize";
-openapi.components.securitySchemes.oauth2.flows.authorizationCode.tokenUrl = "https://your-questforge-worker.example.workers.dev/oauth/token";
+const oauth2 = openapi.components.securitySchemes.oauth2 as OpenApiSchema;
+const flows = oauth2.flows as OpenApiSchema;
+const authorizationCode = flows.authorizationCode as OpenApiSchema;
+const scopes = authorizationCode.scopes as Record<string, string>;
+authorizationCode.authorizationUrl = "https://your-questforge-worker.example.workers.dev/oauth/authorize";
+authorizationCode.tokenUrl = "https://your-questforge-worker.example.workers.dev/oauth/token";
 Object.assign(scopes, {
   "agents:read": "Read registered Agent profiles and the current Agent context",
   "profiles:read": "Read public profile data",
@@ -200,12 +228,13 @@ schemas.HandoffTransitionInput = {
 schemas.HandoffTransitionResult = { type: "object", properties: { dryRun: { type: "boolean" }, quest: { $ref: "#/components/schemas/Quest" }, event: { type: "object" }, events: { type: "array", items: { type: "object" } } } };
 schemas.AgentHandoffPage = { type: "object", properties: { handoffs: { type: "array", items: { $ref: "#/components/schemas/Quest" } }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } } };
 schemas.QuestTree = { type: "object", properties: { roots: { type: "array", items: { type: "object" } }, nodes: { type: "array", items: { $ref: "#/components/schemas/Quest" } }, total: { type: "integer" }, summary: { type: "object", properties: { childrenTotal: { type: "integer" }, childrenCompleted: { type: "integer" }, progressPercent: { type: "integer" } } } } };
+schemas.QuestInput.properties ||= {};
 schemas.QuestInput.properties.assignee = { $ref: "#/components/schemas/Assignee" };
 schemas.QuestInput.properties.parentQuestId = { type: "string", maxLength: 120 };
 schemas.QuestInput.properties.handoff = { $ref: "#/components/schemas/Handoff" };
 const questOutputProperties = { handoff: { $ref: "#/components/schemas/Handoff" }, childrenSummary: { type: "object" } };
 if (Array.isArray(schemas.Quest.allOf)) {
-  const outputPart = schemas.Quest.allOf.find((part) => part?.properties?.id && part?.properties?.createdAt) || schemas.Quest.allOf[schemas.Quest.allOf.length - 1];
+  const outputPart = schemas.Quest.allOf.find((part: OpenApiSchema) => part.properties?.id && part.properties?.createdAt) || schemas.Quest.allOf[schemas.Quest.allOf.length - 1];
   outputPart.properties = { ...(outputPart.properties || {}), ...questOutputProperties };
   delete schemas.Quest.properties;
 } else {

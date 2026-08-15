@@ -1,7 +1,87 @@
-// @ts-nocheck
-const COMMANDS = new Set(["attack", "skill", "guard", "heal", "burst"]);
+import type {
+  BattleBossProfile,
+  BattleCommandId,
+  BattleCommandInput,
+  BattleEffect,
+  BattleRoleId,
+  BattleSession,
+  BattleSkill,
+  BossState,
+  CharacterState,
+  Quest,
+  QuestForgeState,
+} from "../types/questforge.ts";
 
-export const BATTLE_SKILLS = Object.freeze({
+type MutableCharacter = CharacterState & {
+  id?: string;
+  role: string;
+  level: number;
+  hp: number;
+  maxHp: number;
+  gems: number;
+  xp: number;
+  nextXp: number;
+};
+
+type BattleSummary = {
+  commandId: string;
+  command: string;
+  expectedTurn: number;
+  turn: number;
+  cost: number;
+  before: Record<string, number>;
+  after: Record<string, number>;
+  effects: BattleEffect[];
+  replayed: boolean;
+  dryRun: boolean;
+  [key: string]: unknown;
+};
+
+type BattleClaim = BattleSummary;
+
+type MutableBattle = QuestForgeState["battle"] & {
+  turn: number;
+  mp: number;
+  maxMp: number;
+  focus: number;
+  guard: number;
+  shield: number;
+  rage: number;
+  vulnerable: number;
+  poison: number;
+  ended: boolean;
+  log: Array<Record<string, unknown>>;
+  commandClaims: Record<string, BattleClaim>;
+  commandClaimOrder: string[];
+};
+
+type MutableBoss = BossState & {
+  currentId: string;
+  hp: number;
+  maxHp: number;
+  defeatedIds: string[];
+  defeatCount: number;
+  battleLog: Array<Record<string, unknown>>;
+};
+
+type MutableBattleState = QuestForgeState & {
+  character: MutableCharacter;
+  boss: MutableBoss;
+  battle: MutableBattle;
+  tasks: Quest[];
+};
+
+type BattleCommandResult = BattleSummary & {
+  session: BattleSession;
+};
+
+const COMMANDS: ReadonlySet<BattleCommandId> = new Set(["attack", "skill", "guard", "heal", "burst"]);
+
+function isBattleCommand(value: string): value is BattleCommandId {
+  return COMMANDS.has(value as BattleCommandId);
+}
+
+export const BATTLE_SKILLS: Readonly<Record<BattleRoleId, BattleSkill>> = Object.freeze({
   sentinel: { id: "aegis-break", name: "Aegis Break", cost: 18 },
   archivist: { id: "weakness-note", name: "Weakness Note", cost: 16 },
   operator: { id: "protocol-spike", name: "Protocol Spike", cost: 20 },
@@ -10,7 +90,7 @@ export const BATTLE_SKILLS = Object.freeze({
   artificer: { id: "gear-cannon", name: "Gear Cannon", cost: 22 },
 });
 
-export const BATTLE_BOSSES = Object.freeze({
+export const BATTLE_BOSSES: Readonly<Record<string, BattleBossProfile>> = Object.freeze({
   d: { id: "d", name: "Dark Quest Knight", label: "暗黒騎士", maxHp: 125, rewardGems: 26, rewardXp: 36, weakKind: "todo" },
   e: { id: "e", name: "Deadline Wraith", label: "締切レイス", maxHp: 115, rewardGems: 24, rewardXp: 34, weakKind: "daily" },
   h: { id: "h", name: "Deadline Wraith Lite", label: "小型レイス", maxHp: 95, rewardGems: 18, rewardXp: 26, weakKind: "habit" },
@@ -18,97 +98,137 @@ export const BATTLE_BOSSES = Object.freeze({
   h3: { id: "h3", name: "Compact Deadline Wraith", label: "締切の影", maxHp: 100, rewardGems: 20, rewardXp: 30, weakKind: "daily" },
 });
 
-function battleError(status, code, message, details) {
-  return Object.assign(new Error(message), { status, code, details });
+class BattleError extends Error {
+  status: number;
+  code: string;
+  details: unknown;
+
+  constructor(status: number, code: string, message: string, details?: unknown) {
+    super(message);
+    this.name = "BattleError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
 }
 
-function clone(value) {
-  return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+function battleError(status: number, code: string, message: string, details?: unknown): BattleError {
+  return new BattleError(status, code, message, details);
 }
 
-function integer(value, fallback = 0) {
+function clone<T>(value: T): T {
+  return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)) as T;
+}
+
+function integer(value: unknown, fallback = 0): number {
   const number = Number(value);
   return Number.isFinite(number) ? Math.round(number) : fallback;
 }
 
-function clamp(value, minimum, maximum) {
+function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function roleOf(state) {
-  return BATTLE_SKILLS[state.character?.role] ? state.character.role : "sentinel";
+function isBattleRole(value: unknown): value is BattleRoleId {
+  return typeof value === "string" && value in BATTLE_SKILLS;
 }
 
-export function battleSkill(role) {
-  return BATTLE_SKILLS[BATTLE_SKILLS[role] ? role : "sentinel"];
+function roleOf(state: { character?: { role?: unknown } }): BattleRoleId {
+  return isBattleRole(state.character?.role) ? state.character.role : "sentinel";
 }
 
-export function battleBoss(state) {
+export function battleSkill(role: string): BattleSkill {
+  return BATTLE_SKILLS[isBattleRole(role) ? role : "sentinel"];
+}
+
+export function battleBoss(state: { boss?: { currentId?: unknown; maxHp?: unknown } }): BattleBossProfile {
   const currentId = state.boss?.currentId;
-  return BATTLE_BOSSES[currentId] || {
+  const profile = typeof currentId === "string" ? BATTLE_BOSSES[currentId] : undefined;
+  return profile || {
     ...BATTLE_BOSSES.h3,
-    id: currentId || "h3",
+    id: typeof currentId === "string" && currentId ? currentId : "h3",
     maxHp: Math.max(1, integer(state.boss?.maxHp, 100)),
   };
 }
 
-export function battleCommandCost(command, role = "sentinel") {
-  if (!COMMANDS.has(command)) throw battleError(400, "battle_command_invalid", "Unknown battle command.");
-  return { attack: 0, skill: battleSkill(role).cost, guard: 6, heal: 14, burst: 40 }[command];
+export function battleCommandCost(command: string, role = "sentinel"): number {
+  if (!isBattleCommand(command)) throw battleError(400, "battle_command_invalid", "Unknown battle command.");
+  const costs: Record<BattleCommandId, number> = { attack: 0, skill: battleSkill(role).cost, guard: 6, heal: 14, burst: 40 };
+  return costs[command as BattleCommandId];
 }
 
-export function isBattleQuestEligible(task) {
+export function isBattleQuestEligible(task: Quest): boolean {
   if (!task || !["habit", "daily", "todo"].includes(task.kind)) return false;
   if (task.negativeOnly) return false;
   if (["completed", "archived"].includes(task.lifecycleState)) return false;
   return task.kind === "habit" || !task.done;
 }
 
-export function battleMpForQuest(task, weakKind = "") {
+export function battleMpForQuest(task: Quest, weakKind: string = ""): number {
   if (!isBattleQuestEligible(task)) return 0;
   const scale = { trivial: 0.5, easy: 1, medium: 1.5, hard: 2.5 }[task.difficulty] || 1;
-  const base = { habit: 6, daily: 14, todo: 20 }[task.kind] || 0;
+  const base = { habit: 6, daily: 14, todo: 20 }[task.kind as "habit" | "daily" | "todo"] || 0;
   return base ? Math.max(1, Math.round(base * scale + (task.kind === weakKind ? 4 : 0))) : 0;
 }
 
-export function normalizeBattleState(state) {
-  state.character = state.character && typeof state.character === "object" ? state.character : {};
-  state.character.level = Math.max(1, integer(state.character.level, 1));
-  state.character.hp = Math.max(0, integer(state.character.hp, 50));
-  state.character.maxHp = Math.max(1, integer(state.character.maxHp, 50));
-  state.character.gems = Math.max(0, integer(state.character.gems));
-  state.character.xp = Math.max(0, integer(state.character.xp));
-  state.character.nextXp = Math.max(1, integer(state.character.nextXp, 100));
-  state.character.role = roleOf(state);
+export function normalizeBattleState(state: QuestForgeState): MutableBattleState {
+  const rawCharacter = state.character && typeof state.character === "object" ? state.character : {};
+  state.character = {
+    name: "Astra",
+    className: "Sentinel",
+    role: "sentinel",
+    level: 1,
+    hp: 50,
+    maxHp: 50,
+    xp: 0,
+    nextXp: 100,
+    gems: 0,
+    streak: 0,
+    variant: "femme",
+    personality: "",
+    ...rawCharacter,
+  };
+  const character = state.character as MutableCharacter;
+  character.level = Math.max(1, integer(character.level, 1));
+  character.hp = Math.max(0, integer(character.hp, 50));
+  character.maxHp = Math.max(1, integer(character.maxHp, 50));
+  character.gems = Math.max(0, integer(character.gems));
+  character.xp = Math.max(0, integer(character.xp));
+  character.nextXp = Math.max(1, integer(character.nextXp, 100));
+  character.role = roleOf(state);
 
-  state.boss = state.boss && typeof state.boss === "object" ? state.boss : {};
+  const rawBoss = state.boss && typeof state.boss === "object" ? state.boss : {};
+  state.boss = { hp: 100, maxHp: 100, defeatedIds: [], defeatCount: 0, battleLog: [], ...rawBoss };
+  const bossState = state.boss as MutableBoss;
   const boss = battleBoss(state);
-  state.boss.currentId = boss.id;
-  state.boss.maxHp = Math.max(1, integer(state.boss.maxHp, boss.maxHp));
-  state.boss.hp = clamp(integer(state.boss.hp, state.boss.maxHp), 0, state.boss.maxHp);
-  state.boss.defeatedIds = Array.isArray(state.boss.defeatedIds) ? [...new Set(state.boss.defeatedIds.map(String))] : [];
-  state.boss.defeatCount = Math.max(0, integer(state.boss.defeatCount));
-  state.boss.battleLog = Array.isArray(state.boss.battleLog) ? state.boss.battleLog.slice(0, 8) : [];
+  bossState.currentId = boss.id;
+  bossState.maxHp = Math.max(1, integer(bossState.maxHp, boss.maxHp));
+  bossState.hp = clamp(integer(bossState.hp, bossState.maxHp), 0, bossState.maxHp);
+  bossState.defeatedIds = Array.isArray(bossState.defeatedIds) ? [...new Set(bossState.defeatedIds.map(String))] : [];
+  bossState.defeatCount = Math.max(0, integer(bossState.defeatCount));
+  bossState.battleLog = Array.isArray(bossState.battleLog) ? bossState.battleLog.slice(0, 8) : [];
 
-  state.battle = state.battle && typeof state.battle === "object" ? state.battle : {};
-  state.battle.turn = Math.max(1, integer(state.battle.turn, 1));
-  state.battle.maxMp = Math.max(1, integer(state.battle.maxMp, 80));
-  state.battle.mp = clamp(integer(state.battle.mp), 0, state.battle.maxMp);
-  for (const key of ["focus", "guard", "shield", "rage", "vulnerable", "poison"]) state.battle[key] = Math.max(0, integer(state.battle[key]));
-  state.battle.ended = Boolean(state.battle.ended || state.character.hp <= 0 || state.boss.hp <= 0);
-  state.battle.log = Array.isArray(state.battle.log) ? state.battle.log.slice(0, 10) : [];
-  state.battle.commandClaims = state.battle.commandClaims && typeof state.battle.commandClaims === "object" && !Array.isArray(state.battle.commandClaims)
-    ? state.battle.commandClaims
+  const rawBattle = state.battle && typeof state.battle === "object" ? state.battle : {};
+  state.battle = { turn: 1, mp: 0, maxMp: 80, focus: 0, guard: 0, shield: 0, rage: 0, vulnerable: 0, poison: 0, ended: false, log: [], ...rawBattle };
+  const battle = state.battle as MutableBattle;
+  battle.turn = Math.max(1, integer(battle.turn, 1));
+  battle.maxMp = Math.max(1, integer(battle.maxMp, 80));
+  battle.mp = clamp(integer(battle.mp), 0, battle.maxMp);
+  for (const key of ["focus", "guard", "shield", "rage", "vulnerable", "poison"] as const) battle[key] = Math.max(0, integer(battle[key]));
+  battle.ended = Boolean(battle.ended || character.hp <= 0 || bossState.hp <= 0);
+  battle.log = Array.isArray(battle.log) ? battle.log.slice(0, 10) : [];
+  battle.commandClaims = battle.commandClaims && typeof battle.commandClaims === "object" && !Array.isArray(battle.commandClaims)
+    ? battle.commandClaims as Record<string, BattleClaim>
     : {};
-  state.battle.commandClaimOrder = Array.isArray(state.battle.commandClaimOrder) ? state.battle.commandClaimOrder.slice(-100) : [];
-  return state;
+  battle.commandClaimOrder = Array.isArray(battle.commandClaimOrder) ? battle.commandClaimOrder.slice(-100) : [];
+  return state as MutableBattleState;
 }
 
-function appendLog(state, text, kind = "info") {
+function appendLog(state: MutableBattleState, text: string, kind = "info"): void {
   state.battle.log = [{ text, kind, at: new Date().toISOString() }, ...state.battle.log].slice(0, 10);
 }
 
-function grantXp(character, amount) {
+function grantXp(character: MutableCharacter, amount: number): void {
   character.xp += amount;
   while (character.xp >= character.nextXp) {
     character.xp -= character.nextXp;
@@ -119,7 +239,7 @@ function grantXp(character, amount) {
   }
 }
 
-function defeatBoss(state, boss, source, damage) {
+function defeatBoss(state: MutableBattleState, boss: BattleBossProfile, source: string, damage: number): void {
   if (!state.boss.defeatedIds.includes(boss.id)) state.boss.defeatedIds.push(boss.id);
   state.boss.defeatCount += 1;
   state.character.gems += boss.rewardGems;
@@ -140,7 +260,7 @@ function defeatBoss(state, boss, source, damage) {
   appendLog(state, `勝利: ${source}で${damage}ダメージ。ボスを撃破しました。`, "success");
 }
 
-function dealBossDamage(state, amount, source, effects) {
+function dealBossDamage(state: MutableBattleState, amount: number, source: string, effects: BattleEffect[]): number {
   const boss = battleBoss(state);
   let damage = Math.max(0, integer(amount));
   if (state.battle.vulnerable > 0) {
@@ -154,7 +274,7 @@ function dealBossDamage(state, amount, source, effects) {
   return damage;
 }
 
-function takePlayerDamage(state, amount, source, effects) {
+function takePlayerDamage(state: MutableBattleState, amount: number, source: string, effects: BattleEffect[]): void {
   let damage = Math.max(0, integer(amount));
   if (state.battle.guard > 0) {
     damage = Math.ceil(damage / 2);
@@ -174,7 +294,7 @@ function takePlayerDamage(state, amount, source, effects) {
   }
 }
 
-function useRoleSkill(state, role, effects) {
+function useRoleSkill(state: MutableBattleState, role: BattleRoleId, effects: BattleEffect[]): void {
   const skill = battleSkill(role);
   if (role === "sentinel") {
     dealBossDamage(state, 22, skill.name, effects);
@@ -202,7 +322,7 @@ function useRoleSkill(state, role, effects) {
   }
 }
 
-function runEnemyTurn(state, effects) {
+function runEnemyTurn(state: MutableBattleState, effects: BattleEffect[]): void {
   if (state.battle.poison > 0) {
     dealBossDamage(state, state.battle.poison, "毒", effects);
     state.battle.poison -= 1;
@@ -222,7 +342,7 @@ function runEnemyTurn(state, effects) {
   }
 }
 
-function commandDescriptors(state) {
+function commandDescriptors(state: MutableBattleState): Array<Record<string, unknown>> {
   const role = roleOf(state);
   const skill = battleSkill(role);
   return [
@@ -234,8 +354,8 @@ function commandDescriptors(state) {
   ];
 }
 
-export function createBattleSession(state) {
-  normalizeBattleState(state);
+export function createBattleSession(rawState: QuestForgeState): BattleSession {
+  const state = normalizeBattleState(rawState);
   const boss = battleBoss(state);
   return {
     schemaVersion: 1,
@@ -286,10 +406,10 @@ export function createBattleSession(state) {
   };
 }
 
-export function executeBattleCommand(state, input = {}) {
-  normalizeBattleState(state);
+export function executeBattleCommand(rawState: QuestForgeState, input: BattleCommandInput = {}): BattleCommandResult {
+  const state = normalizeBattleState(rawState);
   const command = String(input.command || "");
-  if (!COMMANDS.has(command)) throw battleError(400, "battle_command_invalid", "Unknown battle command.");
+  if (!isBattleCommand(command)) throw battleError(400, "battle_command_invalid", "Unknown battle command.");
   const dryRun = input.dryRun !== false;
   const expectedTurn = input.expectedTurn === undefined ? state.battle.turn : Number(input.expectedTurn);
   if (!Number.isInteger(expectedTurn) || expectedTurn < 1) throw battleError(400, "battle_turn_invalid", "expectedTurn must be a positive integer.");
@@ -353,7 +473,7 @@ export function executeBattleCommand(state, input = {}) {
     target.battle.commandClaimOrder.push(commandId);
     while (target.battle.commandClaimOrder.length > 100) {
       const expiredId = target.battle.commandClaimOrder.shift();
-      delete target.battle.commandClaims[expiredId];
+      if (expiredId) delete target.battle.commandClaims[expiredId];
     }
   }
   return { ...summary, session: createBattleSession(target) };

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -7,36 +6,48 @@ const betaUrl = "http://127.0.0.1:5197/next/";
 const outputDir = process.env.QF_BETA_SCREENSHOT_DIR || ".qa-artifacts/questforge-agent-beta";
 await mkdir(outputDir, { recursive: true });
 
-const target = await fetch(`${debuggerUrl}/json/new?${encodeURIComponent(betaUrl)}`, { method: "PUT" }).then((response) => response.json());
+type JsonRecord = Record<string, unknown>;
+type CdpTarget = { id: string; webSocketDebuggerUrl: string };
+type PendingRequest = { resolve: (value: JsonRecord) => void; reject: (reason?: unknown) => void };
+
+const target = await fetch(`${debuggerUrl}/json/new?${encodeURIComponent(betaUrl)}`, { method: "PUT" }).then((response) => response.json() as Promise<CdpTarget>);
 const socket = new WebSocket(target.webSocketDebuggerUrl);
-const pending = new Map();
+const pending = new Map<number, PendingRequest>();
 let nextId = 0;
-let consoleErrors = [];
+const consoleErrors: string[] = [];
 
 socket.addEventListener("message", ({ data }) => {
-  const message = JSON.parse(data);
-  if (message.method === "Runtime.exceptionThrown") consoleErrors.push(message.params.exceptionDetails.text || "page exception");
-  if (message.method === "Runtime.consoleAPICalled" && message.params.type === "error") consoleErrors.push("console error");
-  const request = pending.get(message.id);
+  const message = JSON.parse(String(data)) as JsonRecord;
+  const params = message.params as JsonRecord | undefined;
+  const exceptionDetails = params?.exceptionDetails as JsonRecord | undefined;
+  if (message.method === "Runtime.exceptionThrown") consoleErrors.push(String(exceptionDetails?.text || "page exception"));
+  if (message.method === "Runtime.consoleAPICalled" && params?.type === "error") consoleErrors.push("console error");
+  const messageId = Number(message.id);
+  const request = pending.get(messageId);
   if (!request) return;
-  pending.delete(message.id);
-  message.error ? request.reject(new Error(message.error.message)) : request.resolve(message.result);
+  pending.delete(messageId);
+  const error = message.error as JsonRecord | undefined;
+  message.error ? request.reject(new Error(String(error?.message || "CDP request failed"))) : request.resolve((message.result || {}) as JsonRecord);
 });
 await new Promise((resolve, reject) => { socket.addEventListener("open", resolve, { once: true }); socket.addEventListener("error", reject, { once: true }); });
 
-function send(method, params = {}) {
+function send(method: string, params: JsonRecord = {}): Promise<JsonRecord> {
   const id = ++nextId;
   socket.send(JSON.stringify({ id, method, params }));
   return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
 }
-async function evaluate(expression) {
+async function evaluate(expression: string): Promise<unknown> {
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
-  return result.result.value;
+  const exceptionDetails = result.exceptionDetails as JsonRecord | undefined;
+  if (exceptionDetails) {
+    const exception = exceptionDetails.exception as JsonRecord | undefined;
+    throw new Error(String(exception?.description || exceptionDetails.text || "Runtime evaluation failed"));
+  }
+  return (result.result as JsonRecord | undefined)?.value;
 }
-async function click(selector) { await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); await delay(40); }
-async function delay(ms = 250) { await new Promise((resolve) => setTimeout(resolve, ms)); }
-async function waitFor(selector, timeoutMs = 5000) {
+async function click(selector: string): Promise<void> { await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); await delay(40); }
+async function delay(ms = 250): Promise<void> { await new Promise((resolve) => setTimeout(resolve, ms)); }
+async function waitFor(selector: string, timeoutMs = 5000): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (await evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`)) return;
@@ -44,13 +55,13 @@ async function waitFor(selector, timeoutMs = 5000) {
   }
   throw new Error(`Timed out waiting for ${selector}`);
 }
-async function screenshot(name) {
+async function screenshot(name: string): Promise<void> {
   const metrics = await send("Page.getLayoutMetrics");
-  const size = metrics.cssContentSize;
+  const size = metrics.cssContentSize as { width: number; height: number };
   const capture = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: size.width, height: size.height, scale: 1 } });
-  await writeFile(join(outputDir, name), Buffer.from(capture.data, "base64"));
+  await writeFile(join(outputDir, name), Buffer.from(String(capture.data || ""), "base64"));
 }
-async function noOverflow(label) {
+async function noOverflow(label: string): Promise<void> {
   if (await evaluate("document.documentElement.scrollWidth > window.innerWidth")) throw new Error(`${label}: horizontal overflow`);
 }
 
@@ -112,7 +123,7 @@ for (const [width, file, view] of [[412, "04-pixel9-settings.png", "settings"], 
     if (await evaluate('document.body.classList.contains("is-detail-modal")')) throw new Error("Mobile popup close failed");
   }
   await noOverflow(`mobile ${width}`);
-  await screenshot(file);
+  await screenshot(String(file));
 }
 
 if (consoleErrors.length) throw new Error(consoleErrors.join("\n"));

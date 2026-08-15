@@ -81,10 +81,18 @@ export interface Quest {
   assignee: QuestAssignee;
   handoff: HandoffDetails;
   externalLinks: ExternalLink[];
+  streak?: number;
+  value?: number;
+  cost?: number;
+  lastCompletedDate?: string;
+  lastRolledOverDate?: string;
+  lastPurchasedAt?: string;
+  assignmentReadyFor?: string;
   [key: string]: unknown;
 }
 
 export interface CharacterState {
+  id?: string;
   name: string;
   className: string;
   role: string;
@@ -112,6 +120,19 @@ export interface BattleState {
   poison: number;
   ended: boolean;
   log: Array<Record<string, unknown>>;
+  commandClaims?: Record<string, Record<string, unknown>>;
+  commandClaimOrder?: string[];
+  [key: string]: unknown;
+}
+
+export interface BossState {
+  currentId?: string;
+  hp: number;
+  maxHp: number;
+  defeatedIds: string[];
+  defeatCount: number;
+  battleLog: Array<Record<string, unknown>>;
+  lastReward?: string;
   [key: string]: unknown;
 }
 
@@ -122,6 +143,61 @@ export interface QuestForgeState {
   tasks: Quest[];
   character: CharacterState;
   battle: BattleState;
+  boss: BossState;
+  rewardClaims: Record<string, string>;
+  taskEvents: Array<Record<string, unknown>>;
+  migrationSnapshots: MigrationSnapshots;
+  syncEvents?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export type BattleCommandId = "attack" | "skill" | "guard" | "heal" | "burst";
+export type BattleRoleId = "sentinel" | "archivist" | "operator" | "alchemist" | "ranger" | "artificer";
+
+export interface BattleSkill {
+  id: string;
+  name: string;
+  cost: number;
+}
+
+export interface BattleBossProfile {
+  id: string;
+  name: string;
+  label: string;
+  maxHp: number;
+  rewardGems: number;
+  rewardXp: number;
+  weakKind: QuestKind;
+}
+
+export interface BattleEffect {
+  type: string;
+  amount?: number;
+  source: string;
+  [key: string]: unknown;
+}
+
+export interface BattleCommandInput {
+  command?: string;
+  commandId?: string;
+  dryRun?: boolean;
+  expectedTurn?: number;
+}
+
+export interface BattleSession {
+  schemaVersion: 1;
+  character: Record<string, unknown>;
+  boss: Record<string, unknown>;
+  battle: Record<string, unknown>;
+  quests: Array<Record<string, unknown>>;
+  commands: Array<Record<string, unknown>>;
+}
+
+export interface MigrationSnapshots {
+  schema3To4?: Record<string, unknown>;
+  schema4To5?: Record<string, unknown>;
+  schema5To6?: Record<string, unknown>;
+  schema6To7?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const APP_VERSION = "2026.08.14-public-beta";
 const CACHE_PREFIX = "questforge-pwa-";
 const CACHE_VERSION = `${CACHE_PREFIX}v21`;

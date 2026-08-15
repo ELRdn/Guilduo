@@ -1,4 +1,3 @@
-// @ts-nocheck
 export default Object.freeze({
   "locale.label": "Langue",
   "nav.tasks": "Quêtes",

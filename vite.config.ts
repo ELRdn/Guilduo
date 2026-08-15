@@ -1,11 +1,10 @@
-// @ts-nocheck
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { defineConfig } from "vite";
 
 const root = new URL(".", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
 
-function copyRuntimeAssets(source, destination) {
+function copyRuntimeAssets(source: string, destination: string): void {
   for (const entry of readdirSync(source, { withFileTypes: true })) {
     const sourcePath = join(source, entry.name);
     const destinationPath = join(destination, entry.name);

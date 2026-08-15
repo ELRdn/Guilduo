@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { writeFile } from "node:fs/promises";
 
 const required = [
@@ -10,7 +9,7 @@ for (const name of required) {
   if (!String(process.env[name] || "").trim()) throw new Error(`Missing release variable: ${name}`);
 }
 
-const json = (value) => JSON.stringify(value, null, 2);
+const json = (value: unknown): string => JSON.stringify(value, null, 2);
 const firebase = {
   apiKey: process.env.FIREBASE_API_KEY,
   authDomain: process.env.FIREBASE_AUTH_DOMAIN,

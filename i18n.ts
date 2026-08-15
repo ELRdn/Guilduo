@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { IntlMessageFormat } from "intl-messageformat";
 import ja from "./locales/ja.ts";
 import en from "./locales/en.ts";
@@ -10,8 +9,36 @@ import ko from "./locales/ko.ts";
 import zhHans from "./locales/zh-Hans.ts";
 import ru from "./locales/ru.ts";
 
-export const SUPPORTED_LOCALES = Object.freeze(["ja", "en", "es", "pt-BR", "fr", "de", "ko", "zh-Hans", "ru"]);
+export const SUPPORTED_LOCALES = Object.freeze(["ja", "en", "es", "pt-BR", "fr", "de", "ko", "zh-Hans", "ru"] as const);
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 export const LOCALE_STORAGE_KEY = "questforge-locale";
+
+type MessageCatalog = Readonly<Record<string, string>>;
+type TranslationElement = {
+  textContent: string | null;
+  dataset: Record<string, string | undefined>;
+  placeholder?: string;
+  title?: string;
+  label?: string;
+  value?: string;
+  href?: string;
+  classList: { contains: (name: string) => boolean };
+  setAttribute: (name: string, value: string) => void;
+  querySelector: (selector: string) => TranslationElement | null;
+};
+type TranslationRoot = {
+  documentElement: { lang: string; dir: string };
+  querySelectorAll: (selector: string) => TranslationElement[];
+  querySelector: (selector: string) => TranslationElement | null;
+};
+type I18nRuntime = {
+  document?: TranslationRoot;
+  localStorage?: { getItem: (key: string) => string | null; setItem: (key: string, value: string) => void };
+  navigator?: { languages?: readonly string[]; language?: string };
+  dispatchEvent?: (event: unknown) => boolean;
+};
+
+const runtimeGlobal = globalThis as unknown as I18nRuntime;
 
 export const LOCALE_METADATA = Object.freeze({
   ja: Object.freeze({
@@ -88,7 +115,7 @@ export const LOCALE_METADATA = Object.freeze({
   }),
 });
 
-const messages = Object.freeze({
+const messages: Readonly<Record<SupportedLocale, MessageCatalog>> = Object.freeze({
   ja: Object.freeze(ja),
   en: Object.freeze(en),
   es: Object.freeze(es),
@@ -100,9 +127,9 @@ const messages = Object.freeze({
   ru: Object.freeze(ru),
 });
 
-const formatterCache = new Map();
-const normalizedLocales = new Map(SUPPORTED_LOCALES.map((locale) => [locale.toLowerCase(), locale]));
-const localeAliases = new Map([
+const formatterCache = new Map<string, IntlMessageFormat | null>();
+const normalizedLocales = new Map<string, SupportedLocale>(SUPPORTED_LOCALES.map((locale) => [locale.toLowerCase(), locale]));
+const localeAliases = new Map<string, SupportedLocale>([
   ["pt", "pt-BR"],
   ["zh", "zh-Hans"],
   ["zh-cn", "zh-Hans"],
@@ -110,29 +137,30 @@ const localeAliases = new Map([
   ["zh-hans", "zh-Hans"],
 ]);
 
-function normalizeLanguageTag(tag) {
+function normalizeLanguageTag(tag: unknown): string {
   return String(tag ?? "").trim().toLowerCase().replace(/_/g, "-");
 }
 
-export function resolveLocale(tag) {
+export function resolveLocale(tag: unknown): SupportedLocale | null {
   const normalized = normalizeLanguageTag(tag);
   if (!normalized) return null;
-  if (normalizedLocales.has(normalized)) return normalizedLocales.get(normalized);
-  if (localeAliases.has(normalized)) return localeAliases.get(normalized);
+  if (normalizedLocales.has(normalized)) return normalizedLocales.get(normalized) ?? null;
+  if (localeAliases.has(normalized)) return localeAliases.get(normalized) ?? null;
   if (normalized === "zh-hant" || /^zh-(tw|hk|mo|hant)(-|$)/.test(normalized)) return null;
   const primary = normalized.split("-")[0];
-  return normalizedLocales.get(primary) || localeAliases.get(primary) || null;
+  return normalizedLocales.get(primary) ?? localeAliases.get(primary) ?? null;
 }
 
-function browserLocale() {
-  const navigator = globalThis.navigator;
-  let candidates = [];
+function browserLocale(): SupportedLocale {
+  const navigator = runtimeGlobal.navigator;
+  let candidates: string[] = [];
   if (navigator) {
     if (Array.isArray(navigator.languages)) {
       candidates = navigator.languages.filter((tag) => String(tag || "").trim());
     }
-    if (!candidates.length && String(navigator.language || "").trim()) {
-      candidates = [navigator.language];
+    const language = navigator.language;
+    if (!candidates.length && language && String(language).trim()) {
+      candidates = [language];
     }
   }
   if (!candidates.length) candidates = ["ja"];
@@ -143,19 +171,20 @@ function browserLocale() {
   return "en";
 }
 
-let activeLocale;
+let activeLocale: SupportedLocale | undefined;
 
-export function getLocale() {
+export function getLocale(): SupportedLocale {
   if (activeLocale) return activeLocale;
   let stored = "";
-  try { stored = globalThis.localStorage?.getItem(LOCALE_STORAGE_KEY) || ""; } catch { /* Device storage is optional. */ }
+  try { stored = runtimeGlobal.localStorage?.getItem(LOCALE_STORAGE_KEY) || ""; } catch { /* Device storage is optional. */ }
   activeLocale = resolveLocale(stored) || browserLocale();
   return activeLocale;
 }
 
-function getFormatter(locale, key) {
+function getFormatter(locale: SupportedLocale, key: string): IntlMessageFormat | null {
   const cacheKey = `${locale}\u0000${key}`;
-  if (formatterCache.has(cacheKey)) return formatterCache.get(cacheKey);
+  const cached = formatterCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   const template = messages[locale]?.[key];
   let formatter = null;
   if (typeof template === "string") {
@@ -169,14 +198,15 @@ function getFormatter(locale, key) {
   return formatter;
 }
 
-export function t(key, variables = {}) {
+export function t(key: string, variables: Record<string, unknown> = {}): string {
   const locale = getLocale();
-  for (const candidate of [...new Set([locale, "en", "ja"])]) {
+  const candidates: SupportedLocale[] = [locale, "en", "ja"].filter((candidate, index, all) => all.indexOf(candidate) === index) as SupportedLocale[];
+  for (const candidate of candidates) {
     const formatter = getFormatter(candidate, key);
     if (!formatter) continue;
     try {
       const formatted = formatter.format(variables);
-      return typeof formatted === "string" ? formatted : formatted.join("");
+      return typeof formatted === "string" ? formatted : Array.isArray(formatted) ? formatted.join("") : String(formatted);
     } catch {
       // Malformed message or missing variable: try the next fallback.
     }
@@ -184,38 +214,39 @@ export function t(key, variables = {}) {
   return key;
 }
 
-export function formatDate(value, options = {}) {
-  const date = value instanceof Date ? value : new Date(String(value).includes("T") ? value : `${value}T00:00:00`);
+export function formatDate(value: unknown, options: Intl.DateTimeFormatOptions = {}): string {
+  const dateText = String(value ?? "");
+  const date = value instanceof Date ? value : new Date(dateText.includes("T") ? dateText : `${dateText}T00:00:00`);
   if (Number.isNaN(date.getTime())) return String(value || "");
   return new Intl.DateTimeFormat(getLocale(), { year: "numeric", month: "short", day: "numeric", ...options }).format(date);
 }
 
-export function formatNumber(value, options = {}) {
+export function formatNumber(value: unknown, options: Intl.NumberFormatOptions = {}): string {
   return new Intl.NumberFormat(getLocale(), options).format(Number(value || 0));
 }
 
-export function compareText(a, b) {
+export function compareText(a: unknown, b: unknown): number {
   return new Intl.Collator(getLocale(), { numeric: true, sensitivity: "base" }).compare(String(a), String(b));
 }
 
-const viewKeys = {
+const viewKeys: Record<string, string> = {
   tasks: "nav.tasks", bosses: "nav.bosses", battle: "nav.battle", character: "nav.character",
   shop: "nav.shop", party: "nav.party", inventory: "nav.inventory", integrations: "nav.integrations",
 };
 
-export function applyDocumentTranslations(root = globalThis.document) {
+export function applyDocumentTranslations(root: TranslationRoot | undefined = runtimeGlobal.document) {
   if (!root) return;
   const locale = getLocale();
   const metadata = LOCALE_METADATA[locale];
   root.documentElement.lang = locale;
   root.documentElement.dir = metadata?.direction || "ltr";
-  root.querySelectorAll("[data-i18n]").forEach((element) => { element.textContent = t(element.dataset.i18n); });
-  root.querySelectorAll("[data-i18n-placeholder]").forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder); });
-  root.querySelectorAll("[data-i18n-aria-label]").forEach((element) => { element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel)); });
-  root.querySelectorAll("[data-i18n-title]").forEach((element) => { element.title = t(element.dataset.i18nTitle); });
-  root.querySelectorAll("[data-i18n-label]").forEach((element) => { element.label = t(element.dataset.i18nLabel); });
+  root.querySelectorAll("[data-i18n]").forEach((element) => { element.textContent = t(element.dataset.i18n || ""); });
+  root.querySelectorAll("[data-i18n-placeholder]").forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder || ""); });
+  root.querySelectorAll("[data-i18n-aria-label]").forEach((element) => { element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel || "")); });
+  root.querySelectorAll("[data-i18n-title]").forEach((element) => { element.title = t(element.dataset.i18nTitle || ""); });
+  root.querySelectorAll("[data-i18n-label]").forEach((element) => { element.label = t(element.dataset.i18nLabel || ""); });
   root.querySelectorAll("[data-view]").forEach((element) => {
-    const key = viewKeys[element.dataset.view];
+    const key = viewKeys[element.dataset.view || ""];
     if (key && !element.classList.contains("sync-integrations-button")) {
       const labelTarget = element.querySelector("b");
       if (labelTarget) labelTarget.textContent = t(key);
@@ -228,10 +259,11 @@ export function applyDocumentTranslations(root = globalThis.document) {
   if (settings) settings.textContent = t("sync.settings");
   const localeSelect = root.querySelector("#localeSelect");
   if (localeSelect) localeSelect.value = locale;
-  for (const [selector, prefix] of [["#taskKind", "kind"], ["#taskDifficulty", "difficulty"], ["#taskRepeat", "repeat"]]) {
+  for (const [selector, prefix] of [["#taskKind", "kind"], ["#taskDifficulty", "difficulty"], ["#taskRepeat", "repeat"]] as const) {
     root.querySelectorAll(`${selector} option`).forEach((option) => {
-      const label = t(`${prefix}.${option.value}`);
-      if (label !== `${prefix}.${option.value}`) option.textContent = label;
+      const value = option.value || "";
+      const label = t(`${prefix}.${value}`);
+      if (label !== `${prefix}.${value}`) option.textContent = label;
     });
   }
   const selfAssignee = root.querySelector('#taskAssignee option[value="self:self"]');
@@ -239,16 +271,16 @@ export function applyDocumentTranslations(root = globalThis.document) {
   if (selfAssignee) selfAssignee.textContent = t("task.assignee.self");
   if (customAssignee) customAssignee.textContent = t("task.assignee.custom");
   const manifest = root.querySelector('link[rel="manifest"]');
-  if (manifest) manifest.href = metadata?.manifest || (locale === "en" ? "/manifest.en.webmanifest" : "/manifest.webmanifest");
+  if (manifest) manifest.href = metadata.manifest || (locale === "en" ? "/manifest.en.webmanifest" : "/manifest.webmanifest");
 }
 
-export function setLocale(locale) {
+export function setLocale(locale: unknown): SupportedLocale {
   const resolved = resolveLocale(locale);
   if (!resolved) return getLocale();
   activeLocale = resolved;
-  try { globalThis.localStorage?.setItem(LOCALE_STORAGE_KEY, resolved); } catch { /* Device storage is optional. */ }
+  try { runtimeGlobal.localStorage?.setItem(LOCALE_STORAGE_KEY, resolved); } catch { /* Device storage is optional. */ }
   applyDocumentTranslations();
-  globalThis.dispatchEvent?.(new CustomEvent("questforge:locale-changed", { detail: { locale: resolved } }));
+  runtimeGlobal.dispatchEvent?.(new CustomEvent("questforge:locale-changed", { detail: { locale: resolved } }));
   return resolved;
 }
 
