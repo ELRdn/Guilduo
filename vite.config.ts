@@ -1,5 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const root = new URL(".", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
@@ -42,7 +43,7 @@ const copyQuestForgeRuntime = {
 export default defineConfig({
   base: "./",
   publicDir: false,
-  plugins: [copyQuestForgeRuntime],
+  plugins: [react(), copyQuestForgeRuntime],
   build: {
     outDir: "dist",
     emptyOutDir: true,

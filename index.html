@@ -32,7 +32,7 @@
     <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body data-theme="soft" data-motion="on">
+  <body class="current-v4-shell" data-theme="soft" data-motion="on">
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -41,7 +41,7 @@
             <h1>QuestForge</h1>
             <p id="brandTagline">Soft Ops Companion</p>
           </div>
-          <button class="mobile-menu-button" type="button" id="mobileMenuButton" aria-label="メニューを開く" data-i18n-aria-label="nav.openMenu" aria-expanded="false">≡</button>
+          <button class="mobile-menu-button" type="button" id="mobileMenuButton" aria-label="メニューを開く" data-i18n-aria-label="nav.openMenu" aria-expanded="false"><span data-qf-icon="menu" data-qf-icon-size="18"></span></button>
         </div>
 
         <nav class="nav-list" aria-label="Primary">
@@ -53,6 +53,15 @@
           <button class="nav-item" type="button" data-view="party">パーティ</button>
           <button class="nav-item" type="button" data-view="inventory">所持品</button>
           <button class="nav-item" type="button" data-view="integrations">AI連携</button>
+        </nav>
+        <nav class="current-reference-nav" aria-label="Current reference navigation" hidden>
+          <button type="button" class="current-reference-nav-button is-active" data-current-ref-view="tasks"><span class="current-nav-icon" data-qf-icon="calendar" data-qf-icon-size="18"></span><b>今日の攻略</b><em>12</em></button>
+          <button type="button" class="current-reference-nav-button" data-current-ref-view="bosses"><span class="current-nav-icon" data-qf-icon="list-tree" data-qf-icon-size="18"></span><b>探索</b></button>
+          <button type="button" class="current-reference-nav-button" data-current-ref-view="party"><span class="current-nav-icon" data-qf-icon="users" data-qf-icon-size="18"></span><b>パーティ</b></button>
+          <button type="button" class="current-reference-nav-button" data-current-ref-view="battle"><span class="current-nav-icon" data-qf-icon="swords" data-qf-icon-size="18"></span><b>バトル</b></button>
+          <button type="button" class="current-reference-nav-button" data-current-ref-view="integrations"><span class="current-nav-icon" data-qf-icon="link" data-qf-icon-size="18"></span><b>連携</b></button>
+          <button type="button" class="current-reference-nav-button" data-current-ref-view="character"><span class="current-nav-icon" data-qf-icon="user" data-qf-icon-size="18"></span><b>プロフィール</b></button>
+          <button type="button" class="current-reference-nav-button" data-current-ref-view="settings"><span class="current-nav-icon" data-qf-icon="settings" data-qf-icon-size="18"></span><b>設定</b></button>
         </nav>
 
         <section class="profile-panel">
@@ -92,6 +101,19 @@
             </div>
           </div>
         </section>
+        <section id="currentSidebarParty" class="current-sidebar-party" aria-label="Active party">
+          <div class="current-sidebar-heading"><span>ACTIVE PARTY</span><b id="currentSidebarPartyCount">-</b></div>
+          <div id="currentSidebarPartyList"></div>
+        </section>
+        <section id="currentSidebarResources" class="current-sidebar-resources" aria-label="Current resources">
+          <div class="current-sidebar-resource"><span>MP</span><b id="currentSidebarMp">-</b></div><i><em id="currentSidebarMpBar"></em></i>
+          <small id="currentSidebarMpNote">-</small>
+          <div class="current-sidebar-resource"><span>XP</span><b id="currentSidebarXp">-</b></div><i><em id="currentSidebarXpBar"></em></i>
+          <small id="currentSidebarXpNote">-</small>
+        </section>
+        <section id="currentSidebarWallet" class="current-sidebar-wallet" aria-label="Current rewards">
+          <div class="current-sidebar-currency"><b id="currentSidebarGold">-</b><span>Gold</span><b id="currentSidebarXpReward">-</b><span>XP</span><b id="currentSidebarShard">-</b><span>Sync Shard</span></div>
+        </section>
         <a class="source-code-link" id="sourceCodeLink" href="#" target="_blank" rel="noreferrer" hidden>Source / AGPL-3.0</a>
       </aside>
 
@@ -125,20 +147,20 @@
             </div>
             <div class="appearance-control" id="appearanceControl">
               <button class="secondary-button appearance-button" type="button" id="appearanceButton" aria-haspopup="menu" aria-expanded="false" aria-controls="appearanceMenu" title="表示モードを変更" aria-label="表示モードを変更。現在はシステム設定">
-                <span id="appearanceIcon" class="appearance-icon" aria-hidden="true">◐</span>
+                <span id="appearanceIcon" class="appearance-icon" aria-hidden="true" data-qf-icon="monitor" data-qf-icon-size="16"></span>
                 <span class="appearance-button-label" data-i18n="appearance.button">表示</span>
               </button>
               <div class="appearance-menu" id="appearanceMenu" role="menu" aria-label="表示モード" data-i18n-aria-label="appearance.menu" hidden>
                 <button type="button" role="menuitemradio" aria-checked="false" data-appearance-option="light">
-                  <span class="appearance-option-icon" aria-hidden="true">☀</span>
+                  <span class="appearance-option-icon" aria-hidden="true" data-qf-icon="sun" data-qf-icon-size="16"></span>
                   <span data-i18n="appearance.light">ライト</span>
                 </button>
                 <button type="button" role="menuitemradio" aria-checked="false" data-appearance-option="dark">
-                  <span class="appearance-option-icon" aria-hidden="true">☾</span>
+                  <span class="appearance-option-icon" aria-hidden="true" data-qf-icon="moon" data-qf-icon-size="16"></span>
                   <span data-i18n="appearance.dark">ダーク</span>
                 </button>
                 <button type="button" role="menuitemradio" aria-checked="true" data-appearance-option="system">
-                  <span class="appearance-option-icon system-icon" aria-hidden="true">▣</span>
+                  <span class="appearance-option-icon system-icon" aria-hidden="true" data-qf-icon="monitor" data-qf-icon-size="16"></span>
                   <span data-i18n="appearance.system">システム設定</span>
                 </button>
               </div>
@@ -162,13 +184,53 @@
               <span aria-hidden="true">♪</span>
               <span data-i18n="feedback.settings">音・演出</span>
             </button>
-            <button class="icon-button" type="button" id="importButton" title="バックアップJSONを読み込む" aria-label="バックアップJSONを読み込む" data-i18n-title="common.importTitle" data-i18n-aria-label="common.importTitle"><span aria-hidden="true">⇩</span></button>
-            <button class="icon-button" type="button" id="exportButton" title="バックアップJSONを保存する" aria-label="バックアップJSONを保存する" data-i18n-title="common.exportTitle" data-i18n-aria-label="common.exportTitle"><span aria-hidden="true">⇧</span></button>
+            <button class="icon-button" type="button" id="importButton" title="バックアップJSONを読み込む" aria-label="バックアップJSONを読み込む" data-i18n-title="common.importTitle" data-i18n-aria-label="common.importTitle"><span aria-hidden="true" data-qf-icon="download" data-qf-icon-size="18"></span></button>
+            <button class="icon-button" type="button" id="exportButton" title="バックアップJSONを保存する" aria-label="バックアップJSONを保存する" data-i18n-title="common.exportTitle" data-i18n-aria-label="common.exportTitle"><span aria-hidden="true" data-qf-icon="upload" data-qf-icon-size="18"></span></button>
             <button class="primary-button" type="button" id="newTaskButton" data-i18n="common.add">追加</button>
           </div>
         </header>
 
         <section class="view active" id="tasksView" data-view-panel="tasks">
+          <div id="currentReferenceSurface" class="current-reference-surface" data-vf-id="MissionSpine">
+            <header class="current-ref-header">
+              <div>
+                <span class="current-ref-kicker" id="currentRefKicker">TODAY / MISSION SPINE</span>
+                <h3 id="currentRefTitle">今日の攻略</h3>
+                <p id="currentRefCopy">HumanとAgentの引き継ぎを、今日の流れに沿って見渡します。</p>
+              </div>
+              <div class="current-ref-actions">
+                <button type="button" class="current-ref-action is-active" data-current-mode="mission">Mission Spine</button>
+                <button type="button" class="current-ref-action" data-current-mode="campaign">Campaign Map</button>
+                <button type="button" class="current-ref-focus" id="currentRefFocusButton">Focus Mode</button>
+              </div>
+            </header>
+            <section class="current-ref-summary" aria-label="Current summary">
+              <article><span>ACTIVE QUESTS</span><strong id="currentRefActive">—</strong><small id="currentRefActiveNote">正規Questから集計</small></article>
+              <article><span>HANDOFF QUEUE</span><strong id="currentRefHandoff">—</strong><small id="currentRefHandoffNote">引き継ぎ状態を表示</small></article>
+              <article><span>FOCUS TIME</span><strong id="currentRefFocus">—</strong><small id="currentRefFocusNote">当日の稼働時間</small></article>
+            </section>
+            <section id="currentRefCampaignSummary" class="current-ref-campaign-summary" aria-label="Campaign summary" hidden>
+              <article class="current-ref-campaign-progress"><span>キャンペーン進行度</span><div><strong>34 / 50</strong><small>クエスト完了</small></div></article>
+              <article><span>現在の地域</span><strong>エルダン大陸</strong><small>第2章：成長の森</small><i><em style="width:62%"></em></i></article>
+              <article><span>完了したクエスト</span><strong>34</strong><small>全体の68%</small></article>
+              <article><span>獲得リソース</span><strong>1,240 Gold</strong><small>860 XP · 12 Sync Shard</small></article>
+            </section>
+            <div id="currentRefMission" class="current-ref-mode">
+              <div class="current-ref-mission-head"><span>MISSION SPINE</span><span id="currentRefMissionCount">—</span></div>
+              <div id="currentRefMissionList" class="current-ref-mission-list"></div>
+              <button type="button" class="current-ref-add" id="currentRefAddMission"><span aria-hidden="true">＋</span> Questを追加</button>
+            </div>
+            <div id="currentRefCampaign" class="current-ref-mode current-ref-campaign" hidden data-vf-id="CampaignMap">
+              <div class="current-ref-mission-head"><span>CAMPAIGN MAP</span><span id="currentRefCampaignCount">—</span></div>
+              <aside class="current-ref-chapters" aria-label="Campaign chapters">
+                <article><b>第1章</b><strong>始まりの平原</strong><small>探索度 100%</small></article>
+                <article class="is-active"><b>第2章</b><strong>成長の森</strong><small>探索度 62%</small></article>
+                <article><b>第3章</b><strong>知識の洞窟</strong><small>探索度 LOCKED</small></article>
+                <article><b>第4章</b><strong>試練の山</strong><small>探索度 LOCKED</small></article>
+              </aside>
+              <div id="currentRefCampaignGrid" class="current-ref-campaign-grid"></div>
+            </div>
+          </div>
           <div class="hero-strip">
             <div>
               <p class="theme-kicker" id="themeKicker">B / Soft Ops Companion</p>
@@ -248,14 +310,14 @@
             </label>
           </div>
 
-          <div class="task-board">
+          <div class="task-board" data-vf-id="CampaignMap">
             <section class="task-column">
               <div class="column-header">
                 <div>
                   <h3 data-i18n="task.column.habit">習慣ログ</h3>
                   <span data-i18n="task.column.habitCopy">良い/悪い行動を記録</span>
                 </div>
-                <button type="button" data-add-kind="habit" title="習慣ログを追加" aria-label="習慣ログを追加" data-i18n-title="task.addKind.habit" data-i18n-aria-label="task.addKind.habit">+</button>
+                    <button type="button" data-add-kind="habit" title="習慣ログを追加" aria-label="習慣ログを追加" data-i18n-title="task.addKind.habit" data-i18n-aria-label="task.addKind.habit"><span data-qf-icon="plus" data-qf-icon-size="16"></span></button>
               </div>
               <div class="task-list" id="habitList"></div>
             </section>
@@ -266,7 +328,7 @@
                   <h3 data-i18n="task.column.daily">今日の約束</h3>
                   <span data-i18n="task.column.dailyCopy">日付で復活する予定</span>
                 </div>
-                <button type="button" data-add-kind="daily" title="毎日の約束を追加" aria-label="毎日の約束を追加" data-i18n-title="task.addKind.daily" data-i18n-aria-label="task.addKind.daily">+</button>
+                    <button type="button" data-add-kind="daily" title="毎日の約束を追加" aria-label="毎日の約束を追加" data-i18n-title="task.addKind.daily" data-i18n-aria-label="task.addKind.daily"><span data-qf-icon="plus" data-qf-icon-size="16"></span></button>
               </div>
               <div class="task-list" id="dailyList"></div>
             </section>
@@ -277,7 +339,7 @@
                   <h3 data-i18n="task.column.todo">一回だけ</h3>
                   <span data-i18n="task.column.todoCopy">期限つきの単発</span>
                 </div>
-                <button type="button" data-add-kind="todo" title="一回だけのタスクを追加" aria-label="一回だけのタスクを追加" data-i18n-title="task.addKind.todo" data-i18n-aria-label="task.addKind.todo">+</button>
+                    <button type="button" data-add-kind="todo" title="一回だけのタスクを追加" aria-label="一回だけのタスクを追加" data-i18n-title="task.addKind.todo" data-i18n-aria-label="task.addKind.todo"><span data-qf-icon="plus" data-qf-icon-size="16"></span></button>
               </div>
               <div class="task-list" id="todoList"></div>
             </section>
@@ -288,7 +350,7 @@
                   <h3 data-i18n="task.column.reward">ごほうび</h3>
                   <span data-i18n="task.column.rewardCopy">Gemで交換する休憩</span>
                 </div>
-                <button type="button" data-add-kind="reward" title="ごほうびを追加" aria-label="ごほうびを追加" data-i18n-title="task.addKind.reward" data-i18n-aria-label="task.addKind.reward">+</button>
+                    <button type="button" data-add-kind="reward" title="ごほうびを追加" aria-label="ごほうびを追加" data-i18n-title="task.addKind.reward" data-i18n-aria-label="task.addKind.reward"><span data-qf-icon="plus" data-qf-icon-size="16"></span></button>
               </div>
               <div class="task-list" id="rewardList"></div>
             </section>
@@ -555,7 +617,16 @@
         </section>
 
         <section class="view" id="partyView" data-view-panel="party">
-          <div class="section-band">
+          <nav class="qf-party-mode-tabs" aria-label="Party画面の表示" role="tablist">
+            <button type="button" class="qf-party-mode-tab is-active" data-party-mode="formation" role="tab" aria-selected="true">Formation</button>
+            <button type="button" class="qf-party-mode-tab" data-party-mode="members" role="tab" aria-selected="false">Members</button>
+            <button type="button" class="qf-party-mode-tab" data-party-mode="social" role="tab" aria-selected="false">Social &amp; Invitations</button>
+          </nav>
+          <section class="section-band qf-party-formation-host" data-party-panel="formation" aria-labelledby="partyFormationHostTitle">
+            <div class="section-heading"><div><p class="eyebrow">FORMATION / DERIVED VIEW</p><h3 id="partyFormationHostTitle">作戦編成</h3></div><span class="pill">非永続ビュー</span></div>
+            <div id="partyFormationIsland"></div>
+          </section>
+          <div class="section-band" data-party-panel="social">
             <div class="section-heading">
               <div><p class="eyebrow">SOCIAL</p><h3 data-i18n="social.title">プロフィールと仲間</h3></div>
               <span class="pill" id="socialConnectionStatus">Googleログインが必要</span>
@@ -586,7 +657,7 @@
             </div>
           </div>
 
-          <div class="section-band">
+          <div class="section-band" data-party-panel="members">
             <div class="section-heading">
               <div><p class="eyebrow">PARTY</p><h3 id="partyHeading">パーティを作る</h3></div>
               <button class="secondary-button" type="button" id="leavePartyButton" data-i18n="common.leave" hidden>退出</button>
@@ -611,7 +682,7 @@
             <p class="field-note" id="partyMessage" aria-live="polite"></p>
           </div>
 
-          <div class="section-band">
+          <div class="section-band" data-party-panel="members">
             <div class="section-heading"><h3 data-i18n="party.challenge">共同チャレンジ</h3><span class="pill">ROADMAP</span></div>
             <div class="challenge-row"><span class="challenge-badge">Next</span><div><strong data-i18n="party.roadmapTitle">仲間と続ける目標</strong><p data-i18n="party.roadmapCopy">パーティ基盤の安定後に、共同進捗とボス戦へ接続します。</p></div></div>
           </div>
@@ -892,7 +963,42 @@
         </section>
       </main>
 
-      <nav class="mobile-tabbar" aria-label="モバイルナビゲーション" data-i18n-aria-label="nav.mobile">
+      <aside class="current-status-rail" aria-label="Current status rail">
+        <section class="current-rail-section current-rail-battle">
+          <div class="current-rail-heading"><span>BATTLE STATUS</span><button type="button" id="currentRailClose" aria-label="Status railを閉じる">×</button></div>
+          <div class="current-rail-boss">
+            <img id="currentRailBossImage" src="./assets/boss-h3-transparent.webp" alt="" decoding="async" />
+            <div><small id="currentRailBossMeta">CURRENT BATTLE</small><strong id="currentRailBossName">—</strong><span id="currentRailBossLevel">—</span></div>
+          </div>
+          <div class="current-rail-bar-label"><span>Boss Pressure</span><b id="currentRailBossPressure">—</b></div>
+          <div class="current-rail-progress"><i id="currentRailBossProgress"></i></div>
+          <div class="current-rail-bar-label"><span>MP</span><b id="currentRailMp">—</b></div>
+          <div class="current-rail-progress is-mp"><i id="currentRailMpProgress"></i></div>
+          <button type="button" class="current-rail-primary" id="currentRailOpenBattle">バトルへ向かう</button>
+        </section>
+        <section class="current-rail-section">
+          <div class="current-rail-heading"><span>BATTLE LOG (TODAY)</span><button type="button" id="currentRailViewBattle">View All →</button></div>
+          <div id="currentRailBattleLog" class="current-rail-log"></div>
+        </section>
+        <section class="current-rail-section">
+          <div class="current-rail-heading"><span>ASTRA COMPANION</span></div>
+          <div class="current-rail-companion">
+            <img src="./assets/avatar-masc-48.webp" alt="" decoding="async" />
+            <p id="currentRailCompanionCopy">—</p>
+          </div>
+          <div class="current-rail-progress"><i id="currentRailCompanionProgress"></i></div>
+        </section>
+        <section class="current-rail-section current-rail-selected">
+          <div class="current-rail-heading"><span>SELECTED MISSION</span><b id="currentRailSelectedState">—</b></div>
+          <strong id="currentRailSelectedTitle">—</strong>
+          <code id="currentRailSelectedId">—</code>
+          <div id="currentRailSelectedOwner" class="current-rail-owner"></div>
+          <div id="currentRailSelectedHandoff" class="current-rail-handoff"></div>
+          <button type="button" class="current-rail-primary" id="currentRailOpenSelected">詳細を開く</button>
+        </section>
+      </aside>
+
+    <nav class="mobile-tabbar" aria-label="モバイルナビゲーション" data-i18n-aria-label="nav.mobile">
         <button class="active" type="button" data-view="tasks">クエスト</button>
         <button type="button" data-view="bosses">ボス</button>
         <button type="button" data-view="battle">バトル</button>
@@ -900,6 +1006,15 @@
         <button type="button" id="mobileMoreButton" aria-label="その他の画面を開く" data-i18n="common.more" data-i18n-aria-label="common.moreAria">その他</button>
       </nav>
     </div>
+    <div class="current-reference-scrollbar current-reference-scrollbar--left" aria-hidden="true"></div>
+    <div class="current-reference-scrollbar current-reference-scrollbar--right" aria-hidden="true"></div>
+    <aside class="current-reference-design-lab" aria-label="Design Lab fixture controls">
+      <button type="button" class="current-reference-design-lab-toggle">⚙ DESIGN LAB</button>
+      <span>Surface</span>
+      <div><button type="button" class="is-active">旧 / Guild OS</button><button type="button">新 / Command</button></div>
+      <span>Theme</span>
+      <div><button type="button">☼ Light</button><button type="button" class="is-active">◐ Dark</button></div>
+    </aside>
 
     <dialog class="task-dialog" id="taskDialog">
       <form id="taskForm">
@@ -1022,7 +1137,7 @@
       <section class="archive-dialog-content">
         <div class="dialog-heading">
           <h3 id="archiveDialogTitle" data-i18n="archive.title">完了・保管</h3>
-          <button class="edit-button" type="button" id="closeArchiveDialog" aria-label="保管を閉じる" data-i18n-aria-label="archive.close">×</button>
+          <button class="edit-button" type="button" id="closeArchiveDialog" aria-label="保管を閉じる" data-i18n-aria-label="archive.close"><span data-qf-icon="x" data-qf-icon-size="18"></span></button>
         </div>
         <div class="archive-list" id="archiveList"></div>
       </section>
@@ -1032,7 +1147,7 @@
       <section class="feedback-dialog-content">
         <div class="dialog-heading">
           <h3 id="feedbackDialogTitle" data-i18n="feedback.settings">音と演出</h3>
-          <button class="edit-button" type="button" id="closeFeedbackDialog" aria-label="音と演出の設定を閉じる" data-i18n-aria-label="feedback.close">×</button>
+          <button class="edit-button" type="button" id="closeFeedbackDialog" aria-label="音と演出の設定を閉じる" data-i18n-aria-label="feedback.close"><span data-qf-icon="x" data-qf-icon-size="18"></span></button>
         </div>
         <label class="preference-row" for="soundEnabledToggle">
           <span data-i18n="feedback.sound">効果音</span>
@@ -1086,7 +1201,7 @@
             <h3 id="togglFocusConnectTitle" data-i18n="focus.connect.title">Toggl Focusを接続</h3>
             <p data-i18n="focus.connect.copy">Personal API keyはこの画面からだけ暗号化して保存されます。AIやMCPへは渡りません。</p>
           </div>
-          <button class="edit-button" type="button" id="cancelTogglFocusConnect" aria-label="Toggl Focus接続を閉じる" data-i18n-aria-label="focus.connect.close">×</button>
+          <button class="edit-button" type="button" id="cancelTogglFocusConnect" aria-label="Toggl Focus接続を閉じる" data-i18n-aria-label="focus.connect.close"><span data-qf-icon="x" data-qf-icon-size="18"></span></button>
         </div>
         <label>
           <span data-i18n="focus.connect.key">Personal API key</span>
@@ -1105,7 +1220,7 @@
     <div class="undo-toast" id="undoToast" role="status" aria-live="polite" hidden>
       <span id="undoToastMessage"></span>
       <button type="button" id="toastActionButton" hidden>更新</button>
-      <button class="undo-toast-close" type="button" id="closeToastButton" aria-label="通知を閉じる">×</button>
+      <button class="undo-toast-close" type="button" id="closeToastButton" aria-label="通知を閉じる"><span data-qf-icon="x" data-qf-icon-size="16"></span></button>
     </div>
 
     <script type="module" src="./main.ts"></script>

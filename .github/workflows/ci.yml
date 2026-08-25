@@ -22,6 +22,9 @@ jobs:
       - run: cp runtime-config.example.js runtime-config.js
       - run: cp wrangler.example.jsonc wrangler.jsonc
       - run: npm run api:generate
+      - run: npm run design:check
+      - run: npx -y -p @google/design.md designmd lint DESIGN.md
+      - run: npx -y -p @google/design.md designmd lint interaction-lab/DESIGN.md
       - run: npm run typecheck
       - run: npm run check
       - run: npm test

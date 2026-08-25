@@ -2,6 +2,8 @@
 
 Forge Opsの操作設計をPCとスマホで試すためのInteraction Labです。見た目だけのモックではなく、ローカル保存とQuestForge REST Gatewayへの任意接続を同じUIで検証できます。
 
+設計の差分・状態遷移・レスポンシブ境界・現行版への昇格条件は[`DESIGN.md`](DESIGN.md)を正本とします。開発ルートは`/interaction-lab/`、Firebase Hosting上の公開βルートは`/next/`です。共通の視覚ルールはプロジェクトルートの[`DESIGN.md`](../DESIGN.md)、部品と画面Blueprintは[`design/COMPONENTS.md`](../design/COMPONENTS.md)と[`design/SCREENS.md`](../design/SCREENS.md)、Quest・MCP・認証・安全性の技術ルールは[`PROJECT_SPEC.md`](../PROJECT_SPEC.md)を参照してください。
+
 - 初期状態はローカルモードです。追加、完了、レビュー、親子展開、バトル、設定は`localStorage`へ保存され、再読み込み後も維持されます。
 - 設定画面でGoogleログインし、Gateway URLを確認して「本体データを読み込む」と、Quest一覧・キャラクター・バトル・連携状態を認証付きRESTから読み込みます。
 - リモートモードではQuest追加、完了、レビュー更新、バトルコマンド、外部連携のプレビュー／同期が本体APIへ送られます。同期はdry-runを先に行い、未ログイン時や接続失敗時はローカル状態を維持します。

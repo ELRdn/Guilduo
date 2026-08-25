@@ -40,6 +40,9 @@ jobs:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
+      - run: npm run design:check
+      - run: npx -y -p @google/design.md designmd lint DESIGN.md
+      - run: npx -y -p @google/design.md designmd lint interaction-lab/DESIGN.md
       - run: npm run check
       - run: npm test
       - run: npm run build

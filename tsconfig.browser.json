@@ -16,7 +16,9 @@
     "i18n-browser.ts",
     "telemetry.ts",
     "shared/**/*.ts",
-    "interaction-lab/**/*.ts"
+    "interaction-lab/**/*.ts",
+    "ui/**/*.ts",
+    "ui/**/*.tsx"
   ],
   "exclude": ["dist", "node_modules", "unity-battle-prototype"]
 }

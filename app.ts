@@ -5,8 +5,24 @@ import type {
   Quest,
   QuestForgeState,
 } from "./types/questforge.ts";
+import { iconMarkup } from "./ui/icon-system.ts";
+import type { QuestForgeIconName } from "./ui/icon-system.ts";
+import type { IslandHandle, PartyFormationViewModel } from "./ui/islands/types.ts";
 
 type JsonRecord = Record<string, unknown>;
+
+interface CurrentRefMission {
+  id: string;
+  title: string;
+  notes: string;
+  time: string;
+  progress: number;
+  state: "done" | "working" | "blocked" | "queued";
+  assignee: string;
+  handoff: string;
+  reward: string;
+  category: string;
+}
 
 interface EquipmentOffset {
   x: number;
@@ -1227,7 +1243,41 @@ let equipmentDragState: {
   startY: number;
   offset: EquipmentOffset;
 } | null = null;
+const currentVisualParams = new URLSearchParams(window.location.search);
+const currentVisualFixtureEnabled = import.meta.env.DEV && currentVisualParams.get("visualFixture") === "v3";
+let currentPresentationMode: "mission" | "campaign" = currentVisualParams.get("vfScreen") === "campaign" ? "campaign" : "mission";
+document.body.classList.add("current-v4-shell");
+document.body.classList.toggle("current-reference-fixture", currentVisualFixtureEnabled);
+
+const currentReferenceFixtureMissions: CurrentRefMission[] = [
+  { id: "QF-001", title: "UI設計", notes: "ダッシュボードの情報設計とワイヤーフレームを更新する", time: "09:00", progress: 100, state: "done", assignee: "Astra", handoff: "accepted", reward: "+20 MP · Boss +3%", category: "DESIGN" },
+  { id: "QF-002", title: "営業候補調査", notes: "ターゲット企業リストを作成し、優先度付けまで進める", time: "10:30", progress: 100, state: "done", assignee: "Scout", handoff: "accepted", reward: "+18 MP · Boss +4%", category: "RESEARCH" },
+  { id: "QF-003", title: "README改善", notes: "初めても理解できるREADMEへ刷新し、導入導線を最適化する", time: "12:00", progress: 60, state: "working", assignee: "Codex", handoff: "working", reward: "+24 MP · Boss +7%", category: "BUILD" },
+  { id: "QF-004", title: "ログ解析とアラート設計", notes: "エラーログ分析とアラートルールを設計する", time: "14:00", progress: 25, state: "blocked", assignee: "Ops", handoff: "blocked", reward: "+30 MP · Boss +9%", category: "OPS" },
+];
+
+const currentReferenceFixtureCampaign: CurrentRefMission[] = [
+  { id: "QF-001", title: "ギルドの設立", notes: "Guild foundation", time: "—", progress: 100, state: "done", assignee: "Astra", handoff: "accepted", reward: "", category: "QUEST" },
+  { id: "QF-002", title: "最初のメンバー", notes: "First members", time: "—", progress: 100, state: "done", assignee: "Astra", handoff: "accepted", reward: "", category: "QUEST" },
+  { id: "QF-003", title: "拠点の整備", notes: "Build the base", time: "—", progress: 100, state: "done", assignee: "Astra", handoff: "accepted", reward: "", category: "QUEST" },
+  { id: "QF-004", title: "初任務の達成", notes: "First assignment", time: "—", progress: 100, state: "done", assignee: "Astra", handoff: "accepted", reward: "", category: "QUEST" },
+  { id: "QF-005", title: "森の調査", notes: "Survey the forest", time: "—", progress: 100, state: "done", assignee: "Scout", handoff: "accepted", reward: "", category: "QUEST" },
+  { id: "QF-006", title: "素材の収集", notes: "Gather materials", time: "—", progress: 62, state: "working", assignee: "Codex", handoff: "working", reward: "", category: "QUEST" },
+  { id: "QF-007", title: "薬草の知識", notes: "Learn the herbs", time: "—", progress: 60, state: "working", assignee: "Scout", handoff: "working", reward: "", category: "QUEST" },
+  { id: "QF-008", title: "森の守護者", notes: "Forest guardian", time: "—", progress: 0, state: "queued", assignee: "Ops", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-009", title: "洞窟の探索", notes: "Explore the cave", time: "—", progress: 0, state: "queued", assignee: "Echo", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-010", title: "古代の記録", notes: "Ancient records", time: "—", progress: 0, state: "queued", assignee: "Codex", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-011", title: "失われた技術", notes: "Lost technology", time: "—", progress: 0, state: "queued", assignee: "Ops", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-012", title: "知識の継承", notes: "Pass on knowledge", time: "—", progress: 0, state: "queued", assignee: "Astra", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-013", title: "山道の開拓", notes: "Open the mountain path", time: "—", progress: 0, state: "queued", assignee: "Scout", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-014", title: "試練の準備", notes: "Prepare the trial", time: "—", progress: 0, state: "queued", assignee: "Codex", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-015", title: "頂への挑戦", notes: "Challenge the summit", time: "—", progress: 0, state: "queued", assignee: "Ops", handoff: "ready", reward: "", category: "QUEST" },
+  { id: "QF-016", title: "試練の終幕", notes: "Complete the trial", time: "—", progress: 0, state: "queued", assignee: "Echo", handoff: "ready", reward: "", category: "QUEST" },
+];
+
 let activeViewId = "tasks";
+let partyFormationIslandHandle: IslandHandle<PartyFormationViewModel> | null = null;
+let partyFormationIslandModule: Promise<typeof import("./ui/islands/PartyFormation.tsx")> | null = null;
 let undoToastTimer: number | null = null;
 let toastActionHandler: (() => void) | null = null;
 let feedbackPreviewTimer: number | null = null;
@@ -3156,16 +3206,279 @@ function buyOrEquipItem(itemId: string): void {
   render();
 }
 
+
+function escapeCurrentRefText(value: unknown): string {
+  const entities: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character] || character);
+}
+
+function currentRefMissionFromTask(task: Quest): CurrentRefMission {
+  const complete = Boolean(task.done || task.lifecycleState === "completed" || task.lifecycleState === "archived");
+  const handoff = String(task.assignee?.handoffState || "none");
+  const missionState: CurrentRefMission["state"] = complete
+    ? "done"
+    : handoff === "blocked"
+      ? "blocked"
+      : handoff === "working"
+        ? "working"
+        : "queued";
+  const estimated = Number(task.estimatedMinutes || 0);
+  const actual = Number(task.actualMinutes || task.manualActualMinutes || 0);
+  const progress = complete ? 100 : estimated > 0 ? Math.max(0, Math.min(99, Math.round(actual / estimated * 100))) : 0;
+  const reward = typeof task.value === "number" && task.value !== 0
+    ? (task.value > 0 ? "+" : "") + String(task.value) + " XP"
+    : task.cost
+      ? String(task.cost) + " Gem"
+      : "—";
+  return {
+    id: task.id,
+    title: task.title,
+    notes: task.notes || task.nextAction || "詳細はQuest Inspectorで確認",
+    time: task.scheduledTime || (task.dueDate ? task.dueDate.slice(5) : "—"),
+    progress,
+    state: missionState,
+    assignee: task.assignee?.label || (task.assignee?.type === "self" ? state.character?.name || "本人" : "未割当"),
+    handoff,
+    reward,
+    category: localizedTaskLabel("kind", task.kind, task.kind).toUpperCase(),
+  };
+}
+
+function currentRefMissions(): CurrentRefMission[] {
+  if (currentVisualFixtureEnabled) return currentReferenceFixtureMissions;
+  return state.tasks
+    .filter((task) => task.kind !== "reward" && task.lifecycleState !== "archived")
+    .sort((left, right) => String(left.scheduledTime || left.dueDate || left.createdAt).localeCompare(String(right.scheduledTime || right.dueDate || right.createdAt)))
+    .slice(0, 6)
+    .map(currentRefMissionFromTask);
+}
+
+function currentRefCampaignMissions(): CurrentRefMission[] {
+  if (currentVisualFixtureEnabled) return currentReferenceFixtureCampaign;
+  return state.tasks
+    .filter((task) => task.lifecycleState !== "archived")
+    .sort((left, right) => String(left.createdAt || "").localeCompare(String(right.createdAt || "")))
+    .slice(0, 12)
+    .map(currentRefMissionFromTask);
+}
+
+function currentRefStateLabel(value: CurrentRefMission["state"]): string {
+  return value === "done" ? "DONE" : value === "working" ? "WORKING" : value === "blocked" ? "BLOCKED" : "QUEUED";
+}
+
+function currentRefHandoffLabel(value: string): string {
+  const labels: Record<string, string> = { accepted: "Accepted", working: "Working", ready: "Ready", blocked: "Blocked", review_required: "Review", none: "No handoff" };
+  return labels[value] || value || "No handoff";
+}
+
+function renderCurrentSidebar(): void {
+  const partyList = document.querySelector<HTMLElement>("#currentSidebarPartyList");
+  if (!partyList) return;
+  const referenceNav = document.querySelector<HTMLElement>(".current-reference-nav");
+  if (referenceNav) referenceNav.hidden = !currentVisualFixtureEnabled;
+  const fixtureMembers = [
+    { name: "You", role: "Commander", state: "working", tone: "green" },
+    { name: "Astra", role: "Writer Agent", state: "working", tone: "blue" },
+    { name: "Codex", role: "Dev Agent", state: "working", tone: "blue" },
+    { name: "Scout", role: "Research Agent", state: "ready", tone: "green" },
+    { name: "Ops", role: "Infra Agent", state: "blocked", tone: "red" },
+  ];
+  const members = currentVisualFixtureEnabled
+    ? fixtureMembers
+    : (Array.isArray(state.party) ? state.party : []).slice(0, 5).map((member) => ({
+      name: String(member.name || member.displayName || "Member"),
+      role: String(member.role || "Party member"),
+      state: "ready",
+      tone: "blue",
+    }));
+  partyList.innerHTML = members.length
+    ? members.map((member) => '<div class="current-sidebar-party-row"><span class="current-sidebar-party-mark is-' + member.tone + '">' + escapeCurrentRefText(member.name.slice(0, 2).toUpperCase()) + '</span><div><strong>' + escapeCurrentRefText(member.name) + '</strong><small>' + escapeCurrentRefText(member.role) + '</small></div><i class="current-sidebar-party-dot is-' + member.tone + '"></i></div>').join("")
+    : '<p class="current-sidebar-empty">No registered members</p>';
+  const count = document.querySelector<HTMLElement>("#currentSidebarPartyCount");
+  if (count) count.textContent = String(members.length) + " / 5";
+  const mp = currentVisualFixtureEnabled ? 82 : Number(state.battle.mp || 0);
+  const maxMp = currentVisualFixtureEnabled ? 100 : Number(state.battle.maxMp || 80);
+  const xp = currentVisualFixtureEnabled ? 6430 : Number(state.character.xp || 0);
+  const nextXp = currentVisualFixtureEnabled ? 10000 : Number(state.character.nextXp || 100);
+  const set = (id: string, value: string): void => {
+    const element = document.querySelector<HTMLElement>("#" + id);
+    if (element) element.textContent = value;
+  };
+  set("currentSidebarMp", mp + " / " + maxMp);
+  set("currentSidebarMpNote", currentVisualFixtureEnabled ? "Full recovery at 18:32" : "Current battle reserve");
+  set("currentSidebarXp", xp.toLocaleString() + " / " + nextXp.toLocaleString());
+  set("currentSidebarXpNote", currentVisualFixtureEnabled ? "Lv.27 -> Lv.28" : "Character progression");
+  set("currentSidebarGold", currentVisualFixtureEnabled ? "240" : String(state.character.gems || 0));
+  set("currentSidebarXpReward", currentVisualFixtureEnabled ? "40" : String(state.character.xp || 0));
+  set("currentSidebarShard", currentVisualFixtureEnabled ? "2" : String((state.inventory || []).length));
+  const mpBar = document.querySelector<HTMLElement>("#currentSidebarMpBar");
+  if (mpBar) mpBar.style.width = Math.min(100, mp / Math.max(1, maxMp) * 100) + "%";
+  const xpBar = document.querySelector<HTMLElement>("#currentSidebarXpBar");
+  if (xpBar) xpBar.style.width = Math.min(100, xp / Math.max(1, nextXp) * 100) + "%";
+}
+
+function renderCurrentReference(): void {
+  const surface = document.querySelector<HTMLElement>("#currentReferenceSurface");
+  const missionPanel = document.querySelector<HTMLElement>("#currentRefMission");
+  const campaignPanel = document.querySelector<HTMLElement>("#currentRefCampaign");
+  const campaignSummary = document.querySelector<HTMLElement>("#currentRefCampaignSummary");
+  const summary = document.querySelector<HTMLElement>(".current-ref-summary");
+  const missionList = document.querySelector<HTMLElement>("#currentRefMissionList");
+  const campaignGrid = document.querySelector<HTMLElement>("#currentRefCampaignGrid");
+  if (!surface || !missionPanel || !campaignPanel || !missionList || !campaignGrid) return;
+
+  const mode = currentPresentationMode;
+  const missions = currentRefMissions();
+  const campaignMissions = currentRefCampaignMissions();
+  document.body.classList.toggle("is-current-campaign", mode === "campaign");
+  surface.dataset.vfId = mode === "mission" ? "MissionSpine" : "";
+  missionPanel.hidden = mode !== "mission";
+  campaignPanel.hidden = mode !== "campaign";
+  if (campaignSummary) campaignSummary.hidden = mode !== "campaign";
+  if (summary) summary.hidden = mode === "campaign";
+  document.querySelectorAll<HTMLElement>("[data-current-mode]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.currentMode === mode);
+  });
+
+  const title = document.querySelector<HTMLElement>("#currentRefTitle");
+  const kicker = document.querySelector<HTMLElement>("#currentRefKicker");
+  const copy = document.querySelector<HTMLElement>("#currentRefCopy");
+  if (title) title.textContent = mode === "mission" ? "今日の攻略" : "探索";
+  if (kicker) kicker.textContent = currentVisualFixtureEnabled
+    ? mode === "mission" ? "TODAY'S ADVENTURE" : "QUEST TREE / 探索"
+    : mode === "mission" ? "TODAY / MISSION SPINE" : "EXPLORE / CAMPAIGN MAP";
+  if (copy) copy.textContent = currentVisualFixtureEnabled
+    ? mode === "mission" ? "Human + AIで、今日というダンジョンを攻略しよう。" : "キャンペーンマップを探索し、新たなQuestを解放しよう。"
+    : mode === "mission" ? "HumanとAgentの引き継ぎを、今日の流れに沿って見渡します。" : "Questの進行、依存関係、完了状態を同じ地図で確認します。";
+
+  const active = missions.filter((mission) => mission.state !== "done").length;
+  const total = currentVisualFixtureEnabled ? 12 : state.tasks.filter((task) => task.kind !== "reward" && task.lifecycleState !== "archived").length;
+  const handoff = missions.filter((mission) => ["working", "blocked"].includes(mission.state)).length;
+  const focusMinutes = currentVisualFixtureEnabled ? 134 : state.tasks.reduce((sum, task) => sum + Number(task.actualMinutes || task.manualActualMinutes || 0), 0);
+  const activeValue = document.querySelector<HTMLElement>("#currentRefActive");
+  const handoffValue = document.querySelector<HTMLElement>("#currentRefHandoff");
+  const focusValue = document.querySelector<HTMLElement>("#currentRefFocus");
+  if (activeValue) activeValue.textContent = currentVisualFixtureEnabled ? "8 / 12" : String(active) + " / " + String(total);
+  if (handoffValue) handoffValue.textContent = String(currentVisualFixtureEnabled ? 3 : handoff);
+  if (focusValue) focusValue.textContent = currentVisualFixtureEnabled
+    ? "02:14:32"
+    : String(Math.floor(focusMinutes / 60)).padStart(2, "0") + ":" + String(focusMinutes % 60).padStart(2, "0") + ":00";
+  const missionCount = document.querySelector<HTMLElement>("#currentRefMissionCount");
+  const campaignCount = document.querySelector<HTMLElement>("#currentRefCampaignCount");
+  if (missionCount) missionCount.textContent = String(missions.length) + " visible";
+  if (campaignCount) campaignCount.textContent = String(campaignMissions.length) + " nodes";
+
+  missionList.innerHTML = missions.length
+    ? missions.map((mission) => [
+      '<article class="current-ref-mission is-', mission.state, '" data-current-task-id="', escapeCurrentRefText(mission.id), '">',
+      '<span class="current-ref-time">', escapeCurrentRefText(mission.time), '</span>',
+      '<button type="button" class="current-ref-mission-copy" data-current-task-id="', escapeCurrentRefText(mission.id), '">',
+      '<small>', escapeCurrentRefText(mission.category), " · ", escapeCurrentRefText(currentRefStateLabel(mission.state)), '</small>',
+      '<strong>', escapeCurrentRefText(mission.title), '</strong>',
+      '<span>', escapeCurrentRefText(mission.notes), '</span></button>',
+      '<div class="current-ref-progress"><b>', String(mission.progress), '%</b><i><em style="width:', String(mission.progress), '%"></em></i><small>', escapeCurrentRefText(mission.reward), '</small></div>',
+      '<div class="current-ref-handoff"><small>HANDOFF</small>', currentVisualFixtureEnabled ? '<div class="current-ref-handoff-track"><i class="is-done"></i><b></b><i class="' + (mission.state === "queued" ? "is-current" : "is-done") + '"></i><b></b><i class="' + (mission.state === "blocked" ? "is-current is-error" : mission.state === "done" ? "is-done" : "") + '"></i><b></b><i></i></div>' : "", '<strong>', escapeCurrentRefText(currentRefHandoffLabel(mission.handoff)), '</strong><span>', escapeCurrentRefText(mission.assignee), '</span></div>',
+      '<button type="button" class="current-ref-open" data-current-task-id="', escapeCurrentRefText(mission.id), '" aria-label="Quest詳細を開く">›</button></article>',
+      currentVisualFixtureEnabled && mission.id === "QF-003" ? '<div class="current-ref-submissions" aria-label="サブQuest"><article><time>12:15</time><div><code>QF-2025-0519-003-A</code><strong>構成の見直し</strong><small>セクション構成と見出しを最適化</small></div><span><b>100%</b><i><em style="width:100%"></em></i></span><strong class="current-ref-submission-owner">YOU　 CODEX　 DONE</strong></article><article><time>12:45</time><div><code>QF-2025-0519-003-B</code><strong>クイックスタート追加</strong><small>初回利用者向けの手順を追加</small></div><span><b>20%</b><i><em style="width:20%"></em></i></span><strong class="current-ref-submission-owner">YOU　 CODEX　 —</strong></article></div>' : "",
+    ].join("")).join("")
+    : '<div class="current-ref-empty">表示できるQuestがありません。Questを追加してMission Spineを始めましょう。</div>';
+
+  campaignGrid.innerHTML = campaignMissions.length
+    ? campaignMissions.map((mission, index) => [
+      '<article class="current-ref-campaign-node is-', mission.state, '" data-current-task-id="', escapeCurrentRefText(mission.id), '">',
+      '<span>', String(index + 1).padStart(2, "0"), '</span><strong>', escapeCurrentRefText(mission.title), '</strong>',
+      '<small>', escapeCurrentRefText(mission.category), " · ", String(mission.progress), '%</small><i><em style="width:', String(mission.progress), '%"></em></i></article>',
+    ].join("")).join("")
+    : '<div class="current-ref-empty">Questがありません。</div>';
+
+  missionList.querySelectorAll<HTMLElement>("[data-current-task-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const task = state.tasks.find((item) => item.id === button.dataset.currentTaskId);
+      if (task) openTaskDialog(task);
+    });
+  });
+  campaignGrid.querySelectorAll<HTMLElement>("[data-current-task-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const task = state.tasks.find((item) => item.id === button.dataset.currentTaskId);
+      if (task) openTaskDialog(task);
+    });
+  });
+  renderCurrentStatusRail(missions);
+}
+
+function renderCurrentStatusRail(missions: CurrentRefMission[]): void {
+  const boss = getBossOption(state.boss.currentId);
+  const bossImage = document.querySelector<HTMLImageElement>("#currentRailBossImage");
+  const bossName = document.querySelector<HTMLElement>("#currentRailBossName");
+  const bossMeta = document.querySelector<HTMLElement>("#currentRailBossMeta");
+  const bossLevel = document.querySelector<HTMLElement>("#currentRailBossLevel");
+  const bossPressure = document.querySelector<HTMLElement>("#currentRailBossPressure");
+  const bossProgress = document.querySelector<HTMLElement>("#currentRailBossProgress");
+  const mpValue = document.querySelector<HTMLElement>("#currentRailMp");
+  const mpProgress = document.querySelector<HTMLElement>("#currentRailMpProgress");
+  if (bossImage) bossImage.src = boss.src;
+  if (bossName) bossName.textContent = currentVisualFixtureEnabled ? "Goblin Skirmish" : boss.label;
+  if (bossMeta) bossMeta.textContent = currentVisualFixtureEnabled ? "CURRENT BATTLE" : boss.threat;
+  if (bossLevel) bossLevel.textContent = currentVisualFixtureEnabled ? "Lv.18 · Normal" : boss.name + " · " + boss.threat;
+  const pressure = currentVisualFixtureEnabled ? 68 : Math.max(0, Math.min(100, Math.round((boss.maxHp - state.boss.hp) / boss.maxHp * 100)));
+  const mp = currentVisualFixtureEnabled ? 82 : Number(state.battle.mp || 0);
+  const maxMp = currentVisualFixtureEnabled ? 100 : Number(state.battle.maxMp || 100);
+  if (bossPressure) bossPressure.textContent = String(pressure) + "%";
+  if (bossProgress) bossProgress.style.width = String(pressure) + "%";
+  if (mpValue) mpValue.textContent = String(mp) + " / " + String(maxMp);
+  if (mpProgress) mpProgress.style.width = String(Math.max(0, Math.min(100, Math.round(mp / Math.max(1, maxMp) * 100)))) + "%";
+
+  const log = document.querySelector<HTMLElement>("#currentRailBattleLog");
+  if (log) {
+    const rows: string[][] = currentVisualFixtureEnabled
+      ? [["09:20", "Goblin Skirmish", "Victory"], ["10:40", "Data Slime", "Victory"], ["13:10", "Spam Imp", "Victory"]]
+      : (Array.isArray(state.boss.battleLog) ? state.boss.battleLog.slice(-3).map((entry) => {
+        const record = asJsonRecord(entry);
+        return ["—", String(record.task || record.text || "Battle"), record.defeated ? "Victory" : "Retry"];
+      }) : []);
+    log.innerHTML = rows.length ? rows.map(([time, title, result]) => [
+      "<div><time>", escapeCurrentRefText(time), "</time><span>", escapeCurrentRefText(title), "</span><b>", escapeCurrentRefText(result), "</b></div>",
+    ].join("")).join("") : "<p>Battle log is empty.</p>";
+  }
+
+  const selected = missions.find((mission) => mission.state === "working") || missions.find((mission) => mission.state !== "done") || missions[0];
+  const companion = document.querySelector<HTMLElement>("#currentRailCompanionCopy");
+  if (companion) companion.textContent = selected
+    ? selected.title + "を進めているね。次は" + selected.assignee + "の作業結果を確認すると良さそう。"
+    : "進行中のQuestを選ぶと、Astraから次の一手を提案します。";
+  const companionProgress = document.querySelector<HTMLElement>("#currentRailCompanionProgress");
+  if (companionProgress) companionProgress.style.width = String(currentVisualFixtureEnabled ? 78 : selected?.progress || 0) + "%";
+
+  const selectedTitle = document.querySelector<HTMLElement>("#currentRailSelectedTitle");
+  const selectedId = document.querySelector<HTMLElement>("#currentRailSelectedId");
+  const selectedState = document.querySelector<HTMLElement>("#currentRailSelectedState");
+  const selectedOwner = document.querySelector<HTMLElement>("#currentRailSelectedOwner");
+  const selectedHandoff = document.querySelector<HTMLElement>("#currentRailSelectedHandoff");
+  if (selectedTitle) selectedTitle.textContent = selected?.title || "No mission selected";
+  if (selectedId) selectedId.textContent = selected?.id || "—";
+  if (selectedState) selectedState.textContent = selected ? currentRefStateLabel(selected.state) : "—";
+  if (selectedOwner) selectedOwner.textContent = selected ? selected.assignee + " · " + selected.category : "—";
+  if (selectedHandoff) selectedHandoff.innerHTML = selected
+    ? ["done", "working", "queued", "blocked"].map((step, index) => {
+      const active = (index === 0 && selected.state === "done") || (index === 1 && selected.state === "working") || (index === 3 && selected.state === "blocked");
+      const completed = index === 0 && selected.state !== "queued";
+      return '<i class="' + (active ? "is-current" : completed ? "is-done" : "") + '"></i>';
+    }).join("")
+    : "";
+}
+
 function render() {
   saveState();
   applyTheme();
   els.sortMode.value = state.sortMode;
   els.currentDateLabel.textContent = formatCurrentDateLabel();
   renderCharacter();
+  renderCurrentSidebar();
   if (activeViewId === "tasks") {
     renderRolloverStatus();
     renderBoss();
     renderTasks();
+    renderCurrentReference();
   }
   if (activeViewId === "bosses") {
     renderBoss();
@@ -3176,6 +3489,7 @@ function render() {
   if (activeViewId === "character") renderCharacterCustomizer();
   if (activeViewId === "shop") renderShop();
   if (activeViewId === "party") renderParty();
+  if (activeViewId !== "party") disposePartyFormationIsland();
   if (activeViewId === "inventory") renderInventory();
   if (activeViewId === "integrations") renderIntegrationHub();
   playPendingBossEffect();
@@ -3196,10 +3510,10 @@ function applyTheme() {
   renderFeedbackSettings();
 }
 
-const appearanceIcons: Record<string, string> = {
-  light: "☀",
-  dark: "☾",
-  system: "◐",
+const appearanceIcons: Record<string, QuestForgeIconName> = {
+  light: "sun",
+  dark: "moon",
+  system: "monitor",
 };
 
 const themeColorMap: Record<string, Record<string, string>> = {
@@ -3239,7 +3553,12 @@ function applyAppearance() {
   document.body.dataset.colorMode = resolved;
 
   const label = i18n?.t?.(`appearance.${mode}`) || mode;
-  if (els.appearanceIcon) els.appearanceIcon.textContent = appearanceIcons[mode];
+  if (els.appearanceIcon) {
+    const icon = appearanceIcons[mode] || appearanceIcons.system;
+    els.appearanceIcon.dataset.qfIcon = icon;
+    els.appearanceIcon.innerHTML = iconMarkup(icon, { size: 16 });
+    els.appearanceIcon.dataset.qfIconReady = icon;
+  }
   if (els.appearanceButton) {
     els.appearanceButton.setAttribute("aria-label", i18n.t("appearance.change", { mode: label }));
     els.appearanceButton.title = i18n.t("appearance.title", { mode: label });
@@ -3613,7 +3932,7 @@ function renderQuestTree(): void {
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "quest-tree-toggle";
-    toggle.textContent = children.length ? (expanded.has(task.id) ? "−" : "+") : "•";
+    toggle.innerHTML = iconMarkup(children.length && expanded.has(task.id) ? "minus" : "plus", { size: 14 });
     toggle.disabled = !children.length;
     toggle.setAttribute("aria-label", children.length ? "サブQuestを開閉" : "サブQuestなし");
     toggle.addEventListener("click", () => {
@@ -3642,7 +3961,7 @@ function renderQuestTree(): void {
     const addChild = document.createElement("button");
     addChild.type = "button";
     addChild.className = "quest-tree-add-child";
-    addChild.textContent = "+";
+    addChild.innerHTML = iconMarkup("plus", { size: 16 });
     addChild.title = "子Questを追加";
     addChild.setAttribute("aria-label", `${task.title}の子Questを追加`);
     addChild.addEventListener("click", () => openTaskDialog({ kind: "todo", parentQuestId: task.id }));
@@ -3923,7 +4242,7 @@ function createTaskCard(task: Quest): HTMLElement {
     const completeMark = document.createElement("span");
     completeMark.className = "task-complete-mark";
     completeMark.setAttribute("aria-hidden", "true");
-    completeMark.textContent = "✓";
+    completeMark.innerHTML = iconMarkup("check", { size: 16 });
     card.appendChild(completeMark);
   }
 
@@ -3934,7 +4253,7 @@ function createTaskCard(task: Quest): HTMLElement {
     const plus = document.createElement("button");
     plus.className = "score-button";
     plus.type = "button";
-    plus.textContent = task.done ? "✓" : "+";
+    plus.innerHTML = task.done ? iconMarkup("check", { size: 18 }) : iconMarkup("plus", { size: 18 });
     plus.setAttribute(
       "aria-label",
       i18n.t(task.kind === "habit" ? "task.positiveAction" : "task.completeAction", { title: task.title }),
@@ -3961,7 +4280,7 @@ function createTaskCard(task: Quest): HTMLElement {
     const minus = document.createElement("button");
     minus.className = "score-button negative";
     minus.type = "button";
-    minus.textContent = "-";
+    minus.innerHTML = iconMarkup("minus", { size: 18 });
     minus.setAttribute(
       "aria-label",
       i18n.t(task.kind === "habit" ? "task.negativeAction" : "task.failAction", { title: task.title }),
@@ -5028,6 +5347,77 @@ function mergeTags(...groups: string[][]): string[] {
   return [...new Set(groups.flat().filter(Boolean))].slice(0, 8);
 }
 
+function buildPartyFormationViewModel(): PartyFormationViewModel {
+  const firebaseUser = globalThis.QuestForgeFirebase?.getUser?.() as { displayName?: string; photoURL?: string } | null;
+  const profile = gatewayRuntime.profile;
+  const humanName = String(profile?.displayName || firebaseUser?.displayName || "あなた");
+  const humanLevel = Number(profile?.level);
+  const humanMetrics = Number.isFinite(humanLevel) && humanLevel > 0
+    ? [{ label: "LEVEL", value: String(humanLevel), tone: "human" as const }]
+    : [];
+  const astraQuest = state.tasks.find((task) => task.assignee?.type === "self" || task.assignee?.label === state.character.name);
+  const astraRole = getRole(state.character.role);
+  const connected = Boolean(firebaseUser);
+  return {
+    title: "作戦編成",
+    subtitle: "Human・Astra・登録済みAgentを、既存データから一時的に配置します。",
+    connectionLabel: gatewayRuntime.status === "online" ? "Gateway / online" : connected ? "Account / signed in" : "Local state only",
+    members: [
+      {
+        id: "human",
+        name: humanName,
+        identity: "human",
+        identityLabel: "HUMAN / PLAYER",
+        role: "Commander",
+        avatarSrc: String(profile?.avatarUrl || firebaseUser?.photoURL || "") || undefined,
+        state: connected ? "ready" : "blocked",
+        stateLabel: connected ? i18n.t("task.handoffStates.ready") : i18n.t("social.loginRequired"),
+        metrics: humanMetrics,
+      },
+      {
+        id: "astra",
+        name: state.character.name,
+        identity: "astra",
+        identityLabel: "ASTRA / COMPANION",
+        role: astraRole.name,
+        avatarSrc: getAvatarSrc(state.character.role, state.character.variant),
+        state: "ready",
+        stateLabel: i18n.t("task.handoffStates.ready"),
+        currentQuest: astraQuest?.title,
+        metrics: [
+          { label: "HP", value: `${state.character.hp} / ${state.character.maxHp}`, tone: "human" },
+          { label: "MP", value: `${state.battle.mp} / ${state.battle.maxMp}`, tone: "rpg" },
+          { label: "LEVEL", value: String(state.character.level), tone: "rpg" },
+        ],
+        capabilities: [astraRole.name],
+      },
+    ],
+    socialMemberCount: gatewayRuntime.party?.members?.length || 0,
+    registeredAgentCount: 0,
+    emptyAgentCopy: "登録済みAgentの正規データが見つかると、割当Quest・Queue・Handoff Load・Capabilityを表示します。",
+  };
+}
+
+function disposePartyFormationIsland(): void {
+  partyFormationIslandHandle?.unmount();
+  partyFormationIslandHandle = null;
+  const host = document.querySelector<HTMLElement>("#partyFormationIsland");
+  if (host) host.replaceChildren();
+}
+
+async function renderPartyFormationIsland(): Promise<void> {
+  const host = document.querySelector<HTMLElement>("#partyFormationIsland");
+  if (!host || activeViewId !== "party") return;
+  const model = buildPartyFormationViewModel();
+  partyFormationIslandModule ||= import("./ui/islands/PartyFormation.tsx");
+  const { partyFormationIsland } = await partyFormationIslandModule;
+  if (activeViewId !== "party" || !host.isConnected) return;
+  if (partyFormationIslandHandle) partyFormationIslandHandle.update(model);
+  else partyFormationIslandHandle = partyFormationIsland.mount(host, model, {
+    onOpenAgentRegistry: () => { window.location.href = "./interaction-lab/#settings"; },
+  });
+}
+
 function renderParty(): void {
   if (!els.partyGrid) return;
   const user = globalThis.QuestForgeFirebase?.getUser?.();
@@ -5081,6 +5471,10 @@ function renderParty(): void {
     els.partyGrid.appendChild(card);
   });
   populateTaskAssigneeOptions();
+  void renderPartyFormationIsland().catch(() => {
+    const host = document.querySelector<HTMLElement>("#partyFormationIsland");
+    if (host) host.dataset.islandLoad = "error";
+  });
 }
 
 function socialPersonCopy(person: GatewayRecord, suffix = ""): HTMLDivElement {
@@ -6033,6 +6427,21 @@ function setActiveView(view: string, options: AppViewOptions = {}): void {
   }
 }
 
+function installPartyModeTabs(): void {
+  const tabs = qa<AppElement>("[data-party-mode]");
+  const panels = qa<AppElement>("[data-party-panel]");
+  const sync = (mode: string): void => {
+    tabs.forEach((tab) => {
+      const active = tab.dataset.partyMode === mode;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+    });
+    panels.forEach((panel) => { panel.hidden = panel.dataset.partyPanel !== mode; });
+  };
+  tabs.forEach((tab) => tab.addEventListener("click", () => sync(tab.dataset.partyMode || "formation")));
+  sync("formation");
+}
+
 qa<AppElement>("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
     const view = button.dataset.view || "tasks";
@@ -6046,6 +6455,24 @@ qa<AppElement>("[data-view]").forEach((button) => {
 
 window.addEventListener("hashchange", () => {
   setActiveView(window.location.hash.slice(1));
+});
+
+qa<HTMLElement>("[data-current-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    currentPresentationMode = button.dataset.currentMode === "campaign" ? "campaign" : "mission";
+    renderCurrentReference();
+  });
+});
+document.querySelector<HTMLElement>("#currentRefAddMission")?.addEventListener("click", () => openTaskDialog({ kind: "todo", difficulty: "medium" }));
+document.querySelector<HTMLElement>("#currentRailOpenBattle")?.addEventListener("click", () => setActiveView("battle"));
+document.querySelector<HTMLElement>("#currentRailViewBattle")?.addEventListener("click", () => setActiveView("battle"));
+document.querySelector<HTMLElement>("#currentRailOpenSelected")?.addEventListener("click", () => {
+  const selected = currentRefMissions().find((mission) => mission.state === "working") || currentRefMissions().find((mission) => mission.state !== "done");
+  const task = selected && state.tasks.find((item) => item.id === selected.id);
+  if (task) openTaskDialog(task);
+});
+document.querySelector<HTMLElement>("#currentRailClose")?.addEventListener("click", () => {
+  document.body.classList.toggle("is-current-rail-collapsed");
 });
 
 els.exportButton.addEventListener("click", () => {
@@ -6171,6 +6598,7 @@ consumeIntegrationOAuthResult();
 consumePartyInvite();
 registerButtonFeedback();
 registerInstallPrompt();
+installPartyModeTabs();
 setActiveView(window.location.hash.slice(1), { render: false });
 registerServiceWorker();
 render();

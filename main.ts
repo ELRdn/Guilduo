@@ -3,6 +3,9 @@ import "./i18n-browser.ts";
 import "./shared/battle-rules-browser.ts";
 import "./questforge-core.ts";
 import "./app.ts";
+import { installQuestForgeIconObserver } from "./ui/icon-system.ts";
+
+installQuestForgeIconObserver();
 
 import("./telemetry.ts").then(({ initializeTelemetry }) => {
   initializeTelemetry({ surface: "root" });

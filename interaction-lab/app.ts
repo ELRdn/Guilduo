@@ -16,11 +16,23 @@ import {
   writeRemoteSnapshot,
 } from "./repository.ts";
 import { currentUser, getIdToken, observeAuth, signIn, signOutUser } from "./auth.ts";
+import { installQuestForgeIconObserver } from "../ui/icon-system.ts";
+import type {
+  FormationMember,
+  IntegrationControlPlaneViewModel,
+  IntegrationNodeStatus,
+  IslandHandle,
+  PartyFormationViewModel,
+  QuestGraphNode,
+  QuestGraphViewModel,
+} from "../ui/islands/types.ts";
+
+installQuestForgeIconObserver();
 
 type LabLocale = (typeof SUPPORTED_LOCALES)[number];
 type JsonRecord = Record<string, unknown>;
 type LabTelemetryConsent = "unknown" | "granted" | "denied";
-type LabView = "today" | "tree" | "battle" | "party" | "integrations" | "profile" | "settings";
+type LabView = "today" | "quests" | "tree" | "agents" | "reviews" | "battle" | "party" | "integrations" | "profile" | "settings";
 
 interface LabQuest {
   id: string;
@@ -134,6 +146,8 @@ interface LabSettings {
   density: boolean;
   motion: boolean;
   sound: boolean;
+  theme: "arcane" | "soft-ops" | "retro";
+  mode: "light" | "dark" | "system";
 }
 
 interface LabState {
@@ -153,6 +167,7 @@ interface LabState {
   timerSeconds: number;
   timerId: number | null;
   integration: string;
+  agentFocusId: string;
   dataSource: string;
   syncStatus: string;
   gatewayUrl: string;
@@ -242,6 +257,7 @@ const state: LabState = {
   timerSeconds: 25 * 60,
   timerId: null,
   integration: "calendar",
+  agentFocusId: "",
   dataSource: "local",
   syncStatus: "local-only",
   gatewayUrl: gatewayDefaultUrl(),
@@ -265,7 +281,9 @@ const state: LabState = {
     typeScale: false,
     density: false,
     motion: true,
-    sound: true
+    sound: true,
+    theme: "soft-ops",
+    mode: "dark"
   },
   battleLog: ["Questを完了するとMPを獲得できる。", "Deadline Wraithが待ち構えている。"],
   quests: [
@@ -402,14 +420,27 @@ function applyLabLocale() {
   document.documentElement.lang = LOCALE_METADATA[locale]?.tag || locale;
   const select = $("#labLocaleSelect");
   if (select) select.value = locale;
-  const labels: Record<LabView, string> = { today: "today", tree: "tree", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
+  const labels: Record<LabView, string> = { today: "today", quests: "tasksHeading", tree: "tree", agents: "agentHeading", reviews: "confirm", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
+  const referenceNavLabels: Partial<Record<LabView, string>> = {
+    today: "今日の作戦",
+    quests: "クエスト",
+    tree: "探索 / ツリー",
+    agents: "エージェント",
+    reviews: "レビュー",
+    battle: "戦闘・報酬",
+    party: "パーティ",
+    integrations: "統合・連携",
+    profile: "プロフィール",
+    settings: "設定",
+  };
   const moreLabel = $("#mobileMoreToggle b");
   if (moreLabel) moreLabel.textContent = labText("more");
   $$('[data-view]').forEach((button) => {
     const view = button.dataset.view;
     const key = view && view in labels ? labels[view as LabView] : undefined;
     const textNode = button.querySelector("b") || button.querySelector("span:last-child");
-    if (key && textNode) textNode.textContent = labText(key);
+    if (textNode && visualFixtureEnabled && view && referenceNavLabels[view as LabView]) textNode.textContent = referenceNavLabels[view as LabView] || "";
+    else if (key && textNode) textNode.textContent = labText(key);
   });
   const titleKey = labels[state.view];
   if (titleKey && $("#pageTitle")) $("#pageTitle").textContent = labText(titleKey);
@@ -418,6 +449,10 @@ function applyLabLocale() {
   if ($("#battleTitle")) $("#battleTitle").textContent = labText("battleHeading");
   if ($("#partyTitle")) $("#partyTitle").textContent = labText("partyHeading");
   if ($("#integrationsTitle")) $("#integrationsTitle").textContent = labText("integrationHeading");
+  const agentsKicker = $("#agentsKicker");
+  if (agentsKicker) agentsKicker.textContent = visualFixtureEnabled && state.view === "agents"
+    ? "AIエージェントのリアルタイム運用状況と連携を監視・制御します。"
+    : "AGENT OPERATIONS / STATUS";
   const targets = {
     "#filterAll": "all", "#filterPriority": "priority", "#sortButton": "sortDue", "#toggleArchived": "showArchived", "#toggleArchivedTree": "showArchived",
     "#clearSelection": "clearSelection", "#bulkCompleteButton": "complete", "#bulkArchiveButton": "archive", "#bulkRestoreButton": "restore", "#collapseTree": "collapse",
@@ -498,6 +533,8 @@ try {
   const savedSettings = JSON.parse(localStorage.getItem("questforge-interaction-settings") || "null");
   if (savedSettings && typeof savedSettings === "object") {
     state.settings = { ...state.settings, ...savedSettings };
+    if (!["arcane", "soft-ops", "retro"].includes(state.settings.theme)) state.settings.theme = "soft-ops";
+    if (!["light", "dark", "system"].includes(state.settings.mode)) state.settings.mode = "dark";
   }
 } catch {
   // Keep the safe defaults when a local setting payload is malformed.
@@ -518,6 +555,17 @@ const partyMembers: PartyMember[] = [
   { name: "Operator", identity: "AGENT / OPERATOR", role: "MCP / 連携", mark: "O", state: "blocked", task: "接続設定を待機中" }
 ];
 
+/* Reference Golden capture fixture. It is enabled only by visual:capture in DEV; production/local state never reads it. */
+const visualFixtureEnabled = import.meta.env.DEV && new URLSearchParams(window.location.search).get("visualFixture") === "v3";
+const referenceCaptureMembers: PartyMember[] = [
+  { name: "You", identity: "HUMAN / PLAYER", role: "Commander", mark: "YO", state: "working", task: "QuestForge operation", avatar: "../assets/avatar-role-femme-sentinel.webp" },
+  { name: "Astra", identity: "AGENT / SENTINEL", role: "Companion", mark: "AS", state: "working", task: "Quest prioritization" },
+  { name: "Codex", identity: "AGENT / ENGINEER", role: "Implementation", mark: "CX", state: "working", task: "README improvement" },
+  { name: "Scout", identity: "AGENT / RESEARCH", role: "Research", mark: "SC", state: "working", task: "Reference review" },
+  { name: "Ops", identity: "AGENT / OPERATOR", role: "MCP / Sync", mark: "OP", state: "review", task: "Connection review" },
+  { name: "Echo", identity: "AGENT / REVIEW", role: "Review", mark: "EC", state: "ready", task: "Return queue" }
+];
+
 const integrations: LabIntegration[] = [
   { id: "calendar", providerId: "google-calendar", name: "Google Calendar", short: "GC", stateKey: "integration.status.connected", copyKey: "service.google-calendar.description", titleKey: "service.google-calendar.type", detailKey: "service.google-calendar.rule1", activityKeys: ["service.google-calendar.rule1", "service.google-calendar.rule2", "service.google-calendar.rule3"], lastSync: "2026-08-14T16:30:00", scope: "2 calendars", nextStepKey: "integration.preview" },
   { id: "tasks", providerId: "google-tasks", name: "Google Tasks", short: "GT", stateKey: "integration.status.admin_setup_required", copyKey: "service.google-tasks.description", titleKey: "service.google-tasks.type", detailKey: "service.google-tasks.rule3", activityKeys: ["service.google-tasks.rule1", "service.google-tasks.rule2", "service.google-tasks.rule3"], lastSync: "", scope: "1 task list", nextStepKey: "integration.resource" },
@@ -536,6 +584,12 @@ const repository = new QuestForgeRepository({ baseUrl: state.gatewayUrl, getToke
 const externalOAuthEnabled = globalThis.QuestForgeConfig?.externalOAuthEnabled === true;
 let remoteLoadPromise: Promise<boolean> | null = null;
 let observedUid = "";
+let partyFormationIslandHandle: IslandHandle<PartyFormationViewModel> | null = null;
+let partyFormationIslandModule: Promise<typeof import("../ui/islands/PartyFormation.tsx")> | null = null;
+let integrationControlPlaneIslandHandle: IslandHandle<IntegrationControlPlaneViewModel> | null = null;
+let integrationControlPlaneIslandModule: Promise<typeof import("../ui/islands/IntegrationControlPlane.tsx")> | null = null;
+let questDependencyGraphIslandHandle: IslandHandle<QuestGraphViewModel> | null = null;
+let questDependencyGraphIslandModule: Promise<typeof import("../ui/islands/QuestDependencyGraph.tsx")> | null = null;
 
 function persistState() {
   writeLabState(state);
@@ -673,7 +727,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 function isLabView(value: string | undefined): value is LabView {
-  return value === "today" || value === "tree" || value === "battle" || value === "party" || value === "integrations" || value === "profile" || value === "settings";
+  return value === "today" || value === "quests" || value === "tree" || value === "agents" || value === "reviews" || value === "battle" || value === "party" || value === "integrations" || value === "profile" || value === "settings";
 }
 
 function closestLabElement(event: LabEvent, selector: string): LabElement | null {
@@ -918,7 +972,7 @@ async function performRemoteLoad({ announce = true, source = "manual" } = {}) {
     setSyncStatus("synced");
     trackTelemetry("sync_success", { source: "gateway" });
     persistState();
-    renderAll();
+    renderAll({ full: true });
     if (announce) notify(`本体のQuest ${snapshot.total || snapshot.quests.length}件を読み込みました。`);
     return true;
   } catch (error) {
@@ -935,7 +989,7 @@ async function performRemoteLoad({ announce = true, source = "manual" } = {}) {
       setSyncStatus("error", error instanceof QuestForgeApiError ? error.message : "APIへ接続できませんでした。ローカルデータを維持しています。");
     }
     trackTelemetry("sync_failure", { source: "gateway", status: error instanceof QuestForgeApiError ? String(error.status || "error") : "error" });
-    renderAll();
+    renderAll({ full: true });
     if (announce) notify(error instanceof QuestForgeApiError ? error.message : "APIへ接続できませんでした。再試行できます。");
     return false;
   }
@@ -994,7 +1048,7 @@ function applyRemoteResponse(response: JsonRecord): void {
   state.lastSyncAt = formatSyncTime();
   setSyncStatus("synced");
   persistState();
-  renderAll();
+  renderAll({ full: true });
 }
 
 function renderConnection() {
@@ -1009,6 +1063,28 @@ function renderConnection() {
   const demoBadge = $("#demoDataBadge");
   if (demoBadge) { demoBadge.hidden = state.remoteMode || state.remoteConnectionState === "auth-checking"; demoBadge.textContent = labText("demoData"); }
   setSyncStatus(state.syncStatus);
+  const topbarSync = document.querySelector<HTMLElement>("#topbarSyncState");
+  const topbarSyncNote = document.querySelector<HTMLElement>("#topbarSyncNote");
+  if (topbarSync) topbarSync.textContent = visualFixtureEnabled ? "Synced" : state.remoteMode ? "Synced" : "Local";
+  if (topbarSyncNote) topbarSyncNote.textContent = visualFixtureEnabled ? "Just now" : state.remoteMode ? state.remoteConnectionState : state.syncStatus;
+  if (visualFixtureEnabled) {
+    const setFixtureText = (selector: string, value: string): void => {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (element) element.textContent = value;
+    };
+    setFixtureText("#topbarLevel", "42");
+    setFixtureText("#topbarXp", "7,842 / 11,000 XP");
+    setFixtureText("#timerValue", "Execution");
+    setFixtureText("#topbarFocusNote", "+25% XP");
+    setFixtureText("#topbarQuestLine", "The Gloom Protocol");
+    setFixtureText("#topbarQuestNote", "Phase 2: Sever the Nodes");
+    setFixtureText("#topbarMp", "64");
+    setFixtureText("#topbarMpMax", "/ 120");
+    setFixtureText("#topbarPressure", "34%");
+    setFixtureText("#topbarPressureNote", "Rising ↗");
+    const topbarMeter = document.querySelector<HTMLMeterElement>("#topbarMpMeter");
+    if (topbarMeter) { topbarMeter.value = 64; topbarMeter.setAttribute("value", "64"); }
+  }
 }
 
 function stateLabel(value: string): string {
@@ -1035,6 +1111,246 @@ function activePartyMembers(): PartyMember[] {
     const assigned = state.quests.find((item) => item.raw?.assignee?.id === agent.agentId);
     return { name: agent.displayName, agentId: agent.agentId, identity: `AGENT / ${String(agent.provider || "generic").toUpperCase()}`, role: agent.role || "assistant", mark: agent.displayName.slice(0, 2).toUpperCase(), state: assigned?.state || (agent.status === "disabled" ? "blocked" : "ready"), task: assigned?.title || agent.instructions || "割り当て待ち" } satisfies PartyMember;
   })];
+}
+
+function formationStateLabel(value: string): string {
+  if (value === "blocked") return stateLabel("blocked");
+  if (value === "review") return stateLabel("review");
+  if (value === "working") return stateLabel("working");
+  if (value === "completed") return stateLabel("completed");
+  return stateLabel("ready");
+}
+
+function buildPartyFormationViewModel(): PartyFormationViewModel {
+  const actualRemoteMembers = state.remoteMode ? activePartyMembers() : visualFixtureEnabled ? referenceCaptureMembers : [];
+  const remotePlayer = actualRemoteMembers.find((member) => member.identity === "HUMAN / PLAYER");
+  const player: FormationMember = {
+    id: "human",
+    name: remotePlayer?.name || state.profile?.displayName || state.authUser?.displayName || "あなた",
+    identity: "human",
+    identityLabel: "HUMAN / PLAYER",
+    role: "Commander",
+    avatarSrc: state.avatarDataUrl || state.profile?.avatarUrl || undefined,
+    state: remotePlayer?.state || (state.remoteMode ? "ready" : "blocked"),
+    stateLabel: formationStateLabel(remotePlayer?.state || (state.remoteMode ? "ready" : "blocked")),
+    metrics: [],
+  };
+  const astra: FormationMember = {
+    id: "astra",
+    name: "Astra",
+    identity: "astra",
+    identityLabel: "ASTRA / COMPANION",
+    role: "Sentinel",
+    avatarSrc: state.avatarDataUrl || state.profile?.avatarUrl || "../assets/avatar-role-femme-sentinel.webp",
+    state: "ready",
+    stateLabel: formationStateLabel("ready"),
+    metrics: [],
+  };
+  const agentRecords: Array<{ id: string; name: string; provider: string; role: string; state: string; capabilities: string[] }> = state.remoteMode
+    ? (state.registeredAgents || []).filter((agent) => agent.status !== "archived").map((agent) => ({
+      id: agent.agentId,
+      name: agent.displayName,
+      provider: String(agent.provider || "generic"),
+      role: agent.role || "assistant",
+      state: agent.status === "disabled" ? "blocked" : "ready",
+      capabilities: Array.isArray(agent.capabilities) ? agent.capabilities.map(String).filter(Boolean) : [],
+    }))
+    : visualFixtureEnabled
+      ? referenceCaptureMembers.filter((member) => member.identity !== "HUMAN / PLAYER").map((member) => ({
+        id: member.agentId || member.name,
+        name: member.name,
+        provider: member.identity.replace(/^AGENT /, ""),
+        role: member.role,
+        state: member.state,
+        capabilities: [],
+      }))
+      : [];
+  const agents: FormationMember[] = agentRecords.map((agent) => {
+    const assigned = state.quests.filter((item) => item.raw?.assignee?.id === agent.id || item.owner === agent.name);
+    const activeQuest = assigned.find((item) => !["completed", "archived"].includes(item.state));
+    const handoffLoad = assigned.filter((item) => ["working", "review", "blocked"].includes(item.state)).length;
+    const agentState = activeQuest?.state || agent.state;
+    const capabilities = agent.capabilities;
+    return {
+      id: agent.id,
+      name: agent.name,
+      identity: "agent",
+      identityLabel: `AGENT / ${agent.provider.toUpperCase()}`,
+      role: agent.role,
+      avatarSrc: undefined,
+      state: agentState,
+      stateLabel: formationStateLabel(agentState),
+      currentQuest: activeQuest?.title,
+      metrics: [
+        { label: "ASSIGNED QUEST", value: String(assigned.length), tone: "agent" },
+        { label: "QUEUE", value: String(Math.max(0, assigned.length - (activeQuest ? 1 : 0))), tone: "neutral" },
+        { label: "HANDOFF LOAD", value: String(handoffLoad), tone: handoffLoad ? "rpg" : "neutral" },
+      ],
+      capabilities,
+    } satisfies FormationMember;
+  });
+  const remotePartyMembers = state.remoteParty?.members?.length || 0;
+  const connectionLabel = state.remoteMode
+    ? state.remoteConnectionState === "synced" ? "QuestForge / synced" : `QuestForge / ${state.remoteConnectionState}`
+    : "Local state only";
+  return {
+    title: "Formation",
+    subtitle: "表示中の編成は正規のPlayer・Agent Registryから導出された非永続ビューです。",
+    connectionLabel,
+    members: [player, astra, ...agents],
+    socialMemberCount: remotePartyMembers,
+    registeredAgentCount: agents.length,
+    emptyAgentCopy: state.remoteMode
+      ? "Agent Registryに登録済みのAgentがいないため、架空のメンバーは表示していません。"
+      : "QuestForge本体へ接続すると、登録済みAgentの割当・Queue・Handoff Loadを表示します。",
+  };
+}
+
+function disposePartyFormationIsland(): void {
+  partyFormationIslandHandle?.unmount();
+  partyFormationIslandHandle = null;
+  const host = document.querySelector<HTMLElement>("#partyFormationIsland");
+  if (host) host.replaceChildren();
+}
+
+function renderPartyFormationIsland(): void {
+  const host = document.querySelector<HTMLElement>("#partyFormationIsland");
+  if (!host || state.view !== "party") return;
+  const model = buildPartyFormationViewModel();
+  partyFormationIslandModule ||= import("../ui/islands/PartyFormation.tsx");
+  void partyFormationIslandModule.then(({ partyFormationIsland }) => {
+    if (state.view !== "party" || !host.isConnected) return;
+    if (partyFormationIslandHandle) partyFormationIslandHandle.update(model);
+    else partyFormationIslandHandle = partyFormationIsland.mount(host, model, {
+      onOpenAgentRegistry: () => { setView("agents"); const mount = document.querySelector<HTMLElement>("#agentRegistryMount"); if (mount) mount.hidden = false; document.querySelector("#toggleAgentRegistry")?.setAttribute("aria-expanded", "true"); document.querySelector("#agentRegistryList")?.scrollIntoView({ behavior: "smooth", block: "start" }); },
+      onOpenMemberQuest: (memberId: string) => {
+        const member = buildPartyFormationViewModel().members.find((item) => item.id === memberId);
+        const target = member ? state.quests.find((item) => item.owner === member.name) : undefined;
+        if (target) { selectQuest(target.id); setView("today"); }
+        else notify((member?.name || memberId) + "に割り当てられたQuestはありません。");
+      },
+    });
+  }).catch(() => { host.dataset.islandLoad = "error"; });
+}
+
+function integrationStatus(raw: unknown, hasRemoteRecord: boolean): IntegrationNodeStatus {
+  const value = String(raw || "").toLowerCase().replace(/_/g, "-");
+  if (["connected", "active", "synced", "ready"].includes(value)) return "connected";
+  if (["syncing", "pending", "in-progress"].includes(value)) return "syncing";
+  if (["error", "failed", "failure"].includes(value)) return "error";
+  if (["unsupported", "not-supported"].includes(value)) return "unsupported";
+  if (["early-access", "preparing", "planned"].includes(value)) return "early-access";
+  return hasRemoteRecord || externalOAuthEnabled ? "not-configured" : "early-access";
+}
+
+function integrationStatusText(status: IntegrationNodeStatus): string {
+  return { connected: "接続済み", syncing: "同期中", "early-access": "準備中", error: "エラー", "not-configured": "未設定", unsupported: "未対応" }[status];
+}
+
+function buildIntegrationControlPlaneViewModel(): IntegrationControlPlaneViewModel {
+  const remoteByKey = new Map<string, LabIntegration>();
+  (state.remoteIntegrations || []).forEach((remote) => {
+    remoteByKey.set(remote.id, remote);
+    remoteByKey.set(remote.providerId, remote);
+  });
+  const nodes = integrations.map((item) => {
+    const remote = remoteByKey.get(item.id) || remoteByKey.get(item.providerId);
+    const remoteRecord = remote as (LabIntegration & JsonRecord) | undefined;
+    const status = integrationStatus(remoteRecord?.status, Boolean(remote));
+    const endpoint = String(remoteRecord?.resource || remoteRecord?.scope || remoteRecord?.target || item.providerId);
+    const latencyValue = remoteRecord?.latencyMs ?? remoteRecord?.latency;
+    return {
+      id: item.id,
+      name: item.name,
+      type: item.providerId,
+      endpoint,
+      status,
+      statusLabel: integrationStatusText(status),
+      latency: latencyValue === undefined || latencyValue === null || latencyValue === "" ? undefined : String(latencyValue).match(/^\d+$/) ? `${latencyValue} ms` : String(latencyValue),
+      auth: String(remoteRecord?.accountEmail || remoteRecord?.email || "") || undefined,
+    };
+  });
+  const selectedId = nodes.some((node) => node.id === state.integration) ? state.integration : nodes[0]?.id || "";
+  return {
+    title: "Integration Control Plane",
+    subtitle: "QuestForgeと実在するAdapterの接続状態を、既存の同期状態から描画します。",
+    selectedId,
+    nodes,
+    tableRows: nodes,
+    connectedCount: nodes.filter((node) => node.status === "connected").length,
+    previewCount: 0,
+    safeRuleCount: 0,
+  };
+}
+
+function disposeIntegrationControlPlaneIsland(): void {
+  integrationControlPlaneIslandHandle?.unmount();
+  integrationControlPlaneIslandHandle = null;
+  const host = document.querySelector<HTMLElement>("#integrationControlPlaneIsland");
+  if (host) host.replaceChildren();
+}
+
+function renderIntegrationControlPlane(): void {
+  const host = document.querySelector<HTMLElement>("#integrationControlPlaneIsland");
+  if (!host || state.view !== "integrations") return;
+  const model = buildIntegrationControlPlaneViewModel();
+  integrationControlPlaneIslandModule ||= import("../ui/islands/IntegrationControlPlane.tsx");
+  void integrationControlPlaneIslandModule.then(({ integrationControlPlaneIsland }) => {
+    if (state.view !== "integrations" || !host.isConnected) return;
+    if (integrationControlPlaneIslandHandle) integrationControlPlaneIslandHandle.update(model);
+    else integrationControlPlaneIslandHandle = integrationControlPlaneIsland.mount(host, model, {
+      onSelect: (id) => { state.integration = id; renderIntegrations(); renderIntegrationControlPlane(); },
+      onOpenSettings: (id) => { state.integration = id; renderIntegrations(); document.querySelector(".integration-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }); },
+    });
+  }).catch(() => { host.dataset.islandLoad = "error"; });
+}
+
+function graphOrder(raw: JsonRecord): number | undefined {
+  const value = raw.order ?? raw.sortOrder ?? raw.position;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function buildQuestGraphViewModel(): QuestGraphViewModel {
+  const nodes: QuestGraphNode[] = state.quests.filter((item) => state.showArchived || item.lifecycleState !== "archived").map((item) => {
+    const raw = asJsonRecord(item.raw);
+    const dependencyIds = Array.isArray(raw.dependencyIds) ? raw.dependencyIds.map(String).filter(Boolean) : Array.isArray(item.dependencyIds) ? item.dependencyIds.map(String).filter(Boolean) : [];
+    const parentQuestId = String(item.parentQuestId || item.parent || raw.parentQuestId || "");
+    return {
+      id: item.id,
+      code: item.code,
+      title: item.title,
+      summary: item.note,
+      kind: questKind(item),
+      status: item.state,
+      statusLabel: stateLabel(item.state),
+      progress: Math.max(0, Math.min(100, Number(item.progress) || 0)),
+      createdAt: String(raw.createdAt || raw.updatedAt || item.id),
+      order: graphOrder(raw),
+      parentQuestId,
+      dependencyIds,
+    };
+  });
+  return { title: "Quest Dependency Graph", subtitle: "親子関係と依存関係から毎回決定的に配置します。座標は保存しません。", nodes, selectedId: state.selectedQuestId, hideCompleted: false, statusFilter: "all" };
+}
+
+function disposeQuestDependencyGraphIsland(): void {
+  questDependencyGraphIslandHandle?.unmount();
+  questDependencyGraphIslandHandle = null;
+  const host = document.querySelector<HTMLElement>("#questDependencyGraphIsland");
+  if (host) host.replaceChildren();
+}
+
+function renderQuestDependencyGraph(): void {
+  const host = document.querySelector<HTMLElement>("#questDependencyGraphIsland");
+  if (!host || state.view !== "tree") return;
+  const model = buildQuestGraphViewModel();
+  questDependencyGraphIslandModule ||= import("../ui/islands/QuestDependencyGraph.tsx");
+  void questDependencyGraphIslandModule.then(({ questDependencyGraphIsland }) => {
+    if (state.view !== "tree" || !host.isConnected) return;
+    if (questDependencyGraphIslandHandle) questDependencyGraphIslandHandle.update(model);
+    else questDependencyGraphIslandHandle = questDependencyGraphIsland.mount(host, model, { onSelect: (id) => { selectQuest(id); renderQuestDependencyGraph(); } });
+  }).catch(() => { host.dataset.islandLoad = "error"; });
 }
 
 function questKind(item: LabQuest): string {
@@ -1341,6 +1657,8 @@ function renderTree() {
 }
 
 function renderBattle() {
+  const battleTitle = document.querySelector<HTMLElement>("#battleTitle");
+  if (battleTitle && visualFixtureEnabled) battleTitle.textContent = "Battle / Rewards";
   const queue = state.quests.filter((item) => !item.parent && item.state !== "completed" && item.state !== "archived");
   $("#battleQueue").innerHTML = queue.length
     ? queue.map((item) => '<div class="battle-queue-row"><strong>' + escapeHtml(item.title) + "</strong><span>+" + escapeHtml(item.reward) + " MP</span></div>").join("")
@@ -1359,19 +1677,14 @@ function renderBattle() {
 }
 
 function renderParty() {
-  const members = activePartyMembers();
-  const assignments = members.map((member) => ({ member, quest: state.quests.find((item) => item.owner === member.name || item.raw?.assignee?.id === member.agentId || (member.identity === "HUMAN / PLAYER" && ["self", "自分", "Astra"].includes(String(item.owner || "")))) }));
-  $("#partyList").innerHTML = assignments.map(({ member, quest: assignedQuest }) =>
-    '<article class="party-card"><div class="party-card-head"><div class="party-mark ' + (member.avatar ? "has-avatar" : "") + '">' + (member.avatar ? '<img src="' + member.avatar + '" alt="" />' : member.mark) + "</div><div>" +
-      "<p>" + member.identity + "</p><h2>" + member.name + "</h2>" + pill(member.state) +
-    "</div></div>" +
-      '<p class="party-task">' + escapeHtml(member.task) + "</p>" +
-      '<dl class="party-card-meta"><div><dt>' + escapeHtml(labText("partyCurrentQuest")) + '</dt><dd>' + (assignedQuest ? escapeHtml(assignedQuest.title) : escapeHtml(labText("unassigned"))) + "</dd></div>" +
-      "<div><dt>" + escapeHtml(labText("statusLabel")) + "</dt><dd>" + stateLabel(member.state) + "</dd></div>" +
-      "<div><dt>" + escapeHtml(labText("estimate")) + "</dt><dd>" + (assignedQuest ? assignedQuest.focus + escapeHtml(labText("minutesSuffix")) : "-") + "</dd></div></dl>" +
-      '<button type="button" data-party-agent="' + member.name + '">' + escapeHtml(labText("partyCheckQuest")) + '</button>' +
-    "</article>"
-  ).join("");
+  const partyTitle = document.querySelector<HTMLElement>("#partyTitle");
+  const partyReferenceCopy = document.querySelector<HTMLElement>("#partyReferenceCopy");
+  if (partyTitle && visualFixtureEnabled) partyTitle.textContent = "パーティ / Workforce";
+  if (partyReferenceCopy) partyReferenceCopy.textContent = visualFixtureEnabled ? "HumanとAI Agentの役割・負荷・現在Holderを横断して編成します。" : "";
+  const members = visualFixtureEnabled ? referenceCaptureMembers.filter((member) => member.name !== "Echo") : activePartyMembers();
+  // Member roster cards (formerly #partyList) now render inside the PartyFormation Island's
+  // "Members" segment — see ui/islands/PartyFormation.tsx. This avoids the double-rendering
+  // where both the Island scene and a separate vanilla card grid showed the same roster.
   $("#partyCount").textContent = String(members.length);
   $("#partyWorking").textContent = String(members.filter((member) => member.state === "working").length);
   $("#partyReview").textContent = String(members.filter((member) => member.state === "review").length);
@@ -1388,11 +1701,15 @@ function renderProfile(): void {
   const characterName = "Astra";
   const avatar = state.avatarDataUrl || state.profile?.avatarUrl || "../assets/avatar-role-femme-sentinel.webp";
   const title = $("#profileTitle");
+  const kicker = document.querySelector<HTMLElement>("#profileKicker");
+  const referenceCopy = document.querySelector<HTMLElement>("#profileReferenceCopy");
   const image = $("#profileAvatarImage");
   const character = $("#profileCharacterName");
   const account = $("#profileAccountLine");
   const status = $("#profileAvatarStatus");
-  if (title) title.textContent = `${accountName}${labText("profileTitleSuffix")}`;
+  if (title) title.textContent = visualFixtureEnabled ? "Human Operator Dashboard" : `${accountName}${labText("profileTitleSuffix")}`;
+  if (kicker) kicker.textContent = visualFixtureEnabled ? "" : "PROFILE / ACCOUNT";
+  if (referenceCopy) referenceCopy.textContent = visualFixtureEnabled ? "あなたのオペレーション全体と、エージェントチームとの協働状況を可視化します。" : "";
   if (image) { image.src = avatar; image.alt = `${accountName}${labText("avatarAlt")}`; }
   if (character) character.textContent = characterName;
   if (account) account.textContent = `${labText("accountPrefix")}${accountName}`;
@@ -1439,6 +1756,65 @@ function renderAgentRegistry() {
   if (connectionList) connectionList.innerHTML = connections.filter((connection) => !connection.revokedAt).map((connection) => '<div class="agent-connection-row"><div><strong>' + escapeHtml(connection.clientName || connection.clientId) + '</strong><small>' + escapeHtml(connection.agentId) + ' · ' + escapeHtml((connection.scopes || []).length) + ' ' + escapeHtml(labText("scopesUsed")) + ' · ' + escapeHtml(labText("lastUsed")) + ' ' + escapeHtml(connection.lastUsedAt ? formatSyncTime(connection.lastUsedAt) : labText("neverUsed")) + '</small></div><button type="button" data-agent-unlink="' + escapeHtml(connection.agentId) + '" data-client-unlink="' + escapeHtml(connection.clientId) + '">' + escapeHtml(labText("unlink")) + '</button></div>').join("") || '<p class="empty-note">' + escapeHtml(labText("noClients")) + '</p>';
 }
 
+function renderAgentOperations(): void {
+  const grid = $("#agentOperationsGrid");
+  const inspector = $("#agentOperationsInspector");
+  const members = visualFixtureEnabled
+    ? referenceCaptureMembers.filter((member) => member.identity !== "HUMAN / PLAYER")
+    : state.remoteMode
+      ? activePartyMembers().filter((member) => member.identity !== "HUMAN / PLAYER")
+      : [];
+  if (!members.length) {
+    grid.innerHTML = '<div class="agent-operations-empty"><strong>表示できるAgentがいません</strong><p>本体へ接続すると、稼働中のAgentの負荷・キュー・レビュー状況がここに表示されます。</p></div>';
+    inspector.innerHTML = '<p class="agent-operations-inspector-empty">Agentを選択すると詳細がここに表示されます。</p>';
+    return;
+  }
+  const selectedId = state.agentFocusId || members[0].agentId || members[0].name;
+  const selected = members.find((member) => (member.agentId || member.name) === selectedId) || members[0];
+  const fixtureCards: Record<string, { load: number; assigned: number; queue: number; review: number; success: number; current: string; tags: string[] }> = {
+    Astra: { load: 72, assigned: 3, queue: 1, review: 0, success: 98, current: "価格ページA/Bテスト設計", tags: ["MCP", "Git", "Docs"] },
+    Codex: { load: 58, assigned: 2, queue: 0, review: 1, success: 97, current: "README改善", tags: ["MCP", "Git", "Docs"] },
+    Scout: { load: 41, assigned: 2, queue: 0, review: 0, success: 96, current: "営業候補調査", tags: ["MCP", "Git", "Docs"] },
+    Ops: { load: 85, assigned: 1, queue: 1, review: 0, success: 95, current: "ログ解析とアラート設計", tags: ["MCP", "Git", "Docs"] },
+    Echo: { load: 8, assigned: 1, queue: 0, review: 0, success: 94, current: "待機中", tags: ["MCP", "Git", "Docs"] },
+  };
+  grid.innerHTML = members.map((member) => {
+    const assigned = state.quests.filter((item) => item.owner === member.name || item.raw?.assignee?.id === member.agentId);
+    const fixture = visualFixtureEnabled ? fixtureCards[member.name] : undefined;
+    const load = fixture?.load ?? Math.min(100, assigned.filter((item) => !["completed", "archived"].includes(item.state)).length * 28 + (member.state === "blocked" ? 16 : 8));
+    const assignedCount = fixture?.assigned ?? assigned.length;
+    const queueCount = fixture?.queue ?? assigned.filter((item) => item.state === "ready").length;
+    const reviewCount = fixture?.review ?? assigned.filter((item) => item.state === "review").length;
+    const success = fixture?.success ?? Math.max(0, Math.min(100, 100 - reviewCount * 4));
+    const currentQuest = fixture?.current ?? assigned[0]?.title ?? "Waiting";
+    const tags = fixture?.tags ?? ["Capability"];
+    const roleLabel = visualFixtureEnabled ? "AI Agent" : member.identity;
+    const currentLabel = visualFixtureEnabled ? "現在のクエスト" : "CURRENT QUEST";
+    const statLabels = visualFixtureEnabled ? ["キュー", "レビュー待ち", "成功率"] : ["QUEUE", "REVIEWS", "SUCCESS"];
+    return '<button type="button" class="agent-operation-card ' + ((member.agentId || member.name) === selectedId ? "is-selected" : "") + '" data-agent-operation="' + escapeHtml(member.agentId || member.name) + '"><span class="agent-operation-mark">' + escapeHtml(member.mark) + '</span><span class="agent-operation-main"><strong>' + escapeHtml(member.name) + '</strong><small class="agent-operation-role">' + escapeHtml(roleLabel) + '</small><span class="agent-operation-current">' + currentLabel + '</span><b class="agent-operation-quest">' + escapeHtml(currentQuest) + '</b></span><span class="agent-operation-load"><i style="width:' + load + '%"></i></span><span class="agent-operation-stats"><span><small>' + statLabels[0] + '</small><b>' + queueCount + '</b></span><span><small>' + statLabels[1] + '</small><b>' + reviewCount + '</b></span><span><small>' + statLabels[2] + '</small><b>' + success + '%</b></span></span><span class="agent-operation-tags">' + tags.map((tag) => '<em>' + escapeHtml(tag) + '</em>').join('') + '</span><em class="agent-operation-state">' + assignedCount + ' Quest / ' + escapeHtml(stateLabel(member.state)) + '</em><span class="agent-operation-trend" aria-hidden="true"><svg viewBox="0 0 100 32" preserveAspectRatio="none"><polyline points="0,28 12,19 24,25 36,10 48,18 60,5 72,15 84,1 100,8"></polyline></svg></span></button>';
+  }).join("") + (visualFixtureEnabled ? '<button type="button" class="agent-operation-add" data-agent-add="true"><span>＋</span><b>エージェントを追加</b></button>' : "");
+  const selectedQuests = state.quests.filter((item) => item.owner === selected.name || item.raw?.assignee?.id === selected.agentId);
+  const selectedFixture = visualFixtureEnabled ? fixtureCards[selected.name] : undefined;
+  const selectedQueue = selectedFixture?.queue ?? selectedQuests.filter((item) => item.state === "ready").length;
+  const selectedReview = selectedFixture?.review ?? selectedQuests.filter((item) => item.state === "review").length;
+  const selectedActive = selectedFixture?.assigned ?? selectedQuests.filter((item) => !["completed", "archived"].includes(item.state)).length;
+  const selectedLoad = selectedFixture?.load ?? 0;
+  inspector.innerHTML = '<p>' + (visualFixtureEnabled ? "選択中のエージェント" : "SELECTED AGENT") + '</p><h2>' + escapeHtml(selected.name) + '</h2><span>' + escapeHtml(visualFixtureEnabled ? "Companion" : selected.role) + '</span>' + (visualFixtureEnabled ? '<strong class="agent-inspector-load">' + selectedLoad + '%</strong>' : '') + '<dl><div><dt>' + (visualFixtureEnabled ? "キュー" : "QUEUE") + '</dt><dd>' + selectedQueue + '</dd></div><div><dt>' + (visualFixtureEnabled ? "レビュー" : "REVIEW") + '</dt><dd>' + selectedReview + '</dd></div><div><dt>' + (visualFixtureEnabled ? "担当Quest" : "ACTIVE") + '</dt><dd>' + selectedActive + '</dd></div></dl><button type="button" data-agent-open-quest="' + escapeHtml(selectedQuests[0]?.id || "") + '">' + (visualFixtureEnabled ? "Handoff" : "担当Questを開く") + '</button>';
+}
+
+function renderReviewQueue(): void {
+  const queue = $("#reviewQueue");
+  const reviews = state.quests.filter((item) => item.state === "review" && item.lifecycleState !== "archived");
+  $("#reviewQueueCount").textContent = String(reviews.length);
+  queue.innerHTML = reviews.length ? reviews.map((item) => '<button type="button" class="review-queue-row" role="listitem" data-review-quest="' + escapeHtml(item.id) + '"><span>' + escapeHtml(item.code) + '</span><strong>' + escapeHtml(item.title) + '</strong><small>' + escapeHtml(item.owner) + ' → HUMAN REVIEW</small><b>' + item.progress + '%</b></button>').join("") : '<p class="empty-note">レビュー待ちのQuestはありません。</p>';
+}
+
+function mountAgentRegistry(): void {
+  const mount = $("#agentRegistryMount");
+  const card = document.querySelector<HTMLElement>(".settings-agent-card");
+  if (card && card.parentElement !== mount) mount.append(card);
+}
+
 function renderPanelErrors() {
   const panel = $("#panelErrorList");
   if (!panel) return;
@@ -1447,6 +1823,61 @@ function renderPanelErrors() {
   panel.hidden = false;
   panel.innerHTML = '<div><strong>' + escapeHtml(labText("panelLoadFailed")) + '</strong><small>' + escapeHtml(labText("panelKeep")) + '</small></div>' + state.panelErrors.map((error) => '<span>' + escapeHtml(labels[error.index] || labText("extraInfo")) + '</span>').join("") + '<button type="button" id="retryPanelsButton">' + escapeHtml(labText("retry")) + '</button>';
   $("#retryPanelsButton")?.addEventListener("click", () => loadRemoteData());
+}
+
+function renderProfileReference(): void {
+  const set = (id: string, value: string): void => {
+    const element = document.querySelector<HTMLElement>("#" + id);
+    if (element) element.textContent = value;
+  };
+  const values = visualFixtureEnabled
+    ? { completion: "28 / 120件", success: "71%", cleared: "84件", average: "2.4件/時", focus: "18.6h", review: "62%", quality: "4.6/5", rate: "68%" }
+    : { completion: String(state.quests.filter((item) => item.state === "completed").length) + " / " + String(state.quests.length), success: Math.round(state.quests.filter((item) => item.progress >= 70).length / Math.max(1, state.quests.length) * 100) + "%", cleared: String(state.quests.filter((item) => item.state === "completed").length), average: Math.round(state.quests.reduce((sum, item) => sum + item.focus, 0) / Math.max(1, state.quests.length)) + "m", focus: Math.round(state.quests.reduce((sum, item) => sum + item.focus, 0) / 60 * 10) / 10 + "h", review: Math.round(state.quests.filter((item) => item.state === "review").length / Math.max(1, state.quests.length) * 100) + "%", quality: "4.0 / 5", rate: Math.round(state.quests.reduce((sum, item) => sum + item.progress, 0) / Math.max(1, state.quests.length)) + "%" };
+  set("profileRefCompletion", values.completion);
+  set("profileRefSuccess", values.success);
+  set("profileRefCleared", values.cleared);
+  set("profileRefAverage", values.average);
+  set("profileRefFocusTime", values.focus);
+  set("profileRefReviewRate", values.review);
+  set("profileRefInputQuality", values.quality);
+  set("profileRefCompletionRate", values.rate);
+  if (visualFixtureEnabled) {
+    const kpiLabels = ["レビュー負荷", "実績比率", "Quest完了数", "承認スループット"];
+    const kpiNotes = ["23%", "+8pp", "+12", "+0.5"];
+    document.querySelectorAll<HTMLElement>(".profile-ref-kpis > section > span").forEach((element, index) => { element.textContent = kpiLabels[index] || element.textContent; });
+    document.querySelectorAll<HTMLElement>(".profile-ref-kpis > section > small").forEach((element, index) => { element.textContent = kpiNotes[index] || element.textContent; });
+    const mainLabels = ["ウィークリーアクティビティ・今週", "エージェントとの協働 (Top 5)"];
+    document.querySelectorAll<HTMLElement>(".profile-ref-main .profile-ref-card > p").forEach((element, index) => { element.textContent = mainLabels[index] || element.textContent; });
+    document.querySelectorAll<HTMLElement>(".profile-ref-main .profile-ref-card h3").forEach((element) => { element.textContent = ""; });
+    const bottomLabels = ["フォーカス指標", "最近の介入"];
+    document.querySelectorAll<HTMLElement>(".profile-ref-bottom .profile-ref-card > p").forEach((element, index) => { element.textContent = bottomLabels[index] || element.textContent; });
+    const miniLabels = ["集中時間", "深いレビュー率", "介入インパクト", "戦略時間比率"];
+    document.querySelectorAll<HTMLElement>(".profile-ref-mini-grid > div > span").forEach((element, index) => { element.textContent = miniLabels[index] || element.textContent; });
+    document.querySelectorAll<HTMLElement>(".profile-ref-mini-grid > div > small").forEach((element) => { element.textContent = ""; });
+  }
+  const bars = visualFixtureEnabled ? [44, 31, 56, 42, 72, 58, 67, 53, 54, 40, 61, 48, 36, 23] : state.quests.slice(0, 5).flatMap((item) => [Math.max(10, item.progress), Math.max(8, item.progress - 18)]);
+  const barGroup = document.querySelector<SVGGElement>("#profileRefBars");
+  if (barGroup) barGroup.innerHTML = bars.map((value, index) => {
+    const group = Math.floor(index / 2);
+    const x = visualFixtureEnabled ? (index % 2 ? 43.5 + group * 71.5 : 16.5 + group * 71.5) : 18 + index * 50;
+    const scale = visualFixtureEnabled ? 1.2 : 1.6;
+    const baseline = visualFixtureEnabled ? 175 : 160;
+    return '<rect x="' + x + '" y="' + (baseline - value * scale) + '" width="' + (visualFixtureEnabled ? 24.5 : 28) + '" height="' + (value * scale) + '" class="' + (index % 2 ? "bar-green" : "bar-blue") + '"></rect>';
+  }).join("");
+  const members = visualFixtureEnabled ? referenceCaptureMembers.filter((member) => member.identity !== "HUMAN / PLAYER") : state.remoteMode ? activePartyMembers().filter((member) => member.identity !== "HUMAN / PLAYER") : [];
+  const agentRows = document.querySelector<HTMLElement>("#profileRefAgentRows");
+  if (agentRows) {
+    const fixtureStats = [[28, 26, 96], [23, 22, 94], [18, 18, 92], [13, 14, 90], [8, 10, 88]];
+    agentRows.innerHTML = members.slice(0, 5).map((member, index) => {
+      const stats = visualFixtureEnabled ? fixtureStats[index] : [Math.max(0, 28 - index * 5), 0, Math.max(0, 96 - index * 2)];
+      return '<div class="profile-ref-agent-row"><span class="status-agent-avatar status-agent-avatar--' + ["green", "blue", "gold", "red", "violet"][index % 5] + '">' + escapeHtml(member.mark) + '</span><strong>' + escapeHtml(member.name) + '</strong><small>' + escapeHtml(visualFixtureEnabled ? "AI Agent" : member.role) + '</small><b>' + stats[0] + (visualFixtureEnabled ? ' 委譲' : ' assigned') + '</b><b>' + stats[1] + (visualFixtureEnabled ? ' 完了' : '') + '</b><em>' + stats[2] + '%</em></div>';
+    }).join("") || '<p class="empty-note">No registered Agents.</p>';
+  }
+  const logRows = visualFixtureEnabled ? ["UI設計リファイン", "ログ解析とアラート設計", "営業候補調査", "セキュリティ脆弱性スキャン"] : state.quests.slice(0, 3).map((item) => item.title);
+  const logs = document.querySelector<HTMLElement>("#profileRefLogRows");
+  if (logs) logs.innerHTML = visualFixtureEnabled
+    ? logRows.map((label, index) => '<div class="profile-ref-log-row"><span>' + ["今日 13:42", "今日 10:15", "昨日 16:50", "昨日 11:08"][index] + '</span><strong>' + escapeHtml(label) + '</strong><b>' + ["Astra", "Ops", "Scout", "Codex"][index] + '</b><em>' + ["方針修正", "優先度変更", "追加情報要求", "設定調整"][index] + '</em></div>').join("")
+    : logRows.map((label, index) => '<div class="profile-ref-log-row"><span>' + escapeHtml(label) + '</span><b>' + (index + 1) + 'd ago</b><em>completed</em></div>').join("");
 }
 
 function renderIntegrations() {
@@ -1473,31 +1904,238 @@ function renderIntegrations() {
   $("#syncButton").disabled = !externalOAuthEnabled;
 }
 
+// Mount/dispose the three React Golden Islands based on the active view. Extracted out of
+// renderTree/renderParty/renderIntegrations so those panel renderers can be skipped when their
+// panel isn't active (see renderAll) without ever forgetting to unmount a leaving Island.
+function syncIslands(): void {
+  if (state.view === "tree") renderQuestDependencyGraph();
+  else disposeQuestDependencyGraphIsland();
+  if (state.view === "party") renderPartyFormationIsland();
+  else disposePartyFormationIsland();
+  if (state.view === "integrations") renderIntegrationControlPlane();
+  else disposeIntegrationControlPlaneIsland();
+}
+
+function renderBattleReport(): void {
+  const set = (id: string, value: string): void => {
+    const element = document.querySelector<HTMLElement>("#" + id);
+    if (element) element.textContent = value;
+  };
+  const values = visualFixtureEnabled
+    ? { quests: "18件", focus: "6h 42m", xp: "42件", success: "87%", gold: "2,655", average: "-6.2%", value: "+2.4%", agents: "6 / 6", completed: "2,655", pressure: "34%", reward: "Victory", rewardCopy: "Keep the chain moving with a high-value handoff." }
+    : { quests: String(state.quests.length), focus: Math.floor(state.timerSeconds / 60) + "m", xp: String(state.quests.reduce((sum, item) => sum + item.xp, 0)), success: Math.round(state.quests.filter((item) => item.progress >= 70).length / Math.max(1, state.quests.length) * 100) + "%", gold: String(state.quests.reduce((sum, item) => sum + item.reward, 0)), average: Math.round(state.quests.reduce((sum, item) => sum + item.focus, 0) / Math.max(1, state.quests.length)) + "m", value: "+0%", agents: String(activePartyMembers().filter((member) => member.identity !== "HUMAN / PLAYER").length), completed: String(state.quests.filter((item) => item.state === "completed").length), pressure: Math.max(0, 100 - state.bossHp) + "%", reward: state.bossHp <= 0 ? "Victory" : "In progress", rewardCopy: "Quest rewards are derived from the current local state." };
+  set("battleReportQuestCount", values.quests);
+  set("battleReportFocus", values.focus);
+  set("battleReportXp", values.xp);
+  set("battleReportSuccess", values.success);
+  set("battleReportGold", values.gold);
+  set("battleReportAvgFocus", values.average);
+  set("battleReportValue", values.value);
+  set("battleReportDonutTotal", values.gold);
+  set("battleReportFocusSummary", values.focus);
+  set("battleReportAgents", values.agents);
+  set("battleReportCompleted", values.completed);
+  set("battleReportBossPressure", values.pressure);
+  set("battleReportRewardTitle", values.reward);
+  set("battleReportRewardCopy", values.rewardCopy);
+  if (visualFixtureEnabled) {
+    set("battleKicker", "");
+    set("battleTitle", "戦闘・報酬");
+    set("battleCopy", "生産性インパクトを戦果に変換し、ボスプレッシャーを低減する");
+    const metricLabels = ["完了クエスト", "フォーカス時間", "レビュー処理", "エージェント性能", "戦闘貢献スコア", "Boss Pressure", "Campaign"];
+    const metricNotes = ["+12%", "+1h 28m", "+15", "+5%", "+18%", "34% → 27.8%", "Phase 2"];
+    document.querySelectorAll<HTMLElement>(".battle-reference-dashboard .battle-report-metric > span").forEach((element, index) => { element.textContent = metricLabels[index] || element.textContent; });
+    document.querySelectorAll<HTMLElement>(".battle-reference-dashboard .battle-report-metric > small").forEach((element, index) => { element.textContent = metricNotes[index] || element.textContent; });
+    const mainCards = [...document.querySelectorAll<HTMLElement>(".battle-reference-dashboard .battle-report-main-grid > .battle-report-card")];
+    const mainLabels = ["インパクトの内訳", "戦闘トレンド（7日間）", "戦闘サマリー", "戦果評価"];
+    const mainTitles = ["", "", "", "勝利"];
+    mainCards.forEach((card, index) => {
+      const kicker = card.querySelector<HTMLElement>(".battle-report-kicker");
+      const title = card.querySelector<HTMLElement>("h3");
+      if (kicker) kicker.textContent = mainLabels[index] || kicker.textContent;
+      if (title && mainTitles[index]) title.textContent = mainTitles[index];
+    });
+    const bottomCards = [...document.querySelectorAll<HTMLElement>(".battle-reference-dashboard .battle-report-bottom-grid > .battle-report-card")];
+    const bottomLabels = ["敵勢力 / Boss", "ドロップ予測", "最近の戦闘ログ"];
+    const bottomTitles = ["Gloom Node Overseer", "", ""];
+    bottomCards.forEach((card, index) => {
+      const kicker = card.querySelector<HTMLElement>(".battle-report-kicker");
+      const title = card.querySelector<HTMLElement>("h3");
+      if (kicker) kicker.textContent = bottomLabels[index] || kicker.textContent;
+      if (title && bottomTitles[index]) title.textContent = bottomTitles[index];
+    });
+  } else {
+    set("battleCopy", "");
+  }
+  const bossHp = visualFixtureEnabled ? 34 : state.bossHp;
+  set("battleReportBossHp", bossHp + "%");
+  const meter = document.querySelector<HTMLMeterElement>("#battleReportBossMeter");
+  if (meter) { meter.value = bossHp; meter.setAttribute("value", String(bossHp)); }
+  const dropRows = visualFixtureEnabled ? ["Node Core Fragment", "Gloom Data Shard", "Protocol Override Key", "Adaptive Schema Core"] : state.quests.slice(0, 4).map((item) => item.title);
+  const drops = document.querySelector<HTMLElement>("#battleReportDrops");
+  if (drops) drops.innerHTML = dropRows.map((label, index) => '<div class="battle-report-drop-row"><strong>' + escapeHtml(label) + '</strong><span>' + (visualFixtureEnabled ? [24, 28, 18, 12][index] : 24 - index * 6) + '%</span><b>' + (visualFixtureEnabled ? [360, 420, 270, 180][index] : 360 - index * 90) + ' XP</b></div>').join("");
+  const logs = document.querySelector<HTMLElement>("#battleReportLog");
+  const logRows = visualFixtureEnabled ? ["Goblin Skirmish", "Data Slime", "Spam Imp"] : state.battleLog.slice(0, 3);
+  if (logs) logs.innerHTML = logRows.map((label, index) => '<div class="battle-report-log-row">' + (visualFixtureEnabled ? '<time>' + ["08:45", "07:30", "06:10"][index] + '</time>' : '') + '<span>' + escapeHtml(label) + '</span><b>Victory</b></div>').join("");
+}
+
 function renderTimer() {
   const min = Math.floor(state.timerSeconds / 60);
   const sec = state.timerSeconds % 60;
   $("#timerValue").textContent = String(min).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
 }
 
-function renderAll() {
+function renderSidebarOpsContext(): void {
+  const setText = (id: string, value: string): void => {
+    const element = document.querySelector<HTMLElement>('#' + id);
+    if (element) element.textContent = value;
+  };
+  const selected = visualFixtureEnabled
+    ? { title: 'The Gloom Protocol', note: 'Phase 2: Sever the Nodes', progress: 60 }
+    : state.quests.find((item) => item.id === state.selectedQuestId) || state.quests[0];
+  const pressure = visualFixtureEnabled ? 34 : Math.max(0, 100 - state.bossHp);
+  const mp = visualFixtureEnabled ? 64 : state.mp;
+  const syncState = visualFixtureEnabled ? 'Synced' : state.remoteMode ? state.remoteConnectionState : state.syncStatus || 'local-only';
+  const syncTime = visualFixtureEnabled ? 'Just now' : state.lastSyncAt || 'local-only';
+  setText('sidebarSyncState', syncState);
+  setText('sidebarSyncTime', syncTime);
+  setText('sidebarContextTitle', selected?.title || 'No active Quest');
+  setText('sidebarContextCopy', selected?.note || 'No active context');
+  setText('sidebarBossPressure', pressure + '%');
+  setText('sidebarMpReserve', mp + (visualFixtureEnabled ? ' / 120' : ' / 100'));
+  const bossMeter = document.querySelector<HTMLMeterElement>('#sidebarBossMeter');
+  if (bossMeter) { bossMeter.value = pressure; bossMeter.setAttribute('value', String(pressure)); }
+  const mpMeter = document.querySelector<HTMLMeterElement>('#sidebarMpMeter');
+  if (mpMeter) { mpMeter.value = mp; mpMeter.setAttribute('value', String(mp)); }
+  const mcpNames = visualFixtureEnabled
+    ? ['mcp.questforge.local', 'Astra MCP', 'S3 (Logs)', 'Datadog']
+    : state.remoteMode
+      ? (state.agentConnections?.authorizedClients || []).map((client) => client.clientName || client.clientId)
+      : ['Local storage'];
+  const mcpList = document.querySelector<HTMLElement>('#sidebarMcpList');
+  if (mcpList) mcpList.innerHTML = mcpNames.map((name) => '<div class="sidebar-mcp-row"><span>' + escapeHtml(name) + '</span><b>' + escapeHtml(visualFixtureEnabled || state.remoteMode ? 'Connected' : 'Local only') + '</b></div>').join('');
+}
+
+function renderStatusRail(): void {
+  const grid = document.querySelector<HTMLElement>("#statusRailAgents");
+  if (!grid) return;
+  const members = visualFixtureEnabled
+    ? referenceCaptureMembers.slice().sort((a, b) => ["Astra", "Codex", "Scout", "Ops", "Echo", "You"].indexOf(a.name) - ["Astra", "Codex", "Scout", "Ops", "Echo", "You"].indexOf(b.name))
+    : state.remoteMode ? activePartyMembers() : [];
+  const fixtureStats: Record<string, { load: number; quests: number; queue: number; reviews: number }> = {
+    Astra: { load: 72, quests: 3, queue: 1, reviews: 0 },
+    Codex: { load: 58, quests: 2, queue: 0, reviews: 1 },
+    Scout: { load: 41, quests: 2, queue: 0, reviews: 0 },
+    Ops: { load: 85, quests: 1, queue: 1, reviews: 0 },
+    Echo: { load: 8, quests: 0, queue: 0, reviews: 0 },
+    You: { load: 65, quests: 4, queue: 0, reviews: 4 },
+  };
+  const fixtureAvatarPaths: Record<string, string> = {
+    Astra: "../assets/avatar-role-sentinel.png",
+    Codex: "../assets/avatar-role-artificer.png",
+    Scout: "../assets/avatar-role-ranger.png",
+    Ops: "../assets/avatar-role-operator.png",
+    Echo: "../assets/avatar-role-archivist.png",
+    You: "../assets/avatar-role-femme-sentinel.png",
+  };
+  grid.innerHTML = members.length ? members.map((member, index) => {
+    const assigned = state.quests.filter((item) => item.owner === member.name || item.raw?.assignee?.id === member.agentId);
+    const active = assigned.filter((item) => !["completed", "archived"].includes(item.state)).length;
+    const fixture = visualFixtureEnabled ? fixtureStats[member.name] : undefined;
+    const load = fixture?.load ?? Math.min(100, Math.max(12, active * 24 + (member.state === "working" ? 48 : member.state === "review" ? 68 : 24)));
+    const quests = fixture?.quests ?? assigned.length;
+    const queue = fixture?.queue ?? assigned.filter((item) => item.state === "ready").length;
+    const reviews = fixture?.reviews ?? assigned.filter((item) => item.state === "review").length;
+    const tones = ["green", "blue", "gold", "red", "violet", "mint"];
+    const avatar = visualFixtureEnabled && fixtureAvatarPaths[member.name]
+      ? '<img src="' + fixtureAvatarPaths[member.name] + '" alt="" />'
+      : escapeHtml(member.mark);
+    return '<article class="status-agent-card"><span class="status-agent-avatar status-agent-avatar--' + tones[index % tones.length] + '">' + avatar + '</span><div><strong>' + escapeHtml(member.name) + '</strong><small>' + quests + ' quests</small><i><b style="width:' + load + '%"></b></i><span class="status-agent-meta">queue: ' + queue + ' - reviews: ' + reviews + '</span></div><em>' + load + '%</em></article>';
+  }).join("") : '<p class="empty-note">No registered Agents.</p>';
+  const selected: LabQuest | undefined = visualFixtureEnabled
+    ? { id: "reference-readme", code: "2025-0519-003", kind: "main", title: "README改善", note: "初めての参照でREADMEへ新しい導入線を最適化する", progress: 60, owner: "Codex", mark: "CX", state: "working", due: "today", focus: 45, reward: 0, xp: 0, difficulty: 1 }
+    : state.quests.find((item) => item.id === state.selectedQuestId) || state.quests[0];
+  const setText = (selector: string, value: string): void => {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element) element.textContent = value;
+  };
+  setText("#statusRailQuestId", selected ? "QF-" + selected.code : "-");
+  setText("#statusRailQuestTitle", selected?.title || "Select a Quest");
+  setText("#statusRailQuestCopy", selected?.note || "Selected Quest");
+  setText("#statusRailQuestState", selected ? stateLabel(selected.state) : "-");
+  setText("#statusRailQuestProgress", selected ? selected.progress + (visualFixtureEnabled ? "% (3/5)" : "%") : "-");
+  const progress = document.querySelector<HTMLElement>("#statusRailProgressBar");
+  if (progress) progress.style.width = (selected?.progress || 0) + "%";
+  const dots = document.querySelector<HTMLElement>("#statusRailHandoff");
+  const dotCount = selected ? selected.state === "completed" ? 5 : selected.state === "working" ? 3 : 2 : 0;
+  if (dots) dots.innerHTML = Array.from({ length: 5 }, (_, index) => '<span class="status-handoff-dot ' + (index < dotCount ? "is-done" : index === dotCount ? "is-current" : "") + '"></span>').join("");
+  const owner = selected ? (visualFixtureEnabled ? referenceCaptureMembers.find((member) => member.name === selected.owner) : partyMember(selected.owner)) : undefined;
+  const ownerElement = document.querySelector<HTMLElement>("#statusRailOwner");
+  if (ownerElement) {
+    const ownerAvatar = visualFixtureEnabled && fixtureAvatarPaths[owner?.name || ""]
+      ? '<img src="' + fixtureAvatarPaths[owner?.name || ""] + '" alt="" />'
+      : escapeHtml(owner?.mark || "");
+    ownerElement.innerHTML = owner ? '<span class="status-agent-avatar status-agent-avatar--blue">' + ownerAvatar + '</span><div><strong>' + escapeHtml(owner.name) + '</strong><small>' + escapeHtml(visualFixtureEnabled ? "AI Agent" : owner.role) + '</small></div><em>' + selected.focus + 'm</em>' : '<small>Owner not set</small>';
+  }
+  setText("#statusRailReferenceDue", visualFixtureEnabled ? "今日 14:00 · Docs" : "-");
+  setText("#statusRailReferenceRisk", visualFixtureEnabled ? "● 中" : "-");
+  setText("#statusRailSyncState", "SYNC " + (state.remoteMode ? state.remoteConnectionState : state.syncStatus || "local-only"));
+  setText("#statusRailSyncTime", "Last sync " + (state.lastSyncAt || "-"));
+  document.querySelectorAll<HTMLButtonElement>("[data-rail-mode]").forEach((button) => button.classList.toggle("is-active", button.dataset.railMode === (state.settings.mode === "system" ? "dark" : state.settings.mode)));
+}
+
+// Only the active panel's renderers run on a plain navigation; renderAll({ full: true }) still
+// rebuilds every panel for state-mutating paths (remote load, sign-in/out, settings import,
+// Quest CRUD) so a panel the user isn't looking at is never stale when they switch to it.
+const PANEL_RENDERERS: Record<LabView, Array<() => void>> = {
+  today: [renderQuestList, renderArchiveControl, renderSelected],
+  quests: [renderQuestList, renderArchiveControl, renderSelected],
+  tree: [renderTree],
+  agents: [renderAgents, renderAgentOperations, renderAgentRegistry],
+  reviews: [renderReviewQueue],
+  battle: [renderBattle, renderBattleReport],
+  party: [renderParty],
+  integrations: [renderIntegrations],
+  profile: [renderProfile, renderProfileReference],
+  settings: [renderAgentRegistry],
+};
+
+function renderAll(options: { full?: boolean } = {}): void {
+  mountAgentRegistry();
   normalizeLabQuestStates();
   reconcileSelectedQuest();
-  renderQuestList();
-  renderArchiveControl();
-  renderSelected();
-  renderAgents();
-  renderTree();
-  renderBattle();
-  renderParty();
-  renderProfile();
-  renderIntegrations();
+  if (options.full) {
+    (Object.keys(PANEL_RENDERERS) as LabView[]).forEach((view) => PANEL_RENDERERS[view].forEach((render) => render()));
+  } else {
+    PANEL_RENDERERS[state.view].forEach((render) => render());
+  }
   renderTimer();
   renderConnection();
-  renderAgentRegistry();
   renderPanelErrors();
+  renderSidebarOpsContext();
+  renderStatusRail();
+  syncIslands();
+}
+
+function applyVisualPreferences(): void {
+  const root = document.documentElement;
+  document.body.classList.toggle("is-reference-fixture", visualFixtureEnabled);
+  root.dataset.qfTheme = state.settings.theme;
+  const resolvedMode = state.settings.mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : state.settings.mode;
+  root.dataset.qfMode = state.settings.mode;
+  root.dataset.qfResolvedMode = resolvedMode;
+  const controls = $("#designLabControls");
+  if (controls) controls.hidden = !import.meta.env.DEV;
+  const themeSelect = $("#labThemeSelect");
+  const modeSelect = $("#labModeSelect");
+  if (themeSelect) themeSelect.value = state.settings.theme;
+  if (modeSelect) modeSelect.value = state.settings.mode;
 }
 
 function applySettings() {
+  applyVisualPreferences();
   document.body.classList.toggle("is-large-type", state.settings.typeScale);
   document.body.classList.toggle("is-relaxed-density", state.settings.density);
   document.body.classList.toggle("is-motion-reduced", !state.settings.motion);
@@ -1538,16 +2176,22 @@ function setMobileMore(open: boolean): void {
   toggle.setAttribute("aria-expanded", String(open));
 }
 
-function setView(view: LabView): void {
+function setView(view: LabView, options: { syncHash?: boolean; replaceHistory?: boolean } = {}): void {
+  const { syncHash = true, replaceHistory = false } = options;
+  if (syncHash && window.location.hash !== `#${view}`) {
+    if (replaceHistory) window.history.replaceState(null, "", `#${view}`);
+    else window.history.pushState(null, "", `#${view}`);
+  }
   state.view = view;
   state.mobileSheetOpen = false;
   document.body.classList.remove("is-detail-modal");
-  document.body.classList.toggle("is-today-view", view === "today");
+  document.body.classList.toggle("is-today-view", view === "today" || view === "quests");
   document.body.classList.toggle("is-tree-view", view === "tree");
-  const titles: Record<LabView, string> = { today: "today", tree: "tree", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
+  const titles: Record<LabView, string> = { today: "today", quests: "today", tree: "tree", agents: "agentHeading", reviews: "confirm", battle: "battle", party: "party", integrations: "integrations", profile: "profile", settings: "settings" };
+  const panelView = view === "quests" ? "today" : view;
   $("#pageTitle").textContent = labText(titles[view]);
   $$("[data-panel]").forEach((panel) => {
-    const active = panel.dataset.panel === view;
+    const active = panel.dataset.panel === panelView;
     panel.hidden = !active;
     panel.classList.toggle("is-active", active);
   });
@@ -1560,6 +2204,7 @@ function setView(view: LabView): void {
   renderSelected();
   applyLabLocale();
   window.scrollTo({ top: 0, behavior: "smooth" });
+  renderAll();
 }
 
 function selectQuest(id: string | undefined): void {
@@ -1597,7 +2242,7 @@ async function completeSelectedQuest() {
   state.battleLog.unshift(item.title + "を完了。+" + item.reward + " MPを獲得。");
   notify(item.title + "を完了。+" + item.reward + " MPを獲得しました。");
   persistState();
-  renderAll();
+  renderAll({ full: true });
 }
 
 function confirmBulkAction(action: string, items: LabQuest[], preview: JsonRecord): boolean {
@@ -1634,7 +2279,7 @@ async function bulkCompleteQuests() {
         state.mp = Math.min(100, state.mp + Number(item.reward || 0));
       });
       persistState();
-      renderAll();
+      renderAll({ full: true });
     }
     clearQuestSelection();
     notify(`${items.length}件を完了しました。`);
@@ -1682,7 +2327,7 @@ async function bulkLifecycleQuests(action: "archive" | "restore"): Promise<void>
         }
       });
       persistState();
-      renderAll();
+      renderAll({ full: true });
     }
     clearQuestSelection();
     notify(`${items.length}件を${label}しました。`);
@@ -1780,7 +2425,7 @@ async function refreshAgentRegistry() {
   const normalizedConnections = normalizeRemoteSnapshot({ agentConnections: connections }).agentConnections;
   state.agentConnections = normalizedConnections;
   if (normalizedConnections.authorizedClients.length || normalizedConnections.connections.length) trackTelemetry("mcp_connection_success", { source: "next" });
-  renderAll();
+  renderAll({ full: true });
 }
 
 function openReview() {
@@ -1826,7 +2471,7 @@ async function addQuest(data: FormData): Promise<void> {
       trackTelemetry("sync_success", { source: "gateway" });
       if (selectedAgent) trackTelemetry("agent_assignment_success", { source: "next" });
       persistState();
-      renderAll();
+      renderAll({ full: true });
       notify(title + "をQuestForge本体へ追加しました。");
     } catch (error) {
       trackTelemetry("sync_failure", { source: "gateway", status: error instanceof QuestForgeApiError ? String(error.status || "error") : "error" });
@@ -1855,7 +2500,7 @@ async function addQuest(data: FormData): Promise<void> {
   state.quests.push(item);
   state.selectedQuestId = item.id;
   persistState();
-  renderAll();
+  renderAll({ full: true });
   notify(title + "を追加しました。");
 }
 
@@ -1908,16 +2553,33 @@ $("#agentList").addEventListener("click", (event: LabEvent) => {
   if (member) notify(member.name + ": " + member.task);
 });
 
-$("#partyList").addEventListener("click", (event: LabEvent) => {
-  const button = closestLabElement(event, "[data-party-agent]");
+$("#toggleAgentRegistry").addEventListener("click", (event: LabEvent) => {
+  const button = event.currentTarget;
+  const mount = $("#agentRegistryMount");
+  mount.hidden = !mount.hidden;
+  button.setAttribute("aria-expanded", String(!mount.hidden));
+});
+
+$("#agentOperationsGrid").addEventListener("click", (event: LabEvent) => {
+  const button = closestLabElement(event, "[data-agent-operation]");
   if (!button) return;
-  const target = state.quests.find((item) => item.owner === button.dataset.partyAgent);
-  if (target) {
-    selectQuest(target.id);
-    setView("today");
-  } else {
-    notify(button.dataset.partyAgent + "に割り当てられたQuestはありません。");
-  }
+  state.agentFocusId = button.dataset.agentOperation || "";
+  renderAgentOperations();
+});
+
+$("#agentOperationsInspector").addEventListener("click", (event: LabEvent) => {
+  const button = closestLabElement(event, "[data-agent-open-quest]");
+  const target = button?.dataset.agentOpenQuest;
+  if (!target) return;
+  selectQuest(target);
+  setView("quests");
+});
+
+$("#reviewQueue").addEventListener("click", (event: LabEvent) => {
+  const button = closestLabElement(event, "[data-review-quest]");
+  if (!button?.dataset.reviewQuest) return;
+  selectQuest(button.dataset.reviewQuest);
+  setView("quests");
 });
 
 $("#integrationList").addEventListener("click", (event: LabEvent) => {
@@ -2010,7 +2672,7 @@ async function runIntegrationAction(dryRun: boolean): Promise<void> {
     state.lastSyncAt = formatSyncTime();
     setSyncStatus("synced");
     persistState();
-    renderAll();
+    renderAll({ full: true });
     notify(`${selected.name}の${dryRun ? "プレビュー" : "同期"}を完了しました${Number.isFinite(count) ? `（${count}件）` : ""}。`);
   } catch (error) {
     setSyncStatus("error", error instanceof QuestForgeApiError ? error.message : "外部同期に失敗しました。");
@@ -2021,8 +2683,45 @@ async function runIntegrationAction(dryRun: boolean): Promise<void> {
 $("#previewButton").addEventListener("click", () => runIntegrationAction(true));
 $("#syncButton").addEventListener("click", () => runIntegrationAction(false));
 
+
+$("#labThemeSelect")?.addEventListener("change", (event: LabEvent) => {
+  const value = (event.currentTarget as LabElement).value;
+  if (value !== "arcane" && value !== "soft-ops" && value !== "retro") return;
+  state.settings.theme = value;
+  localStorage.setItem("questforge-interaction-settings", JSON.stringify(state.settings));
+  applySettings();
+  notify("Theme changed to " + value + ".");
+});
+
+$("#labModeSelect")?.addEventListener("change", (event: LabEvent) => {
+  const value = (event.currentTarget as LabElement).value;
+  if (value !== "light" && value !== "dark" && value !== "system") return;
+  state.settings.mode = value;
+  localStorage.setItem("questforge-interaction-settings", JSON.stringify(state.settings));
+  applySettings();
+  notify("Color mode changed to " + value + ".");
+});
+
+$("#statusRailAgentsButton")?.addEventListener("click", () => setView("agents"));
+$("#statusRailOpenQuest")?.addEventListener("click", () => { if (state.selectedQuestId) selectQuest(state.selectedQuestId); setView("quests"); });
+$("#statusRailEdit")?.addEventListener("click", () => setView("settings"));
+$("#statusRailMcp")?.addEventListener("click", () => setView("integrations"));
+document.querySelectorAll<HTMLButtonElement>("[data-rail-mode]").forEach((button) => button.addEventListener("click", () => {
+  const mode = button.dataset.railMode;
+  if (mode !== "light" && mode !== "dark") return;
+  state.settings.mode = mode;
+  localStorage.setItem("questforge-interaction-settings", JSON.stringify(state.settings));
+  applySettings();
+  renderStatusRail();
+}));
+
+const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+colorSchemeQuery.addEventListener("change", () => {
+  if (state.settings.mode === "system") applySettings();
+});
+
 $$("[data-setting]").forEach((button) => button.addEventListener("click", () => {
-  const key = button.dataset.setting as keyof LabSettings | undefined;
+  const key = button.dataset.setting as keyof Pick<LabSettings, "typeScale" | "density" | "motion" | "sound"> | undefined;
   if (!key) return;
   state.settings[key] = !state.settings[key];
   localStorage.setItem("questforge-interaction-settings", JSON.stringify(state.settings));
@@ -2041,7 +2740,7 @@ $$('[data-detail-mode]').forEach((button) => button.addEventListener("click", ()
 $$('[data-archive-toggle]').forEach((toggle) => toggle.addEventListener("click", () => {
   state.showArchived = !state.showArchived;
   localStorage.setItem("questforge-interaction-archive-visible", String(state.showArchived));
-  renderAll();
+  renderAll({ full: true });
   notify(state.showArchived ? "保管済みQuestを表示しました。" : "保管済みQuestを隠しました。");
 }));
 
@@ -2077,7 +2776,7 @@ $("#archiveQuestButton").addEventListener("click", async () => {
       const response = await repository.updateQuest(item.id, { lifecycleState: restoring ? "active" : "archived" });
       applyRemoteResponse(response);
       if (!restoring && !state.showArchived) reconcileSelectedQuest();
-      renderAll();
+      renderAll({ full: true });
       notify(item.title + (restoring ? "を戻しました。" : "を保管しました。"));
     } catch (error) { notify(errorMessage(error, "保管操作に失敗しました。")); }
     return;
@@ -2095,7 +2794,7 @@ $("#archiveQuestButton").addEventListener("click", async () => {
     item.progress = 100;
   }
   if (!restoring && !state.showArchived) reconcileSelectedQuest();
-  renderAll(); persistState();
+  renderAll({ full: true }); persistState();
 });
 $("#cancelEdit").addEventListener("click", () => $("#editDialog").close());
 $("#editForm").addEventListener("submit", async (event: LabEvent) => {
@@ -2112,7 +2811,7 @@ $("#editForm").addEventListener("submit", async (event: LabEvent) => {
       if (agent) trackTelemetry("agent_assignment_success", { source: "next" });
     }
     else Object.assign(item, { title: patch.title, note: patch.notes, parent: patch.parentQuestId, owner: agent?.displayName || "Astra", state: remoteState(asJsonRecord({ assignee: patch.assignee })) });
-    $("#editDialog").close(); renderAll(); persistState(); notify("Questを更新しました。");
+    $("#editDialog").close(); renderAll({ full: true }); persistState(); notify("Questを更新しました。");
   } catch (error) { notify(errorMessage(error, "Questの更新に失敗しました。")); }
 });
 
@@ -2284,7 +2983,7 @@ async function updateReview(accepted: boolean): Promise<void> {
   item.progress = accepted ? 100 : item.progress;
   persistState();
   notify(item.title + (accepted ? "を承認しました。" : "を作業中へ戻しました。"));
-  renderAll();
+  renderAll({ full: true });
 }
 
 $("#reviewForm").addEventListener("submit", async (event: LabEvent) => {
@@ -2331,13 +3030,13 @@ $("#reconnectButton")?.addEventListener("click", async () => {
   }
   state.remoteConnectionState = state.remoteMode ? "reconnecting" : "syncing";
   setSyncStatus(state.remoteMode ? "reconnecting" : "syncing");
-  renderAll();
+  renderAll({ full: true });
   await loadRemoteData({ announce: true, source: "manual" });
 });
 $("#useLocalButton").addEventListener("click", () => {
   restoreLocalBackupState();
   localMode("この端末に保存中");
-  renderAll();
+  renderAll({ full: true });
   notify("ローカルモードへ戻りました。リモートの変更は保持されています。");
 });
 $("#autoConnectToggle").addEventListener("change", async (event: LabEvent) => {
@@ -2355,7 +3054,7 @@ $("#autoConnectToggle").addEventListener("change", async (event: LabEvent) => {
       state.remoteConnectionState = "stale";
       setSyncStatus("error", "自動接続をオフにしました。前回データを表示中です。");
     }
-    renderAll();
+    renderAll({ full: true });
     notify("起動時の本体自動接続をオフにしました。");
     return;
   }
@@ -2363,7 +3062,7 @@ $("#autoConnectToggle").addEventListener("change", async (event: LabEvent) => {
   if (!hasCache) state.remoteSnapshotAvailable = false;
   state.remoteConnectionState = "reconnecting";
   setSyncStatus("reconnecting");
-  renderAll();
+  renderAll({ full: true });
   await loadRemoteData({ announce: false, source: "auto" });
   if (state.remoteConnectionState === "synced") notify("起動時の本体自動接続をオンにしました。");
 });
@@ -2390,7 +3089,7 @@ $("#telemetryConsentToggle")?.addEventListener("change", (event: LabEvent) => {
 window.addEventListener("questforge:locale-changed", () => {
   applyLabLocale();
   applySettings();
-  renderAll();
+  renderAll({ full: true });
 });
 window.addEventListener("questforge:telemetry-ready", () => applySettings());
 
@@ -2410,7 +3109,7 @@ try {
       state.autoConnectEnabled = false;
       setSyncStatus("local-only", "ログアウト済み。この端末に保存中");
       persistState();
-      renderAll();
+      renderAll({ full: true });
       return;
     }
 
@@ -2429,13 +3128,13 @@ try {
       restoreLocalBackupState();
       setSyncStatus("local-only", "ログイン済み。必要なときに本体データを読み込めます");
       persistState();
-      renderAll();
+      renderAll({ full: true });
       return;
     }
 
     if (state.remoteMode && state.remoteOwnerUid === nextUser.uid && state.remoteConnectionState === "synced") {
       setSyncStatus("synced");
-      renderAll();
+      renderAll({ full: true });
       return;
     }
     const hasCache = restoreRemoteCacheForUser(nextUser.uid);
@@ -2448,7 +3147,7 @@ try {
     }
     state.remoteConnectionState = hasCache ? "reconnecting" : "syncing";
     setSyncStatus("reconnecting");
-    renderAll();
+    renderAll({ full: true });
     await loadRemoteData({ announce: false, source: "auto" });
   });
 } catch {
@@ -2457,7 +3156,13 @@ try {
 }
 
 applySettings();
-applyLabLocale();
-document.body.classList.toggle("is-today-view", state.view === "today");
-document.body.classList.toggle("is-tree-view", state.view === "tree");
-renderAll();
+const hashView = window.location.hash.slice(1);
+setView(isLabView(hashView) ? hashView : "today", { replaceHistory: !isLabView(hashView) });
+window.addEventListener("hashchange", () => {
+  const nextView = window.location.hash.slice(1);
+  if (isLabView(nextView)) {
+    setView(nextView, { syncHash: false });
+    return;
+  }
+  setView("today", { replaceHistory: true });
+});

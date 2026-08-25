@@ -1,6 +1,19 @@
 # QuestForge 公開βロードマップ
 
-最終更新: 2026-08-15
+最終更新: 2026-08-18
+
+## 設計書の正本
+
+- [`DESIGN.md`](DESIGN.md)：現行版`/`の視覚設計、UI操作、コンポーネント、レスポンシブ、アクセシビリティ
+- [`PROJECT_SPEC.md`](PROJECT_SPEC.md)：共通アーキテクチャ、データ契約、ドメイン不変条件、認証、安全性、公開運用
+- [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)：`/next/`のUI実験、同期状態、レスポンシブ設計、昇格ゲート
+- [`design/TOKENS.json`](design/TOKENS.json)：3テーマ×ライト／ダークの機械可読トークン
+- [`design/COMPONENTS.md`](design/COMPONENTS.md)：共通部品の構造、状態、アクセシビリティ
+- [`design/SCREENS.md`](design/SCREENS.md)：Today、Tree、Battle、Party、連携、Profile、SettingsのBlueprint
+- [`design/ASSET_MANIFEST.md`](design/ASSET_MANIFEST.md)：画像・アイコン・役職素材の用途契約
+- [`design/reference/README.md`](design/reference/README.md)：サニタイズ済みGolden Referenceの基準
+- `DESIGN.md`が視覚設計、`PROJECT_SPEC.md`が技術仕様の正本であり、Next版は差分だけを管理する。Next版から`/`への昇格は自動化せず、実アカウント・PC・Pixel 9・9言語・MCP・アクセシビリティの明示受入を通す。
+- DeepSeek Harness、OpenClaw、Hermesなどは外部Execution Planeとして扱い、QuestForgeはRemote MCP、Skill、Agent Registry、Handoff、権限を提供する。Harnessの実接続コードやモデルAPIキーは公開βへ持ち込まない。
 
 ## TypeScript移行
 
@@ -87,6 +100,13 @@ QuestForgeは、**人間・AI・外部サービスが同じパーティーで動
 - Google OAuthを再開する場合だけProvider Secret、Authorized Domain、審査を設定
 
 ## 次の改善
+
+### Design System強化
+
+- MP／Reward／BattleをOrange・Gold、Agent／MCPをBlue、Human／成功をGreenへ統一する
+- Lucide vanillaの機能アイコンへ統一し、アイコンライブラリの混在をなくす
+- Golden Referenceを固定デモFixtureから再生成し、個人データを含めない
+- Design token、Component、Screen、Asset Manifestの整合検査をCIへ追加する
 
 スクショと実装確認で見つかった改善項目:
 

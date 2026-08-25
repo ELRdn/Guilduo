@@ -34,7 +34,9 @@ QuestForgeはHabiticaとは独立したプロジェクトです。提携・承�
 ## 画面とデータ
 
 - `/`：現行UI。ログイン前は端末保存、ログイン後はFirebaseへ同期します。
-- `/next/`：公開βのInteraction Lab。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
+- `/interaction-lab/`：ローカル開発・キャプチャ用のNextソースルートです。
+- `/next/`：Firebase Hosting上の公開βルートです。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
+- 視覚設計の正本は[`DESIGN.md`](DESIGN.md)、技術仕様の正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)、Next版の差分設計は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)です。数値トークンは[`design/TOKENS.json`](design/TOKENS.json)、部品は[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面構成は[`design/SCREENS.md`](design/SCREENS.md)を参照します。
 - 更新時はFirebase Auth状態を復元し、前回同期データがあれば読み取り専用で残します。再接続中はQuest一覧を消さず、スケルトン・再接続ボタン・書き込みロックを表示します。
 - Questの完了状態とAgent Handoff状態は別管理です。単発To Doは完了時に保管、日課・習慣・繰り返しTo Doは次回へ復帰します。
 - 公開プロフィールは表示名、`@handle`、紹介文、アバター、レベルだけです。Quest本文、メモ、UID、OAuth情報は公開しません。
@@ -148,6 +150,13 @@ TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自�
 
 ## ドキュメント
 
+- [視覚設計正本](DESIGN.md)
+- [技術仕様正本](PROJECT_SPEC.md)
+- [Design tokens](design/TOKENS.json)
+- [Component specification](design/COMPONENTS.md)
+- [Screen blueprints](design/SCREENS.md)
+- [Asset manifest](design/ASSET_MANIFEST.md)
+- [Golden references](design/reference/README.md)
 - [公開βロードマップ](ROADMAP.md)
 - [API / MCP / OAuth setup](API_MCP_SETUP.md)
 - [Tagged release setup](RELEASE_SETUP.md)
