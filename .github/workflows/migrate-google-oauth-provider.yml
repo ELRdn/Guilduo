@@ -1,0 +1,41 @@
+name: Migrate Google OAuth Provider
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-google-oauth-provider-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Transfer Google OAuth provider without exposing credentials
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+        run: |
+          set +x
+          service_account="$RUNNER_TEMP/firebase-service-account.json"
+          cleanup() { rm -f "$service_account"; }
+          trap cleanup EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$service_account"
+          chmod 600 "$service_account"
+          node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$service_account"
+          export GOOGLE_APPLICATION_CREDENTIALS="$service_account"
+          npx tsx tools/migrate-google-oauth-provider.mts
