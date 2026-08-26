@@ -48,49 +48,6 @@ jobs:
           APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
         run: |
-          set -euo pipefail
           archive="$RUNNER_TEMP/guilduo-site.tar.gz"
-          response="$RUNNER_TEMP/appwrite-deployment.json"
-          current="$RUNNER_TEMP/appwrite-deployment-current.json"
           tar -czf "$archive" -C dist .
-
-          http_status="$(curl --silent --show-error \
-            --output "$response" \
-            --write-out '%{http_code}' \
-            --request POST \
-            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-            --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-            --form "code=@$archive;type=application/gzip" \
-            --form 'installCommand=' \
-            --form 'buildCommand=' \
-            --form 'outputDirectory=.' \
-            --form 'activate=true' \
-            "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments")"
-
-          if [[ "$http_status" -lt 200 || "$http_status" -ge 300 ]]; then
-            jq '{message, type, code}' "$response" 2>/dev/null || true
-            echo "Appwrite deployment upload failed with HTTP $http_status" >&2
-            exit 1
-          fi
-
-          deployment_id="$(jq -er '.["$id"]' "$response")"
-          for attempt in $(seq 1 90); do
-            curl --silent --show-error --fail \
-              --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-              --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-              "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id" > "$current"
-            status="$(jq -r '.status // empty' "$current")"
-            if [[ "$status" == "ready" ]]; then
-              jq '{id: .["$id"], status, createdAt: .["$createdAt"]}' "$current"
-              exit 0
-            fi
-            if [[ "$status" == "failed" ]]; then
-              jq '{id: .["$id"], status, buildLogs}' "$current"
-              exit 1
-            fi
-            sleep 5
-          done
-
-          jq '{id: .["$id"], status}' "$current"
-          echo "Timed out waiting for Appwrite deployment" >&2
-          exit 1
+          bash tools/deploy-appwrite-site.sh "$archive"

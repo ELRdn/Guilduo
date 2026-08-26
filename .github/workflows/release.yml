@@ -74,15 +74,7 @@ jobs:
         shell: bash
         run: |
           tar -czf "$RUNNER_TEMP/guilduo-site.tar.gz" -C dist .
-          curl --fail-with-body --request POST \
-            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-            --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-            --form "code=@$RUNNER_TEMP/guilduo-site.tar.gz;type=application/gzip" \
-            --form 'installCommand=' \
-            --form 'buildCommand=' \
-            --form 'outputDirectory=.' \
-            --form 'activate=true' \
-            "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments"
+          bash tools/deploy-appwrite-site.sh "$RUNNER_TEMP/guilduo-site.tar.gz"
         env:
           APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
