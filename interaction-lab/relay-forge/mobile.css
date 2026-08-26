@@ -1,0 +1,507 @@
+/* Command Mobile — 390x844 composition (brief B1-B5).
+ *
+ * This sheet only applies at <=900px. Above that the desktop composition owns
+ * the screen and everything here is inert, so the two never fight. */
+
+.rf-m-region,
+.rf-m-decision-region,
+.rf-sheet-host {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  /* Desktop regions stand down; mobile owns the page. */
+  .rf-shell[data-mobile="true"] > .rf-operation-bar,
+  .rf-shell[data-mobile="true"] > .rf-band-region,
+  .rf-shell[data-mobile="true"] > .rf-shelf-region,
+  .rf-shell[data-mobile="true"] > .rf-workfield,
+  .rf-shell[data-mobile="true"] > .rf-chronicle-region,
+  .rf-shell[data-mobile="true"] > .rf-lens-region,
+  .rf-shell[data-mobile="true"] > .rf-lens-scrim {
+    display: none;
+  }
+
+  .rf-shell[data-mobile="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "field"
+      "rail";
+  }
+
+  /* A destination screen takes the same single-column area Command's mobile
+   * composition takes, and leaves the same room for the bottom navigation. */
+  .rf-shell[data-mobile="true"][data-domain]:not([data-domain="command"]) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "field"
+      "rail";
+  }
+
+  .rf-shell[data-mobile="true"][data-domain]:not([data-domain="command"]) > .rf-operation-bar { display: none; }
+
+  .rf-shell[data-mobile="true"][data-domain]:not([data-domain="command"]) > .rf-screen-host {
+    grid-area: field;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    background: var(--qf-color-field);
+    /* Clear of the sticky action strip and the bottom navigation. */
+    padding-bottom: calc(var(--qf-space-12) + var(--qf-space-11));
+  }
+
+  /* The sticky strip sits directly above the navigation, never over it, and
+   * respects the home indicator. */
+  .rf-shell[data-mobile="true"] > .rf-screen-sticky:not(:empty) {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--qf-space-12) + env(safe-area-inset-bottom, 0px));
+    /* One step below the rail: the bottom navigation and its More popover must
+     * always win, or an action strip can swallow taps meant for navigation. */
+    z-index: calc(var(--qf-z-sticky) - 1);
+    padding: var(--qf-space-3) var(--qf-page-gutter);
+    background: var(--qf-color-surface);
+    border-top: var(--qf-border-width) solid var(--qf-color-border-default);
+  }
+
+  .rf-m-region {
+    display: block;
+    grid-area: field;
+    min-width: 0;
+    background: var(--qf-color-field);
+    /* Room for the fixed Decision Bar plus the bottom navigation. */
+    padding-bottom: calc(var(--qf-space-12) * 2 + var(--qf-space-9));
+  }
+
+  .rf-m-page { display: flex; flex-direction: column; }
+
+  /* ---------------- Command header ---------------- */
+
+  .rf-m-header {
+    position: sticky;
+    top: 0;
+    z-index: var(--qf-z-sticky);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--qf-space-5);
+    padding: var(--qf-space-5) var(--qf-page-gutter);
+    background: var(--qf-color-canvas);
+    border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  }
+
+  .rf-m-title {
+    font: var(--qf-text-section);
+    letter-spacing: -0.01em;
+    color: var(--qf-color-fg-strong);
+  }
+
+  .rf-m-status { display: flex; align-items: center; gap: var(--qf-space-5); }
+
+  .rf-m-attention { display: inline-flex; align-items: baseline; gap: var(--qf-space-2); }
+
+  .rf-m-attention-count {
+    font: var(--qf-text-component);
+    font-size: 16px;
+    color: var(--qf-color-review);
+  }
+
+  .rf-m-attention-label { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+  .rf-m-sync {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--qf-space-3);
+    font: var(--qf-text-metadata);
+    font-size: 13px;
+    color: var(--qf-color-fg-muted);
+  }
+
+  .rf-m-sync::before {
+    content: "";
+    width: var(--qf-space-3);
+    height: var(--qf-space-3);
+    border-radius: var(--qf-radius-pill);
+    background: var(--qf-color-success);
+  }
+
+  .rf-m-sync[data-state="stale"] { color: var(--qf-color-warning); }
+  .rf-m-sync[data-state="stale"]::before { background: var(--qf-color-warning); }
+
+  /* ---------------- Sections ---------------- */
+
+  .rf-m-shelf,
+  .rf-m-selected,
+  .rf-m-relay,
+  .rf-m-evidence,
+  .rf-m-chronicle {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-4);
+    padding: var(--qf-space-6) var(--qf-page-gutter);
+    border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  }
+
+  .rf-m-section-head { display: flex; align-items: center; gap: var(--qf-space-4); }
+  .rf-m-section-head .rf-region-label { flex: 1; }
+
+  /* ---------------- Attention Shelf carousel ---------------- */
+
+  .rf-m-shelf-controls { display: flex; gap: var(--qf-space-2); }
+  .rf-m-prev { transform: rotate(135deg); }
+
+  .rf-m-shelf-track {
+    display: flex;
+    gap: var(--qf-space-4);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .rf-m-shelf-track::-webkit-scrollbar { display: none; }
+
+  .rf-m-shelf-item { flex: none; scroll-snap-align: start; }
+
+  .rf-m-shelf-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-3);
+    width: 264px;
+    min-height: calc(var(--qf-relay-default) + var(--qf-space-8));
+    padding: var(--qf-space-5);
+    text-align: left;
+    background: var(--qf-color-surface);
+    border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+    border-radius: var(--qf-radius-md);
+  }
+
+  .rf-m-shelf-card[data-selected="true"] {
+    border-width: var(--qf-selection-width);
+    border-color: var(--qf-color-review);
+    background: var(--qf-color-selected);
+  }
+
+  .rf-m-shelf-head { display: flex; align-items: center; gap: var(--qf-space-3); }
+
+  .rf-m-shelf-reason {
+    font: var(--qf-text-compact);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--qf-color-fg-strong);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .rf-m-shelf-foot { display: flex; align-items: center; gap: var(--qf-space-3); }
+
+  /* ---------------- Selected Quest ---------------- */
+
+  .rf-m-quest-title {
+    font-family: var(--qf-font-sans);
+    font-size: 22px;
+    line-height: 30px;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    color: var(--qf-color-fg-strong);
+  }
+
+  .rf-m-reason { font: var(--qf-text-body); font-size: 14px; line-height: 1.5; color: var(--qf-color-fg-default); }
+
+  .rf-m-holder {
+    display: flex;
+    align-items: center;
+    gap: var(--qf-space-4);
+    padding: var(--qf-space-4);
+    background: var(--qf-color-inset);
+    border-radius: var(--qf-radius-sm);
+  }
+
+  .rf-m-holder-copy { display: flex; flex-direction: column; min-width: 0; }
+  .rf-m-holder-name { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); }
+  .rf-m-holder-state { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+  .rf-m-actions { display: flex; gap: var(--qf-space-4); }
+  /* 44px targets at <=900px. */
+  .rf-m-actions > * { flex: 1; min-height: var(--qf-space-11); justify-content: center; }
+
+  /* ---------------- Vertical Relay ---------------- */
+
+  .rf-m-relay-list { display: flex; flex-direction: column; }
+
+  .rf-m-relay-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--qf-space-8) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--qf-space-4);
+    padding-block: var(--qf-space-4);
+  }
+
+  /* One thread down the avatar column so the order reads as a path. */
+  .rf-m-relay-step:not(:last-child) .rf-m-relay-thread {
+    position: absolute;
+    left: calc(var(--qf-space-8) / 2);
+    top: 50%;
+    bottom: calc(var(--qf-space-4) * -1);
+    width: 1px;
+    background: var(--qf-color-border-default);
+  }
+
+  .rf-m-relay-step[data-state="blocked"] .rf-m-relay-thread { background: var(--qf-color-danger); }
+  .rf-m-relay-step[data-state="review"] .rf-m-relay-thread { background: var(--qf-color-review); }
+
+  .rf-m-relay-copy { display: flex; flex-direction: column; min-width: 0; }
+  .rf-m-relay-name { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); }
+  .rf-m-relay-step[data-state="review"] .rf-m-relay-name { color: var(--qf-color-review); }
+  .rf-m-relay-step[data-state="blocked"] .rf-m-relay-name { color: var(--qf-color-danger); }
+  .rf-m-relay-step[data-state="executing"] .rf-m-relay-name { color: var(--qf-color-agent); }
+  .rf-m-relay-role { font: var(--qf-text-label); font-size: 12px; letter-spacing: 0.06em; color: var(--qf-color-fg-muted); }
+  .rf-m-relay-state { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); }
+
+  .rf-m-relay-time {
+    font: var(--qf-text-operational);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--qf-color-fg-muted);
+    white-space: nowrap;
+  }
+
+  /* ---------------- Evidence ---------------- */
+
+  .rf-m-evidence-primary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-3);
+    padding: var(--qf-space-5);
+    background: var(--qf-color-selected);
+    border: var(--qf-border-width) solid var(--qf-color-review);
+    border-radius: var(--qf-radius-sm);
+  }
+
+  .rf-m-evidence-primary[data-verdict="unavailable"] { border-color: var(--qf-color-warning); }
+
+  .rf-m-evidence-head { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+  .rf-m-evidence-summary { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); }
+
+  .rf-m-evidence-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-3);
+    padding-top: var(--qf-space-4);
+    border-top: var(--qf-border-width) solid var(--qf-color-border-default);
+  }
+
+  .rf-m-evidence-detail .rf-preview-change { grid-template-columns: minmax(0, 1fr) auto; }
+
+  .rf-m-evidence-empty { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+  .rf-m-supporting-toggle { align-self: flex-start; min-height: var(--qf-space-11); }
+
+  .rf-m-evidence-list { display: flex; flex-direction: column; gap: var(--qf-space-2); }
+
+  .rf-m-evidence-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--qf-space-3);
+    padding: var(--qf-space-3) var(--qf-space-4);
+    background: var(--qf-color-inset);
+    border-radius: var(--qf-radius-xs);
+  }
+
+  /* ---------------- Chronicle ---------------- */
+
+  .rf-m-chronicle-latest,
+  .rf-m-chronicle-item {
+    display: flex;
+    align-items: center;
+    gap: var(--qf-space-4);
+    min-width: 0;
+  }
+
+  .rf-m-chronicle-list { display: flex; flex-direction: column; gap: var(--qf-space-4); padding-top: var(--qf-space-4); }
+  .rf-m-chronicle-latest .rf-chronicle-sentence,
+  .rf-m-chronicle-item .rf-chronicle-sentence { white-space: normal; }
+
+  /* ---------------- Sticky Decision Bar ---------------- */
+
+  .rf-m-decision-region {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    /* Sits above the bottom navigation and inside the safe area. */
+    /* Nav height is the item (comfortable + space-6) plus its 1px top border. */
+    bottom: calc(
+      var(--qf-control-comfortable) + var(--qf-space-6) + var(--qf-border-width)
+      + env(safe-area-inset-bottom, 0px)
+    );
+    z-index: var(--qf-z-sticky);
+  }
+
+  .rf-m-decision {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-4);
+    padding: var(--qf-space-5) var(--qf-page-gutter);
+    background: var(--qf-color-raised);
+    border-top: var(--qf-border-width) solid var(--qf-color-border-default);
+    box-shadow: var(--qf-shadow-overlay);
+  }
+
+  .rf-m-decision .rf-decision-actions > * { flex: 1; min-height: var(--qf-space-11); justify-content: center; }
+
+  /* Compact: one line plus a jump, so the Relay above stays readable. */
+  .rf-m-decision[data-shape="compact"] {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--qf-space-5);
+    padding-block: var(--qf-space-4);
+  }
+
+  .rf-m-decision[data-shape="compact"] .rf-decision-status { font-size: 13px; }
+  .rf-m-decision[data-shape="compact"] .rf-m-decision-copy { flex: 1; min-width: 0; }
+  .rf-m-decision-jump { flex: none; min-height: var(--qf-space-11); }
+
+  .rf-m-decision[data-shape="revision"] { gap: var(--qf-space-3); }
+  .rf-m-decision[data-shape="revision"] .rf-revision-input { font-size: 13px; }
+
+  /* More panel sits directly above the bar it belongs to. */
+  .rf-nav-more-panel {
+    position: absolute;
+    right: var(--qf-page-gutter);
+    bottom: calc(100% + var(--qf-space-2));
+    /* A popover sits above the sticky action strip. Without this the strip
+     * covers the lower entries of the More menu and swallows their taps. */
+    z-index: var(--qf-z-popover);
+    min-width: 180px;
+    padding: var(--qf-space-3);
+    background: var(--qf-color-raised);
+    border: var(--qf-border-width) solid var(--qf-color-border-default);
+    border-radius: var(--qf-radius-md);
+    box-shadow: var(--qf-shadow-overlay);
+  }
+
+  .rf-shell[data-mobile="true"] .rf-rail { position: sticky; }
+  .rf-shell[data-mobile="true"] .rf-nav-more-panel .rf-nav-item {
+    flex-direction: row;
+    height: var(--qf-space-11);
+    justify-content: flex-start;
+    padding-inline: var(--qf-space-4);
+    border-top: 0;
+  }
+
+  .rf-nav-glyph[data-domain="more"] {
+    border: 0;
+    position: relative;
+  }
+
+  .rf-nav-glyph[data-domain="more"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: var(--qf-space-2);
+    height: var(--qf-space-2);
+    border-radius: var(--qf-radius-pill);
+    background: currentColor;
+    box-shadow: calc(var(--qf-space-4) * -1) 0 0 currentColor, var(--qf-space-4) 0 0 currentColor;
+  }
+
+  /* The virtual keyboard shrinks the visual viewport; the bar rides with it so
+   * neither the action nor the focused field is hidden. */
+  @supports (bottom: env(keyboard-inset-height)) {
+    .rf-m-decision-region {
+      bottom: calc(
+        var(--qf-control-comfortable) + var(--qf-space-6) + var(--qf-border-width)
+        + env(safe-area-inset-bottom, 0px) + env(keyboard-inset-height, 0px)
+      );
+    }
+  }
+
+  .rf-rail { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+  /* The bottom navigation keeps its labels; the collapsed-rail rule from the
+   * desktop breakpoints must not reach the mobile bar. */
+  .rf-shell[data-mobile="true"] .rf-rail .rf-nav-label {
+    display: block;
+    /* Long labels ellipsis instead of forcing the bar past the viewport. */
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .rf-shell[data-mobile="true"] .rf-rail .rf-nav-item { min-width: 0; overflow: hidden; }
+
+  /* ---------------- Bottom sheet ---------------- */
+
+  .rf-sheet-host { display: block; }
+
+  .rf-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: var(--qf-z-modal);
+  }
+
+  .rf-sheet-scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--qf-color-scrim);
+  }
+
+  .rf-sheet-panel {
+    position: absolute;
+    inset: auto 0 0 0;
+    display: flex;
+    flex-direction: column;
+    max-height: 86vh;
+    background: var(--qf-color-surface);
+    border-top: var(--qf-border-width) solid var(--qf-color-border-default);
+    border-radius: var(--qf-radius-lg) var(--qf-radius-lg) 0 0;
+    box-shadow: var(--qf-shadow-modal);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: rf-sheet-enter var(--qf-motion-panel) var(--qf-ease-enter);
+  }
+
+  @keyframes rf-sheet-enter {
+    from { transform: translateY(var(--qf-space-12)); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  .rf-sheet-header {
+    flex: none;
+    display: grid;
+    grid-template-columns: var(--qf-space-11) minmax(0, 1fr) var(--qf-space-11);
+    align-items: center;
+    padding: var(--qf-space-4) var(--qf-space-4) var(--qf-space-5);
+    border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  }
+
+  .rf-sheet-header .rf-region-label { text-align: center; }
+
+  .rf-sheet-grip {
+    justify-self: center;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    align-self: start;
+    width: var(--qf-space-10);
+    height: var(--qf-space-2);
+    border-radius: var(--qf-radius-pill);
+    background: var(--qf-color-border-default);
+    margin-bottom: var(--qf-space-4);
+  }
+
+  .rf-sheet-header .rf-region-label { grid-row: 2; grid-column: 2; }
+  .rf-sheet-close { grid-row: 2; grid-column: 3; justify-self: end; }
+
+  .rf-sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .rf-sheet-body .rf-spine { border: 0; border-radius: 0; height: 100%; }
+  .rf-sheet-body .rf-spine-header { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-sheet-panel { animation: none; }
+}

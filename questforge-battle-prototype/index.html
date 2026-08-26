@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QuestForge Battle Prototype</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="jrpg-shell">
+      <section class="game-screen" aria-label="Classic command battle prototype">
+        <header class="game-topbar">
+          <div>
+            <p>QuestForge Battle Lab</p>
+            <h1>MP Command Battle</h1>
+          </div>
+          <button class="small-command" id="resetBattleButton" type="button">リセット</button>
+        </header>
+
+        <section class="battle-field">
+          <div class="enemy-zone">
+            <article class="combatant-status enemy-status">
+              <div>
+                <strong id="bossName">Deadline Wraith</strong>
+                <span>Rage <b id="bossRageText">0</b></span>
+              </div>
+              <div class="meter-row">
+                <span>HP</span>
+                <em id="bossHpText">140/140</em>
+                <div class="meter boss"><i id="bossHpBar"></i></div>
+              </div>
+              <div class="status-row" id="bossStatusRow"></div>
+            </article>
+            <div class="enemy-platform">
+              <img id="bossSprite" class="boss-sprite" src="../questforge-prototype/assets/boss-h3-transparent.png" alt="Deadline Wraith boss" />
+            </div>
+          </div>
+
+          <div class="party-zone">
+            <div class="player-platform">
+              <img id="playerSprite" class="player-sprite" src="../questforge-prototype/assets/avatar-role-sentinel.png" alt="Player avatar" />
+            </div>
+            <article class="combatant-status player-status">
+              <div>
+                <strong id="playerName">Astra / Sentinel</strong>
+                <span>Turn <b id="turnValue">1</b></span>
+              </div>
+              <div class="meter-row">
+                <span>HP</span>
+                <em id="playerHpText">56/60</em>
+                <div class="meter"><i id="playerHpBar"></i></div>
+              </div>
+              <div class="meter-row">
+                <span>MP</span>
+                <em id="playerMpText">12/80</em>
+                <div class="meter mp"><i id="playerMpBar"></i></div>
+              </div>
+              <div class="status-row" id="playerStatusRow"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="battle-console">
+          <article class="message-window">
+            <p id="mainMessage">タスクでMPをためて、コマンドで戦います。</p>
+            <div class="battle-log" id="battleLog" aria-live="polite"></div>
+          </article>
+
+          <article class="command-window">
+            <div class="window-title">
+              <strong>COMMAND</strong>
+              <span id="battleResultText">進行中</span>
+            </div>
+            <div class="command-grid" id="commandGrid">
+              <button type="button" data-command="attack">
+                <strong>たたかう</strong>
+                <span>0 MP</span>
+              </button>
+              <button type="button" data-command="skill">
+                <strong id="skillCommandName">Aegis Break</strong>
+                <span id="skillCommandCost">18 MP</span>
+              </button>
+              <button type="button" data-command="guard">
+                <strong>まもる</strong>
+                <span>6 MP</span>
+              </button>
+              <button type="button" data-command="heal">
+                <strong>かいふく</strong>
+                <span>14 MP</span>
+              </button>
+              <button type="button" data-command="burst">
+                <strong>バースト</strong>
+                <span>40 MP</span>
+              </button>
+            </div>
+          </article>
+        </section>
+      </section>
+
+      <aside class="lab-panel">
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>タスクでMP獲得</h2>
+            <span id="taskCountText">0 completed</span>
+          </div>
+          <div class="task-action-grid">
+            <button type="button" data-task-action="daily">
+              <strong>今日の約束</strong>
+              <span>+14 MP / Focus +1</span>
+            </button>
+            <button type="button" data-task-action="todo">
+              <strong>一回クエスト</strong>
+              <span>+20 MP</span>
+            </button>
+            <button type="button" data-task-action="habit">
+              <strong>習慣ログ +</strong>
+              <span>+6 MP</span>
+            </button>
+            <button type="button" data-task-action="toggl">
+              <strong>Toggl 25分</strong>
+              <span>+18 MP / Focus +2</span>
+            </button>
+            <button type="button" data-task-action="missed" class="danger-action">
+              <strong>期限切れ</strong>
+              <span>HP -8 / Rage +1</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>役職</h2>
+            <span id="classSkillText">Aegis Break</span>
+          </div>
+          <div class="class-grid" id="classGrid">
+            <button type="button" data-class="sentinel">Sentinel</button>
+            <button type="button" data-class="archivist">Archivist</button>
+            <button type="button" data-class="operator">Operator</button>
+            <button type="button" data-class="alchemist">Alchemist</button>
+            <button type="button" data-class="ranger">Ranger</button>
+            <button type="button" data-class="artificer">Artificer</button>
+          </div>
+        </section>
+
+        <section class="panel contract-panel">
+          <div class="panel-heading">
+            <h2>合体用データ</h2>
+            <span>contract</span>
+          </div>
+          <pre id="contractPreview"></pre>
+        </section>
+      </aside>
+    </main>
+
+    <script src="./battle.js"></script>
+  </body>
+</html>

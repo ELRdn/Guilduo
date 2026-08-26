@@ -1,0 +1,545 @@
+/* ------------------------------------------------------------------ *
+ * Relay Forge — shared screen grammar
+ *
+ * Only what the six destinations share: the screen frame, the status
+ * vocabulary, chips, metrics, segments and the confirmation surface. Layout
+ * belongs to each screen's own stylesheet; nothing here sets a grid for a
+ * region a screen owns.
+ *
+ * Every value is an existing token. No colour, radius, shadow or motion value
+ * is introduced by this file.
+ * ------------------------------------------------------------------ */
+
+/* ---------------- screen frame ---------------- */
+
+.rf-screen {
+  display: grid;
+  min-height: 0;
+  min-width: 0;
+  gap: var(--qf-pane-gap);
+  padding: var(--qf-space-6) var(--qf-page-gutter) var(--qf-space-6);
+  background: var(--qf-color-canvas);
+}
+
+.rf-screen-header {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--qf-space-7);
+  flex-wrap: wrap;
+  padding-bottom: var(--qf-space-4);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-screen-heading { min-width: 0; flex: 1 1 auto; }
+
+.rf-screen-title {
+  font: var(--qf-text-page);
+  color: var(--qf-color-fg-strong);
+  margin: 0;
+}
+
+/* The five-second question. It is content, not a subtitle, so it never
+ * truncates away on the first breakpoint. */
+.rf-screen-question {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  margin: var(--qf-space-2) 0 0;
+  max-width: 68ch;
+}
+
+.rf-screen-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--qf-space-6);
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.rf-screen-meta dt {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+/* A meta value is information, not a label, so it clears the 13px floor even
+ * though `--qf-text-operational` is 12px. */
+.rf-screen-meta dd {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  color: var(--qf-color-fg-strong);
+  margin: 0 var(--qf-space-4) 0 var(--qf-space-3);
+}
+
+.rf-screen-actions { display: flex; gap: var(--qf-space-3); flex: 0 0 auto; }
+
+/* Column headers and inline eyebrows share the label family: uppercase, 12px,
+ * muted. They name a column or a field rather than carrying its value, which is
+ * why they sit with `.rf-region-label` below the 13px information floor. */
+.rf-col-label,
+.rf-inline-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+/* ---------------- regions ---------------- */
+
+.rf-screen-region {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  gap: var(--qf-space-4);
+  padding: var(--qf-space-5);
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-md);
+}
+
+/* Exactly one region per screen owns vertical scrolling on desktop. */
+.rf-screen-region[data-scroll="true"] { overflow-y: auto; overscroll-behavior: contain; }
+
+.rf-screen-region > .rf-region-label { flex: 0 0 auto; }
+
+/* ---------------- status vocabulary ---------------- */
+
+.rf-screen-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  padding: var(--qf-space-4) var(--qf-space-5);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-left-width: var(--qf-selection-width);
+  border-radius: var(--qf-radius-sm);
+  background: var(--qf-color-inset);
+}
+
+.rf-screen-notice-copy { display: flex; flex-direction: column; gap: var(--qf-space-1); min-width: 0; flex: 1; }
+.rf-screen-notice-copy strong { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); }
+.rf-screen-notice-copy span { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+/* The mark is the non-colour signal: a distinct shape per status, so the
+ * banner still says which condition it is in greyscale. */
+.rf-screen-notice-mark {
+  flex: 0 0 auto;
+  width: var(--qf-space-5);
+  height: var(--qf-space-5);
+  border: var(--qf-border-width) solid currentColor;
+}
+
+.rf-screen-notice[data-status="loading"] { color: var(--qf-color-fg-muted); }
+.rf-screen-notice[data-status="loading"] .rf-screen-notice-mark { border-radius: var(--qf-radius-pill); border-style: dashed; }
+
+.rf-screen-notice[data-status="empty"] { color: var(--qf-color-fg-muted); }
+.rf-screen-notice[data-status="empty"] .rf-screen-notice-mark { border-style: dotted; }
+
+.rf-screen-notice[data-status="partial"] { color: var(--qf-color-warning); border-left-color: var(--qf-color-warning); }
+.rf-screen-notice[data-status="partial"] .rf-screen-notice-mark {
+  border-radius: var(--qf-radius-pill);
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+
+.rf-screen-notice[data-status="error"] { color: var(--qf-color-danger); border-left-color: var(--qf-color-danger); }
+.rf-screen-notice[data-status="error"] .rf-screen-notice-mark { transform: rotate(45deg); }
+
+.rf-screen-notice[data-status="permission"] { color: var(--qf-color-danger); border-left-color: var(--qf-color-danger); }
+.rf-screen-notice[data-status="permission"] .rf-screen-notice-mark {
+  border-radius: var(--qf-radius-xs);
+  border-top-width: calc(var(--qf-border-width) * 3);
+}
+
+.rf-screen-notice[data-status="offline"] { color: var(--qf-color-fg-muted); border-left-color: var(--qf-color-border-strong); }
+.rf-screen-notice[data-status="offline"] .rf-screen-notice-mark {
+  border-radius: var(--qf-radius-pill);
+  background: repeating-linear-gradient(45deg, currentColor 0 2px, transparent 2px 4px);
+}
+
+.rf-screen-notice[data-status="stale"] { color: var(--qf-color-warning); border-left-color: var(--qf-color-warning); }
+.rf-screen-notice[data-status="stale"] .rf-screen-notice-mark { border-style: dashed; }
+
+.rf-screen-notice[data-status="conflict"] { color: var(--qf-color-review); border-left-color: var(--qf-color-review); }
+.rf-screen-notice[data-status="conflict"] .rf-screen-notice-mark {
+  border-radius: var(--qf-radius-pill);
+  box-shadow: inset 0 0 0 var(--qf-border-width) currentColor;
+}
+
+.rf-screen-notice .rf-secondary-button { flex: 0 0 auto; }
+
+/* ---------------- skeleton ---------------- */
+
+/* Sized to the row it stands in for, so nothing moves when data arrives. */
+.rf-screen-skeleton { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+.rf-screen-skeleton-item {
+  display: block;
+  border-radius: var(--qf-radius-xs);
+  background: var(--qf-color-inset);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-screen-skeleton[data-variant="row"] .rf-screen-skeleton-item { height: var(--qf-row-default); }
+.rf-screen-skeleton[data-variant="card"] .rf-screen-skeleton-item { height: var(--qf-space-12); }
+.rf-screen-skeleton[data-variant="node"] .rf-screen-skeleton-item { height: var(--qf-row-comfortable); }
+.rf-screen-skeleton[data-variant="tile"] .rf-screen-skeleton-item { height: calc(var(--qf-space-12) * 2); }
+
+/* The pulse is decoration; it stops entirely when motion is reduced. */
+@media (prefers-reduced-motion: no-preference) {
+  .rf-screen-skeleton-item { animation: rf-screen-skeleton-pulse 1.8s var(--qf-ease-move) infinite; }
+  .rf-screen-skeleton-item:nth-child(2) { animation-delay: 0.15s; }
+  .rf-screen-skeleton-item:nth-child(3) { animation-delay: 0.3s; }
+  .rf-screen-skeleton-item:nth-child(n + 4) { animation-delay: 0.45s; }
+}
+
+@keyframes rf-screen-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ---------------- empty ---------------- */
+
+.rf-screen-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qf-space-3);
+  padding: var(--qf-space-7) var(--qf-space-5);
+  border: var(--qf-border-width) dashed var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+}
+
+.rf-screen-empty-title { font: var(--qf-text-section); color: var(--qf-color-fg-strong); margin: 0; }
+.rf-screen-empty-body { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; max-width: 52ch; }
+.rf-screen-empty .rf-primary-button { margin-top: var(--qf-space-2); }
+
+/* ---------------- chips ---------------- */
+
+.rf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-2);
+  height: var(--qf-control-compact);
+  padding-inline: var(--qf-space-3);
+  border: var(--qf-border-width) solid currentColor;
+  border-radius: var(--qf-radius-xs);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.rf-chip-mark {
+  font: var(--qf-font-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.rf-chip-label { font: var(--qf-text-metadata); font-size: 13px; color: inherit; }
+
+.rf-chip[data-tone="review"] { color: var(--qf-color-review); }
+.rf-chip[data-tone="blocked"] { color: var(--qf-color-danger); }
+.rf-chip[data-tone="danger"] { color: var(--qf-color-danger); }
+.rf-chip[data-tone="waiting"] { color: var(--qf-color-waiting); }
+.rf-chip[data-tone="working"] { color: var(--qf-color-accent); }
+.rf-chip[data-tone="done"] { color: var(--qf-color-success); }
+.rf-chip[data-tone="scheduled"] { color: var(--qf-color-fg-muted); }
+.rf-chip[data-tone="neutral"] { color: var(--qf-color-fg-muted); }
+
+/* Blocked and danger also take a doubled leading edge, so they separate from
+ * review without relying on hue. */
+.rf-chip[data-tone="blocked"],
+.rf-chip[data-tone="danger"] { border-left-width: calc(var(--qf-border-width) * 3); }
+
+/* ---------------- metrics ---------------- */
+
+.rf-metric-row {
+  display: flex;
+  gap: var(--qf-space-3);
+  flex-wrap: wrap;
+}
+
+.rf-metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-1);
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: var(--qf-space-4) var(--qf-space-5);
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-left-width: var(--qf-selection-width);
+  border-radius: var(--qf-radius-sm);
+  text-align: left;
+}
+
+.rf-metric-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-metric-value { font: var(--qf-text-kpi); color: var(--qf-color-fg-strong); }
+.rf-metric-note { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+.rf-metric[data-tone="review"] { border-left-color: var(--qf-color-review); }
+.rf-metric[data-tone="blocked"] { border-left-color: var(--qf-color-danger); }
+.rf-metric[data-tone="danger"] { border-left-color: var(--qf-color-danger); }
+.rf-metric[data-tone="waiting"] { border-left-color: var(--qf-color-waiting); }
+.rf-metric[data-tone="working"] { border-left-color: var(--qf-color-accent); }
+.rf-metric[data-tone="done"] { border-left-color: var(--qf-color-success); }
+.rf-metric[data-tone="neutral"],
+.rf-metric[data-tone="scheduled"] { border-left-color: var(--qf-color-border-strong); }
+
+.rf-metric[data-actionable="true"] { cursor: pointer; }
+.rf-metric[data-actionable="true"]:hover { border-color: var(--qf-color-border-strong); }
+.rf-metric[data-actionable="true"]:hover { border-left-color: var(--qf-color-accent); }
+
+/* ---------------- segments ---------------- */
+
+.rf-segments {
+  display: flex;
+  gap: var(--qf-space-1);
+  padding: var(--qf-space-1);
+  background: var(--qf-color-inset);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-sm);
+  flex-wrap: wrap;
+}
+
+.rf-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-2);
+  height: var(--qf-control-default);
+  padding-inline: var(--qf-space-4);
+  border-radius: var(--qf-radius-xs);
+  color: var(--qf-color-fg-muted);
+  font: var(--qf-text-component);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Selected is a surface change plus a bottom rule, not a hue swap alone. */
+.rf-segment[data-selected="true"] {
+  background: var(--qf-color-surface);
+  color: var(--qf-color-fg-strong);
+  box-shadow: inset 0 calc(var(--qf-selection-width) * -1) 0 var(--qf-color-accent);
+}
+
+.rf-segment-count {
+  font: var(--qf-font-mono);
+  font-size: 12px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-segment[data-selected="true"] .rf-segment-count { color: var(--qf-color-fg-default); }
+
+/* ---------------- search ---------------- */
+
+.rf-search { display: flex; min-width: 0; flex: 1 1 220px; }
+
+.rf-search-input {
+  width: 100%;
+  height: var(--qf-control-default);
+  padding-inline: var(--qf-space-4);
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-field);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+}
+
+.rf-search-input::placeholder { color: var(--qf-color-fg-muted); }
+
+.rf-search-input:focus-visible {
+  outline: var(--qf-focus-width) solid var(--qf-color-focus);
+  outline-offset: var(--qf-focus-offset);
+}
+
+/* ---------------- confirmation / unavailable ---------------- */
+
+.rf-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-3);
+  padding: var(--qf-space-4) var(--qf-space-5);
+  border: var(--qf-border-width) solid var(--qf-color-danger);
+  border-left-width: var(--qf-selection-width);
+  border-radius: var(--qf-radius-sm);
+  background: var(--qf-color-inset);
+}
+
+.rf-confirm-title { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); margin: 0; }
+
+.rf-confirm-impact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-2);
+  margin: 0;
+  padding-left: var(--qf-space-6);
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+}
+
+.rf-confirm-actions { display: flex; gap: var(--qf-space-3); justify-content: flex-end; }
+
+.rf-danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--qf-control-default);
+  padding-inline: var(--qf-space-5);
+  border-radius: var(--qf-radius-sm);
+  font: var(--qf-text-component);
+  white-space: nowrap;
+  background: var(--qf-color-danger);
+  color: var(--qf-color-fg-on-accent);
+  transition: opacity var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-danger-button:hover:not(:disabled) { opacity: 0.88; }
+.rf-danger-button:disabled { background: var(--qf-color-surface); color: var(--qf-color-fg-disabled); }
+
+.rf-unavailable {
+  display: flex;
+  align-items: baseline;
+  gap: var(--qf-space-3);
+  margin: 0;
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-unavailable-tag {
+  flex: 0 0 auto;
+  padding: 0 var(--qf-space-2);
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+  border: var(--qf-border-width) dashed var(--qf-color-border-strong);
+  border-radius: var(--qf-radius-xs);
+}
+
+/* ---------------- shared row furniture ---------------- */
+
+/* A selectable list row. Screens set their own grid on top of this. */
+.rf-srow {
+  position: relative;
+  display: grid;
+  align-items: center;
+  gap: var(--qf-space-4);
+  width: 100%;
+  min-height: var(--qf-row-default);
+  padding: var(--qf-space-3) var(--qf-space-4);
+  border-radius: var(--qf-radius-xs);
+  border-left: var(--qf-selection-width) solid transparent;
+  text-align: left;
+  color: var(--qf-color-fg-default);
+}
+
+.rf-srow:hover { background: var(--qf-color-inset); }
+
+/* Selection is a leading edge plus a tinted surface plus an explicit label —
+ * three signals, matching Command's Attention Shelf. */
+.rf-srow[data-selected="true"] {
+  background: var(--qf-color-selected);
+  border-left-color: var(--qf-color-accent);
+}
+
+.rf-srow-title {
+  font: var(--qf-text-component);
+  font-size: 14px;
+  color: var(--qf-color-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-srow-sub {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-srow-id {
+  font: var(--qf-font-mono);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-srow-meta { display: flex; align-items: center; gap: var(--qf-space-4); flex: 0 0 auto; white-space: nowrap; }
+
+/* A link that moves to another destination, carrying the current selection. */
+.rf-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-2);
+  height: var(--qf-control-compact);
+  padding-inline: var(--qf-space-3);
+  border-radius: var(--qf-radius-xs);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+  white-space: nowrap;
+}
+
+.rf-jump:hover { border-color: var(--qf-color-accent); color: var(--qf-color-fg-strong); }
+.rf-jump::after { content: "→"; color: var(--qf-color-fg-muted); }
+
+/* ---------------- mobile ---------------- */
+
+@media (max-width: 900px) {
+  .rf-screen {
+    padding: var(--qf-space-4) var(--qf-page-gutter) var(--qf-space-5);
+    gap: var(--qf-space-4);
+  }
+
+  .rf-screen-header { align-items: flex-start; flex-direction: column; gap: var(--qf-space-3); }
+  .rf-screen-title { font: var(--qf-text-section); }
+  .rf-screen-meta { gap: var(--qf-space-4); flex-wrap: wrap; }
+  .rf-screen-actions { width: 100%; }
+  .rf-screen-actions > * { flex: 1; min-height: var(--qf-space-11); }
+
+  /* On mobile every region is part of one page scroll: a region that scrolls
+   * inside a page that also scrolls is the trap section 3.2 forbids. */
+  .rf-screen-region[data-scroll="true"] { overflow-y: visible; }
+
+  .rf-screen-region { padding: var(--qf-space-4); }
+
+  .rf-metric-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rf-metric { padding: var(--qf-space-3) var(--qf-space-4); }
+
+  /* The segment strip scrolls sideways rather than wrapping to three rows. */
+  .rf-segments { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; }
+  .rf-segment { min-height: var(--qf-space-11); }
+
+  .rf-srow { min-height: var(--qf-space-11); padding: var(--qf-space-4); }
+  .rf-jump { min-height: var(--qf-space-11); }
+  .rf-confirm-actions > * { flex: 1; min-height: var(--qf-space-11); }
+
+  /* Every interactive control inside a destination screen clears 44px on a
+   * touch screen, including the ones that live inside notices and empty
+   * states, which are easy to miss when only the obvious buttons are sized. */
+  .rf-screen-host button,
+  .rf-screen-host a[href],
+  .rf-screen-host input,
+  .rf-screen-host select,
+  .rf-screen-host textarea,
+  .rf-screen-sticky button {
+    min-height: var(--qf-space-11);
+  }
+
+  .rf-search-input { height: var(--qf-space-11); }
+}

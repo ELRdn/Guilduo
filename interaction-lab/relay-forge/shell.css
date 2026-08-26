@@ -1,0 +1,815 @@
+/* Relay Forge App Shell — NEWDESIGNv2.md section 3.
+ *
+ * Five regions plus the Rail and Lens:
+ *
+ *   rail | operation bar (spans workfield + lens)
+ *        | capacity band (spans workfield + lens)
+ *        | attention shelf              | lens
+ *        | quest loom | selected quest  | lens
+ *        | chronicle strip              | lens
+ *
+ * At 1920: 1920 - 216 rail - 360 lens = 1344 workfield; minus 2x24 gutter =
+ * 1296 content; the 26/74 split resolves to ~337 Loom and ~947 Selected Quest,
+ * keeping the centre above the 900px floor section 3.1 sets. */
+
+.rf-shell {
+  display: grid;
+  height: 100%;
+  background: var(--qf-color-canvas);
+  grid-template-columns: var(--qf-rail-width) minmax(0, 1fr) var(--qf-lens-width);
+  grid-template-rows:
+    var(--qf-operation-bar-height)
+    var(--qf-capacity-band-height)
+    auto
+    minmax(0, 1fr)
+    auto;
+  grid-template-areas:
+    "rail bar   bar"
+    "rail band  band"
+    "rail shelf lens"
+    "rail field lens"
+    "rail chron lens";
+}
+
+.rf-shell[data-lens="closed"] {
+  grid-template-columns: var(--qf-rail-width) minmax(0, 1fr) 0;
+}
+
+.rf-shell[data-rail="collapsed"] {
+  grid-template-columns: var(--qf-rail-collapsed) minmax(0, 1fr) var(--qf-lens-width);
+}
+
+/* ---------------------------------------------------------------- *
+ * Forge Rail
+ * ---------------------------------------------------------------- */
+
+.rf-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--qf-color-canvas);
+  border-right: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  padding-block: var(--qf-space-4) var(--qf-space-6);
+}
+
+.rf-rail-top {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-space-11);
+  padding-inline: var(--qf-space-5);
+  margin-bottom: var(--qf-space-6);
+}
+
+.rf-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--qf-space-9);
+  height: var(--qf-space-9);
+  flex: none;
+  border: var(--qf-border-width) solid var(--qf-color-review);
+  border-radius: var(--qf-radius-md);
+  font: var(--qf-text-label);
+  letter-spacing: 0.06em;
+  color: var(--qf-color-review);
+}
+
+.rf-rail-workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rf-rail-workspace b {
+  font: var(--qf-text-component);
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-rail-workspace small {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-rail-domains {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-1);
+  padding-inline: var(--qf-space-4);
+}
+
+.rf-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-5);
+  width: 100%;
+  height: var(--qf-control-comfortable);
+  padding-inline: var(--qf-space-5);
+  border-left: var(--qf-selection-width) solid transparent;
+  border-radius: var(--qf-radius-sm);
+  font: var(--qf-text-body);
+  color: var(--qf-color-fg-muted);
+  transition: color var(--qf-motion-quick) var(--qf-ease-move),
+    background-color var(--qf-motion-quick) var(--qf-ease-move),
+    border-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-nav-item:hover:not(:disabled) {
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-selected);
+}
+
+.rf-nav-item[data-selected="true"] {
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-selected);
+  border-left-color: var(--qf-color-human);
+  font-weight: 600;
+}
+
+.rf-nav-item:disabled {
+  color: var(--qf-color-fg-disabled);
+}
+
+/* Domain glyphs are geometric marks; the icon family stays Lucide elsewhere. */
+.rf-nav-glyph {
+  position: relative;
+  flex: none;
+  width: var(--qf-space-7);
+  height: var(--qf-space-7);
+  border: var(--qf-border-width) solid currentColor;
+}
+
+.rf-nav-glyph[data-domain="command"] { border-radius: var(--qf-radius-pill); }
+.rf-nav-glyph[data-domain="quests"] { border-radius: var(--qf-radius-xs); }
+.rf-nav-glyph[data-domain="network"] { border-radius: var(--qf-radius-xs); transform: rotate(45deg) scale(0.82); }
+.rf-nav-glyph[data-domain="party"] { border-radius: var(--qf-radius-pill); border-style: double; border-width: var(--qf-radius-xs); }
+.rf-nav-glyph[data-domain="battle"] { border-radius: var(--qf-radius-xs) var(--qf-radius-pill) var(--qf-radius-xs) var(--qf-radius-pill); }
+.rf-nav-glyph[data-domain="connections"] { border-style: dashed; border-radius: var(--qf-radius-xs); }
+
+.rf-nav-item[data-selected="true"] .rf-nav-glyph[data-domain="command"] {
+  border-color: var(--qf-color-human);
+  box-shadow: inset 0 0 0 var(--qf-radius-xs) var(--qf-color-human);
+}
+
+.rf-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-nav-attention {
+  margin-left: auto;
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-rail-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-1);
+  padding-inline: var(--qf-space-4);
+}
+
+.rf-rail-utility {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-control-comfortable);
+  padding-inline: var(--qf-space-5);
+  border-radius: var(--qf-radius-sm);
+  font: var(--qf-text-compact);
+  color: var(--qf-color-fg-muted);
+  transition: color var(--qf-motion-quick) var(--qf-ease-move),
+    background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-rail-utility:hover {
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-selected);
+}
+
+.rf-rail-utility .rf-nav-label { flex: 1; }
+.rf-rail-utility .rf-kbd { margin-left: auto; }
+
+/* Theme control reads as a two-state switch without needing an icon font. */
+.rf-theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-3);
+  margin-left: auto;
+}
+
+.rf-theme-glyph {
+  width: var(--qf-space-5);
+  height: var(--qf-space-5);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-border-width) solid currentColor;
+}
+
+.rf-theme-glyph[data-mode="dark"] {
+  box-shadow: inset calc(var(--qf-space-2) * -1) 0 0 0 currentColor;
+}
+
+.rf-theme-switch[data-theme-mode="dark"] .rf-theme-glyph[data-mode="dark"],
+.rf-theme-switch[data-theme-mode="light"] .rf-theme-glyph[data-mode="light"] {
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-collapse-mark,
+.rf-chevron-mark,
+.rf-caret-mark,
+.rf-chevron-inline,
+.rf-overflow-mark,
+.rf-bell-mark,
+.rf-search-glyph,
+.rf-review-glyph,
+.rf-decision-info,
+.rf-spine-grip,
+.rf-spine-chevron,
+.rf-evidence-icon {
+  display: inline-block;
+  flex: none;
+  position: relative;
+}
+
+/* Chevron / caret marks are drawn from borders — no icon font is introduced. */
+.rf-collapse-mark,
+.rf-chevron-mark,
+.rf-caret-mark,
+.rf-chevron-inline,
+.rf-spine-chevron {
+  width: var(--qf-space-4);
+  height: var(--qf-space-4);
+  border-right: var(--qf-border-width) solid currentColor;
+  border-bottom: var(--qf-border-width) solid currentColor;
+}
+
+.rf-collapse-mark { transform: rotate(135deg); }
+.rf-chevron-mark { transform: rotate(-135deg); }
+.rf-caret-mark { transform: rotate(45deg) translate(-25%, -25%); }
+.rf-chevron-inline { transform: rotate(-45deg); margin-left: var(--qf-space-2); }
+.rf-spine-chevron { transform: rotate(-45deg); color: var(--qf-color-fg-muted); }
+
+.rf-overflow-mark {
+  width: var(--qf-space-1);
+  height: var(--qf-space-1);
+  border-radius: var(--qf-radius-pill);
+  background: currentColor;
+  box-shadow: 0 calc(var(--qf-space-3) * -1) 0 currentColor, 0 var(--qf-space-3) 0 currentColor;
+}
+
+.rf-bell-mark,
+.rf-search-glyph,
+.rf-review-glyph,
+.rf-decision-info {
+  width: var(--qf-space-6);
+  height: var(--qf-space-6);
+  border: var(--qf-border-width) solid currentColor;
+  border-radius: var(--qf-radius-pill);
+}
+
+.rf-search-glyph::after {
+  content: "";
+  position: absolute;
+  right: calc(var(--qf-space-1) * -1);
+  bottom: calc(var(--qf-space-1) * -1);
+  width: var(--qf-space-3);
+  height: 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+
+.rf-review-glyph::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--qf-space-3);
+  height: var(--qf-space-1);
+  border-left: var(--qf-border-width) solid currentColor;
+  border-bottom: var(--qf-border-width) solid currentColor;
+  transform: rotate(-45deg) translate(0, -1px);
+}
+
+/* Collapsed Rail: labels hide, glyph position holds. */
+.rf-shell[data-rail="collapsed"] .rf-nav-label,
+.rf-shell[data-rail="collapsed"] .rf-rail-workspace,
+.rf-shell[data-rail="collapsed"] .rf-kbd,
+.rf-shell[data-rail="collapsed"] .rf-nav-attention,
+.rf-shell[data-rail="collapsed"] .rf-theme-switch {
+  display: none;
+}
+
+.rf-shell[data-rail="collapsed"] .rf-rail-top,
+.rf-shell[data-rail="collapsed"] .rf-rail-domains,
+.rf-shell[data-rail="collapsed"] .rf-rail-bottom {
+  padding-inline: var(--qf-space-2);
+}
+
+.rf-shell[data-rail="collapsed"] .rf-nav-item,
+.rf-shell[data-rail="collapsed"] .rf-rail-utility {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* ---------------------------------------------------------------- *
+ * Operation Bar
+ * ---------------------------------------------------------------- */
+
+.rf-operation-bar {
+  grid-area: bar;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--qf-space-6);
+  padding-inline: var(--qf-page-gutter);
+  background: var(--qf-color-canvas);
+}
+
+.rf-operation-center { display: flex; justify-content: center; }
+
+.rf-operation-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--qf-space-5);
+}
+
+.rf-search-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  width: 100%;
+  max-width: 480px;
+  min-width: 200px;
+  height: var(--qf-control-default);
+  padding-inline: var(--qf-space-5);
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-md);
+  font: var(--qf-text-compact);
+  color: var(--qf-color-fg-muted);
+  transition: border-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-search-trigger:hover { border-color: var(--qf-color-border-strong); }
+.rf-search-copy { flex: 1; text-align: left; }
+
+.rf-create-group { display: inline-flex; }
+
+.rf-create {
+  border-radius: var(--qf-radius-sm) 0 0 var(--qf-radius-sm);
+  background: var(--qf-color-review);
+  color: var(--qf-color-fg-on-accent);
+}
+
+.rf-create-more {
+  border-radius: 0 var(--qf-radius-sm) var(--qf-radius-sm) 0;
+  padding-inline: var(--qf-space-4);
+  background: var(--qf-color-review);
+  color: var(--qf-color-fg-on-accent);
+  border-left: var(--qf-border-width) solid var(--qf-color-canvas);
+}
+
+.rf-create:hover,
+.rf-create-more:hover { background: var(--qf-color-warning); }
+
+.rf-alerts { gap: var(--qf-space-3); }
+
+.rf-identity-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--qf-control-default);
+  height: var(--qf-control-default);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-border-width) solid var(--qf-color-human);
+  font: var(--qf-text-label);
+  color: var(--qf-color-human);
+}
+
+/* ---------------------------------------------------------------- *
+ * Capacity Band
+ * ---------------------------------------------------------------- */
+
+.rf-band-region {
+  grid-area: band;
+  background: var(--qf-color-canvas);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-capacity {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(144px, 1fr));
+  height: 100%;
+  padding-inline: var(--qf-page-gutter);
+}
+
+.rf-capacity-slot {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  min-width: 0;
+  height: 100%;
+  padding-inline: var(--qf-space-5) var(--qf-space-6);
+  border-right: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  text-align: left;
+  transition: background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-capacity-slot:first-child { padding-left: 0; }
+.rf-capacity-slot:last-child { border-right: 0; }
+.rf-capacity-slot:hover:not(:disabled) { background: var(--qf-color-selected); }
+
+/* Uppercase section label: section 9.2 allows 12-13px for this role only. */
+.rf-capacity-label {
+  flex: none;
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-capacity-label--short { display: none; }
+
+@media (max-width: 1599px) {
+  .rf-capacity-label--full { display: none; }
+  .rf-capacity-label--short { display: inline; }
+}
+
+.rf-capacity-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-default);
+}
+
+/* Tone is a 6px dot plus text — the band is status, not a KPI strip. */
+.rf-capacity-slot::before {
+  content: "";
+  flex: none;
+  width: var(--qf-space-3);
+  height: var(--qf-space-3);
+  border-radius: var(--qf-radius-pill);
+  background: var(--qf-color-border-strong);
+}
+
+.rf-capacity-slot[data-tone="review"]::before { background: var(--qf-color-review); }
+.rf-capacity-slot[data-tone="agent"]::before { background: var(--qf-color-agent); }
+.rf-capacity-slot[data-tone="danger"]::before { background: var(--qf-color-danger); }
+.rf-capacity-slot[data-tone="success"]::before { background: var(--qf-color-success); }
+.rf-capacity-slot[data-tone="warning"]::before { background: var(--qf-color-warning); }
+
+.rf-capacity-slot[data-expanded="true"] .rf-capacity-value { color: var(--qf-color-warning); }
+
+/* ---------------------------------------------------------------- *
+ * Region shells
+ * ---------------------------------------------------------------- */
+
+.rf-shelf-region {
+  grid-area: shelf;
+  min-width: 0;
+  padding: var(--qf-page-gutter) var(--qf-page-gutter) 0;
+  background: var(--qf-color-field);
+}
+
+.rf-workfield {
+  grid-area: field;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--qf-space-5) var(--qf-page-gutter) 0;
+  background: var(--qf-color-field);
+  overflow: hidden;
+}
+
+.rf-panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: var(--qf-pane-gap);
+  /* Section 3.1: Loom ~26%, Selected Quest ~74%. */
+  grid-template-columns: minmax(280px, 26%) minmax(0, 1fr);
+}
+
+.rf-shell[data-loom="collapsed"] .rf-panes {
+  grid-template-columns: var(--qf-space-11) minmax(0, 1fr);
+}
+
+.rf-chronicle-region {
+  grid-area: chron;
+  min-width: 0;
+  padding: var(--qf-space-5) var(--qf-page-gutter) var(--qf-space-5);
+  background: var(--qf-color-field);
+}
+
+.rf-lens-region {
+  grid-area: lens;
+  min-width: 0;
+  min-height: 0;
+  background: var(--qf-color-surface);
+  border-left: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  overflow: hidden;
+}
+
+.rf-shell[data-lens="closed"] .rf-lens-region { border-left: 0; }
+
+.rf-lens-scrim { display: none; }
+
+.rf-lens {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  animation: rf-lens-enter var(--qf-motion-panel) var(--qf-ease-enter);
+}
+
+@keyframes rf-lens-enter {
+  from { opacity: 0; transform: translateX(var(--qf-space-5)); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-lens { animation: none; }
+}
+
+/* ---------------------------------------------------------------- *
+ * Responsive — section 12
+ * ---------------------------------------------------------------- */
+
+/* Below 1600 the in-flow Lens cannot coexist with the 900px Selected Quest
+ * floor from section 3.1, so section 12.1's own escape applies: the Lens moves
+ * to overlay first and the centre is protected. The Loom drops to its 320px
+ * floor rather than keeping the 26% share.
+ *
+ *   1440 - 184 rail = 1256; - 40 gutter = 1216; - 12 gap - 300 Loom = 904. */
+@media (max-width: 1599px) {
+  /* The Loom sits at its 320px section 3.1 ceiling only while that still leaves
+   * the centre above 900px; at 1440 it drops to the 300px floor to do so.
+   *   1440 - 184 rail - 40 gutter - 12 gap - 300 Loom = 904. */
+  .rf-panes { grid-template-columns: minmax(300px, 300px) minmax(0, 1fr); }
+
+  .rf-shell[data-lens="open"] .rf-lens-scrim,
+  .rf-shell[data-lens="pinned"] .rf-lens-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--qf-z-lens) - 1);
+    background: var(--qf-color-scrim);
+  }
+
+  .rf-lens-region {
+    position: fixed;
+    top: calc(var(--qf-operation-bar-height) + var(--qf-capacity-band-height));
+    right: 0;
+    bottom: 0;
+    width: var(--qf-lens-width);
+    z-index: var(--qf-z-lens);
+    box-shadow: var(--qf-shadow-overlay);
+    border-left: var(--qf-border-width) solid var(--qf-color-border-default);
+  }
+
+  .rf-shell,
+  .rf-shell[data-lens="closed"],
+  .rf-shell[data-rail="collapsed"] {
+    grid-template-columns: var(--qf-rail-width) minmax(0, 1fr);
+    grid-template-areas:
+      "rail bar"
+      "rail band"
+      "rail shelf"
+      "rail field"
+      "rail chron";
+  }
+
+  .rf-shell[data-rail="collapsed"] {
+    grid-template-columns: var(--qf-rail-collapsed) minmax(0, 1fr);
+  }
+
+  .rf-shell[data-lens="closed"] .rf-lens-region { display: none; }
+}
+
+/* 1200-1439: the Rail collapses as well (section 12.2). */
+@media (max-width: 1439px) {
+  .rf-shell,
+  .rf-shell[data-lens="closed"],
+  .rf-shell[data-rail="collapsed"] {
+    grid-template-columns: var(--qf-rail-collapsed) minmax(0, 1fr);
+  }
+
+  /* Section 12.2 floor: the Loom never drops below 280px. */
+  .rf-panes { grid-template-columns: minmax(280px, 300px) minmax(0, 1fr); }
+
+  .rf-rail .rf-nav-label,
+  .rf-rail .rf-rail-workspace,
+  .rf-rail .rf-kbd,
+  .rf-rail .rf-nav-attention,
+  .rf-rail .rf-theme-switch {
+    display: none;
+  }
+
+  .rf-rail-top,
+  .rf-rail-domains,
+  .rf-rail-bottom { padding-inline: var(--qf-space-2); }
+
+  .rf-nav-item,
+  .rf-rail-utility { justify-content: center; padding-inline: 0; }
+
+}
+
+/* 901-1199: Shelf scrolls horizontally, Loom drops below the Selected Quest. */
+@media (max-width: 1199px) {
+  /* Section 12.3: the regions stack, and the Selected Quest stays first so the
+   * star of the screen is never pushed below the Loom. */
+  .rf-panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    flex: none;
+    min-height: auto;
+    row-gap: var(--qf-space-8);
+  }
+
+  .rf-selected { order: 1; }
+  .rf-spine { order: 2; }
+  .rf-workfield { overflow-y: auto; }
+
+  .rf-shelf-track { overflow-x: auto; scroll-snap-type: x mandatory; }
+  .rf-shelf-card { scroll-snap-align: start; min-width: 280px; }
+}
+
+/* <=900: page scroll, bottom navigation, Lens as a bottom sheet. */
+@media (max-width: 900px) {
+  body { overflow: auto; }
+
+  .rf-shell,
+  .rf-shell[data-lens="closed"],
+  .rf-shell[data-rail="collapsed"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--qf-operation-bar-height) auto auto auto auto auto;
+    grid-template-areas:
+      "bar"
+      "band"
+      "shelf"
+      "field"
+      "chron"
+      "rail";
+    min-height: 100%;
+  }
+
+  .rf-operation-bar {
+    position: sticky;
+    top: 0;
+    z-index: var(--qf-z-sticky);
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .rf-operation-center { display: none; }
+  .rf-page-title { font: var(--qf-text-section); }
+  .rf-alerts { display: none; }
+
+  .rf-rail {
+    position: sticky;
+    bottom: 0;
+    z-index: var(--qf-z-sticky);
+    flex-direction: row;
+    align-items: stretch;
+    border-right: 0;
+    border-top: var(--qf-border-width) solid var(--qf-color-border-subtle);
+    padding-block: 0;
+  }
+
+  .rf-rail-top,
+  .rf-rail-bottom { display: none; }
+
+  .rf-rail-domains { flex-direction: row; width: 100%; gap: 0; padding-inline: 0; }
+  .rf-rail-domains > li { flex: 1; min-width: 0; }
+
+  .rf-nav-item {
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--qf-space-1);
+    /* 44px effective target at <=900px. */
+    height: calc(var(--qf-control-comfortable) + var(--qf-space-6));
+    padding-inline: var(--qf-space-1);
+    border-left: 0;
+    border-radius: 0;
+    border-top: var(--qf-selection-width) solid transparent;
+    font: var(--qf-text-micro);
+    /* Section 9.2 floor applies to navigation labels too; long ones truncate. */
+    font-size: 13px;
+  }
+
+  .rf-nav-item[data-selected="true"] { border-top-color: var(--qf-color-human); }
+  .rf-nav-label { display: block; }
+
+  .rf-capacity { grid-template-columns: repeat(2, minmax(0, 1fr)); height: auto; }
+
+  /* Two-row summary: the label sits above the value so operational values are
+   * never truncated at 390px (section 6.3). */
+  .rf-capacity-slot {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+    height: calc(var(--qf-control-comfortable) + var(--qf-space-4));
+    padding-inline: var(--qf-space-5) var(--qf-space-4);
+  }
+
+  .rf-capacity-slot::before {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .rf-capacity-slot:nth-child(-n + 2) {
+    border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  }
+
+  .rf-capacity-slot:nth-child(2n) { border-right: 0; }
+
+  .rf-workfield { overflow: visible; }
+
+  /* Section 12.4 order: Shelf → Selected Quest → Loom → Chronicle. */
+  .rf-panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    flex: none;
+    min-height: auto;
+    row-gap: var(--qf-space-8);
+  }
+
+  .rf-spine { order: 2; }
+  .rf-selected { order: 1; }
+  .rf-pane, .rf-spine, .rf-selected { min-height: auto; }
+
+  .rf-lens-region {
+    position: fixed;
+    inset: auto 0 0 0;
+    top: auto;
+    width: 100%;
+    height: min(78vh, 640px);
+    border-left: 0;
+    border-top: var(--qf-border-width) solid var(--qf-color-border-default);
+    border-radius: var(--qf-radius-lg) var(--qf-radius-lg) 0 0;
+    box-shadow: var(--qf-shadow-overlay);
+  }
+
+  .rf-chronicle-region { padding-bottom: var(--qf-space-9); }
+}
+
+/* ---------------------------------------------------------------- *
+ * Non-Command destinations
+ *
+ * Command keeps its five-region grid untouched. Every other destination gets
+ * the rail, the Operation Bar and one workfield it owns entirely, so no screen
+ * inherits Command's Loom / Selected / Lens tracks by accident.
+ * ---------------------------------------------------------------- */
+
+.rf-screen-host { display: none; min-width: 0; min-height: 0; }
+.rf-screen-sticky { display: none; }
+
+.rf-shell[data-domain]:not([data-domain="command"]) {
+  grid-template-columns: var(--qf-rail-width) minmax(0, 1fr);
+  grid-template-rows: var(--qf-operation-bar-height) minmax(0, 1fr);
+  grid-template-areas:
+    "rail bar"
+    "rail screen";
+}
+
+.rf-shell[data-domain]:not([data-domain="command"])[data-rail="collapsed"] {
+  grid-template-columns: var(--qf-rail-collapsed) minmax(0, 1fr);
+}
+
+.rf-shell[data-domain]:not([data-domain="command"]) > .rf-screen-host {
+  display: block;
+  grid-area: screen;
+  overflow: hidden;
+}
+
+/* The Command regions are emptied by the shell, but they are also removed from
+ * layout so an empty element cannot claim a grid track. */
+.rf-shell[data-domain]:not([data-domain="command"]) > .rf-band-region,
+.rf-shell[data-domain]:not([data-domain="command"]) > .rf-shelf-region,
+.rf-shell[data-domain]:not([data-domain="command"]) > .rf-workfield,
+.rf-shell[data-domain]:not([data-domain="command"]) > .rf-chronicle-region,
+.rf-shell[data-domain]:not([data-domain="command"]) > .rf-lens-region,
+.rf-shell[data-domain]:not([data-domain="command"]) > .rf-lens-scrim { display: none; }
+
+/* The screen title is focus target after a cross-screen navigation, so focus
+ * lands on the destination rather than back at the rail. */
+.rf-screen-title:focus-visible {
+  outline: var(--qf-focus-width) solid var(--qf-color-focus);
+  outline-offset: var(--qf-focus-offset);
+}

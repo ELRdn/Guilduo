@@ -1,6 +1,8 @@
-# QuestForge Interaction Lab
+# Guilduo Interaction Lab
 
-Forge Opsの操作設計をPCとスマホで試すためのInteraction Labです。見た目だけのモックではなく、ローカル保存とQuestForge REST Gatewayへの任意接続を同じUIで検証できます。
+Relay Forgeの操作設計をPCとスマホで試すためのInteraction Labです。見た目だけのモックではなく、ローカル保存とGuilduo REST Gatewayへの任意接続を同じUIで検証できます。
+
+設計の差分・状態遷移・レスポンシブ境界・現行版への昇格条件は[`DESIGN.md`](DESIGN.md)を正本とします。開発ルートは`/interaction-lab/`、Firebase Hosting上の公開βルートは`/next/`です。共通の視覚ルールはプロジェクトルートの[`DESIGN.md`](../DESIGN.md)、部品と画面Blueprintは[`design/COMPONENTS.md`](../design/COMPONENTS.md)と[`design/SCREENS.md`](../design/SCREENS.md)、Quest・MCP・認証・安全性の技術ルールは[`PROJECT_SPEC.md`](../PROJECT_SPEC.md)を参照してください。
 
 - 初期状態はローカルモードです。追加、完了、レビュー、親子展開、バトル、設定は`localStorage`へ保存され、再読み込み後も維持されます。
 - 設定画面でGoogleログインし、Gateway URLを確認して「本体データを読み込む」と、Quest一覧・キャラクター・バトル・連携状態を認証付きRESTから読み込みます。
@@ -14,7 +16,7 @@ Forge Opsの操作設計をPCとスマホで試すためのInteraction Labです
 ## 本体データへ接続する
 
 1. 設定を開き、Gateway URLを確認します。通常は公開WorkerのURLが初期入力されます。
-2. 「Googleでログイン」を押し、QuestForgeに使っているアカウントで認証します。
+2. 「Googleでログイン」を押し、Guilduoに使っているアカウントで認証します。
 3. 「本体データを読み込む」を押します。失敗してもローカルデータは置き換えません。
 4. 連携画面のプレビューを確認してから同期します。
 

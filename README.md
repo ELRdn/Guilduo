@@ -1,42 +1,133 @@
-# QuestForge
+# Guilduo
 
-QuestForge is an open task RPG where completing real work earns MP, then the player chooses when and how to use that MP in a deterministic command battle. It combines a browser/PWA task manager, REST API, remote MCP server, social profiles and parties, and opt-in external integrations.
+> **AIを仲間に、最強のパーティーを。**
 
-Version: `0.4.0-beta.1` / Web release: `2026.08.13-agent-registry-beta`
+**人間だけが、依頼主じゃない。**
 
-> QuestForge is an independent project. It is not affiliated with, endorsed by, or a substitute for Habitica. Product names and trademarks belong to their respective owners.
+Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事を依頼し、担当し、受け渡し、レビューするための **Human × AI Work Platform** です。現実の作業をQuestとして扱い、Relay、Evidence、Decisionを共有しながら仕事を前へ進めます。
 
-## Current Features
+ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 
-- Habits, daily promises, one-time quests, and rewards
-- Dates, deadlines, repeating schedules, sorting, editing, completion archive, and JSON backup
-- Task assignees: self, friend/party member, or AI agent metadata
-- MP command battle with six roles, five commands, dry-run previews, and idempotent turns
-- Public profile with exact `@handle` search, friend requests, and one four-person party per user
-- Firebase Google login, PC/mobile state sync, and installable PWA
-- Cloudflare Worker REST API and Streamable HTTP MCP with OAuth scopes
-- Google Calendar, Google Tasks, Notion, and Toggl Focus integrations
-- Japanese, English, Spanish, Brazilian Portuguese, French, German, Korean, Simplified Chinese, and Russian display modes
-- Three visual themes with light, dark, and system appearance modes
-- Sandboxed plugin slots and signed webhook foundations
+GuilduoはHabiticaとは独立したプロジェクトです。提携・承認・代替サービスではありません。各製品名と商標はそれぞれの権利者に帰属します。
 
-The Unity Battle Lab is intentionally pending and excluded from this web release.
+## 公開βの範囲
 
-## Architecture
-
-| Layer | Responsibility |
+| 項目 | 状態 |
 |---|---|
-| Firebase Hosting | PWA frontend |
-| Firebase Auth / Realtime Database | Sign-in and private per-user quest/character state |
-| Cloudflare Worker | REST, OAuth, MCP, webhooks, integration orchestration |
-| Cloudflare D1 | Public profiles, friends, parties, integration accounts and sync records |
-| Cloudflare KV | OAuth state, MCP clients, and short-lived credentials |
+| Web / PWA | 公開βの中心機能 |
+| Firebase Googleログイン・端末ゲスト保存 | 利用可能 |
+| Quest CRUD、保管、Quest Tree、MPバトル | 利用可能 |
+| Agent Registry、MCPクライアント紐付け、Handoff | 利用可能 |
+| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| `/next/` Interaction Lab | 新UIの公開β・検証レーン |
+| 9言語 | ルートUIで利用可能。βUIも主要ナビを対応 |
+| Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
+| Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
 
-Private tasks and character state are not stored in the public social graph. A public profile contains only display name, `@handle`, bio, avatar role/variant, and level.
+アプリ版は `0.5.0-beta.1`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。FirebaseログインとMCP OAuthは利用できます。
 
-## Local Setup
+## 設計原則
 
-Requirements: Node.js 22+, Firebase CLI, and Wrangler.
+1. **人間が目的と最終判断を持つ**：AIの提案は確認可能にし、勝手に完了・公開しない。
+2. **作業と報酬を分離する**：QuestでMPを得て、戦うタイミングとコマンドは自分で選ぶ。
+3. **読む、プレビューする、実行する**：書き込み・一括更新・Handoffはdry-runを標準にする。
+4. **削除より保管**：履歴・報酬・外部リンクを残し、不要Questは保管する。
+5. **人間とAIを同じパーティーに置く**：Astraは相棒キャラクター、Agentは担当役割、ユーザーはアカウントとして分離する。
+6. **データを閉じ込めない**：REST、MCP、CLI、Web UIが同じWorkerとドメイン処理を使う。
+
+## 画面とデータ
+
+- `/`：現行UI。ログイン前は端末保存、ログイン後はFirebaseへ同期します。
+- `/lp/`・`/lp/en/`：Guilduo公式Landing Pageの日本語版・英語版です。CTA URLはRuntime Configから供給し、未設定時は安全に無効化します。
+- `/interaction-lab/`：ローカル開発・キャプチャ用のNextソースルートです。
+- `/next/`：Firebase Hosting上の公開βルートです。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
+- 視覚設計の正本は[`DESIGN.md`](DESIGN.md)、技術仕様の正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)、Next版の差分設計は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)です。数値トークンは[`design/TOKENS.json`](design/TOKENS.json)、部品は[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面構成は[`design/SCREENS.md`](design/SCREENS.md)を参照します。
+- 更新時はFirebase Auth状態を復元し、前回同期データがあれば読み取り専用で残します。再接続中はQuest一覧を消さず、スケルトン・再接続ボタン・書き込みロックを表示します。
+- Questの完了状態とAgent Handoff状態は別管理です。単発To Doは完了時に保管、日課・習慣・繰り返しTo Doは次回へ復帰します。
+- 公開プロフィールは表示名、`@handle`、紹介文、アバター、レベルだけです。Quest本文、メモ、UID、OAuth情報は公開しません。
+
+## Firebase / Worker構成
+
+| 層 | 役割 |
+|---|---|
+| Firebase Hosting | Web/PWA配信 |
+| Firebase Auth / Realtime Database | Googleログイン、ユーザー単位のQuest・キャラクター状態 |
+| Cloudflare Worker | REST、OAuth、MCP、Webhook、拡張機能境界 |
+| Cloudflare D1 | Agent Registry、MCP接続、プロフィール、連携メタデータ |
+| Cloudflare KV | OAuth state、短期状態、MCPクライアント |
+
+トークン、APIキー、秘密情報はFirebaseやブラウザのLocal Storageに保存しません。Agent RegistryにもモデルAPIキー、パスワード、実行URLは保存しません。
+
+## MCP
+
+安定接続先は次です。
+
+```text
+https://<your-worker>/mcp
+```
+
+MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、プロフィール、パーティー、バトル、Toggl Focus契約を含む51 toolsを公開します。`/mcp-next`は新SDK向けの検証レーンで、ResourcesとWorkflow Promptsを追加します。既存クライアントの互換性のため、通常利用は `/mcp` を維持します。
+
+### AIクライアント
+
+- ChatGPT / Codex：リモートMCP Appまたは開発者モードへ `/mcp` を登録
+- Claude：Settings > ConnectorsからOAuth Remote MCPを追加
+- Gemini CLI：`gemini mcp add --transport http questforge https://<your-worker>/mcp`
+- GitHub Copilot CLI：`copilot mcp add --transport http questforge https://<your-worker>/mcp`
+- OpenClaw / Hermes：後続の接続レシピで同じRemote HTTP MCPを使用
+
+登録後はGuilduo設定の **AI Agent Registry** でAgentを作成し、認可済みMCPクライアントをAgentへ紐付けます。Agentから権限を増やすことはできません。
+
+## CLI
+
+CLIはMCPとは役割を分けています。MCPはAIのツール発見・承認用、CLIは人間とCIのREST/JSON操作用です。
+
+```bash
+npm run cli -- doctor --json
+npm run cli -- quests list --view today --json
+npm run cli -- quests add --title "公開前チェック" --due 2026-08-20 --json
+npm run cli -- quests add --title "公開前チェック" --execute --json
+npm run cli -- quests complete quest-id --execute --json
+npm run cli -- agents list --json
+npm run cli -- handoff quest-id review_required --expected-state working --execute --json
+npm run cli -- mcp-config --json
+```
+
+書き込みは `--execute` がない限りdry-runまたは実行計画だけを返します。認証は `QUESTFORGE_TOKEN` または `--token-stdin` を使用し、トークンをログへ出しません。本番の一般ユーザーは固定APIキーではなくOAuthを使います。
+
+## Skill / OpenAI Plugin・MCP App
+
+- 正規Skill：[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- OpenAI Plugin準備パッケージ：[`plugins/questforge/`](plugins/questforge/)
+- MCP App登録用雛形：[`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
+- 提出チェックリスト：[`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)
+
+Skillは、読み取り、dry-run、確認、実行、レビュー返却の順序をAIへ教えます。OpenAI公式レビューは自動完了しません。公開βで実アカウント受入とプライバシー・アカウント削除導線を確認した後、運用者がDashboardから申請します。
+
+## 9言語
+
+日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語に対応します。言語設定は端末単位で保存し、Firebase同期には含めません。日付・数値・比較順はIntl APIを使います。
+
+## 外部サービスのロードマップ
+
+現在は契約と安全な表示を先に実装し、Provider OAuthはEarly Accessとして保留しています。
+
+1. Google Calendar：読み取り専用予定枠
+2. Google Tasks：削除なし双方向同期
+3. Toggl Track：時間記録と見積・MP変換
+4. Notion：日次ログ出力
+5. Todoist、Discord / Slack：同期・通知
+6. OpenClaw、Hermes Agent：接続レシピとSkill再利用
+
+初回同期はプレビュー必須、外部削除はGuilduoから自動削除しません。Provider SecretはWorker Secretだけに置きます。
+
+## パフォーマンスと計測
+
+Pixel 9相当を基準に、LCP 2.5秒以下、INP 200ms以下、CLS 0.1以下、初期圧縮JavaScript 250KB以下を目標にします。匿名計測は明示同意したユーザーだけが対象で、Quest本文、メモ、メール、UID、トークン、外部本文は送信しません。実装済みの許可イベントはWeb Vitals、JavaScriptエラー、同期結果、初回Quest完了、MCP接続、Agent割り当てで、計測を拒否・撤回した場合は送信しません。公開前に管理者が `TELEMETRY_ENDPOINT` とD1 migration 0006を設定します。
+
+## ローカル開発
+
+要件はNode.js 22+、Firebase CLI、Wranglerです。
 
 ```bash
 npm install
@@ -47,54 +138,40 @@ cp wrangler.example.jsonc wrangler.jsonc
 npm run dev
 ```
 
-On PowerShell, use `Copy-Item` instead of `cp` if needed. Fill the copied files with your own Firebase and Cloudflare project values.
-
-Apply D1 migrations before using profiles, friends, parties, or integrations:
+PowerShellでは `Copy-Item` を使ってください。主要コマンドは次です。
 
 ```bash
-npx wrangler d1 migrations apply questforge-data --local
-npx wrangler d1 migrations apply questforge-data --remote
+npm run check
+npm run typecheck
+npm test
+npm run build
+npm run api:generate
+npm run worker:dev
 ```
 
-Worker secrets and provider OAuth setup are documented in [API_MCP_SETUP.md](API_MCP_SETUP.md).
+TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自動生成します。`npm run typecheck`は型生成、生成結果の整合性確認、明示的な`any`と`@ts-nocheck`の検査、ブラウザ・Worker・Node・バトル原型のstrict型チェックをまとめて実行します。Viteの変換と型チェックは分離し、API/MCPの契約は別テストで維持します。
 
-## Commands
+公開デプロイは `v*` タグ専用GitHub Actionsです。WorkerのD1 migration・deploy・health確認が成功した場合だけFirebaseを更新します。今回の作業終了地点は、**実装・テスト・スクリーンショット検証済みのデプロイ直前**です。
 
-```bash
-npm run dev          # local PWA
-npm test             # all Node tests
-npm run check        # syntax checks
-npm run build        # production frontend
-npm run worker:dev   # local Worker on :8787
-npm run api:generate # regenerate OpenAPI and MCP contracts
-```
+## ドキュメント
 
-## MCP
+- [視覚設計正本](DESIGN.md)
+- [技術仕様正本](PROJECT_SPEC.md)
+- [Design tokens](design/TOKENS.json)
+- [Component specification](design/COMPONENTS.md)
+- [Screen blueprints](design/SCREENS.md)
+- [Asset manifest](design/ASSET_MANIFEST.md)
+- [Golden references](design/reference/README.md)
+- [公開βロードマップ](ROADMAP.md)
+- [API / MCP / OAuth setup](API_MCP_SETUP.md)
+- [Tagged release setup](RELEASE_SETUP.md)
+- [Privacy](PRIVACY.md)
+- [Terms](TERMS.md)
+- [Security](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Assets](ASSETS.md)
+- [License](LICENSE)
 
-The standard remote endpoint is:
+## ライセンス
 
-```text
-https://<your-worker>/mcp
-```
-
-Use OAuth for normal users. Version 2.6 exposes 50 tools, including Quest Trees, daily briefs, reviews, registered Agent context and assignment, handoffs, activity history, Calendar-to-Quest conversion, and safe Toggl Focus workflows. Existing clients reconnect only when they need the new `agents:read` scope or cached an older tool list.
-
-`/mcp-next` is the SDK v2 Streamable HTTP lane. It exposes the same 50 tools plus MCP Resources for registered Agents, current Agent context, Quest Trees, Agent Handoffs, and Toggl Focus, as well as workflow Prompts. Use it to test a client before moving its standard connection to the newer transport behavior.
-
-The local stdio bridge in `mcp-local/` is a development compatibility path. The bundled [QuestForge workflow skill](skills/questforge-workflows/SKILL.md) teaches an AI client to preview batch changes, inspect Quest Trees, use exact handles, archive instead of delete, process Agent Handoffs with stale-state protection, plan reviews, and execute battle turns safely.
-
-## Integration Status
-
-- Google Calendar: read-only schedule slots and explicit quest conversion
-- Google Tasks: deletion-free bidirectional contract and conflict handling
-- Notion: one daily `QuestForge Logs` record
-- Toggl Focus: per-user encrypted personal API key, explicit Quest task creation/update, guarded timer controls, and confirmed time-entry attribution for the last 30 days
-- Toggl Track: data contract only; legacy Track compatibility remains a later phase
-
-Provider OAuth requires operator-owned client IDs and secrets. A user only presses Connect after the operator configures them.
-
-## License
-
-QuestForge software is licensed under [GNU AGPL-3.0-only](LICENSE). If you run a modified version over a network, provide its corresponding source to users as required by the license. See [ASSETS.md](ASSETS.md) for visual asset notes.
-
-Read [PRIVACY.md](PRIVACY.md), [TERMS.md](TERMS.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md) before operating a public instance.
+GuilduoはGNU AGPL-3.0-onlyです。ネットワーク越しに改変版を提供する場合は、同ライセンスのソース提供条件に従ってください。

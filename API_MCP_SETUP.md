@@ -1,166 +1,166 @@
-# QuestForge Gateway setup
+# QuestForge Gateway / MCP setup
 
-Firebase Hosting serves the web app. REST, OAuth, MCP, webhooks, plugins, and external adapters run on Cloudflare Workers.
+QuestForgeは、Firebase HostingのWeb/PWA、Cloudflare WorkerのREST/MCP、Firebase Auth/Realtime Databaseのユーザー状態を分離して運用します。
 
-## 1. Create Cloudflare resources
+## 現在の公開β境界
+
+- Firebase Googleログイン：利用可能
+- Remote MCP `/mcp`：利用可能。OAuthを使用
+- `/mcp-next`：SDK検証用。ResourcesとPromptsを含む
+- CLI：REST/JSON操作。書き込みは`--execute`が必要
+- Google Calendar、Google Tasks、Notion、Toggl：**Provider OAuth準備中**。UIでは接続・自動同期を停止して契約とロードマップだけを表示
+- Unity Battle Lab、外部サービスの本番同期、自動Agent実行：後続工程
+
+Provider連携コードは削除していません。`externalOAuthEnabled`を`true`にする前に、OAuth審査、プライバシー文面、アカウント削除、同期競合テストを完了してください。
+
+## 1. Cloudflareリソース
 
 ```bash
 npx wrangler login
 npx wrangler kv namespace create QUESTFORGE_KV
-npx wrangler d1 create questforge-integrations
+npx wrangler d1 create questforge-data
+npx wrangler d1 migrations apply questforge-data --remote
 ```
 
-Add the returned namespace to `wrangler.jsonc`:
+`wrangler.jsonc`へKV namespaceとD1 database IDを設定します。D1にはAgent Registry、MCPクライアント、公開プロフィール、連携メタデータを保存します。Quest本文とキャラクター本体はFirebase側のユーザー領域です。
 
-```json
-"kv_namespaces": [{ "binding": "QUESTFORGE_KV", "id": "returned-id" }]
-```
+## 2. Firebase Worker認証
 
-The KV binding is required for MCP OAuth clients, short-lived provider OAuth state, webhooks, plugin installs, and retry records. Add the returned D1 database ID as the `QUESTFORGE_DB` binding, then apply migrations:
-
-```bash
-npx wrangler d1 migrations apply questforge-integrations --remote
-```
-
-D1 stores per-user integration accounts, encrypted provider tokens, Calendar schedule blocks, sync cursors, locks, logs, private Agent Registry profiles, and MCP client links.
-
-## 2. Add Firebase service credentials
-
-In Firebase Console, open Project settings > Service accounts and generate a private key. Do not add the downloaded JSON to this project.
+Firebase ConsoleのProject settings > Service accountsから秘密鍵を生成します。JSON全文をリポジトリへ置かず、必要な値だけWorker Secretへ登録します。
 
 ```bash
 npx wrangler secret put FIREBASE_CLIENT_EMAIL
 npx wrangler secret put FIREBASE_PRIVATE_KEY
 ```
 
-Use the `client_email` and `private_key` values from the downloaded JSON.
+Firebase Authentication > Settings > Authorized domainsには、公開WorkerとFirebase Hostingのホスト名を登録します。
 
-In Firebase Console > Authentication > Settings > Authorized domains, add the deployed `workers.dev` hostname. Otherwise the OAuth approval page cannot open Google sign-in.
+## 3. デプロイ前の外部OAuthフラグ
 
-## 3. Configure the integration vault
+公開βでは次を`false`にします。デフォルトも`false`です。
 
-Generate a 32-byte encryption key. Store the base64url output as a Worker Secret and never commit it.
+```js
+globalThis.QuestForgeConfig = {
+  gatewayUrl: "https://your-worker.example.workers.dev",
+  externalOAuthEnabled: false,
+};
+```
+
+この状態でもFirebaseログインとMCP OAuthは動作します。Calendar、Tasks、Notion、Togglの接続ボタンは「公開βで準備中」となり、外部データを書き換えません。
+
+## 4. Remote MCP
+
+安定エンドポイント：
+
+```text
+https://your-worker.example.workers.dev/mcp
+```
+
+検証レーン：
+
+```text
+https://your-worker.example.workers.dev/mcp-next
+```
+
+Workerの`/health`は次を返します。
+
+```json
+{
+  "version": "2.7.0",
+  "schemaVersion": 7,
+  "mcp": { "stable": "/mcp", "preview": "/mcp-next", "tools": 51 },
+  "agentStorage": "d1"
+}
+```
+
+### 接続例
+
+```toml
+[mcp_servers.questforge]
+url = "https://your-worker.example.workers.dev/mcp"
+auth = "oauth"
+default_tools_approval_mode = "writes"
+```
+
+Gemini CLI：
+
+```bash
+gemini mcp add --transport http questforge https://your-worker.example.workers.dev/mcp
+```
+
+GitHub Copilot CLI：
+
+```bash
+copilot mcp add --transport http questforge https://your-worker.example.workers.dev/mcp
+```
+
+Claude、OpenClaw、Hermesは、同じRemote HTTP MCPとOAuth metadataを使います。OpenClaw/Hermes向けの専用レシピは外部サービス公開後のロードマップに残しています。
+
+## 5. Agent RegistryとSkill
+
+1. QuestForgeへFirebase Googleログインする
+2. `/next/` > 設定 > AI Agent Registryを開く
+3. Agent ID、表示名、Provider、役割、作業指示を登録する
+4. ChatGPT、Codex、ClaudeなどをRemote MCPへ接続する
+5. 認可済みMCPクライアントをAgentへ紐付ける
+6. Quest担当へ割り当て、`ready → working → review_required → accepted`を確認する
+
+Agent作成、権限変更、MCPクライアント紐付けはFirebaseログインしたWeb UIだけが行います。MCPクライアントは自分の権限を拡張できません。Skillの正規版は[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)、OpenAI Plugin/MCP App準備パッケージは[`plugins/questforge/`](plugins/questforge/)です。
+
+## 6. CLI
+
+```bash
+npm run cli -- doctor --json
+npm run cli -- quests list --view today --json
+npm run cli -- quests add --title "Quest名" --json
+npm run cli -- quests add --title "Quest名" --execute --json
+npm run cli -- quests complete quest-id --execute --json
+npm run cli -- agents list --json
+npm run cli -- handoff quest-id review_required --expected-state working --execute --json
+npm run cli -- mcp-config --json
+```
+
+認証は`QUESTFORGE_TOKEN`または`--token-stdin`です。固定APIキーをユーザー向けの本番認証として配布しないでください。CLIは人間/CI向けRESTクライアントであり、AIのツール発見・確認はMCPが担当します。
+
+## 7. 外部サービスを再開する条件
+
+以下を満たしてから、運用者が環境変数`EXTERNAL_OAUTH_ENABLED=true`で公開環境を再ビルドします。
+
+- Google Cloud OAuth consent、Authorized domains、必要な審査が完了
+- Notion Public Connectionの審査と親ページ選択を確認
+- Provider SecretをWorker Secretへ登録し、ブラウザやGitHubへ置かない
+- 初回同期がdry-run/プレビューで止まる
+- 外部削除がQuestForgeから自動削除されない
+- 401、429、5xx、競合、接続解除、再接続の実機テストが完了
+- PCとPixel 9でOAuth復帰・同期・失敗表示を確認
+
+将来のProvider対応は次の順です。
+
+1. Google Calendar読み取り専用予定枠
+2. Google Tasks削除なし双方向同期
+3. Toggl Track時間記録とMP/XP変換
+4. Notion日次ログ
+5. Todoist、Discord/Slack通知
+
+## 8. ローカルWorker
 
 ```powershell
-$bytes = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-$key = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
-$key | npx wrangler secret put INTEGRATION_TOKEN_KEY
-```
-
-## 4. Register Google OAuth
-
-In Google Cloud Console, enable Google Calendar API and Google Tasks API. Configure the OAuth consent screen in Testing mode and add the test-user email addresses. Create a Web application OAuth client with this exact redirect URI:
-
-```text
-https://your-questforge-worker.example.workers.dev/oauth/callback/google
-```
-
-Store the generated values:
-
-```bash
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-```
-
-QuestForge requests Calendar event/list read-only scopes and the Google Tasks write scope. Firebase Google login does not grant these API permissions, so users complete this second consent once from the integration screen.
-
-## 5. Register a Notion Public Connection
-
-Create a Public Connection in the Notion developer dashboard and use this redirect URI:
-
-```text
-https://your-questforge-worker.example.workers.dev/oauth/callback/notion
-```
-
-Store its credentials:
-
-```bash
-npx wrangler secret put NOTION_CLIENT_ID
-npx wrangler secret put NOTION_CLIENT_SECRET
-```
-
-After authorization, the user selects a parent page and QuestForge creates a `QuestForge Logs` database with the Notion `2026-03-11` API.
-
-## 6. Deploy
-
-```bash
-npm run worker:deploy
-```
-
-`PUBLIC_BASE_URL` and `WEB_APP_URL` stay as non-secret Wrangler variables. Verify `/health` reports `integrationStorage: d1`, then connect Google and Notion from the app.
-
-## MCP v2.6 connection check
-
-The normal OAuth endpoint is `https://your-questforge-worker.example.workers.dev/mcp`. It provides all 50 QuestForge tools, including Quest Tree, Agent Handoff, Agent Registry reads and assignments, and safe Toggl Focus operations. Existing OAuth clients keep their previous scopes. Reconnect only when Agent features need the new `agents:read` scope or a client has cached an older tool list.
-
-`https://your-questforge-worker.example.workers.dev/mcp-next` is the SDK v2 Streamable HTTP lane. It provides the same tools plus Agent Registry, current Agent context, Quest Tree, Agent Handoff, and Toggl Focus Resources. It also adds the `assign_registered_agent` Prompt alongside the planning and review Prompts. Use `/mcp-next` first for clients that support modern MCP discovery, then keep `/mcp` as the compatibility endpoint.
-
-Agent IDs and instructions are managed from `/next/` > Settings > AI Agent Registry after Firebase Google login. The Registry never stores model API keys, passwords, access tokens, or execution URLs. One OAuth MCP client can belong to one Agent; one Agent can have multiple clients. Disabling, archiving, or unlinking an Agent revokes the related OAuth connection.
-
-Toggl Focus is a user-owned connection. Never add a global Toggl key to Worker Secrets and never ask an MCP client for a key.
-
-## Local development
-
-Copy `worker/.dev.vars.example` to `worker/.dev.vars` and fill local values.
-
-```bash
+Copy-Item worker/.dev.vars.example worker/.dev.vars
 npm run worker:dev
 ```
 
-Use a Firebase ID token as a bearer token, or set `DEV_BEARER_TOKEN` and `DEV_USER_ID` for local testing.
+ローカル検証では`DEV_BEARER_TOKEN`と`DEV_USER_ID`を使えます。Provider OAuth Secretや実ユーザーのトークンを`.dev.vars`へ入れたまま共有しないでください。
 
-## Integration release status
+## 9. タグ付きリリース
 
-### Phase 1: implemented
+GitHub Actionsは`v*`タグだけで公開処理を開始します。
 
-- Google Calendar: per-user OAuth, multi-calendar selection, read-only schedule cache, explicit event-to-Quest conversion.
-- Google Tasks: per-user OAuth, one selected list, no-delete bidirectional sync, manual local export, conflict choice, and remote-missing recovery.
-- Notion: per-user OAuth, parent-page selection, dedicated `QuestForge Logs` database, and one upserted daily row.
-- Shared runtime: D1 encrypted token storage, 15-minute Cron, per-user locks, retry logs, dry-run preview, REST, and Remote MCP.
+1. `npm run api:generate`、`npm run check`、`npm test`、`npm run build`
+2. D1の追加migration
+3. Worker deploy
+4. `/health`でWorker版数、Schema、D1を確認
+5. 成功時だけFirebase Rules/Hosting
+6. `/`、`/next/`、MCP metadata、未認証401をSmoke test
+7. GitHub Release作成
 
-Provider connections stay disabled until the Google and Notion client credentials in sections 4 and 5 are stored as Worker Secrets. Scheduled Firebase writes also require the two service credentials in section 2.
-
-### Toggl Focus: implemented
-
-Toggl Focus uses one Personal API key per QuestForge user. It is encrypted with `INTEGRATION_TOKEN_KEY` in D1 and never returned by REST or MCP.
-
-1. In QuestForge, open `AI・サービス連携` and select `Toggl Focus`.
-2. Press `接続する`, then paste a key beginning with `toggl_sk_` into the web-only dialog.
-3. Save the numeric organization ID and Workspace ID. Project ID is optional.
-4. From a To Do or Daily, use `Focusタスクを作成` or enable automatic creation for new items.
-5. Start or stop a timer only after the confirmation dialog shows the current Focus entry.
-6. In the Focus integration panel, inspect up to 30 days of time entries and confirm direct or manually selected Quest attribution.
-
-The connection only transfers confirmed time-entry duration, task metadata, and IDs. QuestForge does not collect desktop app names, window titles, Activity Timeline rules, or raw activity data. Archiving or completing a Quest never deletes or completes the Focus task.
-
-Disconnecting removes the encrypted key from QuestForge. It does not change anything in Toggl Focus; revoke or rotate the key from Toggl Focus if you no longer want that key to be usable there.
-
-Toggl Track remains a later compatibility phase. Do not reuse a Track token for Toggl Focus.
-
-### Phase 3: Agent recipes
-
-- Publish an OpenClaw setup recipe using the existing OAuth Remote HTTP MCP endpoint.
-- Publish a Hermes Agent setup recipe with recommended read, write, and batch tool filters.
-- Reuse the QuestForge skill and the same permission scopes for both Agents.
-- Keep batch writes dry-run by default and continue to avoid destructive Quest deletion.
-
-## 7. Web UI connection flow
-
-Open the QuestForge `AI・サービス連携` screen. The setup panel guides the user through the same four steps for Google Calendar, Google Tasks, and Notion:
-
-1. Sign in to QuestForge with the `Googleでログイン` button.
-2. Select a service and press `接続する` to complete the provider OAuth consent.
-3. Select calendars, one Google Tasks list, or the Notion parent page, then press `設定を保存`.
-4. Press `実データ確認`, review the preview, and only then press `確認して同期`.
-
-Google Calendar and Google Tasks share one Google provider consent. Calendar is read-only schedule display, Google Tasks is bidirectional without deletion, and Notion writes one daily `QuestForge Logs` row. A `管理者設定待ち` status means the Worker Secrets in sections 2, 4, and 5 are not registered yet; it is not a user OAuth failure.
-
-The current app keeps unauthenticated data on the current device. The first To Do is added from the empty state, while the sample habits, dailies, and rewards remain available. Existing saved data is never deleted by the guest onboarding change.
-
-## 8. Battle prototype boundary
-
-The Unity experiment lives in `unity-battle-prototype/` and loads an offline JSON fixture. The versioned data contract is `api/battle-contract.v1.json`. Unity does not connect to Firebase directly. Production battle endpoints remain a later phase:
-
-- `GET /v1/battle/session`
-- `POST /v1/battle/commands`
+Worker確認に失敗した場合はFirebaseを更新しません。公開βのタグ候補は`v0.5.0-beta.1`です。

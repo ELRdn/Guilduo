@@ -1,0 +1,24 @@
+{
+  "name": "questforge",
+  "version": "0.5.0",
+  "description": "Connect QuestForge's quests, Agent handoffs, reviews, and command battles to an AI client.",
+  "author": {
+    "name": "QuestForge contributors"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "QuestForge",
+    "shortDescription": "AIを仲間に、最強のパーティーを。",
+    "longDescription": "人間が目的と最終判断を持ち、AIがQuestの整理・作業・レビューを支援します。すべての書き込みはdry-runと確認を優先します。",
+    "developerName": "QuestForge contributors",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "defaultPrompt": [
+      "今日のQuestを整理して、実行順を提案して",
+      "完了したQuestを週次レビューして",
+      "Agentに渡すQuestを安全に準備して"
+    ]
+  },
+  "mcpServers": "./.mcp.json",
+  "apps": "./.app.json"
+}

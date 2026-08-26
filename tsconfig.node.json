@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "cli/**/*.ts",
+    "mcp-local/**/*.ts",
+    "tools/**/*.ts",
+    "tools/**/*.mts",
+    "interaction-lab/**/*.mts",
+    "tests/**/*.ts",
+    "vite.config.ts"
+  ],
+  "exclude": ["dist", "node_modules", "unity-battle-prototype"]
+}

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["./worker-configuration.d.ts", "node"]
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "worker-configuration.d.ts",
+    "server/**/*.ts",
+    "shared/**/*.ts",
+    "worker/src/**/*.ts"
+  ],
+  "exclude": ["dist", "node_modules", "unity-battle-prototype"]
+}

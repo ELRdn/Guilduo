@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "app.ts",
+    "main.ts",
+    "firebase-client.ts",
+    "questforge-core.ts",
+    "i18n.ts",
+    "i18n-browser.ts",
+    "telemetry.ts",
+    "shared/**/*.ts",
+    "interaction-lab/**/*.ts",
+    "ui/**/*.ts",
+    "ui/**/*.tsx"
+  ],
+  "exclude": ["dist", "node_modules", "unity-battle-prototype"]
+}

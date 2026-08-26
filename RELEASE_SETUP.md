@@ -1,6 +1,6 @@
 # QuestForge tagged release setup
 
-`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。
+`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。公開βの候補は`v0.5.0-beta.1`です。
 
 ## GitHub Environment
 
@@ -19,6 +19,7 @@ Repository Settingsで`production` Environmentを作成し、必要ならRequire
 - `FIREBASE_PROJECT_ID`、`FIREBASE_DATABASE_URL`、`FIREBASE_API_KEY`、`FIREBASE_AUTH_DOMAIN`
 - `FIREBASE_STORAGE_BUCKET`、`FIREBASE_MESSAGING_SENDER_ID`、`FIREBASE_APP_ID`
 - `D1_DATABASE_NAME`、`D1_DATABASE_ID`、`KV_NAMESPACE_ID`
+- `EXTERNAL_OAUTH_ENABLED`: 公開βでは`false`。Provider OAuthの受入完了後だけ`true`
 - `SOURCE_URL`: privateリポジトリのURL。空でも可
 
 Firebase Web設定、Worker URL、D1/KV IDは公開識別子なのでVariablesへ置きます。サービスアカウントJSONとCloudflare API TokenだけをSecretsへ保存します。Workflowはこれらからgitignore対象の設定ファイルを一時生成します。
@@ -28,7 +29,7 @@ Firebase Web設定、Worker URL、D1/KV IDは公開識別子なのでVariables�
 1. API契約差分、構文、テスト、ビルドを検証
 2. D1の追加migrationを適用
 3. Workerを公開
-4. `/health`が`2.6.0`、Schema 6、D1 Agent Storageを返すことを確認
+4. `/health`が`2.7.0`、Schema 7、51 tools、D1 Agent Storageを返すことを確認
 5. 成功した場合だけFirebase Database RulesとHostingを公開
 6. `/`、`/next/`、OAuth metadata、MCP認証拒否を確認
 7. GitHub Releaseを作成

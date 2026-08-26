@@ -1,0 +1,242 @@
+/* Relay Forge design tokens.
+ *
+ * Source of truth: NEWDESIGN.md section 27 "Implementation Tokens".
+ * Values here are transcribed from that section and must not be edited without
+ * following the section 25.3 token governance process.
+ *
+ * This sheet is intentionally NOT loaded by the legacy `/` or `/next/` surfaces:
+ * design/tokens.generated.css already binds --qf-radius-md and --qf-motion-panel
+ * to different legacy values, so the two token systems stay in separate documents
+ * until the section 29 Phase 5 promotion.
+ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --qf-color-canvas: #e9ece8;
+  --qf-color-field: #f1f3ef;
+  --qf-color-surface: #fafbf8;
+  --qf-color-raised: #ffffff;
+  --qf-color-inset: #e4e8e3;
+  --qf-color-selected: #dce9e1;
+  --qf-color-fg-strong: #17201e;
+  --qf-color-fg-default: #40504b;
+  --qf-color-fg-muted: #66756f;
+  --qf-color-fg-disabled: #919b96;
+  --qf-color-border-subtle: #d3d9d4;
+  --qf-color-border-default: #b9c2bc;
+  --qf-color-border-strong: #7c8b84;
+  --qf-color-accent: #23312d;
+  --qf-color-accent-hover: #17221f;
+  --qf-color-fg-on-accent: #f7faf8;
+  --qf-color-human: #1d6d4d;
+  --qf-color-agent: #2d65a7;
+  --qf-color-system: #596863;
+  --qf-color-review: #76531b;
+  --qf-color-waiting: #825b18;
+  --qf-color-success: #236b43;
+  --qf-color-warning: #8b5b13;
+  --qf-color-danger: #a33f3a;
+  --qf-color-mp: #684aa3;
+  --qf-color-battle: #8b482d;
+  --qf-color-focus: #145fa8;
+  --qf-color-scrim: rgba(20, 28, 25, 0.36);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --qf-color-canvas: #0b0f10;
+  --qf-color-field: #101617;
+  --qf-color-surface: #151d1f;
+  --qf-color-raised: #1c2729;
+  --qf-color-inset: #0d1213;
+  --qf-color-selected: #20302c;
+  --qf-color-fg-strong: #edf2ef;
+  --qf-color-fg-default: #c4ceca;
+  --qf-color-fg-muted: #8e9b97;
+  --qf-color-fg-disabled: #5e6966;
+  --qf-color-border-subtle: #253032;
+  --qf-color-border-default: #344244;
+  --qf-color-border-strong: #536365;
+  --qf-color-accent: #d7e2de;
+  --qf-color-accent-hover: #ebf2ef;
+  --qf-color-fg-on-accent: #111816;
+  --qf-color-human: #67c194;
+  --qf-color-agent: #75a7e8;
+  --qf-color-system: #9aa7a3;
+  --qf-color-review: #d9b36a;
+  --qf-color-waiting: #d2a65a;
+  --qf-color-success: #64ba86;
+  --qf-color-warning: #e1a85a;
+  --qf-color-danger: #e77068;
+  --qf-color-mp: #b59ae8;
+  --qf-color-battle: #d8875f;
+  --qf-color-focus: #9bc8ff;
+  --qf-color-scrim: rgba(0, 0, 0, 0.62);
+}
+
+/* Section 27 defines light on :root and dark on [data-theme="dark"]. The OS-preference
+ * default required by the same section is expressed by re-applying the dark block when
+ * the user has not explicitly chosen light, so an explicit choice still wins. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --qf-color-canvas: #0b0f10;
+    --qf-color-field: #101617;
+    --qf-color-surface: #151d1f;
+    --qf-color-raised: #1c2729;
+    --qf-color-inset: #0d1213;
+    --qf-color-selected: #20302c;
+    --qf-color-fg-strong: #edf2ef;
+    --qf-color-fg-default: #c4ceca;
+    --qf-color-fg-muted: #8e9b97;
+    --qf-color-fg-disabled: #5e6966;
+    --qf-color-border-subtle: #253032;
+    --qf-color-border-default: #344244;
+    --qf-color-border-strong: #536365;
+    --qf-color-accent: #d7e2de;
+    --qf-color-accent-hover: #ebf2ef;
+    --qf-color-fg-on-accent: #111816;
+    --qf-color-human: #67c194;
+    --qf-color-agent: #75a7e8;
+    --qf-color-system: #9aa7a3;
+    --qf-color-review: #d9b36a;
+    --qf-color-waiting: #d2a65a;
+    --qf-color-success: #64ba86;
+    --qf-color-warning: #e1a85a;
+    --qf-color-danger: #e77068;
+    --qf-color-mp: #b59ae8;
+    --qf-color-battle: #d8875f;
+    --qf-color-focus: #9bc8ff;
+    --qf-color-scrim: rgba(0, 0, 0, 0.62);
+  }
+}
+
+:root {
+  --qf-font-sans: "IBM Plex Sans Variable", "Noto Sans JP", "Noto Sans KR", "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --qf-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --qf-text-display: 600 32px/38px var(--qf-font-sans);
+  --qf-text-page: 600 24px/30px var(--qf-font-sans);
+  --qf-text-section: 600 18px/24px var(--qf-font-sans);
+  --qf-text-component: 600 14px/20px var(--qf-font-sans);
+  --qf-text-body: 400 14px/20px var(--qf-font-sans);
+  --qf-text-compact: 400 13px/18px var(--qf-font-sans);
+  --qf-text-label: 600 11px/16px var(--qf-font-sans);
+  --qf-text-metadata: 400 12px/16px var(--qf-font-sans);
+  --qf-text-micro: 500 11px/14px var(--qf-font-sans);
+  --qf-text-kpi: 600 24px/28px var(--qf-font-sans);
+  --qf-text-operational: 500 12px/16px var(--qf-font-mono);
+
+  --qf-space-0: 0;
+  --qf-space-1: 2px;
+  --qf-space-2: 4px;
+  --qf-space-3: 6px;
+  --qf-space-4: 8px;
+  --qf-space-5: 12px;
+  --qf-space-6: 16px;
+  --qf-space-7: 20px;
+  --qf-space-8: 24px;
+  --qf-space-9: 32px;
+  --qf-space-10: 40px;
+  --qf-space-11: 48px;
+  --qf-space-12: 64px;
+
+  --qf-radius-none: 0;
+  --qf-radius-xs: 2px;
+  --qf-radius-sm: 4px;
+  --qf-radius-md: 6px;
+  --qf-radius-lg: 10px;
+  --qf-radius-pill: 999px;
+
+  --qf-border-width: 1px;
+  --qf-selection-width: 2px;
+  --qf-focus-width: 2px;
+  --qf-focus-offset: 2px;
+  --qf-shadow-none: none;
+  --qf-shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --qf-shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.32);
+
+  --qf-motion-instant: 0ms;
+  --qf-motion-fast: 80ms;
+  --qf-motion-quick: 120ms;
+  --qf-motion-standard: 180ms;
+  --qf-motion-panel: 240ms;
+  --qf-motion-deliberate: 320ms;
+  --qf-motion-ceremony: 520ms;
+  --qf-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --qf-ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+  --qf-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --qf-control-compact: 28px;
+  --qf-control-default: 32px;
+  --qf-control-comfortable: 40px;
+  --qf-row-compact: 44px;
+  --qf-row-default: 52px;
+  --qf-row-comfortable: 60px;
+  --qf-relay-compact: 56px;
+  --qf-relay-default: 64px;
+  --qf-relay-comfortable: 72px;
+  --qf-operation-bar-height: 48px;
+  --qf-capacity-band-height: 32px;
+  --qf-rail-collapsed: 56px;
+  --qf-pane-gap: 12px;
+
+  --qf-z-base: 0;
+  --qf-z-sticky: 100;
+  --qf-z-lens: 200;
+  --qf-z-popover: 300;
+  --qf-z-toast: 400;
+  --qf-z-modal-backdrop: 500;
+  --qf-z-modal: 510;
+  --qf-z-command: 600;
+  --qf-z-tooltip: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --qf-motion-quick: 0ms;
+    --qf-motion-standard: 0ms;
+    --qf-motion-panel: 80ms;
+    --qf-motion-deliberate: 80ms;
+    --qf-motion-ceremony: 80ms;
+  }
+}
+
+/* Section 27.1 layout token adapters. */
+:root {
+  --qf-rail-width: 184px;
+  --qf-lens-width: 304px;
+  --qf-page-gutter: 20px;
+}
+
+@media (min-width: 1600px) {
+  :root { --qf-rail-width: 216px; --qf-lens-width: 360px; --qf-page-gutter: 24px; }
+}
+@media (min-width: 2240px) {
+  :root { --qf-rail-width: 224px; --qf-lens-width: 384px; --qf-page-gutter: 32px; --qf-pane-gap: 16px; }
+}
+@media (min-width: 3200px) {
+  :root { --qf-rail-width: 240px; --qf-lens-width: 416px; --qf-page-gutter: 40px; }
+}
+@media (max-width: 1199px) {
+  :root { --qf-rail-width: 56px; --qf-lens-width: min(384px, 92vw); --qf-page-gutter: 16px; }
+}
+
+/* Intervention Queue pane width.
+ *
+ * Added under the section 25.3 token governance rule: the Queue is a
+ * foundational shell primitive whose width is fixed per breakpoint by the
+ * section 28.1 golden geometry (296px at 1920, 288px at 2560), and no existing
+ * semantic token expresses it. Below 1600px the Queue moves into the Lens and
+ * this token is unused. */
+:root {
+  --qf-queue-width: 296px;
+}
+
+@media (min-width: 2240px) {
+  :root { --qf-queue-width: 288px; }
+}
+@media (min-width: 3200px) {
+  :root { --qf-queue-width: 296px; }
+}

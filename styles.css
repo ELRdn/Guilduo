@@ -1,3 +1,5 @@
+@import "design/tokens.generated.css";
+
 :root {
   --bg: #eef1f4;
   --panel: #ffffff;
@@ -48,16 +50,16 @@
 }
 
 body[data-theme="arcane"] {
-  --bg: #eceae3;
-  --panel: #fffaf0;
+  --bg: var(--qf-canvas);
+  --panel: #fffaf0; /* intentionally literal — see currentExceptions in tools/generate-tokens.mts */
   --panel-2: #f5f0e6;
   --ink: #20252b;
   --muted: #6f756f;
   --line: #d8cfbc;
-  --green: #4f8069;
-  --red: #a24f58;
-  --gold: #a8792b;
-  --blue: #56757a;
+  --green: var(--qf-human);
+  --red: var(--qf-danger);
+  --gold: var(--qf-rpg);
+  --blue: var(--qf-agent);
   --violet: #586d6a;
   --sidebar: #202735;
   --sidebar-panel: rgba(235, 222, 190, 0.08);
@@ -73,16 +75,16 @@ body[data-theme="arcane"] {
 }
 
 body[data-theme="soft"] {
-  --bg: #f3f2ef;
-  --panel: #ffffff;
+  --bg: var(--qf-canvas);
+  --panel: var(--qf-surface);
   --panel-2: #f7f8f6;
   --ink: #20262b;
   --muted: #687276;
   --line: #dde2dd;
-  --green: #4f8a6d;
-  --red: #c45d5d;
-  --gold: #b98535;
-  --blue: #4d7d8e;
+  --green: var(--qf-human);
+  --red: var(--qf-danger);
+  --gold: var(--qf-rpg);
+  --blue: var(--qf-agent);
   --violet: #5f6f65;
   --sidebar: #232b31;
   --sidebar-panel: rgba(255, 255, 255, 0.07);
@@ -98,16 +100,16 @@ body[data-theme="soft"] {
 }
 
 body[data-theme="retro"] {
-  --bg: #eee6d8;
-  --panel: #fff8e8;
+  --bg: var(--qf-canvas);
+  --panel: var(--qf-surface);
   --panel-2: #f8efd9;
   --ink: #171b25;
   --muted: #6d665c;
   --line: #302b25;
-  --green: #4c8d42;
-  --red: #c24732;
-  --gold: #b16f20;
-  --blue: #315c78;
+  --green: var(--qf-human);
+  --red: var(--qf-danger);
+  --gold: var(--qf-rpg);
+  --blue: var(--qf-agent);
   --violet: #2f405f;
   --sidebar: #171b25;
   --sidebar-panel: rgba(239, 227, 193, 0.09);
@@ -124,16 +126,16 @@ body[data-theme="retro"] {
 }
 
 html[data-color-mode="dark"] body[data-theme="arcane"] {
-  --bg: #15191d;
-  --panel: #20262b;
+  --bg: var(--qf-canvas);
+  --panel: var(--qf-surface);
   --panel-2: #272e31;
   --ink: #eef1ea;
   --muted: #aeb8b2;
   --line: #3e4947;
-  --green: #78b998;
-  --red: #ef858b;
-  --gold: #d6ad5e;
-  --blue: #79aeb6;
+  --green: var(--qf-human);
+  --red: var(--qf-danger);
+  --gold: var(--qf-rpg);
+  --blue: var(--qf-agent);
   --violet: #8aa49c;
   --sidebar: #10151c;
   --sidebar-panel: rgba(214, 173, 94, 0.08);
@@ -148,23 +150,25 @@ html[data-color-mode="dark"] body[data-theme="arcane"] {
 }
 
 html[data-color-mode="dark"] body[data-theme="soft"] {
-  --bg: #151918;
-  --panel: #202624;
-  --panel-2: #272e2b;
-  --ink: #edf2ee;
-  --muted: #abb7b1;
-  --line: #3b4540;
-  --green: #78b493;
-  --red: #e98282;
-  --gold: #d2a75f;
-  --blue: #78a8b8;
+  /* v4.3: contrast-pain pass — ink/line/sidebar softened to match interaction-lab's dark
+     soft-ops values (see interaction-lab/styles.css ":root[data-qf-theme=soft-ops]..."). */
+  --bg: var(--qf-canvas);
+  --panel: var(--qf-surface);
+  --panel-2: #28363b;
+  --ink: #e2e7e5;
+  --muted: #9f9f9f;
+  --line: #30414a;
+  --green: var(--qf-human);
+  --red: var(--qf-danger);
+  --gold: var(--qf-rpg);
+  --blue: var(--qf-agent);
   --violet: #859b8e;
-  --sidebar: #111715;
+  --sidebar: #171f23;
   --sidebar-panel: rgba(185, 208, 193, 0.08);
   --sidebar-border: rgba(185, 208, 193, 0.18);
   --brand-mark-bg: #2b3934;
   --brand-mark-border: #a9c5b4;
-  --hero: #222825;
+  --hero: #151d20;
   --avatar-sky: #789a9b;
   --avatar-ground: #718a62;
   --boss: #cf8276;
@@ -172,16 +176,16 @@ html[data-color-mode="dark"] body[data-theme="soft"] {
 }
 
 html[data-color-mode="dark"] body[data-theme="retro"] {
-  --bg: #11131a;
-  --panel: #1d2130;
+  --bg: var(--qf-canvas);
+  --panel: var(--qf-surface);
   --panel-2: #252a3a;
   --ink: #f6edcf;
   --muted: #b8af9a;
   --line: #687056;
-  --green: #82c36f;
-  --red: #f0765e;
-  --gold: #e2b35e;
-  --blue: #74a6c7;
+  --green: var(--qf-human);
+  --red: var(--qf-danger);
+  --gold: var(--qf-rpg);
+  --blue: var(--qf-agent);
   --violet: #8698c4;
   --sidebar: #0b0e15;
   --sidebar-panel: rgba(226, 179, 94, 0.08);
@@ -220,6 +224,23 @@ html[data-color-mode="dark"] body {
 * {
   box-sizing: border-box;
 }
+
+/* v4.3: thin, low-contrast scrollbars everywhere (page scroll and every independently
+   scrolling region alike) so nested scroll areas read as one workspace instead of a stack
+   of separate windows. Stays operable — width/color only, never overlay-hidden. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink) 38%, transparent); }
 
 [hidden] {
   display: none !important;
@@ -2848,7 +2869,7 @@ html[data-color-mode="dark"] .jrpg-boss-sprite {
 
 .battle-float-text.resource {
   top: 16%;
-  color: var(--blue);
+  color: var(--gold);
   font-size: 17px;
 }
 
@@ -2957,7 +2978,7 @@ body[data-motion="on"] .battle-float-text.is-visible {
 }
 
 .jrpg-meter.mp i {
-  background: var(--blue);
+  background: var(--gold);
 }
 
 .jrpg-meter.boss i {
@@ -3965,6 +3986,26 @@ body[data-motion="on"] .battle-float-text.is-visible {
   font-size: 12px;
 }
 
+.telemetry-settings {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.telemetry-settings h4,
+.telemetry-settings p {
+  margin: 0;
+}
+
+.telemetry-settings > div p,
+.telemetry-settings > p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 @media (max-width: 760px) {
   .developer-runtime-grid {
     grid-template-columns: 1fr;
@@ -4678,4 +4719,1068 @@ body[data-theme="retro"] .column-header button {
   .quest-tree-children {
     margin-left: 20px;
   }
+}
+/* Lucide icons use the same currentColor as their control and never resize the label. */
+.qf-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.14em;
+  stroke: currentColor;
+}
+
+button .qf-icon,
+a .qf-icon {
+  pointer-events: none;
+}
+
+.qf-party-mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0 2px;
+  border-bottom: 1px solid var(--line, #d9e0e8);
+}
+
+.qf-party-mode-tab {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted, #687276);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.qf-party-mode-tab:hover,
+.qf-party-mode-tab:focus-visible,
+.qf-party-mode-tab.is-active {
+  border-bottom-color: var(--green, #4f8a6d);
+  color: var(--green, #4f8a6d);
+}
+
+.qf-party-formation-host {
+  min-width: 0;
+}
+
+.qf-party-formation-host > .section-heading {
+  margin-bottom: 0;
+}
+
+
+/* v4.3 Current signature shell: Mission Spine + Campaign Map + status rail. */
+.current-v4-shell {
+  --current-canvas: #151d20;
+  --current-rail: #101719;
+  --current-panel: #151d20;
+  --current-panel-soft: #19242a;
+  --current-line: #2c3a3d;
+  --current-green: #78b493;
+  --current-blue: #69a8ef;
+  --current-red: #e98282;
+  --current-muted: #8e9a98;
+}
+.current-v4-shell .current-reference-surface {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  min-height: calc(100vh - 24px);
+  padding: 16px 8px 24px;
+  background: var(--current-canvas);
+}
+.current-v4-shell .current-reference-surface[hidden] { display: none !important; }
+.current-v4-shell .current-ref-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 72px;
+  padding: 3px 8px 0;
+}
+.current-v4-shell .current-ref-kicker,
+.current-v4-shell .current-ref-summary span,
+.current-v4-shell .current-ref-mission-head,
+.current-v4-shell .current-rail-heading span {
+  color: var(--current-muted);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+.current-v4-shell .current-ref-header h3 {
+  margin: 7px 0 5px;
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1.05;
+}
+.current-v4-shell .current-ref-header p {
+  margin: 0;
+  color: var(--current-muted);
+  font-size: 9px;
+}
+.current-v4-shell .current-ref-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.current-v4-shell .current-ref-action,
+.current-v4-shell .current-ref-focus {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--current-line);
+  background: var(--current-panel);
+  color: var(--current-muted);
+  font-size: 8px;
+  font-weight: 800;
+}
+.current-v4-shell .current-ref-action.is-active,
+.current-v4-shell .current-ref-focus {
+  border-color: var(--current-blue);
+  color: var(--current-blue);
+}
+.current-v4-shell .current-ref-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.current-v4-shell .current-ref-summary article {
+  display: grid;
+  gap: 5px;
+  min-height: 66px;
+  align-content: center;
+  padding: 9px 12px;
+  border: 1px solid var(--current-line);
+  background: var(--current-panel);
+}
+.current-v4-shell .current-ref-summary strong {
+  color: var(--ink);
+  font: 800 18px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.current-v4-shell .current-ref-summary small {
+  color: var(--current-muted);
+  font-size: 8px;
+}
+.current-v4-shell .current-ref-mission-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 3px 6px;
+}
+.current-v4-shell .current-ref-mission-list {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+.current-v4-shell .current-ref-mission-list::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 22px;
+  width: 1px;
+  background: var(--current-line);
+  content: "";
+}
+.current-v4-shell .current-ref-mission {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 48px minmax(230px, 1.45fr) 150px minmax(180px, 1fr) 24px;
+  gap: 8px;
+  min-width: 0;
+  min-height: 86px;
+  align-items: stretch;
+  border: 1px solid var(--current-line);
+  background: var(--current-panel);
+}
+.current-v4-shell .current-ref-mission.is-working { border-color: color-mix(in srgb, var(--current-blue) 80%, var(--current-line)); }
+.current-v4-shell .current-ref-mission.is-blocked { border-color: color-mix(in srgb, var(--current-red) 72%, var(--current-line)); }
+.current-v4-shell .current-ref-time {
+  display: grid;
+  place-items: center;
+  color: var(--current-muted);
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.current-v4-shell .current-ref-mission-copy {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  padding: 10px 5px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.current-v4-shell .current-ref-mission-copy small,
+.current-v4-shell .current-ref-mission-copy span,
+.current-v4-shell .current-ref-progress small,
+.current-v4-shell .current-ref-handoff small,
+.current-v4-shell .current-ref-handoff span {
+  overflow: hidden;
+  color: var(--current-muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-v4-shell .current-ref-mission-copy strong {
+  overflow: hidden;
+  margin: 5px 0 3px;
+  color: var(--ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-v4-shell .current-ref-mission.is-done .current-ref-mission-copy strong { color: var(--current-green); }
+.current-v4-shell .current-ref-progress,
+.current-v4-shell .current-ref-handoff {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  padding: 10px 8px;
+  border-left: 1px solid var(--current-line);
+}
+.current-v4-shell .current-ref-progress b {
+  color: var(--current-green);
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.current-v4-shell .current-ref-mission.is-working .current-ref-progress b { color: var(--current-blue); }
+.current-v4-shell .current-ref-mission.is-blocked .current-ref-progress b { color: var(--current-red); }
+.current-v4-shell .current-ref-progress i {
+  display: block;
+  height: 4px;
+  margin: 8px 0 5px;
+  overflow: hidden;
+  background: var(--current-panel-soft);
+}
+.current-v4-shell .current-ref-progress i em {
+  display: block;
+  height: 100%;
+  background: var(--current-green);
+}
+.current-v4-shell .current-ref-mission.is-working .current-ref-progress i em { background: var(--current-blue); }
+.current-v4-shell .current-ref-mission.is-blocked .current-ref-progress i em { background: var(--current-red); }
+.current-v4-shell .current-ref-handoff strong {
+  overflow: hidden;
+  margin: 5px 0 3px;
+  color: var(--current-green);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-v4-shell .current-ref-mission.is-working .current-ref-handoff strong { color: var(--current-blue); }
+.current-v4-shell .current-ref-mission.is-blocked .current-ref-handoff strong { color: var(--current-red); }
+.current-v4-shell .current-ref-open {
+  align-self: center;
+  width: 22px;
+  height: 28px;
+  margin-right: 3px;
+  border: 1px solid var(--current-line);
+  background: var(--current-panel-soft);
+  color: var(--current-muted);
+  font-size: 18px;
+}
+.current-v4-shell .current-ref-open:hover,
+.current-v4-shell .current-ref-mission-copy:hover { color: var(--current-blue); }
+.current-v4-shell .current-ref-add {
+  min-height: 30px;
+  margin: 8px auto 0;
+  padding: 0 14px;
+  border: 1px solid var(--current-line);
+  background: var(--current-panel);
+  color: var(--current-blue);
+  font-size: 9px;
+  font-weight: 800;
+}
+.current-v4-shell .current-ref-campaign {
+  min-width: 0;
+}
+.current-v4-shell .current-ref-campaign-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.current-v4-shell .current-ref-campaign-node {
+  display: grid;
+  min-width: 0;
+  min-height: 86px;
+  align-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--current-line);
+  background: var(--current-panel);
+}
+.current-v4-shell .current-ref-campaign-node > span,
+.current-v4-shell .current-ref-campaign-node > small {
+  color: var(--current-muted);
+  font-size: 8px;
+}
+.current-v4-shell .current-ref-campaign-node strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-v4-shell .current-ref-campaign-node i {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  background: var(--current-panel-soft);
+}
+.current-v4-shell .current-ref-campaign-node i em {
+  display: block;
+  height: 100%;
+  background: var(--current-green);
+}
+.current-v4-shell .current-ref-campaign-node.is-working { border-color: var(--current-blue); }
+.current-v4-shell .current-ref-campaign-node.is-working i em { background: var(--current-blue); }
+.current-v4-shell .current-ref-campaign-node.is-blocked { border-color: var(--current-red); }
+.current-v4-shell .current-ref-campaign-node.is-blocked i em { background: var(--current-red); }
+.current-v4-shell .current-ref-empty {
+  padding: 28px;
+  border: 1px dashed var(--current-line);
+  color: var(--current-muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.current-status-rail {
+  display: none;
+}
+.current-v4-shell .current-rail-section {
+  display: grid;
+  gap: 8px;
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--current-line);
+}
+.current-v4-shell .current-rail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.current-v4-shell .current-rail-heading button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--current-blue);
+  font-size: 8px;
+}
+.current-v4-shell .current-rail-boss {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.current-v4-shell .current-rail-boss img {
+  width: 42px;
+  height: 48px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.current-v4-shell .current-rail-boss small,
+.current-v4-shell .current-rail-boss span {
+  display: block;
+  color: var(--current-muted);
+  font-size: 8px;
+}
+.current-v4-shell .current-rail-boss strong {
+  display: block;
+  margin: 4px 0;
+  color: var(--current-red);
+  font-size: 12px;
+}
+.current-v4-shell .current-rail-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--current-muted);
+  font-size: 8px;
+}
+.current-v4-shell .current-rail-bar-label b { color: var(--ink); }
+.current-v4-shell .current-rail-progress {
+  height: 5px;
+  overflow: hidden;
+  background: var(--current-panel-soft);
+}
+.current-v4-shell .current-rail-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--current-red);
+}
+.current-v4-shell .current-rail-progress.is-mp i { background: var(--current-blue); }
+.current-v4-shell .current-rail-primary {
+  min-height: 28px;
+  border: 1px solid var(--current-green);
+  background: color-mix(in srgb, var(--current-green) 20%, var(--current-panel));
+  color: var(--current-green);
+  font-size: 9px;
+  font-weight: 850;
+}
+.current-v4-shell .current-rail-log {
+  display: grid;
+  gap: 0;
+}
+.current-v4-shell .current-rail-log > div {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 26px;
+  border-bottom: 1px solid var(--current-line);
+  font-size: 8px;
+}
+.current-v4-shell .current-rail-log time { color: var(--current-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.current-v4-shell .current-rail-log span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current-v4-shell .current-rail-log b { color: var(--current-green); font-size: 8px; }
+.current-v4-shell .current-rail-log p { margin: 0; color: var(--current-muted); font-size: 8px; }
+.current-v4-shell .current-rail-companion {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.current-v4-shell .current-rail-companion img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.current-v4-shell .current-rail-companion p {
+  margin: 0;
+  color: var(--current-muted);
+  font-size: 8px;
+  line-height: 1.45;
+}
+.current-v4-shell .current-rail-selected > strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-v4-shell .current-rail-selected code {
+  overflow: hidden;
+  color: var(--current-blue);
+  font: 8px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-v4-shell .current-rail-owner {
+  color: var(--current-muted);
+  font-size: 8px;
+}
+.current-v4-shell .current-rail-handoff {
+  display: flex;
+  gap: 7px;
+  padding: 4px 0;
+}
+.current-v4-shell .current-rail-handoff i {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--current-line);
+  border-radius: 50%;
+}
+.current-v4-shell .current-rail-handoff i.is-done { border-color: var(--current-green); background: var(--current-green); }
+.current-v4-shell .current-rail-handoff i.is-current { border-color: var(--current-blue); background: var(--current-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--current-blue) 18%, transparent); }
+
+@media (min-width: 1200px) {
+  body.current-v4-shell {
+    overflow: hidden;
+  }
+  body.current-v4-shell .app-shell {
+    grid-template-columns: 112px minmax(0, 1fr) 310px;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  body.current-v4-shell .sidebar {
+    gap: 10px;
+    min-width: 0;
+    padding: 9px 7px 10px;
+    overflow: hidden;
+    border-right: 1px solid var(--current-line);
+  }
+  body.current-v4-shell .brand {
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 5px;
+    padding: 0 2px 8px;
+  }
+  body.current-v4-shell .brand-mark {
+    width: 26px;
+    height: 26px;
+    border-width: 1px;
+    border-radius: 2px;
+    font-size: 8px;
+  }
+  body.current-v4-shell .brand h1 { font-size: 9px; }
+  body.current-v4-shell .brand p { margin-top: 1px; font-size: 6px; }
+  body.current-v4-shell .nav-list { gap: 2px; }
+  body.current-v4-shell .nav-item {
+    min-height: 27px;
+    padding: 4px 5px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    background: transparent;
+    color: #bdc9c6;
+    font-size: 9px;
+  }
+  body.current-v4-shell .nav-item.active,
+  body.current-v4-shell .nav-item:hover {
+    border-color: color-mix(in srgb, var(--current-green) 55%, transparent);
+    background: color-mix(in srgb, var(--current-green) 15%, transparent);
+    color: var(--current-green);
+  }
+  body.current-v4-shell .profile-panel {
+    margin-top: auto;
+    padding: 7px;
+    border: 1px solid var(--current-line);
+    border-radius: 2px;
+    background: var(--current-panel);
+  }
+  body.current-v4-shell .avatar-stage { height: 70px; border-radius: 2px; }
+  body.current-v4-shell .avatar-stack.compact { transform: scale(.58); }
+  body.current-v4-shell .profile-text { gap: 2px; margin-top: 7px; }
+  body.current-v4-shell .profile-text strong { font-size: 9px; }
+  body.current-v4-shell .profile-text span,
+  body.current-v4-shell .stat-grid span { font-size: 7px; }
+  body.current-v4-shell .stat-grid { gap: 3px; margin-top: 6px; }
+  body.current-v4-shell .stat-grid div { padding: 4px; border-radius: 2px; }
+  body.current-v4-shell .stat-grid strong { font-size: 8px; }
+  body.current-v4-shell .workspace {
+    min-width: 0;
+    padding: 0 10px 10px;
+    overflow: auto;
+    background: var(--current-canvas);
+  }
+  body.current-v4-shell .workspace > .topbar { display: none; }
+  body.current-v4-shell #tasksView > :not(#currentReferenceSurface) { display: none !important; }
+  body.current-v4-shell #tasksView { min-width: 0; }
+  body.current-v4-shell .current-status-rail {
+    display: flex;
+    min-width: 0;
+    height: 100vh;
+    flex-direction: column;
+    overflow-y: auto;
+    border-left: 1px solid var(--current-line);
+    background: var(--current-rail);
+    color: var(--ink);
+  }
+  body.current-v4-shell.is-current-rail-collapsed .current-status-rail { display: none; }
+  body.current-v4-shell.is-current-rail-collapsed .app-shell { grid-template-columns: 112px minmax(0, 1fr); }
+}
+
+@media (max-width: 1199px) {
+  body.current-v4-shell .app-shell { grid-template-columns: 1fr; }
+  body.current-v4-shell .current-status-rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+    border-top: 1px solid var(--current-line);
+    background: var(--current-rail);
+  }
+  body.current-v4-shell .current-rail-section { min-width: 0; }
+  body.current-v4-shell .current-ref-campaign-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  body.current-v4-shell .current-reference-surface { min-height: 0; padding: 12px 0 20px; }
+  body.current-v4-shell .current-ref-header { display: block; }
+  body.current-v4-shell .current-ref-actions { justify-content: flex-start; margin-top: 10px; }
+  body.current-v4-shell .current-ref-summary { grid-template-columns: 1fr; }
+  body.current-v4-shell .current-ref-mission-list::before { display: none; }
+  body.current-v4-shell .current-ref-mission { grid-template-columns: 42px minmax(0, 1fr) 22px; }
+  body.current-v4-shell .current-ref-progress,
+  body.current-v4-shell .current-ref-handoff { grid-column: 2 / -1; border-left: 0; border-top: 1px solid var(--current-line); }
+  body.current-v4-shell .current-ref-campaign-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.current-v4-shell .current-status-rail { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  body.current-v4-shell .sidebar { padding: 8px; }
+  body.current-v4-shell .nav-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.current-v4-shell .profile-panel { display: none; }
+  body.current-v4-shell .current-ref-header h3 { font-size: 20px; }
+  body.current-v4-shell .current-ref-campaign-grid { grid-template-columns: 1fr; }
+}
+
+
+
+/* Final Current geometry pass: reference content starts at the shell boundary. */
+@media (min-width: 1200px) {
+  body.current-v4-shell .workspace { padding: 0; }
+  body.current-v4-shell .current-reference-surface { padding: 16px 10px 24px; }
+  body.current-v4-shell .current-ref-mission { min-height: 126px; }
+  body.current-v4-shell .current-ref-mission-copy { padding-top: 16px; padding-bottom: 16px; }
+  body.current-v4-shell .current-ref-progress,
+  body.current-v4-shell .current-ref-handoff { padding-top: 16px; padding-bottom: 16px; }
+  body.current-v4-shell .current-ref-campaign-node { min-height: 102px; }
+}
+
+
+/* Reference Lock Current shell geometry follows the v3 292 / 304 split. */
+@media (min-width: 1200px) {
+  body.current-v4-shell .app-shell { grid-template-columns: 292px minmax(0, 1fr) 304px; }
+  body.current-v4-shell .sidebar { gap: 12px; padding: 15px 14px 12px; }
+  body.current-v4-shell .brand { grid-template-columns: 38px minmax(0, 1fr); gap: 9px; padding-bottom: 12px; }
+  body.current-v4-shell .brand-mark { width: 38px; height: 38px; font-size: 10px; }
+  body.current-v4-shell .brand h1 { font-size: 15px; }
+  body.current-v4-shell .brand p { font-size: 8px; }
+  body.current-v4-shell .nav-list { gap: 3px; }
+  body.current-v4-shell .nav-item { min-height: 32px; padding: 5px 8px; font-size: 11px; }
+  body.current-v4-shell .profile-panel { padding: 10px; }
+  body.current-v4-shell .avatar-stage { height: 100px; }
+  body.current-v4-shell .avatar-stack.compact { transform: scale(.75); }
+  body.current-v4-shell .profile-text strong { font-size: 12px; }
+  body.current-v4-shell .profile-text span,
+  body.current-v4-shell .stat-grid span { font-size: 8px; }
+  body.current-v4-shell .stat-grid { gap: 4px; margin-top: 8px; }
+  body.current-v4-shell .stat-grid div { padding: 6px; }
+  body.current-v4-shell .stat-grid strong { font-size: 10px; }
+  body.current-v4-shell .current-reference-surface { padding: 16px 14px 24px; }
+  body.current-v4-shell .current-status-rail { padding: 14px 12px 16px; }
+}
+
+
+
+/* Reference capture frame is part of the locked 1920×907 crop, never production chrome. */
+body.current-reference-fixture {
+  border-top: 1px solid #3d3f40;
+  border-bottom: 5px solid #191a1a;
+  background: #191a1a;
+}
+
+
+body.current-reference-fixture {
+  border-top: 0;
+  border-bottom: 5px solid #191a1a;
+}
+body.current-reference-fixture::before {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  right: 4px;
+  left: 4px;
+  height: 1px;
+  background: #3d3f40;
+  content: "";
+  pointer-events: none;
+}
+
+
+body.current-reference-fixture {
+  border: 0;
+  background: #151d20;
+}
+body.current-reference-fixture::before {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  right: 4px;
+  left: 4px;
+  height: 1px;
+  background: #3d3f40;
+  content: "";
+  pointer-events: none;
+}
+body.current-reference-fixture::after {
+  position: fixed;
+  z-index: 1000;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 5px;
+  border-top: 1px solid #3d3f40;
+  background: #191a1a;
+  content: "";
+  pointer-events: none;
+}
+
+.current-reference-scrollbar,
+.current-reference-design-lab { display: none; }
+
+@media (min-width: 1200px) {
+  body.current-reference-fixture .current-reference-scrollbar {
+    position: fixed;
+    z-index: 1001;
+    display: block;
+    pointer-events: none;
+  }
+  body.current-reference-fixture .current-reference-scrollbar--left {
+    top: 1px;
+    bottom: 1px;
+    left: 281px;
+    width: 15px;
+    background: #2c2c2c;
+  }
+  body.current-reference-fixture .current-reference-scrollbar--left::before {
+    position: absolute;
+    top: 188px;
+    left: 3px;
+    width: 9px;
+    height: 691px;
+    background: #9f9f9f;
+    content: "";
+  }
+  body.current-reference-fixture .current-reference-scrollbar--right {
+    top: 1px;
+    right: 0;
+    bottom: 1px;
+    width: 20px;
+    background: linear-gradient(to right, #2c2c2c 0 15px, #3d3f40 15px 16px, #191a1a 16px 100%);
+  }
+  body.current-reference-fixture .current-reference-scrollbar--right::before {
+    position: absolute;
+    top: 49px;
+    left: 3px;
+    width: 9px;
+    height: 651px;
+    background: #9f9f9f;
+    content: "";
+  }
+  body.current-reference-fixture .current-reference-design-lab {
+    position: fixed;
+    right: 15px;
+    bottom: 21px;
+    z-index: 1002;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    width: 298px;
+    min-height: 125px;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid var(--current-line);
+    background: var(--current-panel);
+    color: var(--ink);
+    font-size: 8px;
+  }
+  body.current-reference-fixture .current-reference-design-lab > span { color: var(--current-muted); font-weight: 800; }
+  body.current-reference-fixture .current-reference-design-lab > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  body.current-reference-fixture .current-reference-design-lab button { min-height: 28px; border: 1px solid var(--current-line); background: transparent; color: var(--ink); font-size: 8px; }
+  body.current-reference-fixture .current-reference-design-lab button.is-active { border-color: var(--current-blue); background: var(--current-blue); color: #fff; }
+  body.current-reference-fixture .current-reference-design-lab .current-reference-design-lab-toggle {
+    position: absolute;
+    top: -29px;
+    right: 0;
+    min-height: 28px;
+    padding: 0 9px;
+    border-color: #c9d0cb;
+    background: #f2f4f1;
+    color: #202624;
+    font-weight: 850;
+  }
+}
+
+
+/* Current Reference Golden left rail: profile -> active party -> resources ->
+   navigation. The fixture only changes presentation order; normal root IA stays intact. */
+@media (min-width: 1200px) {
+  body.current-reference-fixture .sidebar {
+    display: flex;
+    gap: 10px;
+    padding: 0 14px 10px;
+    overflow: hidden;
+  }
+  body.current-reference-fixture .sidebar .brand { display: none; }
+  body.current-reference-fixture .sidebar .profile-panel {
+    order: 1;
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 8px;
+    min-height: 87px;
+    height: 87px;
+    margin: 0;
+    padding: 8px 6px;
+    border: 1px solid var(--current-line);
+    border-radius: 2px;
+    background: var(--current-panel);
+  }
+  body.current-reference-fixture .profile-panel .avatar-stage { height: 68px; }
+  body.current-reference-fixture .profile-panel .avatar-stack.compact { transform: scale(.58); }
+  body.current-reference-fixture .profile-panel .profile-text { align-content: center; margin-top: 0; }
+  body.current-reference-fixture .profile-panel .stat-grid { display: none; }
+  body.current-reference-fixture .current-sidebar-party {
+    order: 2;
+    display: grid;
+    gap: 7px;
+    min-height: 244px;
+    height: 244px;
+    padding: 12px;
+    border: 1px solid var(--current-line);
+    background: var(--current-panel);
+  }
+  body.current-reference-fixture .current-sidebar-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--current-muted);
+    font-size: 9px;
+    font-weight: 850;
+  }
+  body.current-reference-fixture .current-sidebar-heading b { color: var(--ink); font-size: 13px; }
+  body.current-reference-fixture #currentSidebarPartyList { display: grid; gap: 5px; }
+  body.current-reference-fixture .current-sidebar-party-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) 7px;
+    gap: 6px;
+    align-items: center;
+    min-height: 29px;
+  }
+  body.current-reference-fixture .current-sidebar-party-mark {
+    display: grid;
+    width: 22px;
+    height: 22px;
+    place-items: center;
+    border: 1px solid currentColor;
+    background: var(--current-panel-soft);
+    color: var(--current-blue);
+    font: 800 7px/1 ui-monospace, monospace;
+  }
+  body.current-reference-fixture .current-sidebar-party-mark.is-green { color: var(--current-green); }
+  body.current-reference-fixture .current-sidebar-party-mark.is-red,
+  body.current-reference-fixture .current-sidebar-party-dot.is-red { color: var(--current-red); }
+  body.current-reference-fixture .current-sidebar-party-row strong { display: block; font-size: 10px; }
+  body.current-reference-fixture .current-sidebar-party-row small { display: block; color: var(--current-muted); font-size: 7px; }
+  body.current-reference-fixture .current-sidebar-party-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; color: var(--current-blue); }
+  body.current-reference-fixture .current-sidebar-party-dot.is-green { color: var(--current-green); }
+  body.current-reference-fixture .current-sidebar-party-dot.is-red { color: var(--current-red); }
+  body.current-reference-fixture .current-sidebar-resources {
+    order: 3;
+    display: grid;
+    gap: 5px;
+    min-height: 143px;
+    height: 143px;
+    padding: 12px;
+    border: 1px solid var(--current-line);
+    background: var(--current-panel);
+  }
+  body.current-reference-fixture .current-sidebar-resource { display: flex; justify-content: space-between; gap: 8px; color: var(--current-muted); font-size: 9px; }
+  body.current-reference-fixture .current-sidebar-resource b { color: var(--ink); font: 800 12px/1 ui-monospace, monospace; }
+  body.current-reference-fixture .current-sidebar-resources > i { display: block; height: 4px; background: var(--current-panel-soft); }
+  body.current-reference-fixture .current-sidebar-resources > i em { display: block; height: 100%; background: var(--current-green); }
+  body.current-reference-fixture .current-sidebar-resources > small { color: var(--current-muted); font-size: 7px; text-align: right; }
+  body.current-reference-fixture .current-sidebar-wallet {
+    order: 4;
+    display: grid;
+    min-height: 49px;
+    height: 49px;
+    padding: 10px 12px;
+    border: 1px solid var(--current-line);
+    background: var(--current-panel);
+  }
+  body.current-reference-fixture .current-sidebar-currency {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px 6px;
+    margin: 0;
+    padding: 0;
+    border-top: 0;
+  }
+  body.current-reference-fixture .current-sidebar-currency b { color: var(--ink); font: 800 11px/1 ui-monospace, monospace; }
+  body.current-reference-fixture .current-sidebar-currency span { color: var(--current-muted); font-size: 7px; }
+  body.current-reference-fixture .nav-list {
+    order: 5;
+    display: grid;
+    gap: 3px;
+    margin-top: 0;
+    transform: translateY(-3px);
+  }
+  body.current-reference-fixture .nav-list { display: none; }
+  body.current-reference-fixture .current-reference-nav {
+    order: 5;
+    display: grid;
+    gap: 5px;
+    margin-top: 0;
+    transform: translateY(-3px);
+  }
+  body.current-reference-fixture .current-reference-nav-button {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 12px;
+    min-height: 37px;
+    align-items: center;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+  }
+  body.current-reference-fixture .current-reference-nav-button .current-nav-icon { display: grid; place-items: center; color: var(--ink); }
+  body.current-reference-fixture .current-reference-nav-button b { font-size: 15px; font-weight: 850; }
+  body.current-reference-fixture .current-reference-nav-button em { display: grid; min-width: 23px; min-height: 23px; place-items: center; border-radius: 5px; background: var(--current-green); color: #102018; font: 800 11px/1 ui-monospace, monospace; font-style: normal; }
+  body.current-reference-fixture .current-reference-nav-button.is-active { border-left: 3px solid var(--current-green); background: color-mix(in srgb, var(--current-green) 18%, transparent); color: var(--current-green); }
+  body.current-reference-fixture .current-reference-nav-button.is-active .current-nav-icon { color: var(--current-green); }
+  body.current-reference-fixture .nav-item[data-view="shop"],
+  body.current-reference-fixture .nav-item[data-view="party"],
+  body.current-reference-fixture .nav-item[data-view="inventory"] { display: none; }
+  body.current-reference-fixture .source-code-link { display: none; }
+}
+
+@media (min-width: 1200px) {
+  body.current-reference-fixture .current-status-rail {
+    gap: 10px;
+    padding: 14px 13px 16px 28px;
+  }
+  body.current-reference-fixture .current-rail-section {
+    min-width: 0;
+    margin: 0;
+    padding: 13px;
+    border: 1px solid var(--current-line);
+    background: var(--current-panel);
+  }
+  body.current-reference-fixture .current-rail-battle { min-height: 256px; }
+  body.current-reference-fixture .current-rail-section:nth-child(2) { min-height: 149px; }
+  body.current-reference-fixture .current-rail-section:nth-child(3) { min-height: 132px; }
+  body.current-reference-fixture .current-rail-section:nth-child(4) { min-height: 270px; }
+  body.current-reference-fixture .current-rail-heading span { font-size: 10px; font-weight: 850; }
+  body.current-reference-fixture .current-rail-heading button { font-size: 9px; }
+  body.current-reference-fixture .current-rail-progress { height: 6px; }
+  body.current-reference-fixture .current-rail-log > div { min-height: 30px; }
+  body.current-reference-fixture .current-rail-primary { min-height: 44px; font-size: 10px; }
+}
+
+/* Reference Lock frame and Mission Spine geometry for the v3 capture crop. */
+@media (min-width: 1200px) {
+  body.current-reference-fixture {
+    --current-canvas: #101719;
+    --current-line: #28363b;
+  }
+  body.current-reference-fixture .app-shell { grid-template-columns: 297px minmax(0, 1fr) 324px; }
+  body.current-reference-fixture .sidebar { padding-left: 19px; padding-right: 15px; overflow-y: scroll; overflow-x: hidden; background: #151d20; }
+  body.current-reference-fixture .workspace { overflow-y: scroll; overflow-x: hidden; background: #151d20; }
+  body.current-reference-fixture .current-status-rail { overflow-y: scroll; overflow-x: hidden; }
+  body.current-reference-fixture .current-status-rail { background: #11191c; }
+  body.current-reference-fixture .current-reference-surface {
+    grid-template-rows: 105px 93px auto;
+    row-gap: 15px;
+    min-height: calc(100vh - 24px);
+    padding: 21px 22px 24px 19px;
+    background: #101719;
+  }
+  body.current-reference-fixture .current-ref-header h3 { font-size: 32px; }
+  body.current-reference-fixture .current-ref-header p { font-size: 11px; }
+  body.current-reference-fixture .current-ref-kicker { font-size: 10px; }
+  body.current-reference-fixture .current-ref-summary span { font-size: 9px; }
+  body.current-reference-fixture .current-ref-summary strong { font-size: 20px; }
+  body.current-reference-fixture .current-ref-summary small { font-size: 9px; }
+  body.current-reference-fixture .current-ref-summary { height: 93px; }
+  body.current-reference-fixture .current-ref-summary article { min-height: 0; height: 93px; box-sizing: border-box; }
+  body.current-reference-fixture .current-ref-mission-list { gap: 12px; padding-left: 55px; }
+  body.current-reference-fixture .current-ref-mission { margin-top: 0; min-height: 104px; height: 104px; grid-template-columns: 0 minmax(230px, 1fr) 150px minmax(180px, 1.05fr) 24px; }
+  body.current-reference-fixture .current-ref-mission:first-child { margin-top: -14px; }
+  body.current-reference-fixture .current-ref-time { position: absolute; left: -52px; top: 50%; width: 40px; transform: translateY(-50%); text-align: left; }
+  body.current-reference-fixture .current-ref-mission::before { position: absolute; left: -42px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); border: 2px solid var(--current-line); border-radius: 50%; background: var(--current-panel); content: ""; }
+  body.current-reference-fixture .current-ref-mission.is-done::before { border-color: var(--current-green); background: var(--current-green); }
+  body.current-reference-fixture .current-ref-mission.is-working::before { border-color: var(--current-blue); box-shadow: inset 0 0 0 4px var(--current-panel); }
+  body.current-reference-fixture .current-ref-mission.is-blocked::before { border-color: var(--current-red); }
+  body.current-reference-fixture .current-ref-mission-copy { padding-left: 8px; }
+  body.current-reference-fixture .current-ref-mission-copy small,
+  body.current-reference-fixture .current-ref-progress small,
+  body.current-reference-fixture .current-ref-handoff small,
+  body.current-reference-fixture .current-ref-handoff span { font-size: 9px; }
+  body.current-reference-fixture .current-ref-mission-copy strong { font-size: 17px; }
+  body.current-reference-fixture .current-ref-mission-copy > span { font-size: 10px; }
+  body.current-reference-fixture .current-ref-progress b { font-size: 11px; }
+  body.current-reference-fixture .current-ref-handoff strong { font-size: 10px; }
+  body.current-reference-fixture .current-ref-handoff-track { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 5px 0 1px; }
+  body.current-reference-fixture .current-ref-handoff-track i { flex: 0 0 18px; width: 18px; height: 18px; border: 2px solid var(--current-line); border-radius: 50%; background: var(--current-panel); }
+  body.current-reference-fixture .current-ref-handoff-track i.is-done { border-color: var(--current-green); background: var(--current-green); }
+  body.current-reference-fixture .current-ref-handoff-track i.is-current { border-color: var(--current-blue); box-shadow: inset 0 0 0 4px var(--current-panel); }
+  body.current-reference-fixture .current-ref-handoff-track i.is-error { border-color: var(--current-red); box-shadow: inset 0 0 0 4px var(--current-panel); }
+  body.current-reference-fixture .current-ref-handoff-track b { flex: 1 1 auto; min-width: 8px; height: 1px; background: var(--current-line); }
+  body.current-reference-fixture .current-ref-mission-copy { grid-column: 2; }
+  body.current-reference-fixture .current-ref-progress { grid-column: 3; }
+  body.current-reference-fixture .current-ref-handoff { grid-column: 4; }
+  body.current-reference-fixture .current-ref-open { grid-column: 5; }
+  body.current-reference-fixture .current-ref-mission-copy,
+  body.current-reference-fixture .current-ref-progress,
+  body.current-reference-fixture .current-ref-handoff { padding-top: 10px; padding-bottom: 10px; }
+  body.current-reference-fixture .current-ref-submissions {
+    display: grid;
+    gap: 8px;
+    margin-left: 50px;
+    padding-top: 2px;
+    padding-bottom: 14px;
+  }
+  body.current-reference-fixture .current-ref-submissions article {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr) 120px minmax(120px, .8fr);
+    gap: 8px;
+    min-height: 66px;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid var(--current-line);
+    background: var(--current-panel);
+  }
+  body.current-reference-fixture .current-ref-submissions time,
+  body.current-reference-fixture .current-ref-submissions code,
+  body.current-reference-fixture .current-ref-submissions small { color: var(--current-muted); font-size: 7px; }
+  body.current-reference-fixture .current-ref-submissions code,
+  body.current-reference-fixture .current-ref-submissions strong,
+  body.current-reference-fixture .current-ref-submissions small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.current-reference-fixture .current-ref-submissions article > div { min-width: 0; }
+  body.current-reference-fixture .current-ref-submissions article > div strong { margin: 4px 0 2px; color: var(--ink); font-size: 10px; }
+  body.current-reference-fixture .current-ref-submissions article > span { display: grid; gap: 5px; }
+  body.current-reference-fixture .current-ref-submissions article > span b { color: var(--current-green); font: 800 9px/1 ui-monospace, monospace; }
+  body.current-reference-fixture .current-ref-submissions article > span i { display: block; height: 4px; background: var(--current-panel-soft); }
+  body.current-reference-fixture .current-ref-submissions article > span em { display: block; height: 100%; background: var(--current-green); }
+  body.current-reference-fixture .current-ref-submission-owner { color: var(--current-green); font-size: 7px; text-align: center; }
+}
+
+/* Campaign Map is a full-workspace strategy surface in the locked Current
+   reference; the mission Status Rail is intentionally not present there. */
+@media (min-width: 1200px) {
+  body.current-reference-fixture.is-current-campaign .app-shell { grid-template-columns: 297px minmax(0, 1fr); }
+  body.current-reference-fixture.is-current-campaign .current-status-rail { display: none !important; }
+  body.current-reference-fixture.is-current-campaign .current-reference-surface {
+    grid-template-rows: 88px 109px auto;
+    row-gap: 15px;
+    padding: 21px 44px 24px 24px;
+  }
+  body.current-reference-fixture.is-current-campaign .current-ref-summary { display: none !important; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    height: 109px;
+  }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary > article {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    align-content: center;
+    padding: 13px 14px;
+    border: 1px solid var(--current-line);
+    background: var(--current-panel);
+  }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary span,
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary small { color: var(--current-muted); font-size: 9px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary strong { color: var(--ink); font-size: 17px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary .current-ref-campaign-progress { display: flex; align-items: center; gap: 12px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-progress::before { flex: 0 0 52px; width: 52px; height: 52px; border: 5px solid var(--current-panel-soft); border-right-color: var(--current-green); border-bottom-color: var(--current-green); border-radius: 50%; content: ""; transform: rotate(25deg); }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-progress > div { display: grid; gap: 5px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary i { display: block; height: 5px; background: var(--current-panel-soft); }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-summary i em { display: block; height: 100%; background: var(--current-green); }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign { position: relative; top: 1px; display: grid; grid-template-columns: 162px minmax(0, 1fr); gap: 20px; min-height: 650px; padding: 18px 10px; border: 1px solid var(--current-line); background: #141c1f; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign .current-ref-mission-head { display: none; }
+  body.current-reference-fixture.is-current-campaign .current-ref-chapters { display: grid; grid-template-rows: repeat(4, 1fr); gap: 8px; min-width: 0; padding: 0 0 0 0; border-left: 3px solid var(--current-line); }
+  body.current-reference-fixture.is-current-campaign .current-ref-chapters article { display: grid; align-content: center; gap: 7px; min-width: 0; padding: 10px 12px; border-left: 1px solid transparent; }
+  body.current-reference-fixture.is-current-campaign .current-ref-chapters article.is-active { border-left-color: var(--current-green); background: color-mix(in srgb, var(--current-green) 12%, transparent); }
+  body.current-reference-fixture.is-current-campaign .current-ref-chapters b { color: var(--ink); font-size: 10px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-chapters strong { color: var(--ink); font-size: 15px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-chapters small { color: var(--current-muted); font-size: 9px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-grid { box-sizing: border-box; grid-column: 2; grid-row: 1; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(4, 112px); gap: 34px 40px; align-content: start; padding-top: 15px; padding-right: 22px; background-color: #151d20; background-image: linear-gradient(color-mix(in srgb, var(--current-line) 32%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--current-line) 32%, transparent) 1px, transparent 1px); background-size: 24px 24px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node { min-height: 112px; height: 112px; align-content: start; gap: 7px; padding: 13px; border-color: var(--current-line); background: var(--current-panel); }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node > span { color: var(--current-muted); font: 8px/1 ui-monospace, monospace; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node strong { font-size: 15px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node > small { font-size: 8px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node i { margin-top: auto; height: 5px; }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node.is-done { border-bottom-color: var(--current-green); }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node.is-working { border-color: var(--current-blue); }
+  body.current-reference-fixture.is-current-campaign .current-ref-campaign-node.is-queued:nth-child(n + 9) { opacity: .55; }
 }

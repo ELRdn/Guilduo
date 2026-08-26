@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Guilduo — Relay Forge / Command</title>
+    <link rel="icon" href="../../assets/icons/icon-192.png" />
+    <script>
+      // Section 27: do not flash the wrong theme before hydration. This runs
+      // before first paint and mirrors readStoredTheme() in shell.ts.
+      (function () {
+        var requested = new URLSearchParams(window.location.search).get("theme");
+        var stored = null;
+        try {
+          stored = window.localStorage.getItem("qf-relay-forge-theme");
+        } catch (error) {
+          stored = null;
+        }
+        var theme = requested || stored || "system";
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.setAttribute("data-theme", theme);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="rf-skip-link" href="#rf-workfield">Workfield へスキップ</a>
+    <div id="relay-forge-root"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -15,9 +15,10 @@ worker/.dev.vars
 screenshots/
 backups/
 .qa-artifacts/
+*.tsbuildinfo
+worker-configuration.d.ts
 
-# Interaction Lab capture helpers and generated visual evidence stay local.
-interaction-lab/capture-*.mjs
+# Interaction Lab generated visual evidence stays local; capture scripts are tracked TypeScript tooling.
 interaction-lab/screenshots/
 
 # Unity Battle Lab is intentionally pending and excluded from the public web release.
@@ -32,3 +33,12 @@ unity-battle-prototype/[Bb]uilds/
 unity-battle-prototype/[Ll]ogs/
 unity-battle-prototype/[Uu]serSettings/
 unity-battle-prototype/webgl-build/
+
+# Scratch capture script for the phase-43 design pass
+.tmp-qf-capture-phase43.mjs
+
+# Vendored React imagegen spike (85MB, includes its own node_modules)
+questforge-imagegen-react-v3/
+
+# Loose visual reference dump, not wired into any tooling
+sannsyoo image/

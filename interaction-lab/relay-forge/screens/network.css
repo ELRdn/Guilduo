@@ -1,0 +1,372 @@
+/* ------------------------------------------------------------------ *
+ * Network — relationship explorer
+ *
+ * The canvas never scrolls: it fits its neighbourhood. The explanation rail is
+ * the one scrolling region, because reasons are text and text is long.
+ * ------------------------------------------------------------------ */
+
+.rf-screen--network {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.rf-n-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 30%);
+  gap: var(--qf-pane-gap);
+  min-height: 0;
+}
+
+.rf-screen-region[data-variant="canvas"] { overflow: hidden; }
+
+/* ---------------- canvas ---------------- */
+
+.rf-n-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--qf-radius-sm);
+  background: var(--qf-color-inset);
+}
+
+.rf-n-lane-labels {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--qf-space-3) var(--qf-space-4);
+  pointer-events: none;
+}
+
+/* These captions explain the two lanes in words, so they are information and
+ * clear the 13px floor rather than sitting with the label family. */
+.rf-n-lane-labels span {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-n-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Non-scaling strokes keep every connector exactly 1px whatever the canvas
+ * aspect ratio is, so the Loom's line weight survives here. */
+.rf-n-edge {
+  stroke: var(--qf-color-border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Edge kind is carried by the dash pattern, not by hue: dependency solid,
+ * containment dotted, assignment long-dash, sync dash-dot. */
+.rf-n-edge[data-kind="contains"] { stroke-dasharray: 1 3; }
+.rf-n-edge[data-kind="assignment"] { stroke-dasharray: 8 4; }
+.rf-n-edge[data-kind="sync"] { stroke-dasharray: 6 3 1 3; }
+
+/* A blocking edge is broken and coloured — two signals, as section 5.2 asks. */
+.rf-n-edge[data-blocking="true"] {
+  stroke: var(--qf-color-danger);
+  stroke-dasharray: 4 4;
+  stroke-width: 1.5;
+}
+
+.rf-n-joint { fill: var(--qf-color-border-strong); }
+
+.rf-n-nodes { position: absolute; inset: 0; }
+
+.rf-n-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-2);
+  width: 216px;
+  padding: var(--qf-space-3) var(--qf-space-4);
+  text-align: left;
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+}
+
+/* Node kind is a shape, matching Command's actor grammar: a Quest is a plain
+ * rectangle, an Actor is clipped at one corner, a Connection is bracketed. */
+.rf-n-node[data-kind="actor"] {
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+
+.rf-n-node[data-kind="connection"] {
+  border-left-width: var(--qf-selection-width);
+  border-right-width: var(--qf-selection-width);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-n-node[data-state="blocked"] { border-color: var(--qf-color-danger); }
+.rf-n-node[data-state="review"] { border-color: var(--qf-color-review); }
+.rf-n-node[data-state="degraded"] { border-color: var(--qf-color-danger); }
+
+.rf-n-node[data-focused="true"] {
+  border-color: var(--qf-color-accent);
+  border-width: var(--qf-selection-width);
+  background: var(--qf-color-selected);
+  width: 264px;
+}
+
+.rf-n-node:hover { border-color: var(--qf-color-border-strong); }
+
+.rf-n-node-top { display: flex; align-items: center; gap: var(--qf-space-3); min-width: 0; }
+
+.rf-n-node-ref {
+  font: var(--qf-font-mono);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-n-node-label {
+  font: var(--qf-text-component);
+  font-size: 14px;
+  color: var(--qf-color-fg-strong);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rf-n-node-sub {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------- outline ---------------- */
+
+/* The outline does not scroll itself: its region is the declared scroll owner,
+ * so switching Graph -> Outline does not introduce a second scroller. */
+.rf-n-outline { display: flex; flex-direction: column; gap: var(--qf-space-5); min-height: 0; }
+
+.rf-n-outline-focus {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-3);
+  padding: var(--qf-space-4);
+  background: var(--qf-color-selected);
+  border-left: var(--qf-selection-width) solid var(--qf-color-accent);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-n-outline-focus strong { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); min-width: 0; }
+
+.rf-n-outline-lane { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+
+.rf-n-outline-title {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+  margin: 0;
+}
+
+.rf-n-outline-empty { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+.rf-n-outline-list { display: flex; flex-direction: column; gap: var(--qf-space-3); margin: 0; padding: 0; list-style: none; }
+
+.rf-n-outline-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-2);
+  padding: var(--qf-space-4);
+  background: var(--qf-color-inset);
+  border-left: var(--qf-selection-width) solid var(--qf-color-border-strong);
+  border-radius: var(--qf-radius-xs);
+  align-items: flex-start;
+}
+
+.rf-n-outline-row[data-blocking="true"] { border-left-color: var(--qf-color-danger); }
+
+.rf-n-outline-head { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+.rf-n-outline-kind {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-xs);
+  padding: 0 var(--qf-space-2);
+}
+
+.rf-n-outline-label { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); margin: 0; }
+.rf-n-outline-reason { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+/* ---------------- reason rail ---------------- */
+
+.rf-n-focus-head { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+.rf-n-focus-title { font: var(--qf-text-section); color: var(--qf-color-fg-strong); margin: 0; }
+.rf-n-focus-sub { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+.rf-n-focus-actions { display: flex; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+.rf-n-rail-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+  margin: var(--qf-space-3) 0 0;
+}
+
+.rf-n-rail-empty { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+.rf-n-reasons { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
+
+.rf-n-reason {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: var(--qf-space-3);
+  padding: var(--qf-space-3);
+  border-left: var(--qf-border-width) solid var(--qf-color-border-default);
+}
+
+.rf-n-reason[data-blocking="true"] { border-left-width: var(--qf-selection-width); border-left-color: var(--qf-color-danger); }
+
+.rf-n-reason-kind {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-n-reason-copy { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); min-width: 0; }
+
+.rf-n-chains { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
+
+.rf-n-chain {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: var(--qf-space-3);
+  align-items: center;
+  width: 100%;
+  min-height: var(--qf-row-default);
+  padding: var(--qf-space-3);
+  text-align: left;
+  border-left: var(--qf-selection-width) solid var(--qf-color-danger);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-n-chain[data-selected="true"] { background: var(--qf-color-selected); }
+.rf-n-chain:hover { background: var(--qf-color-inset); }
+
+.rf-n-chain-reason {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-n-chain-count { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); white-space: nowrap; }
+
+/* ---------------- narrower desktop ---------------- */
+
+@media (max-width: 1600px) and (min-width: 901px) {
+  .rf-n-workspace { grid-template-columns: minmax(0, 1fr) minmax(330px, 32%); }
+  .rf-n-node { width: 188px; }
+  .rf-n-node[data-focused="true"] { width: 228px; }
+}
+
+/* ---------------- mobile ---------------- */
+
+@media (max-width: 900px) {
+  .rf-screen--network { grid-template-rows: none; height: auto; }
+  /* The canvas is not shrunk — it is not rendered at all. The mobile explorer
+   * below is a different composition of the same ViewModel. */
+  .rf-n-workspace { display: contents; }
+
+  .rf-n-m-focus {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-2);
+    padding: var(--qf-space-4);
+    background: var(--qf-color-selected);
+    border: var(--qf-border-width) solid var(--qf-color-accent);
+    border-left-width: var(--qf-selection-width);
+    border-radius: var(--qf-radius-sm);
+  }
+
+  .rf-n-m-focus[data-kind="actor"] { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); }
+  .rf-n-m-focus[data-state="blocked"] { border-color: var(--qf-color-danger); }
+
+  .rf-n-m-focus-top { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+  .rf-n-m-focus-title { font: var(--qf-text-section); color: var(--qf-color-fg-strong); margin: 0; }
+  .rf-n-m-focus-sub { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+  .rf-n-m-back { align-self: flex-start; min-height: var(--qf-space-11); }
+
+  .rf-n-m-lane {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-3);
+    padding: var(--qf-space-4);
+    background: var(--qf-color-surface);
+    border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+    border-radius: var(--qf-radius-sm);
+  }
+
+  .rf-n-m-lane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--qf-space-3);
+    min-height: var(--qf-space-11);
+    font: var(--qf-text-component);
+    font-size: 14px;
+    color: var(--qf-color-fg-strong);
+    text-align: left;
+  }
+
+  /* A caret that rotates, so open/closed is a shape not just a count. */
+  .rf-n-m-lane-head::after {
+    content: "";
+    flex: 0 0 auto;
+    width: var(--qf-space-3);
+    height: var(--qf-space-3);
+    border-right: var(--qf-border-width) solid currentColor;
+    border-bottom: var(--qf-border-width) solid currentColor;
+    transform: rotate(45deg);
+    transition: transform var(--qf-motion-quick) var(--qf-ease-move);
+  }
+
+  .rf-n-m-lane[data-open="false"] .rf-n-m-lane-head::after { transform: rotate(-45deg); }
+
+  .rf-n-m-lane-count { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-muted); margin-left: auto; }
+
+  .rf-n-m-list { display: flex; flex-direction: column; gap: var(--qf-space-3); margin: 0; padding: 0; list-style: none; }
+
+  .rf-n-m-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-2);
+    width: 100%;
+    min-height: var(--qf-space-11);
+    padding: var(--qf-space-4);
+    text-align: left;
+    background: var(--qf-color-inset);
+    border-left: var(--qf-selection-width) solid var(--qf-color-border-strong);
+    border-radius: var(--qf-radius-xs);
+  }
+
+  .rf-n-m-row[data-blocking="true"] { border-left-color: var(--qf-color-danger); }
+  .rf-n-m-row-top { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+  .rf-n-m-row-label { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); }
+  .rf-n-m-row-reason { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+  .rf-n-m-sticky { display: flex; }
+  .rf-n-m-sticky > * { flex: 1; min-height: var(--qf-space-11); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-n-m-lane-head::after { transition: none; }
+}

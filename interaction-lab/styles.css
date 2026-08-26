@@ -1,3 +1,5 @@
+@import "../design/tokens.generated.css";
+
 :root {
   color-scheme: light;
   font-family: Inter, "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
@@ -10,7 +12,7 @@
   --muted: #687276;
   --line: #d9dfda;
   --green: #4f8a6d;
-  --orange: #c95d2c;
+  --orange: #b98535;
   --red: #ba442f;
   --blue: #286fb8;
   --gold: #b58735;
@@ -18,6 +20,23 @@
 }
 
 * { box-sizing: border-box; }
+
+/* v4.3: thin, low-contrast scrollbars everywhere (page scroll and every independently
+   scrolling region alike) so nested scroll areas read as one workspace instead of a stack
+   of separate windows. Stays operable — width/color only, never overlay-hidden. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink) 38%, transparent); }
 
 body {
   min-width: 320px;
@@ -125,17 +144,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .page-title .demo-data-badge { margin-top: 5px; }
 
 .demo-data-badge[hidden] { display: none; }
+.tree-layout[hidden], .integration-metrics[hidden], .integration-workspace[hidden], .integration-detail[hidden] { display: none !important; }
 
-.sidebar-nav { display: grid; gap: 7px; }
+.sidebar-nav { display: grid; gap: 8px; }
 
+/* v4.3: Left Rail presence pass — taller rows, a real left accent on the active item,
+   and slightly larger icon/label so the rail reads as the app's primary navigation shell
+   rather than a minor strip. */
 .nav-button {
   display: grid;
-  min-height: 42px;
-  grid-template-columns: 30px minmax(0, 1fr);
+  min-height: 48px;
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  gap: 9px;
-  padding: 6px 8px;
+  gap: 10px;
+  padding: 8px 10px;
   border: 1px solid transparent;
+  border-left: 3px solid transparent;
   border-radius: 4px;
   background: transparent;
   color: #fff;
@@ -144,8 +168,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .nav-icon {
   display: grid;
-  width: 27px;
-  height: 27px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 1px solid #4b5757;
   border-radius: 3px;
@@ -155,11 +179,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font-weight: 800;
 }
 
-.nav-button b { font-size: 14px; }
+.nav-button b { font-size: 15px; }
 
 .nav-button.is-active {
   border-color: #b9d0c1;
-  background: #35433e;
+  border-left-color: #c9ded1;
+  background: #3a4941;
 }
 
 .nav-button.is-active .nav-icon {
@@ -170,7 +195,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .sidebar-profile {
   margin-top: auto;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid #415051;
   border-radius: 4px;
   background: #283438;
@@ -241,12 +266,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
   display: grid;
   min-height: 102px;
   grid-template-columns: minmax(190px, 0.9fr) minmax(580px, 2.9fr) 52px;
   gap: 12px;
   align-items: stretch;
   padding: 12px 0 16px;
+  background: var(--canvas);
 }
 
 .page-title, .status-card, .quick-add {
@@ -303,6 +332,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .status-card strong { font-size: 20px; line-height: 1.1; }
 .status-card small { color: var(--muted); font-size: 11px; }
 
+/* v4.3: Status Strip readouts use the Data typeface (DESIGN.md §3) instead of the UI
+   font, matching the mono precision used across the three React Golden Islands. */
+#topbarLevel, #topbarXp, #topbarQuestLine, #topbarMp, #topbarMpMax, #topbarPressure, #timerValue {
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+}
+
 .focus-card button {
   display: flex;
   align-items: center;
@@ -335,9 +370,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   color: #fff;
 }
 
-.mp-card strong { display: flex; align-items: baseline; gap: 4px; color: var(--blue); }
+.mp-card strong { display: flex; align-items: baseline; gap: 4px; color: var(--gold); }
 .mp-card strong small { color: var(--muted); font-size: 10px; }
 .pressure-card strong { color: var(--orange); }
+
+.mp-card meter { accent-color: var(--gold); }
+.mp-card meter::-webkit-meter-optimum-value,
+.mp-card meter::-webkit-meter-suboptimum-value,
+.mp-card meter::-webkit-meter-even-less-good-value { background: var(--gold); }
 
 meter {
   display: block;
@@ -389,6 +429,17 @@ meter::-webkit-meter-even-less-good-value {
   gap: 6px;
 }
 
+.archive-count {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .tool, .primary-action, .secondary-action {
   min-height: 38px;
   padding: 0 12px;
@@ -398,6 +449,12 @@ meter::-webkit-meter-even-less-good-value {
   color: var(--ink);
   font-size: 13px;
   font-weight: 800;
+}
+
+.tool:disabled, .primary-action:disabled, .secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+  filter: saturate(.55);
 }
 
 .tool.is-active, .tool[aria-pressed="true"] {
@@ -421,7 +478,7 @@ meter::-webkit-meter-even-less-good-value {
   gap: 16px;
 }
 
-.quest-board, .agent-panel, .selected-panel, .tree-list, .tree-note, .battle-side section,
+.quest-board, .selected-panel, .tree-list, .tree-note, .battle-side section,
 .integration-runway, .integration-card, .integration-detail, .party-card, .battle-stage {
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -429,9 +486,17 @@ meter::-webkit-meter-even-less-good-value {
   box-shadow: var(--shadow);
 }
 
+/* v4.3: agent-panel is a secondary overview next to the primary Selected Quest panel — a
+   flatter, borderless treatment keeps it from competing with selected-panel for attention. */
+.agent-panel {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+}
+
 .quest-head, .quest-row {
   display: grid;
-  grid-template-columns: 88px minmax(240px, 2.3fr) minmax(108px, 0.7fr) 116px 88px 78px 66px;
+  grid-template-columns: 104px minmax(240px, 2.3fr) minmax(108px, 0.7fr) 116px 88px 78px 66px;
   gap: 10px;
   align-items: center;
 }
@@ -459,7 +524,9 @@ meter::-webkit-meter-even-less-good-value {
 
 .quest-row:last-child { border-bottom: 0; }
 
-.quest-row.is-selected { outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: -2px; background: #f8fbfd; }
+.quest-row.is-selected { outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: -2px; background: color-mix(in srgb, var(--blue) 9%, var(--panel)); }
+.quest-row.is-selected .quest-summary strong { font-weight: 800; }
+.quest-row.is-bulk-selected { background: color-mix(in srgb, var(--blue) 10%, var(--panel)); }
 .quest-row.is-working { border-left: 3px solid var(--blue); }
 .quest-row.is-blocked { border-left: 3px solid var(--red); }
 .quest-row.is-review { border-left: 3px solid var(--orange); }
@@ -478,7 +545,7 @@ meter::-webkit-meter-even-less-good-value {
 
 .quest-code {
   display: grid;
-  grid-template-columns: 10px 20px minmax(0, 1fr);
+  grid-template-columns: 10px 20px 18px minmax(0, 1fr);
   min-width: 0;
   align-items: center;
   column-gap: 8px;
@@ -488,6 +555,14 @@ meter::-webkit-meter-even-less-good-value {
 }
 
 .quest-number { min-width: 0; white-space: nowrap; }
+
+.quest-select {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
 
 .rail-marker {
   display: inline-block;
@@ -571,7 +646,7 @@ meter::-webkit-meter-even-less-good-value {
   height: 5px;
   overflow: hidden;
   border-radius: 3px;
-  background: #e6ebe7;
+  background: color-mix(in srgb, var(--ink) 12%, var(--panel));
 }
 
 .progress-line span {
@@ -581,8 +656,10 @@ meter::-webkit-meter-even-less-good-value {
   background: var(--green);
 }
 
-.quest-row.is-blocked .quest-progress b, .quest-row.is-review .quest-progress b { color: var(--orange); }
-.quest-row.is-blocked .progress-line span, .quest-row.is-review .progress-line span { background: var(--orange); }
+.quest-row.is-blocked .quest-progress b { color: var(--red); }
+.quest-row.is-blocked .progress-line span { background: var(--red); }
+.quest-row.is-review .quest-progress b { color: var(--orange); }
+.quest-row.is-review .progress-line span { background: var(--orange); }
 .quest-row.is-working .progress-line span { background: var(--blue); }
 .quest-row.is-completed .progress-line span { background: var(--green); }
 
@@ -631,11 +708,13 @@ meter::-webkit-meter-even-less-good-value {
 .state-pill[data-state="ready"] { background: #7c8584; }
 .state-pill[data-state="completed"] { background: var(--green); }
 .state-pill[data-state="review"] { background: var(--orange); }
+.state-pill[data-state="archived"] { background: var(--muted); }
 
 .quest-due, .quest-focus { color: var(--muted); font-size: 12px; font-weight: 700; }
 .quest-focus { color: var(--green); }
 
 .today-side { display: grid; align-content: start; gap: 16px; }
+.today-side { position: sticky; top: 118px; align-self: start; max-height: calc(100vh - 134px); overflow-y: auto; scrollbar-width: thin; }
 .agent-panel, .selected-panel { padding: 14px; }
 
 .panel-heading {
@@ -738,6 +817,8 @@ meter::-webkit-meter-even-less-good-value {
 
 .boss-stats b { color: #fff; font-size: 13px; }
 .selected-panel { min-height: 244px; }
+.quest-row.is-archived { border-left: 3px solid var(--muted); opacity: .78; }
+.quest-row.is-archived .quest-progress b, .quest-row.is-archived .quest-focus { color: var(--muted); }
 
 .selected-panel > p {
   min-height: 36px;
@@ -769,7 +850,26 @@ meter::-webkit-meter-even-less-good-value {
   margin-top: 14px;
 }
 
-.selected-actions > *, .dialog-actions > *, .integration-actions > * { flex: 1; }
+.selected-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.selected-actions > *, .dialog-actions > *, .integration-actions > * { flex: 1; min-width: 0; white-space: nowrap; }
+.selected-actions > * { padding-right: 6px; padding-left: 6px; }
+
+.bulk-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 32%, var(--line));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--blue) 7%, var(--panel));
+}
+
+.bulk-selection-bar[hidden] { display: none; }
+.bulk-selection-bar strong { margin-right: auto; color: var(--blue); font-size: 12px; }
+.bulk-selection-bar button { min-height: 30px; padding: 0 10px; white-space: nowrap; }
 
 .tree-layout, .battle-layout {
   display: grid;
@@ -834,6 +934,12 @@ meter::-webkit-meter-even-less-good-value {
   color: #fff;
 }
 
+.tree-note-profile { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #415051; }
+.tree-note-avatar { display: grid; width: 42px; height: 42px; place-items: center; overflow: hidden; border: 1px solid #71827a; border-radius: 50%; background: #d7e8df; color: #1b2b28; font-size: 13px; font-weight: 900; }
+.tree-note-avatar img { width: 100%; height: 100%; object-fit: cover; image-rendering: auto; }
+.tree-note-profile strong, .tree-note-profile small { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-note-profile strong { font-size: 14px; }
+.tree-note-profile small { margin-top: 3px; color: #b7c6bf; font-size: 10px; line-height: 1.35; }
 .tree-note > p { color: #78a8d8; }
 .tree-note h2 { font-size: 19px; }
 .tree-note > span { color: #b7c6bf; font-size: 12px; line-height: 1.5; }
@@ -853,10 +959,7 @@ meter::-webkit-meter-even-less-good-value {
 .battle-stage {
   min-height: 0;
   padding: 16px;
-  background:
-    linear-gradient(rgba(32, 43, 45, 0.94), rgba(32, 43, 45, 0.94)),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 24px 24px,
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 24px 24px;
+  background: var(--canvas);
   color: #fff;
 }
 
@@ -871,10 +974,7 @@ meter::-webkit-meter-even-less-good-value {
   padding: 28px 34px 34px;
   border: 1px solid #3d4e4c;
   border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(23, 36, 40, 0.2), rgba(7, 15, 16, 0.82)),
-    linear-gradient(90deg, rgba(120, 168, 216, 0.08) 1px, transparent 1px) 0 0 / 32px 32px,
-    #16201f;
+  background: var(--canvas);
 }
 
 .arena-horizon { position: absolute; right: 0; bottom: 112px; left: 0; height: 1px; background: rgba(208, 227, 216, 0.34); box-shadow: 0 -18px 40px rgba(120, 168, 216, 0.1); }
@@ -924,7 +1024,7 @@ meter::-webkit-meter-even-less-good-value {
 }
 
 .player-stage span { color: #c8d7d1; font-size: 13px; }
-.player-stage b { color: #78a8d8; }
+.player-stage b { color: var(--gold); }
 .player-stage .combat-hud { width: 210px; }
 
 .turn-indicator { position: absolute; right: 34px; bottom: 22px; left: 34px; z-index: 1; margin: 0; color: #fff; font-size: 14px; font-weight: 800; letter-spacing: 0.05em; }
@@ -987,7 +1087,7 @@ meter::-webkit-meter-even-less-good-value {
 
 .battle-queue-row:last-child { border-bottom: 0; }
 .battle-queue-row strong { font-size: 12px; }
-.battle-queue-row span { color: var(--blue); font-size: 11px; font-weight: 800; }
+.battle-queue-row span { color: var(--gold); font-size: 11px; font-weight: 800; }
 .battle-side ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .battle-side li { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
@@ -1167,6 +1267,10 @@ meter::-webkit-meter-even-less-good-value {
 .profile-identity-card { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 20px; padding: 24px; }
 .profile-page-avatar { display: grid; width: 128px; height: 128px; place-items: center; overflow: hidden; border: 1px solid #60706e; border-radius: 4px; background: #b4d1d0; }
 .profile-page-avatar img { width: 145px; image-rendering: pixelated; }
+.profile-role-note { display: block; max-width: 420px; margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.avatar-upload { display: inline-flex; min-height: 36px; align-items: center; margin-top: 12px; padding: 0 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel-muted); color: var(--ink); font-size: 11px; font-weight: 800; cursor: pointer; }
+.avatar-upload:hover { border-color: var(--blue); color: var(--blue); }
+.profile-avatar-status { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
 .profile-identity-card h2, .profile-current-card h2, .profile-log-card h2, .settings-card h2 { margin: 5px 0; font-size: 22px; }
 .profile-identity-card > div > span, .profile-current-card > span { color: var(--muted); font-size: 13px; }
 .profile-identity-card dl { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin: 0; }
@@ -1183,37 +1287,66 @@ meter::-webkit-meter-even-less-good-value {
 .settings-card { padding: 20px; }
 .settings-connection-card { grid-column: 1 / -1; }
 .setting-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); }
+.setting-row-stack { align-items: flex-start; flex-direction: column; }
 .setting-row:first-of-type { margin-top: 10px; }
 .setting-row strong { display: block; font-size: 14px; }
 .setting-row small { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.setting-check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 12px; font-weight: 700; cursor: pointer; }
+.setting-check input { width: 18px; height: 18px; accent-color: var(--blue); }
+.setting-status { min-height: 1.4em; }
 .connection-status { display: grid; gap: 4px; padding: 14px; margin: 14px 0; border: 1px solid var(--line); background: var(--surface-soft); }
 .connection-status strong { color: var(--ink); font-size: 16px; }
 .connection-status strong[data-status="synced"] { color: var(--green); }
 .connection-status strong[data-status="syncing"] { color: var(--blue); }
-.connection-status strong[data-status="error"] { color: var(--orange); }
+.connection-status strong[data-status="reconnecting"] { color: var(--blue); }
+.connection-status strong[data-status="error"] { color: var(--red); }
+.connection-status strong[data-status="stale"] { color: var(--orange); }
 .connection-status small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .connection-url { display: grid; gap: 6px; }
 .connection-url span { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .connection-url input { width: 100%; min-height: 42px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 9px 11px; color: var(--ink); background: var(--surface); font: inherit; }
 .connection-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .connection-actions > * { flex: 1 1 180px; }
+.integration-public-beta-note { margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--orange); background: color-mix(in srgb, var(--orange) 8%, var(--panel)); color: var(--ink); font-size: 12px; line-height: 1.5; }
+.connection-preference { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding: 12px; border: 1px solid var(--line); background: var(--surface-soft); cursor: pointer; }
+.connection-preference input { width: 18px; height: 18px; flex: 0 0 auto; margin: 1px 0 0; accent-color: var(--blue); }
+.connection-preference span { display: grid; gap: 3px; min-width: 0; }
+.connection-preference b { color: var(--ink); font-size: 12px; }
+.connection-preference small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .connection-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0 0; }
 .connection-meta div { padding: 10px; background: var(--surface-soft); }
 .settings-agent-card { grid-column: 1 / -1; }
 .setting-description, .empty-note { color: var(--muted); line-height: 1.6; }
+.agent-registry-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
+.agent-registry-legend span { padding: 10px; border: 1px solid var(--line); background: var(--panel-muted); color: var(--muted); font-size: 11px; line-height: 1.45; }
+.agent-registry-legend b { display: block; margin-bottom: 3px; color: var(--ink); font-size: 12px; }
 .agent-form { display: grid; gap: 12px; margin: 16px 0; padding: 16px; border: 1px solid var(--line); background: var(--surface-soft); }
 .agent-form label { display: grid; gap: 6px; font-weight: 700; }
 .agent-form input, .agent-form textarea, .agent-link-row select { width: 100%; min-height: 42px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); padding: 9px 10px; font: inherit; }
 .connection-url input { text-overflow: ellipsis; }
 .agent-registry-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
 .registry-agent { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; border: 1px solid var(--line); padding: 14px; background: var(--surface); }
+.registry-agent-title { display: flex; min-width: 0; align-items: center; gap: 9px; }
+.registry-agent-mark { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid var(--blue); border-radius: 50%; color: var(--blue); font-size: 9px; font-weight: 900; }
 .registry-agent p, .registry-agent > small, .registry-actions { grid-column: 1 / -1; margin: 0; }
 .registry-agent small { color: var(--muted); }
 .registry-actions, .agent-link-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .registry-actions button { min-height: 36px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 800; }
 .agent-link-row { margin-top: 14px; align-items: center; }
 .agent-link-row select { flex: 1 1 220px; }
-.panel-error-list { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--orange); background: var(--surface); }
+.agent-connection-box { margin-top: 18px; padding: 14px; border: 1px solid var(--line); background: var(--panel-muted); }
+.agent-connection-box > div:first-child p { margin: 0; color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.agent-connection-box h3 { margin: 4px 0; font-size: 16px; }
+.agent-connection-box h3 + small { color: var(--muted); font-size: 11px; }
+.agent-link-row label { display: grid; flex: 1 1 220px; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 800; }
+.agent-connection-list { display: grid; gap: 6px; margin-top: 12px; }
+.agent-connection-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); background: var(--panel); }
+.agent-connection-row strong, .agent-connection-row small { display: block; }
+.agent-connection-row strong { font-size: 12px; }
+.agent-connection-row small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.agent-connection-row button { min-height: 30px; border: 1px solid var(--line); background: var(--panel-muted); color: var(--ink); font-size: 11px; font-weight: 800; }
+.panel-error-list { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--red); background: var(--surface); }
+.panel-error-list[hidden] { display: none; }
 .panel-error-list div { display: grid; margin-right: auto; }
 .panel-error-list small { color: var(--muted); }
 .panel-error-list span { padding: 4px 7px; border: 1px solid var(--line); font-weight: 800; }
@@ -1221,7 +1354,11 @@ meter::-webkit-meter-even-less-good-value {
 .connection-meta dt { color: var(--muted); font-size: 11px; }
 .connection-meta dd { margin: 4px 0 0; color: var(--ink); font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
 .setting-toggle { min-width: 62px; min-height: 34px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 3px; background: var(--panel-muted); color: var(--ink); font-size: 11px; font-weight: 800; }
+.setting-select { min-height: 38px; min-width: min(220px, 48vw); border: 1px solid var(--line); border-radius: 3px; background: var(--panel); color: var(--ink); padding: 7px 9px; font-weight: 700; }
 .setting-toggle[aria-pressed="true"] { border-color: var(--blue); background: #edf5fb; color: var(--blue); }
+.detail-mode-switch { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.detail-mode-switch button { min-height: 40px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel-muted); color: var(--ink); font-size: 12px; font-weight: 800; }
+.detail-mode-switch button[aria-pressed="true"] { border-color: var(--blue); background: #edf5fb; color: var(--blue); }
 .settings-routes { display: grid; align-content: start; gap: 8px; }
 .settings-routes .secondary-action { text-align: left; }
 .is-large-type .quest-summary strong, .is-large-type .tree-node strong { font-size: 17px; }
@@ -1230,6 +1367,13 @@ meter::-webkit-meter-even-less-good-value {
 .is-relaxed-density .quest-row { min-height: 106px; }
 .is-relaxed-density .tree-node { min-height: 84px; }
 .mobile-nav { display: none; }
+.selected-backdrop { display: none; }
+
+.quest-skeleton-list { display: grid; gap: 8px; padding: 10px; }
+.quest-skeleton-row { display: block; min-height: 92px; border: 1px solid var(--line); background: linear-gradient(90deg, var(--panel-muted) 25%, var(--panel) 50%, var(--panel-muted) 75%); background-size: 240% 100%; animation: quest-skeleton-shimmer 1.2s linear infinite; }
+@keyframes quest-skeleton-shimmer { to { background-position: -240% 0; } }
+body.is-syncing .quest-list { cursor: progress; }
+@media (prefers-reduced-motion: reduce) { .quest-skeleton-row { animation: none; } }
 
 .dialog {
   width: min(520px, calc(100vw - 32px));
@@ -1308,7 +1452,7 @@ meter::-webkit-meter-even-less-good-value {
   .status-strip { gap: 7px; }
   .status-card { padding: 11px; }
   .status-card strong, .focus-card button b { font-size: 17px; }
-  .quest-head, .quest-row { grid-template-columns: 44px minmax(180px, 2fr) 84px 76px 82px 72px 58px; gap: 7px; }
+  .quest-head, .quest-row { grid-template-columns: 88px minmax(180px, 2fr) 84px 76px 82px 72px 58px; gap: 7px; }
 }
 
 @media (max-width: 1060px) {
@@ -1321,7 +1465,7 @@ meter::-webkit-meter-even-less-good-value {
   .profile-avatar { width: 42px; height: 42px; float: none; margin: 0; }
   .profile-avatar img { width: 46px; }
   .today-layout { grid-template-columns: minmax(0, 1fr) 280px; }
-  .quest-head, .quest-row { grid-template-columns: 38px minmax(150px, 1.7fr) 72px 70px 76px 68px 48px; }
+  .quest-head, .quest-row { grid-template-columns: 82px minmax(150px, 1.7fr) 72px 70px 76px 68px 48px; }
   .agent-chip { grid-template-columns: 26px; }
   .agent-chip strong, .agent-chip small { display: none; }
 }
@@ -1344,7 +1488,10 @@ meter::-webkit-meter-even-less-good-value {
   .view-heading { align-items: start; flex-direction: column; margin-top: 4px; }
   .toolbar { justify-content: start; }
   .today-layout, .tree-layout, .battle-layout { grid-template-columns: 1fr; }
+  .topbar { position: relative; top: auto; z-index: auto; background: transparent; }
+  .today-side { position: static; max-height: none; overflow: visible; }
   .agent-panel { display: none; }
+  .agent-registry-legend { grid-template-columns: 1fr; }
   .selected-panel {
     position: fixed;
     right: 12px;
@@ -1381,14 +1528,39 @@ meter::-webkit-meter-even-less-good-value {
     font-size: 10px;
     font-weight: 800;
   }
+  body.is-detail-modal::before {
+    display: none;
+  }
+  .selected-backdrop { display: block; position: fixed; inset: 0; z-index: 10; border: 0; background: rgba(24, 34, 32, .58); }
+  .selected-backdrop[hidden] { display: none; }
+  body.is-detail-modal .selected-panel {
+    top: 50%;
+    right: 16px;
+    bottom: auto;
+    left: 16px;
+    z-index: 15;
+    max-height: min(540px, calc(100vh - 150px));
+    transform: translateY(-50%) scale(.96);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 180ms ease, opacity 180ms ease;
+  }
+  body.is-detail-modal .selected-panel.is-mobile-open {
+    transform: translateY(-50%) scale(1);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  body.is-detail-modal .selected-panel:not(.is-mobile-open) > :not(.panel-heading) { visibility: visible; }
+  body.is-detail-modal .selected-panel .panel-heading { margin-bottom: 12px; }
+  body.is-detail-modal .selected-panel .panel-heading h2 { white-space: normal; }
   .boss-panel { min-height: 144px; }
   .boss-panel img { width: 115px; height: 115px; }
   .quest-head { display: none; }
   .quest-list { padding: 0; }
-  .quest-row { grid-template-columns: 72px minmax(0, 1fr); gap: 8px; min-height: 110px; padding: 12px; }
+  .quest-row { grid-template-columns: 88px minmax(0, 1fr); gap: 8px; min-height: 110px; padding: 12px; }
   .quest-row[data-depth="1"] { padding-left: 22px; background-position: 11px 0; }
   .quest-row[data-depth="1"] .quest-code { font-size: 13px; }
-  .quest-code { grid-template-columns: 8px 18px minmax(0, 1fr); min-width: 0; column-gap: 5px; font-size: 18px; white-space: nowrap; }
+  .quest-code { grid-template-columns: 8px 18px 17px minmax(0, 1fr); min-width: 0; column-gap: 5px; font-size: 18px; white-space: nowrap; }
   .quest-code .rail-marker { width: 8px; height: 8px; }
   .quest-toggle { width: 18px; height: 18px; }
   .quest-row .quest-progress, .quest-row .agent-chip, .quest-row .quest-due, .quest-row .quest-focus { grid-column: 2; }
@@ -1942,4 +2114,1729 @@ body.is-relaxed-density .command-grid button {
 @media (max-width: 640px) {
   .agent-registry-list { grid-template-columns: 1fr; }
   .agent-link-row { display: grid; }
+}
+
+/* Today is an operation board: only the quest feed moves on larger screens. */
+@media (min-width: 901px) {
+  body.is-today-view {
+    overflow: hidden;
+  }
+
+  body.is-today-view .app-shell {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
+  body.is-today-view .sidebar {
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  body.is-today-view .workspace {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  body.is-today-view .topbar {
+    position: relative;
+    top: auto;
+    flex: 0 0 auto;
+  }
+
+  body.is-today-view .view[data-panel="today"] {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  body.is-today-view .view[data-panel="today"] > .view-heading {
+    flex: 0 0 auto;
+  }
+
+  body.is-today-view .today-layout {
+    min-height: 0;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 1fr) minmax(270px, 310px);
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  body.is-today-view .quest-board {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  body.is-today-view .quest-head {
+    flex: 0 0 auto;
+  }
+
+  body.is-today-view .quest-list {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+  }
+
+  body.is-today-view .quest-list:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--blue) 52%, transparent);
+    outline-offset: -3px;
+  }
+
+  body.is-today-view .today-side {
+    position: relative;
+    top: auto;
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: 1fr;
+    max-height: none;
+    align-self: stretch;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+  }
+}
+
+/* At narrow desktop widths the side rail stays beside the feed, but yields space. */
+@media (min-width: 901px) and (max-width: 1180px) {
+  body.is-today-view .today-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+
+/* v4.3: `.today-layout { grid-template-columns: minmax(0,1fr); }` at 901-1460px (above) is
+   meant to stack the quest board full-width before content collides, but the unconditional
+   `body.is-today-view .today-layout` two-column rule outranks it by specificity for the whole
+   ≥901px range and was silently winning up to 1460px, leaving the quest board pinned to a
+   ~520px column and its row content overlapping. This closes the 1181-1460px gap the 901-1180px
+   rule above doesn't cover, at matching specificity so it wins for exactly that range. */
+@media (min-width: 1181px) and (max-width: 1460px) {
+  body.is-today-view .today-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Phones keep the natural page flow and the existing bottom detail sheet. */
+@media (max-width: 900px) {
+  body.is-today-view {
+    overflow: auto;
+  }
+
+  body.is-today-view .app-shell {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  body.is-today-view .workspace {
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  body.is-today-view .view[data-panel="today"] {
+    display: block;
+    min-height: 0;
+  }
+
+  body.is-today-view .today-layout {
+    display: grid;
+    min-height: 0;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  body.is-today-view .quest-board {
+    display: block;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  body.is-today-view .quest-list {
+    display: block;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+    scrollbar-gutter: auto;
+    overscroll-behavior: auto;
+  }
+
+  body.is-today-view .today-side {
+    position: static;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* Quest Tree uses the same fixed operation-board boundary as Today on larger screens. */
+@media (min-width: 901px) {
+  body.is-tree-view { overflow: hidden; }
+
+  body.is-tree-view .app-shell {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
+  body.is-tree-view .sidebar {
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  body.is-tree-view .workspace {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  body.is-tree-view .topbar {
+    position: relative;
+    top: auto;
+    flex: 0 0 auto;
+  }
+
+  body.is-tree-view .view[data-panel="tree"] {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  body.is-tree-view .view[data-panel="tree"] > .view-heading,
+  body.is-tree-view .quest-rail-legend {
+    flex: 0 0 auto;
+  }
+
+  body.is-tree-view .tree-layout {
+    display: grid;
+    min-height: 0;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  body.is-tree-view .tree-list {
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+  }
+
+  body.is-tree-view .tree-list:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--blue) 52%, transparent);
+    outline-offset: -3px;
+  }
+
+  body.is-tree-view .tree-note {
+    display: block;
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    align-self: stretch;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+  }
+
+  body.is-tree-view .tree-note-profile,
+  body.is-tree-view .tree-note > p,
+  body.is-tree-view .tree-note h2,
+  body.is-tree-view .tree-note > span,
+  body.is-tree-view .tree-note dl {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  body.is-tree-view .tree-note dl { margin: 18px 0 0; }
+
+  body.is-tree-view .tree-node {
+    grid-template-columns: 78px minmax(0, 1fr) 100px 72px;
+  }
+
+  body.is-tree-view .tree-node > div { min-width: 0; }
+  body.is-tree-view .tree-node strong,
+  body.is-tree-view .tree-node small { overflow-wrap: anywhere; }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  body.is-tree-view .tree-layout { grid-template-columns: minmax(0, 1fr) 270px; gap: 10px; }
+  body.is-tree-view .tree-node { grid-template-columns: 70px minmax(0, 1fr) 88px 64px; gap: 7px; padding: 9px; }
+  body.is-tree-view .tree-node strong { font-size: 14px; }
+  body.is-tree-view .tree-note { padding: 14px; }
+}
+
+@media (max-width: 900px) {
+  body.is-tree-view { overflow: auto; }
+  body.is-tree-view .app-shell { height: auto; min-height: 100vh; }
+  body.is-tree-view .workspace { display: block; height: auto; min-height: 0; overflow: visible; }
+  body.is-tree-view .view[data-panel="tree"] { display: block; min-height: 0; }
+  body.is-tree-view .tree-layout { display: grid; min-height: 0; grid-template-columns: 1fr; overflow: visible; }
+  body.is-tree-view .tree-list { display: grid; max-height: none; min-height: 0; overflow: visible; scrollbar-gutter: auto; overscroll-behavior: auto; }
+  body.is-tree-view .tree-note { display: block; position: static; height: auto; min-height: 0; max-height: none; overflow: visible; }
+  body.is-tree-view .tree-node { grid-template-columns: 62px minmax(0, 1fr); align-items: start; }
+  body.is-tree-view .tree-node .tree-code { grid-row: 1 / span 4; }
+  body.is-tree-view .tree-node > div { grid-column: 2; min-width: 0; }
+  body.is-tree-view .tree-node .state-pill { grid-column: 2; grid-row: auto; justify-self: start; margin-top: 6px; }
+  body.is-tree-view .tree-node button { grid-column: 2; grid-row: auto; width: 100%; margin-top: 6px; }
+}
+/* Functional controls use the shared Lucide icon vocabulary. */
+.qf-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.14em;
+  stroke: currentColor;
+}
+
+button .qf-icon,
+a .qf-icon {
+  pointer-events: none;
+}
+.agent-operations-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
+.agent-operations-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.agent-operation-card { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: start; min-height: 176px; padding: 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); text-align: left; }
+.agent-operation-card:hover, .agent-operation-card:focus-visible, .agent-operation-card.is-selected { border-color: var(--blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 16%, transparent); }
+.agent-operation-mark { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); background: var(--panel-muted); color: var(--blue); font: 800 11px/1 ui-monospace, monospace; }
+.agent-operation-card > span:last-of-type { display: grid; gap: 3px; min-width: 0; }
+.agent-operation-card small { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .06em; }
+.agent-operation-card strong { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.agent-operation-card b { color: var(--blue); font-size: 26px; line-height: 1; }
+.agent-operation-card i { grid-column: 1 / -1; display: block; height: 5px; background: var(--blue); }
+.agent-operation-card em { grid-column: 1 / -1; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 800; }
+.agent-operations-inspector { display: grid; align-content: start; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); box-shadow: var(--shadow); }
+.agent-operations-inspector p { margin: 0; color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.agent-operations-inspector h2 { margin: 0; font-size: 24px; }
+.agent-operations-inspector dl { display: grid; margin: 4px 0; }
+.agent-operations-inspector dl div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.agent-operations-inspector dt { color: var(--muted); font-size: 10px; font-weight: 800; }
+.agent-operations-inspector dd { margin: 0; color: var(--blue); font-size: 16px; font-weight: 900; }
+.agent-operations-inspector button { min-height: 38px; border: 1px solid var(--blue); border-radius: 4px; background: var(--blue); color: #fff; font-weight: 800; }
+/* v4.3: Agents empty-state pass — when there are no connected Agents, the grid still shows
+   the page's architecture (a card-shaped placeholder, not a bare line of text collapsing to
+   nothing) and the inspector explains what will appear there instead of going fully blank. */
+.agent-operations-empty {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 320px;
+  padding: 24px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  text-align: center;
+}
+.agent-operations-empty strong { font-size: 15px; }
+.agent-operations-empty p { max-width: 320px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.agent-operations-inspector p.agent-operations-inspector-empty { color: var(--muted); font-size: 11px; font-weight: 400; letter-spacing: normal; line-height: 1.6; }
+.agent-registry-mount { margin-top: 16px; }
+.agent-registry-mount > .settings-agent-card { display: grid; gap: 12px; }
+/* v4.3: Reviews queue pass — rows become real clickable cards (padding, rounded corners,
+   hover elevation) instead of a bare list separated by hairlines, and the queue gets a
+   minimum presence so a short/empty queue doesn't read as a broken page. */
+.review-queue-panel { padding: 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); box-shadow: var(--shadow); min-height: 260px; }
+.review-queue { display: grid; gap: 8px; margin-top: 14px; }
+.review-queue-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) minmax(120px, .8fr) 56px 18px; gap: 12px; align-items: center; width: 100%; padding: 14px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--ink); text-align: left; transition: border-color 140ms ease, background 140ms ease; }
+.review-queue-row:hover, .review-queue-row:focus-visible { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 6%, var(--canvas)); color: var(--ink); }
+.review-queue-row::after { content: "→"; color: var(--blue); font-weight: 800; text-align: right; }
+.review-queue-row span { color: var(--blue); font: 800 11px/1.4 ui-monospace, monospace; }
+.review-queue-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-queue-row small { color: var(--muted); font-size: 10px; font-weight: 700; }
+.review-queue-row b { color: var(--orange); text-align: right; }
+.review-queue .empty-note { display: grid; place-items: center; min-height: 200px; color: var(--muted); font-size: 12px; text-align: center; }
+@media (max-width: 1060px) {
+  .agent-operations-layout { grid-template-columns: 1fr; }
+  .agent-operations-inspector { order: -1; }
+  .agent-operations-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* v4.3 semantic theme surface: colors are sourced from design/TOKENS.json. */
+:root[data-qf-theme="soft-ops"][data-qf-resolved-mode="light"] {
+  color-scheme: light;
+  --canvas: var(--qf-canvas); --panel: var(--qf-surface); --panel-muted: #F7F8F5; --ink: #1F272A; --muted: #687276; --line: #D9E0E8; --line-strong: #B9C6C8; --green: var(--qf-human); --blue: var(--qf-agent); --orange: var(--qf-rpg); --gold: var(--qf-rpg); --red: var(--qf-danger); --surface: var(--qf-surface); --surface-soft: #F7F8F5;
+}
+:root[data-qf-theme="soft-ops"][data-qf-resolved-mode="dark"] {
+  color-scheme: dark;
+  /* v4.3: contrast-pain pass — ink softened off pure white, rail lifted a shade off canvas. */
+  --canvas: var(--qf-canvas); --panel: var(--qf-surface); --panel-muted: #28363B; --ink: #E2E7E5; --muted: #9F9F9F; --line: #2C2C2C; --line-strong: #40545B; --rail: #171F23; --rail-2: #1E2830; --green: var(--qf-human); --blue: var(--qf-agent); --orange: var(--qf-rpg); --gold: var(--qf-rpg); --red: var(--qf-danger); --surface: var(--qf-surface); --surface-soft: #28363B; --shadow: 0 8px 22px rgba(0,0,0,.22);
+}
+:root[data-qf-theme="arcane"][data-qf-resolved-mode="light"] {
+  color-scheme: light;
+  --canvas: var(--qf-canvas); --panel: var(--qf-surface); --panel-muted: #F7F2E9; --ink: #1F272A; --muted: #687276; --line: #D9E0E8; --line-strong: #B7C4C8; --green: var(--qf-human); --blue: var(--qf-agent); --orange: var(--qf-rpg); --gold: var(--qf-rpg); --red: var(--qf-danger); --surface: var(--qf-surface); --surface-soft: #F7F2E9;
+}
+:root[data-qf-theme="arcane"][data-qf-resolved-mode="dark"] {
+  color-scheme: dark;
+  --canvas: var(--qf-canvas); --panel: var(--qf-surface); --panel-muted: #293136; --ink: #F5F7F6; --muted: #AEB9B7; --line: #3A474B; --line-strong: #617177; --green: var(--qf-human); --blue: var(--qf-agent); --orange: var(--qf-rpg); --gold: var(--qf-rpg); --red: var(--qf-danger); --surface: var(--qf-surface); --surface-soft: #293136; --shadow: 0 8px 22px rgba(0,0,0,.25);
+}
+:root[data-qf-theme="retro"][data-qf-resolved-mode="light"] {
+  color-scheme: light;
+  --canvas: var(--qf-canvas); --panel: var(--qf-surface); --panel-muted: #F5EDDE; --ink: #1D211F; --muted: #68645C; --line: #CEC6B8; --line-strong: #A9A093; --green: var(--qf-human); --blue: var(--qf-agent); --orange: var(--qf-rpg); --gold: var(--qf-rpg); --red: var(--qf-danger); --surface: var(--qf-surface); --surface-soft: #F5EDDE;
+}
+:root[data-qf-theme="retro"][data-qf-resolved-mode="dark"] {
+  color-scheme: dark;
+  --canvas: var(--qf-canvas); --panel: var(--qf-surface); --panel-muted: #272C3D; --ink: #F8F4E7; --muted: #B8B5A9; --line: #3B4151; --line-strong: #626A80; --green: var(--qf-human); --blue: var(--qf-agent); --orange: var(--qf-rpg); --gold: var(--qf-rpg); --red: var(--qf-danger); --surface: var(--qf-surface); --surface-soft: #272C3D; --shadow: 0 8px 22px rgba(0,0,0,.28);
+}
+.design-lab-controls {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #415051;
+  border-radius: 4px;
+  background: #283438;
+  color: #DDE8E1;
+}
+.design-lab-controls > p { margin: 0; color: #78A8B8; font-size: 9px; font-weight: 900; letter-spacing: .12em; }
+.design-lab-controls label { display: grid; gap: 4px; color: #B9D0C1; font-size: 10px; font-weight: 800; }
+.design-lab-controls select { min-height: 32px; border: 1px solid #50605C; border-radius: 3px; background: #20292D; color: #F4F7F5; padding: 4px 7px; font-size: 11px; }
+.design-lab-controls small { color: #98AAA1; font-size: 9px; line-height: 1.4; }
+body.is-motion-reduced *, body.is-motion-reduced *::before, body.is-motion-reduced *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+@media (max-width: 900px) {
+  .design-lab-controls { display: none; }
+}
+
+/* v4.3 Reference Golden Shell: compact command rail + persistent status rail. */
+.design-lab-controls { display: none; }
+.status-rail { display: none; }
+.status-rail-heading,
+.status-rail-kicker,
+.status-rail-meta,
+.status-rail-owner,
+.status-rail-sync-actions,
+.status-rail-footer > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.status-rail-heading strong,
+.status-rail-kicker span,
+.status-rail-footer > span { color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .08em; }
+.status-rail-heading button,
+.status-rail-sync-actions button,
+.status-rail-footer button { padding: 0; border: 0; background: transparent; color: var(--blue); font-size: 9px; font-weight: 800; }
+.status-agent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 8px; }
+#statusRailAgents .empty-note { margin: 7px 0 0; font-size: 10px; }
+.status-agent-card { display: grid; grid-template-columns: 19px minmax(0, 1fr); gap: 5px; min-width: 0; padding: 6px 5px; border: 1px solid var(--line); background: var(--panel); }
+.status-agent-avatar { display: grid; width: 19px; height: 19px; place-items: center; border: 1px solid currentColor; background: var(--panel-muted); color: var(--blue); font: 900 9px/1 ui-monospace, monospace; }
+.status-agent-avatar--green { color: var(--green); }
+.status-agent-avatar--blue { color: var(--blue); }
+.status-agent-avatar--gold { color: var(--gold); }
+.status-agent-avatar--red { color: var(--red); }
+.status-agent-avatar--violet { color: #a28bd4; }
+.status-agent-avatar--mint { color: #5fc4aa; }
+.status-agent-card > div { min-width: 0; }
+.status-agent-card strong { display: block; overflow: hidden; color: var(--ink); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.status-agent-card small { display: block; overflow: hidden; margin-top: 2px; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.status-agent-card i,
+.status-rail-progress { display: block; height: 3px; overflow: hidden; margin-top: 4px; background: color-mix(in srgb, var(--line) 70%, transparent); }
+.status-agent-card i b,
+.status-rail-progress b { display: block; height: 100%; background: var(--blue); }
+.status-agent-card em { display: none; }
+.status-rail-quest,
+.status-rail-sync { display: grid; gap: 6px; margin-top: 8px; padding: 8px; border: 1px solid var(--line); background: var(--panel); }
+.status-rail-kicker code { overflow: hidden; color: var(--blue); font: 7px/1.2 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.status-rail-quest > strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.status-rail-quest > small,
+.status-rail-sync > small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.status-rail-meta { color: var(--muted); font-size: 9px; }
+.status-rail-meta strong { color: var(--blue); font-size: 14px; }
+.status-rail-handoff { display: flex; gap: 5px; align-items: center; padding: 4px 0; }
+.status-handoff-dot { width: 7px; height: 7px; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; }
+.status-handoff-dot.is-done { border-color: var(--green); background: var(--green); }
+.status-handoff-dot.is-current { border-color: var(--blue); background: var(--blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 20%, transparent); }
+.status-rail-owner { justify-content: flex-start; }
+.status-rail-owner > div { min-width: 0; }
+.status-rail-owner strong { display: block; font-size: 9px; }
+.status-rail-owner small,
+.status-rail-owner em { color: var(--muted); font-size: 8px; font-style: normal; }
+.status-rail-owner em { margin-left: auto; white-space: nowrap; }
+.status-rail-primary { min-height: 27px; border: 1px solid var(--green); background: var(--green); color: #102018; font-size: 9px; font-weight: 850; }
+.status-rail-reference-only { display: none; }
+.status-rail-owner-label { color: var(--muted); font-size: 8px; }
+.status-rail-reference-facts { display: grid; gap: 5px; }
+.status-rail-reference-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 8px; }
+.status-rail-reference-facts b { color: var(--ink); font-size: 8px; }
+.status-rail-reference-facts > div:last-child b { color: var(--gold); }
+.status-rail-reference-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.status-rail-reference-actions button { min-height: 34px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 8px; font-weight: 800; }
+.status-rail-reference-actions button:first-child { border-color: var(--green); background: var(--green); color: #102018; }
+.status-rail-live { color: var(--green); font-size: 8px; }
+.status-rail-sync-actions { justify-content: stretch; }
+.status-rail-sync-actions button { flex: 1; min-height: 23px; border: 1px solid var(--line); color: var(--ink); }
+.status-rail-sync-actions button:last-child { color: var(--blue); }
+.status-rail-footer { display: grid; gap: 4px; margin-top: auto; padding-top: 9px; border-top: 1px solid var(--line); }
+.status-rail-footer button { flex: 1; min-height: 24px; border: 1px solid var(--line); color: var(--muted); }
+.status-rail-footer button.is-active { border-color: var(--blue); background: var(--blue); color: #fff; }
+
+/* v4.3: raised to 1061px alongside the other .app-shell rail-width rules below, so none of
+   them fight the icon-centric 72px rail (max-width:1060px) for the 901-1060px band. */
+@media (min-width: 1061px) {
+  .app-shell { grid-template-columns: 112px minmax(0, 1fr) 176px; }
+  .sidebar { gap: 12px; padding: 8px 7px 10px; }
+  .brand { gap: 5px; padding-bottom: 9px; }
+  .brand-mark { width: 25px; height: 25px; border-width: 1px; border-radius: 2px; font-size: 8px; }
+  .brand strong { font-size: 8px; }
+  .brand small { margin-top: 1px; font-size: 6px; letter-spacing: .04em; }
+  .beta-badge { min-height: 11px; margin-left: 2px; padding: 1px 3px; font-size: 6px; }
+  .sidebar-nav { gap: 3px; }
+  .nav-button { min-height: 25px; grid-template-columns: 18px minmax(0, 1fr); gap: 5px; padding: 3px 4px; border-radius: 2px; }
+  .nav-icon { width: 18px; height: 18px; border-radius: 2px; font-size: 6px; }
+  .nav-button b { overflow: hidden; font-size: 9px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar-profile { padding: 7px; border-radius: 2px; }
+  .profile-avatar { width: 30px; height: 30px; margin-right: 5px; }
+  .profile-avatar img { width: 34px; }
+  .sidebar-profile strong { font-size: 9px; }
+  .sidebar-profile small { font-size: 6px; }
+  .sidebar-profile dl { gap: 3px; margin-top: 7px; }
+  .sidebar-profile dl div { padding: 4px; }
+  .sidebar-profile dt { font-size: 6px; }
+  .sidebar-profile dd { margin-top: 2px; font-size: 8px; }
+  .profile-open { margin-top: 4px; font-size: 6px; }
+  .workspace { padding: 0 12px 24px; }
+  .topbar { min-height: 92px; gap: 8px; padding: 8px 0 12px; }
+  .page-title { padding: 9px 12px; }
+  .page-title p { font-size: 8px; }
+  .page-title h1 { font-size: 17px; }
+  .page-title .demo-data-badge { font-size: 7px; }
+  .status-strip { gap: 7px; }
+  .status-card { padding: 8px 10px; }
+  .status-card > span { font-size: 8px; }
+  .status-card strong, .focus-card button b { font-size: 15px; }
+  .status-card small { font-size: 8px; }
+  .quick-add { font-size: 22px; }
+  .view-heading { margin: 2px 0 11px; }
+  .view-heading > div > p { font-size: 8px; }
+  .view-heading h2 { font-size: 19px; }
+  .status-rail { display: flex; position: sticky; top: 0; z-index: 10; min-width: 0; height: 100vh; flex-direction: column; padding: 8px 8px 9px; overflow-y: auto; border-left: 1px solid var(--line); background: var(--rail); color: var(--ink); }
+
+}
+
+/* Reference Golden Battle Report dashboard. */
+.battle-legacy { display: none !important; }
+.battle-reference-dashboard { display: grid; gap: 9px; min-width: 0; margin-top: 2px; }
+/* v4.3: tactical report pass — metrics/cards get the same panel+shadow treatment as the
+   rest of the app instead of flat canvas-colored boxes, and the 7-tile KPI row is grouped
+   into loose Output / Reward / Performance clusters (nth-child spacing, no DOM reorder). */
+.battle-report-metric-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.battle-report-metric,
+.battle-report-card { min-width: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); box-shadow: var(--shadow); }
+.battle-report-metric { display: grid; align-content: center; gap: 3px; min-height: 72px; padding: 9px 10px; }
+.battle-report-metric span,
+.battle-report-kicker { margin: 0; color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .08em; }
+.battle-report-metric strong { color: var(--ink); font-size: 18px; line-height: 1; }
+.battle-report-metric small { color: var(--muted); font-size: 8px; }
+.battle-report-metric:nth-child(4) { margin-left: 5px; }
+.battle-report-metric.is-accent {
+  margin-left: 5px;
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 9%, var(--panel));
+}
+.battle-report-metric.is-accent strong { color: var(--gold); font-size: 20px; }
+.battle-report-metric:nth-child(6) { margin-left: 5px; }
+.battle-report-main-grid { display: grid; align-items: start; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.1fr) minmax(190px, .75fr); gap: 8px; min-height: 220px; }
+.battle-report-card { padding: 11px; }
+.battle-report-card h3 { margin: 5px 0 10px; color: var(--ink); font-size: 14px; }
+.battle-report-donut-wrap { display: flex; align-items: center; justify-content: space-around; gap: 8px; min-height: 150px; }
+.battle-report-donut { width: 150px; height: 150px; overflow: visible; transform: rotate(-90deg); }
+.battle-report-donut circle { fill: none; stroke-width: 13; }
+.battle-report-donut .donut-track { stroke: var(--panel-muted); }
+.battle-report-donut .donut-segment { stroke-linecap: butt; }
+.battle-report-donut .donut-segment--blue { stroke: var(--blue); }
+.battle-report-donut .donut-segment--green { stroke: var(--green); }
+.battle-report-donut .donut-segment--gold { stroke: var(--gold); }
+.battle-report-donut .donut-segment--red { stroke: var(--red); }
+.battle-report-donut text { fill: var(--ink); font-family: inherit; transform: rotate(90deg); transform-origin: 60px 60px; }
+.battle-report-donut text:first-of-type { font-size: 15px; font-weight: 900; }
+.battle-report-donut text:last-of-type { fill: var(--muted); font-size: 7px; letter-spacing: .08em; }
+.battle-report-legend { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 8px; }
+.battle-report-legend li { display: grid; grid-template-columns: 7px minmax(0, 1fr) auto; gap: 5px; align-items: center; white-space: nowrap; }
+.battle-report-legend i { width: 7px; height: 7px; }
+.battle-report-legend b { color: var(--ink); }
+.legend-blue { background: var(--blue); }
+.legend-green { background: var(--green); }
+.legend-gold { background: var(--gold); }
+.legend-red { background: var(--red); }
+.battle-report-trend-card { display: grid; grid-template-rows: auto auto 1fr auto; }
+.battle-report-sparkline { width: 100%; height: 150px; margin-top: 3px; overflow: visible; }
+.sparkline-grid { fill: none; stroke: var(--line); stroke-width: 1; }
+.sparkline-line { fill: none; stroke-width: 2; }
+.sparkline-line--blue { stroke: var(--blue); }
+.sparkline-line--green { stroke: var(--green); }
+.battle-report-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 8px; }
+.battle-report-summary-stack { display: grid; grid-template-rows: 1.1fr .9fr; gap: 8px; }
+.battle-report-summary dl { display: grid; gap: 0; margin: 5px 0 0; }
+.battle-report-summary dl div { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.battle-report-summary dt { color: var(--muted); font-size: 8px; }
+.battle-report-summary dd { margin: 0; color: var(--ink); font-size: 10px; font-weight: 850; text-align: right; }
+.battle-report-summary > p:last-child { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+/* v4.3: Boss is the hero of the report — wider column, tinted danger surface, bigger art
+   and a thicker pressure meter, instead of sitting flat and equal-weight next to Drops/Log. */
+.battle-report-bottom-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, .85fr); gap: 10px; min-height: 170px; }
+.battle-report-boss {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--line));
+  background: color-mix(in srgb, var(--red) 8%, var(--panel));
+}
+.battle-report-boss-body { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 13px; align-items: center; }
+.battle-report-boss img { width: 98px; height: 98px; object-fit: contain; image-rendering: pixelated; }
+.battle-report-boss h3 { margin: 0 0 3px; font-size: 15px; }
+.battle-report-boss span,
+.battle-report-boss small { display: block; color: var(--muted); font-size: 8px; }
+.battle-report-boss strong { display: block; margin-top: 8px; color: var(--red); font-size: 18px; }
+.battle-report-boss meter { height: 8px; margin-top: 6px; accent-color: var(--red); }
+.battle-report-drop-row,
+.battle-report-log-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px 58px; gap: 7px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 8px; }
+.battle-report-drop-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battle-report-drop-row span { color: var(--muted); text-align: right; }
+.battle-report-drop-row b { color: var(--blue); text-align: right; }
+.battle-report-log-row { grid-template-columns: minmax(0, 1fr) auto; }
+.battle-report-log-row span { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.battle-report-log-row b { color: var(--red); font-size: 8px; }
+@media (max-width: 1180px) {
+  .battle-report-metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .battle-report-main-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .battle-report-summary-stack { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 1fr; }
+}
+@media (max-width: 900px) {
+  .battle-report-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .battle-report-main-grid,
+  .battle-report-bottom-grid { grid-template-columns: 1fr; }
+  .battle-report-summary-stack { grid-column: auto; grid-template-columns: 1fr; grid-template-rows: auto; }
+  .battle-report-donut-wrap { justify-content: flex-start; }
+}
+
+/* Reference header removes the view-title tile; status cards span the full command workspace. */
+@media (min-width: 901px) {
+  .topbar { grid-template-columns: minmax(0, 1fr) 52px; }
+  .topbar .page-title { display: none; }
+  .topbar .status-strip { grid-column: 1; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .topbar .status-card { min-height: 72px; }
+}
+/* v4.3: rows sized to content (was minmax(...,1fr), stretching the middle row to fill the
+   viewport and leaving a large dead gap above Boss/Drops/Log once cards no longer stretch
+   to match each other's height). align-content:start stops the container's own min-height
+   from spreading leftover space between rows either. */
+.battle-reference-dashboard { display: grid; align-content: start; min-height: calc(100vh - 122px); grid-template-rows: auto auto auto; }
+
+/* Preserve the three-column topbar geometry while keeping the synced status card. */
+@media (min-width: 901px) {
+  .topbar { grid-template-columns: minmax(190px, .9fr) minmax(580px, 2.9fr) 52px; }
+  .topbar .page-title { display: flex; }
+  .topbar .status-strip { grid-column: auto; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+/* Reference Golden capture variants stay behind the DEV fixture gate. */
+/* v4.3: PartyFormation/QuestDependencyGraph Islands are the measured Signature Region now
+   (see docs/ui-v4/CLAUDE_UI_HANDOFF.md "Golden階層の定義") — no longer hidden under fixture. */
+.is-reference-fixture .party-summary,
+.is-reference-fixture .party-activity-panel { display: none !important; }
+.is-reference-fixture .party-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 2px; }
+.is-reference-fixture .party-card { display: grid; min-height: 174px; align-content: start; gap: 6px; padding: 12px; border-color: var(--line); background: var(--canvas); box-shadow: none; }
+.is-reference-fixture .party-card-head { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+.is-reference-fixture .party-mark { width: 30px; height: 30px; }
+.is-reference-fixture .party-card h2 { font-size: 13px; }
+.is-reference-fixture .party-card p { font-size: 8px; }
+.is-reference-fixture .party-task { min-height: 22px; font-size: 9px; }
+.is-reference-fixture .party-card-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 2px; }
+.is-reference-fixture .party-card-meta div { padding: 6px; }
+.is-reference-fixture .party-card button { display: none; }
+/* v4.3: QuestDependencyGraph Island stays visible under fixture too (see note above). */
+.is-reference-fixture .tree-layout { grid-template-columns: minmax(0, 1fr) 230px; gap: 8px; margin-top: 8px; }
+.is-reference-fixture .tree-list { display: grid; gap: 0; padding: 8px; background: var(--canvas); }
+.is-reference-fixture .tree-node { min-height: 58px; grid-template-columns: 62px minmax(0, 1fr) 80px 56px; padding: 8px; border-color: var(--line); border-radius: 0; background: var(--canvas); }
+.is-reference-fixture .tree-note { min-height: 330px; padding: 12px; background: var(--canvas); }
+.is-reference-fixture .agent-operation-card { min-height: 226px; }
+.is-reference-fixture .agent-operation-card::after { grid-column: 1 / -1; align-self: end; height: 38px; border-top: 1px solid var(--line); background: linear-gradient(160deg, transparent 40%, color-mix(in srgb, var(--blue) 75%, transparent) 41% 44%, transparent 45%) 0 100% / 100% 70% no-repeat; content: ""; opacity: .8; }
+.is-reference-fixture .settings-layout { max-width: 1060px; grid-template-columns: 240px minmax(0, 760px); gap: 8px; }
+.is-reference-fixture .settings-layout .settings-card { padding: 14px; }
+.is-reference-fixture .settings-layout .settings-card:nth-child(n + 3) { display: none; }
+.is-reference-fixture .settings-layout .settings-card:nth-child(1) { min-height: 390px; }
+.is-reference-fixture .settings-layout .settings-card:nth-child(2) { min-height: 390px; }
+.profile-reference-dashboard { display: none; }
+.is-reference-fixture .profile-layout { display: none !important; }
+.is-reference-fixture .profile-reference-dashboard { display: grid; gap: 8px; min-height: calc(100vh - 122px); grid-template-rows: auto minmax(250px, 1fr) minmax(130px, auto); }
+.profile-ref-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.profile-ref-kpis > section,
+.profile-ref-card { min-width: 0; border: 1px solid var(--line); background: var(--canvas); }
+.profile-ref-kpis > section { display: grid; gap: 4px; min-height: 76px; align-content: center; padding: 10px; }
+.profile-ref-kpis span,
+.profile-ref-card > p { margin: 0; color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .08em; }
+.profile-ref-kpis strong { color: var(--ink); font-size: 18px; }
+.profile-ref-kpis small { color: var(--muted); font-size: 8px; }
+.profile-ref-main { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .9fr); gap: 8px; min-height: 0; }
+.profile-ref-card { padding: 11px; }
+.profile-ref-card h3 { margin: 5px 0 9px; color: var(--ink); font-size: 14px; }
+.profile-ref-chart { display: grid; grid-template-rows: auto auto 1fr; }
+.profile-ref-chart svg { width: 100%; height: 190px; }
+.profile-ref-gridline { fill: none; stroke: var(--line); stroke-width: 1; }
+.bar-blue { fill: var(--blue); }
+.bar-green { fill: #26bfa8; }
+.profile-ref-agent-table { overflow: hidden; }
+.profile-ref-agent-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(70px, .8fr) 65px 34px; gap: 5px; align-items: center; min-height: 42px; border-bottom: 1px solid var(--line); font-size: 8px; }
+.profile-ref-agent-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-ref-agent-row small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.profile-ref-agent-row b { color: var(--ink); font-size: 8px; text-align: right; }
+.profile-ref-agent-row em { color: var(--green); font-size: 8px; font-style: normal; text-align: right; }
+.profile-ref-bottom { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .9fr); gap: 8px; }
+.profile-ref-mini-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 9px; }
+.profile-ref-mini-grid > div { display: grid; gap: 4px; padding: 8px; background: var(--panel-muted); }
+.profile-ref-mini-grid span,
+.profile-ref-mini-grid small { color: var(--muted); font-size: 8px; }
+.profile-ref-mini-grid strong { font-size: 14px; }
+.profile-ref-log-row { display: grid; grid-template-columns: minmax(0, 1fr) 60px 70px; gap: 6px; align-items: center; min-height: 29px; border-bottom: 1px solid var(--line); font-size: 8px; }
+.profile-ref-log-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-ref-log-row b { color: var(--muted); font-weight: 700; }
+.profile-ref-log-row em { color: var(--green); font-style: normal; text-align: right; }
+@media (max-width: 900px) {
+  .is-reference-fixture .party-list,
+  .is-reference-fixture .profile-ref-main,
+  .is-reference-fixture .profile-ref-bottom { grid-template-columns: 1fr; }
+  .is-reference-fixture .settings-layout { max-width: none; grid-template-columns: 1fr; }
+  .is-reference-fixture .settings-layout .settings-card:nth-child(n + 3) { display: block; }
+  .is-reference-fixture .tree-layout { grid-template-columns: 1fr; }
+}
+
+/* Reference Lock shell geometry: v3 Next uses a 224px command rail and 326px inspector rail.
+   v4.3: raised to 1061px (see note above the 112/176 block). */
+@media (min-width: 1061px) {
+  .app-shell { grid-template-columns: 224px minmax(0, 1fr) 326px; }
+  .sidebar { gap: 18px; padding: 14px 12px 12px; }
+  .brand { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 9px; padding-bottom: 13px; }
+  .brand-mark { width: 38px; height: 38px; border-width: 1px; border-radius: 3px; font-size: 10px; }
+  .brand strong { font-size: 14px; }
+  .brand small { font-size: 8px; }
+  .sidebar-nav { gap: 4px; }
+  .nav-button { min-height: 34px; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 5px 7px; }
+  .nav-icon { width: 25px; height: 25px; font-size: 8px; }
+  .nav-button b { font-size: 12px; }
+  .sidebar-profile { padding: 10px; }
+  .profile-avatar { width: 50px; height: 50px; }
+  .profile-avatar img { width: 56px; }
+  .sidebar-profile strong { font-size: 14px; }
+  .sidebar-profile small { font-size: 8px; }
+  .sidebar-profile dt { font-size: 8px; }
+  .sidebar-profile dd { font-size: 11px; }
+  .workspace { padding: 0 20px 28px; }
+  .status-rail { flex-basis: auto; background: var(--canvas); }
+  .status-agent-card,
+  .status-rail-quest,
+  .status-rail-sync { background: var(--panel); }
+  .status-rail { padding: 12px 12px 14px; }
+  .status-agent-card { padding: 7px 6px; }
+  .status-agent-avatar { width: 21px; height: 21px; }
+  .status-agent-card strong { font-size: 9px; }
+  .status-agent-card small { font-size: 8px; }
+}
+
+
+
+/* Reference capture frame is part of the locked 1920×907 crop, never production chrome. */
+body.is-reference-fixture {
+  border-top: 1px solid #3d3f40;
+  border-bottom: 5px solid #191a1a;
+  background: #191a1a;
+}
+
+
+body.is-reference-fixture {
+  border-top: 0;
+  border-bottom: 5px solid #191a1a;
+}
+body.is-reference-fixture::before {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  right: 4px;
+  left: 4px;
+  height: 1px;
+  background: #3d3f40;
+  content: "";
+  pointer-events: none;
+}
+
+
+@media (max-width: 900px) {
+  .battle-reference-dashboard { display: none !important; }
+  .battle-legacy { display: grid !important; }
+  .battle-layout,
+  .battle-layout > *,
+  .battle-stage,
+  .battle-arena { min-width: 0; max-width: 100%; }
+}
+
+
+body.is-reference-fixture {
+  border: 0;
+  background: #151d20;
+}
+body.is-reference-fixture::before {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  right: 4px;
+  left: 4px;
+  height: 1px;
+  background: #3d3f40;
+  content: "";
+  pointer-events: none;
+}
+body.is-reference-fixture::after {
+  position: fixed;
+  z-index: 1000;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 5px;
+  border-top: 1px solid #3d3f40;
+  background: #191a1a;
+  content: "";
+  pointer-events: none;
+}
+
+
+
+/* Next dark tokens follow the locked v3 surface grammar.
+   v4.3: line/rail-2 lifted a shade to match the softened canvas/surface split above —
+   border contrast now reads as a surface-shade step rather than a hard black/white edge. */
+:root[data-qf-theme="soft-ops"][data-qf-resolved-mode="dark"] {
+  --line: #30414a;
+  --line-strong: #3d5158;
+  --rail-2: #232f37;
+  --muted: #94a1a3;
+}
+
+/* Product shell follows the v3 Next surface; capture and normal lab use the same geometry.
+   v4.3: raised to 1061px (see note above the 112/176 block). */
+@media (min-width: 1061px) {
+  .app-shell { grid-template-columns: 224px minmax(0, 1fr) 326px; }
+  .sidebar { gap: 18px; padding: 14px 12px 12px; }
+  .brand { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 9px; padding-bottom: 13px; }
+  .brand-mark { width: 38px; height: 38px; border-width: 1px; border-radius: 3px; font-size: 10px; }
+  .brand strong { font-size: 14px; }
+  .brand small { font-size: 8px; }
+  .sidebar-nav { gap: 4px; }
+  .nav-button { min-height: 34px; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 5px 7px; }
+  .nav-icon { width: 25px; height: 25px; font-size: 8px; }
+  .nav-button b { font-size: 12px; }
+  .sidebar-profile { padding: 10px; }
+  .profile-avatar { width: 50px; height: 50px; }
+  .profile-avatar img { width: 56px; }
+  .sidebar-profile strong { font-size: 14px; }
+  .sidebar-profile small { font-size: 8px; }
+  .sidebar-profile dt { font-size: 8px; }
+  .sidebar-profile dd { font-size: 11px; }
+  .workspace { padding: 0 20px 28px; }
+  .status-rail { padding: 10px 10px 12px; background: var(--rail); }
+  .status-agent-card,
+  .status-rail-quest,
+  .status-rail-sync { background: var(--panel); }
+}
+
+
+@media (min-width: 901px) {
+  .status-rail { background: var(--panel); }
+}
+
+
+/* Reference Golden topbar alignment: v3 places the five status cells first,
+   followed by Sync and the primary action. The page label belongs below it.
+   v4.3: the cells no longer sit edge-to-edge with zeroed gap/border-radius (that read as a
+   spreadsheet header row) — each keeps its own rounded card and a real gap, and Quest Line
+   (the current objective) gets a touch more visual weight than the surrounding vitals. */
+@media (min-width: 901px) {
+  .topbar {
+    grid-template-columns: minmax(0, 5fr) minmax(150px, 1fr) minmax(170px, 1fr);
+    gap: 10px;
+    min-height: 97px;
+    padding: 0;
+    margin: 0 -20px;
+  }
+  .topbar .page-title { display: none; }
+  /* Three loose clusters without reordering the DOM: [Level, Focus] operator vitals |
+     [Quest Line] current objective, widened + tinted as the hero cell | [MP, Boss Pressure]
+     status/threat (Sync sits just after, as its own small utility cell). */
+  .topbar .status-strip { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .topbar .status-strip .status-card:nth-child(3) {
+    margin-inline: 4px;
+    background: color-mix(in srgb, var(--blue) 7%, var(--panel));
+    border-color: color-mix(in srgb, var(--blue) 30%, var(--line));
+  }
+  .topbar .status-strip .status-card:nth-child(3) strong { font-size: 23px; }
+  .topbar .status-strip .status-card:nth-child(4) { margin-left: 4px; }
+
+  .sidebar { padding-top: 24px; padding-left: 16px; padding-right: 16px; }
+  .is-reference-fixture .legacy-link { display: none; }
+
+  .is-reference-fixture .agent-operations-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .is-reference-fixture .agent-operation-card { min-height: 276px; }
+  .is-reference-fixture .agent-operation-card::after { height: 54px; }
+
+  .is-reference-fixture .profile-reference-dashboard {
+    min-height: 0;
+    grid-template-rows: 92px 292px 259px;
+  }
+  .is-reference-fixture .profile-ref-kpis > section { min-height: 92px; }
+}
+
+/* Reference Golden content rhythm: the locked v3 screens reserve a compact
+   header band before the Signature surface begins. */
+@media (min-width: 901px) {
+  .is-reference-fixture .agent-operations-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .is-reference-fixture .agent-operation-card { min-height: 276px; }
+  .is-reference-fixture .agent-operation-card::after { height: 54px; }
+  .is-reference-fixture .view[data-panel="agents"] .view-heading,
+  .is-reference-fixture .view[data-panel="profile"] .view-heading {
+    padding-bottom: 45px;
+  }
+}
+
+/* Reference Golden density: keep the dashboard rows finite at the locked
+   1920x907 viewport and let the surrounding shell carry the remaining space. */
+@media (min-width: 901px) {
+  .is-reference-fixture .status-rail { padding: 12px 10px 14px; }
+  .is-reference-fixture .status-agent-grid { gap: 8px; }
+  .is-reference-fixture .status-agent-card {
+    min-height: 104px;
+    grid-template-columns: 31px minmax(0, 1fr);
+    gap: 6px;
+    align-content: start;
+    padding: 9px 7px;
+  }
+  .is-reference-fixture .status-agent-avatar { width: 29px; height: 29px; }
+  .is-reference-fixture .status-agent-card strong { font-size: 10px; }
+  .is-reference-fixture .status-agent-card small { font-size: 8px; }
+  .is-reference-fixture .status-agent-card i { height: 4px; margin-top: 8px; }
+  .is-reference-fixture .status-agent-card em {
+    display: block;
+    grid-column: 2;
+    color: var(--blue);
+    font-size: 8px;
+    font-style: normal;
+    font-weight: 850;
+    text-align: right;
+  }
+  .is-reference-fixture .status-rail-quest { min-height: 340px; }
+  .is-reference-fixture .status-rail-sync { min-height: 72px; }
+
+  .is-reference-fixture .view[data-panel="battle"] .view-heading { padding-bottom: 74px; }
+  .is-reference-fixture .battle-reference-dashboard {
+    min-height: 0;
+    grid-template-rows: 94px 243px 214px;
+  }
+  .is-reference-fixture .battle-report-metric { min-height: 94px; }
+  .is-reference-fixture .battle-report-main-grid {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr) minmax(0, .8fr) minmax(0, .9fr);
+  }
+  .is-reference-fixture .battle-report-summary-stack { display: contents; }
+  .is-reference-fixture .battle-report-bottom-grid { min-height: 214px; }
+  .is-reference-fixture .view[data-panel="party"] .view-heading { padding-bottom: 45px; }
+}
+
+/* Final Reference Golden column proportions for Battle Report. */
+@media (min-width: 901px) {
+  .is-reference-fixture .battle-report-main-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.29fr) minmax(0, .76fr) minmax(0, .72fr);
+  }
+  .is-reference-fixture .battle-report-bottom-grid {
+    grid-template-columns: minmax(0, .85fr) minmax(0, .95fr) minmax(0, 1.05fr);
+  }
+}
+
+/* Shared left-rail operational context. Values are populated by render code
+   from domain state; the initial DOM remains placeholder-only. */
+.sidebar { overflow-y: auto; }
+.sidebar-ops-context {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--line);
+}
+.sidebar-sync-line,
+.sidebar-context-block > div,
+.sidebar-battle-block > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.sidebar-sync-line span,
+.sidebar-context-block > p,
+.sidebar-mcp-block > p,
+.sidebar-battle-block > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+.sidebar-sync-line b { color: var(--green); font-size: 8px; }
+.sidebar-sync-line small,
+.sidebar-context-block small,
+.sidebar-battle-block span { color: var(--muted); font-size: 8px; }
+.sidebar-context-block { display: grid; gap: 5px; }
+.sidebar-context-block strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-context-block button {
+  min-height: 29px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 800;
+}
+.sidebar-mcp-block,
+.sidebar-battle-block { display: grid; gap: 6px; }
+.sidebar-mcp-list { display: grid; gap: 5px; }
+#sidebarMcpList { display: grid; gap: 5px; }
+.sidebar-mcp-row { display: flex; justify-content: space-between; gap: 6px; min-width: 0; font-size: 8px; }
+.sidebar-mcp-row span { overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-mcp-row b { color: var(--green); font-size: 7px; white-space: nowrap; }
+.sidebar-battle-block meter { width: 100%; height: 5px; }
+.sidebar-battle-block > div b { color: var(--red); font-size: 9px; }
+@media (min-width: 901px) {
+  .sidebar-ops-context { min-height: 362px; }
+}
+
+/* Agent Operations card content mirrors the Reference card hierarchy while
+   preserving a single action surface and domain-owned values. */
+.agent-operation-main { display: grid !important; gap: 3px; min-width: 0; }
+.agent-operation-current { margin-top: 9px; color: var(--muted); font-size: 8px; font-weight: 700; }
+.agent-operation-quest { overflow: hidden; color: var(--ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.agent-operation-card > i { grid-column: 1 / -1; }
+.agent-operation-stats {
+  display: grid !important;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.agent-operation-stats > span { display: grid; gap: 3px; padding: 7px 6px; border-right: 1px solid var(--line); }
+.agent-operation-stats > span:last-child { border-right: 0; }
+.agent-operation-stats small { color: var(--muted); font-size: 7px; font-weight: 800; }
+.agent-operation-stats b { color: var(--ink); font-size: 11px; }
+.agent-operation-tags {
+  display: flex !important;
+  grid-column: 1 / -1;
+  gap: 4px;
+  min-width: 0;
+}
+.agent-operation-tags em {
+  display: inline-flex;
+  min-height: 18px;
+  align-items: center;
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 700;
+}
+.agent-operation-state {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+@media (min-width: 901px) {
+  .is-reference-fixture .profile-ref-main,
+  .is-reference-fixture .profile-ref-bottom { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+  .is-reference-fixture .profile-ref-chart svg { transform: translateY(18px); }
+  .is-reference-fixture .profile-ref-bottom .profile-ref-card { padding-top: 16px; }
+  .is-reference-fixture .profile-ref-mini-grid > div { background: #1a2427; }
+}
+
+@media (min-width: 901px) {
+  .is-reference-fixture .status-agent-grid { margin-right: 15px; margin-left: 15px; }
+  .is-reference-fixture .status-agent-card { min-height: 112px; }
+  .is-reference-fixture .status-agent-meta { display: block; margin-top: 3px; color: var(--muted); font-size: 7px; white-space: nowrap; }
+  .is-reference-fixture .status-rail-quest { min-height: 360px; }
+}
+
+/* Reference capture shell edges: the inspector rail is 330px wide and the
+   primary action is an inset control, not a full-height blue column.
+   v4.3: raised from min-width:901px to 1061px — DESIGN.md §4.3 wants the icon-centric
+   nav (.app-shell 72px rail, set at max-width:1060px above) to own the whole 901-1060px
+   band. At 901px this rule used to immediately re-widen the rail back to 224px while the
+   nav labels stayed hidden, leaving a wide rail with no labels in that range. */
+@media (min-width: 1061px) {
+  .app-shell { grid-template-columns: 224px minmax(0, 1fr) 330px; }
+  .workspace { padding-right: 15px; }
+  .topbar { margin-right: -15px; }
+  .topbar .quick-add {
+    margin: 25px 16px 24px 0;
+    border-radius: 3px;
+  }
+}
+
+@media (min-width: 901px) {
+  .topbar .quick-add { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 16px; font-size: 13px; }
+  .topbar .quick-add b { font-size: 12px; white-space: nowrap; }
+  .topbar .quick-add > span:last-child { font-size: 23px; line-height: 1; }
+}
+
+/* Right rail frame geometry: match the locked status panel and card rows. */
+@media (min-width: 901px) {
+  .is-reference-fixture .status-rail { padding: 0 21px 14px 16px; }
+  .is-reference-fixture .status-rail-heading {
+    min-height: 46px;
+    margin-top: 11px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-bottom: 0;
+  }
+  .is-reference-fixture .status-agent-grid {
+    grid-template-rows: repeat(3, 98px);
+    gap: 8px;
+    margin: 0;
+    padding: 0 13px 14px;
+    border: 1px solid var(--line);
+    border-top: 0;
+  }
+  .is-reference-fixture .status-agent-card {
+    min-height: 98px;
+    height: 98px;
+    padding: 9px 7px;
+  }
+  .is-reference-fixture .status-rail-quest { margin-top: 10px; min-height: 368px; }
+}
+
+@media (min-width: 901px) {
+  .sidebar-ops-context { margin-top: 2px; padding-top: 3px; }
+}
+
+/* Chromium reference captures include the locked command/inspector scroll
+   tracks. Keep their geometry deterministic without affecting product mode. */
+@media (min-width: 901px) {
+  body.is-reference-fixture .app-shell { grid-template-columns: 228px minmax(0, 1fr) 331px; }
+  body.is-reference-fixture .sidebar { overflow-y: scroll; overflow-x: hidden; padding-left: 20px; }
+  body.is-reference-fixture .workspace { overflow-y: scroll; overflow-x: hidden; padding-left: 16px; padding-right: 15px; }
+  body.is-reference-fixture .status-rail { overflow-y: scroll; overflow-x: hidden; }
+  body.is-reference-fixture .sidebar-nav { gap: 4px; }
+  body.is-reference-fixture .nav-button { min-height: 35px; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 5px 7px; }
+  body.is-reference-fixture .nav-icon { width: 24px; height: 24px; border: 0; border-radius: 0; background: transparent; color: var(--ink); }
+  body.is-reference-fixture .nav-button b { font-size: 14px; }
+}
+
+@media (min-width: 901px) {
+  .agent-reference-handoff,
+  .agent-reference-filter { display: none; }
+  body.is-reference-fixture .view[data-panel="agents"] .view-heading > div {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  body.is-reference-fixture .view[data-panel="agents"] .view-heading {
+    padding-top: 14px;
+    padding-bottom: 23px;
+  }
+  body.is-reference-fixture .view[data-panel="agents"] .view-heading h2 { order: 1; }
+  body.is-reference-fixture .view[data-panel="agents"] .view-heading > div > p {
+    order: 2;
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  body.is-reference-fixture .view[data-panel="agents"] .agent-reference-handoff,
+  body.is-reference-fixture .view[data-panel="agents"] .agent-reference-filter { display: inline-flex; }
+  body.is-reference-fixture .view[data-panel="agents"] .view-heading-actions > .tool:not(.agent-reference-filter) { display: none; }
+  body.is-reference-fixture .view[data-panel="agents"] .agent-reference-handoff {
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  body.is-reference-fixture .view[data-panel="agents"] .agent-reference-handoff input { accent-color: var(--blue); }
+  body.is-reference-fixture .view[data-panel="agents"] .agent-reference-filter {
+    align-items: center;
+    gap: 5px;
+    min-width: 82px;
+  }
+}
+
+@media (min-width: 901px) {
+  .is-reference-fixture .focus-card button { display: block; }
+  .is-reference-fixture .focus-card button i { display: none; }
+  .is-reference-fixture .focus-card button b { color: var(--green); font-size: 16px; }
+  .is-reference-fixture .focus-card > small { color: var(--muted); font-size: 8px; }
+}
+
+/* Reference Golden Agent Operations geometry: two compact card rows and a
+   finite inspector preserve the v3 visual rhythm inside the locked viewport. */
+@media (min-width: 901px) {
+  .is-reference-fixture .agent-operations-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 12px;
+    align-items: start;
+    height: 570px;
+  }
+  .is-reference-fixture .agent-operations-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, 272px);
+    gap: 23px 12px;
+    height: 567px;
+    align-content: start;
+  }
+  .is-reference-fixture .agent-operation-card {
+    min-height: 0;
+    height: 272px;
+    overflow: hidden;
+    align-content: start;
+    grid-template-rows: 94px 5px 40px 18px 0 55px;
+  }
+  .is-reference-fixture .agent-operation-main {
+    grid-column: 2;
+    grid-template-rows: auto auto auto auto;
+    align-content: start;
+    gap: 2px;
+  }
+  .is-reference-fixture .agent-operation-main strong { order: 1; font-size: 18px; line-height: 1.15; }
+  .is-reference-fixture .agent-operation-role { order: 2; color: var(--muted); font-size: 8px; font-weight: 700; }
+  .is-reference-fixture .agent-operation-current { order: 3; margin-top: 13px; font-size: 8px; }
+  .is-reference-fixture .agent-operation-quest { order: 4; font-size: 18px; line-height: 1.1; }
+  .is-reference-fixture .agent-operation-card > i { width: auto !important; height: 5px; margin: 0; background: transparent; }
+  .is-reference-fixture .agent-operation-load { display: block; grid-column: 1 / -1; height: 5px; background: color-mix(in srgb, var(--line) 70%, transparent); }
+  .is-reference-fixture .agent-operation-load i { display: block; height: 100%; background: var(--blue); }
+  .is-reference-fixture .agent-operation-stats > span { padding: 7px 6px; }
+  .is-reference-fixture .agent-operation-stats small { font-size: 7px; }
+  .is-reference-fixture .agent-operation-stats b { font-size: 12px; }
+  .is-reference-fixture .agent-operation-state { display: none; }
+  .is-reference-fixture .agent-operation-trend { display: block; grid-column: 1 / -1; justify-self: center; align-self: end; width: 90px; height: 55px; padding: 4px 3px 0; }
+  .is-reference-fixture .agent-operation-trend svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .is-reference-fixture .agent-operation-trend polyline { fill: none; stroke: var(--blue); stroke-width: 2.2; vector-effect: non-scaling-stroke; }
+  .is-reference-fixture .agent-operation-card::after { display: none; }
+  .is-reference-fixture .agent-operation-add {
+    display: grid;
+    height: 272px;
+    place-items: center;
+    align-content: center;
+    gap: 7px;
+    border: 1px dashed var(--blue);
+    background: transparent;
+    color: var(--blue);
+    font: inherit;
+  }
+  .is-reference-fixture .agent-operation-add span { font-size: 28px; line-height: 1; }
+  .is-reference-fixture .agent-operation-add b { font-size: 14px; }
+  .is-reference-fixture .agent-operations-inspector {
+    height: 272px;
+    min-height: 272px;
+    overflow: hidden;
+    align-content: start;
+    gap: 10px;
+  }
+  .is-reference-fixture .agent-operations-inspector h2 { font-size: 24px; }
+  .is-reference-fixture .agent-inspector-load { display: block; color: var(--ink); font-size: 40px; line-height: 1; font-weight: 900; }
+  .is-reference-fixture .agent-operations-inspector dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0; }
+  .is-reference-fixture .agent-operations-inspector dl div { display: grid; gap: 3px; padding: 7px 6px; border: 1px solid var(--line); }
+  .is-reference-fixture .agent-operations-inspector dt { font-size: 7px; }
+  .is-reference-fixture .agent-operations-inspector dd { font-size: 15px; }
+}
+
+@media (min-width: 901px) {
+  body.is-reference-fixture .view[data-panel="agents"] .view-heading {
+    padding-top: 19px;
+    padding-bottom: 14px;
+  }
+  body.is-reference-fixture .view[data-panel="agents"] .view-heading > .view-heading-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+@media (min-width: 901px) {
+  body.is-reference-fixture .nav-button.is-active,
+  body.is-reference-fixture .nav-button.is-active:hover {
+    border-color: color-mix(in srgb, var(--blue) 60%, transparent);
+    border-left-width: 3px;
+    background: color-mix(in srgb, var(--blue) 20%, transparent);
+    color: var(--blue);
+  }
+  body.is-reference-fixture .nav-button.is-active .nav-icon { color: var(--blue); }
+  body.is-reference-fixture #topbarSyncState::before { margin-right: 5px; color: var(--green); content: "●"; }
+}
+
+@media (min-width: 901px) {
+  body.is-reference-fixture .status-rail-reference-only { display: block; }
+  body.is-reference-fixture .status-rail-reference-facts { display: grid; }
+  body.is-reference-fixture .status-rail-reference-actions { display: grid; }
+  body.is-reference-fixture .status-rail-primary { display: none; }
+}
+
+@media (min-width: 901px) {
+  body.is-reference-fixture .agent-operations-grid {
+    grid-template-rows: repeat(2, 276px);
+    row-gap: 19px;
+  }
+  body.is-reference-fixture .agent-operation-card,
+  body.is-reference-fixture .agent-operation-add {
+    height: 276px;
+  }
+}
+
+@media (min-width: 901px) {
+  body.is-reference-fixture .topbar {
+    grid-template-columns: 974px 184px 203px;
+    margin-left: -16px;
+  }
+  body.is-reference-fixture .topbar .status-strip {
+    grid-template-columns: 163px 195px 259px 163px 194px;
+  }
+  body.is-reference-fixture .status-rail {
+    padding-right: 15px;
+    padding-left: 10px;
+  }
+  body.is-reference-fixture .status-rail-heading {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  body.is-reference-fixture .status-agent-grid {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+}
+
+.reference-brand { display: none; }
+.reference-scrollbar { display: none; }
+.reference-design-lab { display: none; }
+.settings-reference-surface { display: none; }
+.battle-reference-copy,
+.battle-reference-periods { display: none; }
+
+@media (min-width: 901px) {
+  body.is-reference-fixture .sidebar .brand { display: none; }
+  body.is-reference-fixture .reference-brand {
+    display: grid;
+    grid-template-columns: 41px minmax(0, 1fr);
+    gap: 9px;
+    align-items: start;
+    height: 62px;
+    min-height: 62px;
+  }
+  body.is-reference-fixture .reference-brand-mark {
+    display: grid;
+    width: 41px;
+    height: 41px;
+    place-items: center;
+    border: 2px solid var(--blue);
+    color: var(--blue);
+  }
+  body.is-reference-fixture .reference-brand-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  body.is-reference-fixture .reference-brand-copy strong {
+    color: var(--ink);
+    font-size: 16px;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: .02em;
+  }
+  body.is-reference-fixture .reference-brand-copy small {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.is-reference-fixture .reference-brand-copy em {
+    color: var(--blue);
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 800;
+  }
+  body.is-reference-fixture .reference-scrollbar {
+    position: fixed;
+    z-index: 1001;
+    display: block;
+    pointer-events: none;
+  }
+  body.is-reference-fixture .reference-scrollbar--left {
+    top: 1px;
+    bottom: 1px;
+    left: 213px;
+    width: 12px;
+    background: #2c2c2c;
+  }
+  body.is-reference-fixture .reference-scrollbar--left::before {
+    position: absolute;
+    top: 49px;
+    left: 3px;
+    width: 9px;
+    height: 651px;
+    background: #9f9f9f;
+    content: "";
+  }
+  body.is-reference-fixture .reference-scrollbar--right {
+    top: 1px;
+    right: 0;
+    bottom: 1px;
+    width: 15px;
+    background: linear-gradient(to right, #11191c 0 10px, #3d3f40 10px 11px, #191a1a 11px 100%);
+  }
+  body.is-reference-fixture .reference-design-lab {
+    position: fixed;
+    right: 15px;
+    bottom: 21px;
+    z-index: 1002;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    width: 298px;
+    min-height: 125px;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 8px;
+  }
+  body.is-reference-fixture .reference-design-lab > span { color: var(--muted); font-weight: 800; }
+  body.is-reference-fixture .reference-design-lab > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  body.is-reference-fixture .reference-design-lab button { min-height: 28px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 8px; }
+  body.is-reference-fixture .reference-design-lab button.is-active { border-color: var(--blue); background: var(--blue); color: #fff; }
+  body.is-reference-fixture .reference-design-lab .reference-design-lab-toggle {
+    position: absolute;
+    top: -29px;
+    right: 0;
+    min-height: 28px;
+    padding: 0 9px;
+    border-color: #c9d0cb;
+    background: #f2f4f1;
+    color: #202624;
+    font-weight: 850;
+  }
+  body.is-reference-fixture .view[data-panel="settings"] > .view-heading,
+  body.is-reference-fixture .view[data-panel="settings"] > .panel-error-list,
+  body.is-reference-fixture .view[data-panel="settings"] > .settings-layout { display: none; }
+  body.is-reference-fixture .settings-reference-surface {
+    display: block;
+    width: 978px;
+    margin-left: 9px;
+    padding-top: 26px;
+  }
+  body.is-reference-fixture .settings-reference-heading { display: grid; gap: 5px; }
+  body.is-reference-fixture .settings-reference-heading p { margin: 0; color: var(--blue); font-size: 10px; font-weight: 850; letter-spacing: .08em; }
+  body.is-reference-fixture .settings-reference-heading h2 { margin: 0; color: var(--ink); font-size: 32px; line-height: 1.05; }
+  body.is-reference-fixture .settings-reference-heading span { color: var(--muted); font-size: 12px; }
+  body.is-reference-fixture .settings-reference-shell {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 18px;
+    height: 557px;
+    margin-top: 21px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  body.is-reference-fixture .settings-reference-nav {
+    display: grid;
+    align-content: start;
+    gap: 2px;
+    padding: 8px;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+  }
+  body.is-reference-fixture .settings-reference-nav button {
+    min-height: 43px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink);
+    font-size: 16px;
+    text-align: left;
+  }
+  body.is-reference-fixture .settings-reference-nav button.is-active { border-color: color-mix(in srgb, var(--blue) 28%, transparent); background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); }
+  body.is-reference-fixture .settings-reference-general { padding: 25px 18px 16px; }
+  body.is-reference-fixture .settings-reference-general h3 { margin: 0; color: var(--ink); font-size: 25px; }
+  body.is-reference-fixture .settings-reference-general > p { margin: 20px 0 28px; color: var(--muted); font-size: 14px; }
+  body.is-reference-fixture .settings-reference-row { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid var(--line); }
+  body.is-reference-fixture .settings-reference-row strong { display: block; color: var(--ink); font-size: 15px; }
+  body.is-reference-fixture .settings-reference-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+  body.is-reference-fixture .settings-reference-switch { position: relative; display: block; width: 41px; height: 25px; flex: 0 0 auto; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel-muted); }
+  body.is-reference-fixture .settings-reference-switch::after { position: absolute; top: 3px; left: 3px; width: 17px; height: 17px; border-radius: 50%; background: var(--muted); content: ""; }
+  body.is-reference-fixture .settings-reference-switch.is-on { border-color: var(--green); background: color-mix(in srgb, var(--green) 20%, transparent); }
+  body.is-reference-fixture .settings-reference-switch.is-on::after { left: 19px; background: var(--green); }
+  body.is-reference-fixture .settings-reference-select { display: grid; grid-template-columns: 1fr 220px; min-height: 72px; align-items: center; gap: 18px; border-top: 1px solid var(--line); color: var(--ink); font-size: 15px; }
+  body.is-reference-fixture .settings-reference-select select { min-height: 43px; border: 1px solid var(--line); background: var(--panel-muted); color: var(--ink); font-size: 15px; }
+  body.is-reference-fixture .settings-reference-save { min-height: 49px; margin-top: 12px; padding: 0 18px; border: 1px solid var(--blue); background: var(--blue); color: #fff; font-size: 15px; font-weight: 850; }
+  body.is-reference-fixture .view[data-panel="battle"] .view-heading > div:first-child { display: flex; flex-direction: column; align-items: flex-start; }
+  body.is-reference-fixture .view[data-panel="battle"] #battleKicker { display: none; }
+  body.is-reference-fixture .view[data-panel="battle"] #battleTitle { order: 1; }
+  body.is-reference-fixture .view[data-panel="battle"] .battle-reference-copy { display: block; order: 2; margin-top: 7px; color: var(--muted); font-size: 12px; }
+  body.is-reference-fixture .view[data-panel="battle"] .battle-reference-periods { display: grid; grid-template-columns: repeat(2, 62px); gap: 0; width: 124px; }
+  body.is-reference-fixture .view[data-panel="battle"] .battle-reference-periods button { min-height: 42px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 15px; }
+  body.is-reference-fixture .view[data-panel="battle"] #resetBattle { display: none; }
+  body.is-reference-fixture .view[data-panel="battle"] .view-heading { padding-bottom: 28px; }
+  body.is-reference-fixture .view[data-panel="battle"] .battle-report-log-row { grid-template-columns: 42px minmax(0, 1fr) auto; }
+}
+
+/* Party Workforce reference cards: preserve the local Party contract while matching the locked handoff surface. */
+.party-reference-copy { display: none; }
+.profile-reference-copy,
+.profile-reference-period { display: none; }
+@media (min-width: 901px) {
+  body.is-reference-fixture .party-card--reference {
+    min-height: 174px;
+    grid-template-rows: auto auto 5px auto auto;
+    gap: 6px;
+    padding: 12px;
+  }
+  body.is-reference-fixture .party-card--reference .party-card-head {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+  }
+  body.is-reference-fixture .party-card--reference .party-mark {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+  body.is-reference-fixture .party-card--reference .party-mark.has-avatar img { width: 34px; }
+  body.is-reference-fixture .party-card--reference .party-card-head p {
+    margin: 0 0 2px;
+    color: var(--muted);
+    font-size: 8px;
+    line-height: 1;
+  }
+  body.is-reference-fixture .party-card--reference .party-card-head h2 {
+    display: inline;
+    margin: 0;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.1;
+  }
+  body.is-reference-fixture .party-card--reference .party-role {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 8px;
+    line-height: 1;
+  }
+  body.is-reference-fixture .party-card--reference .party-task {
+    min-height: 22px;
+    margin: 0;
+    color: var(--ink) !important;
+    font-size: 9px;
+    line-height: 1.25;
+  }
+  body.is-reference-fixture .party-card--reference .party-load {
+    overflow: hidden;
+    height: 5px;
+    background: var(--panel-muted);
+  }
+  body.is-reference-fixture .party-card--reference .party-load i {
+    display: block;
+    height: 100%;
+    background: var(--blue);
+  }
+  body.is-reference-fixture .party-card--reference:first-child .party-load i { background: var(--green); }
+  body.is-reference-fixture .party-card--reference:last-child .party-load i { background: var(--red); }
+  body.is-reference-fixture .party-card--reference .party-card-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+  }
+  body.is-reference-fixture .party-card--reference .party-card-meta div {
+    display: grid;
+    min-height: 28px;
+    place-items: center;
+    padding: 5px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: transparent;
+  }
+  body.is-reference-fixture .party-card--reference .party-card-meta strong {
+    color: var(--ink);
+    font-size: 9px;
+    font-weight: 850;
+  }
+  body.is-reference-fixture .party-card--reference .party-handoff {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    align-items: start;
+    min-height: 30px;
+    margin-top: 1px;
+  }
+  body.is-reference-fixture .party-card--reference .party-handoff-step {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    min-width: 0;
+  }
+  body.is-reference-fixture .party-card--reference .party-handoff-step:not(:last-child)::after {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 100%;
+    height: 1px;
+    background: var(--line-strong);
+    content: "";
+  }
+  body.is-reference-fixture .party-card--reference .party-handoff-step i {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: 16px;
+    height: 16px;
+    place-items: center;
+    border: 2px solid var(--line-strong);
+    border-radius: 50%;
+    background: var(--canvas);
+    color: var(--canvas);
+    font-size: 9px;
+    font-style: normal;
+  }
+  body.is-reference-fixture .party-card--reference .party-handoff-step small {
+    overflow: hidden;
+    max-width: 100%;
+    color: var(--muted);
+    font-size: 6px;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.is-reference-fixture .party-card--reference .party-handoff-step.is-done i { border-color: var(--green); background: var(--green); }
+  body.is-reference-fixture .party-card--reference .party-handoff-step.is-active i { border-color: var(--blue); background: var(--canvas); }
+  body.is-reference-fixture .party-card--reference .party-handoff-step.is-error i { border-color: var(--red); background: var(--canvas); color: var(--red); }
+  body.is-reference-fixture .party-card--reference .party-handoff-step.is-done small { color: var(--green); }
+  body.is-reference-fixture .party-card--reference > button { display: none; }
+  body.is-reference-fixture .party-reference-copy {
+    display: block;
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  body.is-reference-fixture .view[data-panel="party"] > .view-heading {
+    padding-bottom: 22px;
+  }
+  body.is-reference-fixture .view[data-panel="party"] > .view-heading > div {
+    transform: translateY(8px);
+  }
+  body.is-reference-fixture .party-list {
+    min-height: 565px;
+    grid-auto-rows: 182px;
+  }
+  body.is-reference-fixture .view[data-panel="profile"] > .view-heading {
+    padding-bottom: 33px;
+  }
+  body.is-reference-fixture .view[data-panel="profile"] #profileKicker,
+  body.is-reference-fixture .view[data-panel="profile"] #profileSettingsButton { display: none; }
+  body.is-reference-fixture .view[data-panel="profile"] > .view-heading > div {
+    transform: translateY(20px);
+  }
+  body.is-reference-fixture .view[data-panel="profile"] .profile-reference-copy {
+    display: block;
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  body.is-reference-fixture .view[data-panel="profile"] .profile-reference-period {
+    display: inline-flex;
+    min-width: 72px;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 15px;
+  }
+  body.is-reference-fixture .profile-ref-main .profile-ref-card h3 {
+    display: block;
+    height: 16px;
+    margin: 0;
+    visibility: hidden;
+  }
+  body.is-reference-fixture .profile-ref-agent-row {
+    grid-template-columns: 29px minmax(0, 1fr) 72px 62px 62px 34px;
+  }
+  body.is-reference-fixture .profile-ref-agent-row strong { font-size: 11px; }
+  body.is-reference-fixture .profile-ref-agent-row small { font-size: 7px; }
+  body.is-reference-fixture .profile-ref-agent-row b,
+  body.is-reference-fixture .profile-ref-agent-row em { font-size: 10px; }
+  body.is-reference-fixture .profile-ref-log-row {
+    grid-template-columns: 66px minmax(0, 1fr) 55px 72px;
+  }
+  body.is-reference-fixture .profile-ref-log-row strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+  body.is-reference-fixture .profile-ref-log-row b,
+  body.is-reference-fixture .profile-ref-log-row em { font-size: 8px; }
+  body.is-reference-fixture .profile-ref-mini-grid > div > small { display: none; }
+  body.is-reference-fixture .profile-reference-dashboard { gap: 10px; }
+  body.is-reference-fixture .profile-ref-agent-table { padding-top: 14px; }
+  body.is-reference-fixture .profile-reference-dashboard {
+    width: calc(100% + 1px);
+    margin-left: -1px;
+  }
+  body.is-reference-fixture .profile-ref-kpis { gap: 8px; }
+  body.is-reference-fixture .profile-ref-kpis > section:nth-child(1),
+  body.is-reference-fixture .profile-ref-kpis > section:nth-child(3) { border-color: var(--blue); }
+  body.is-reference-fixture .profile-ref-kpis > section:nth-child(2),
+  body.is-reference-fixture .profile-ref-kpis > section:nth-child(4) { border-color: var(--green); }
+  body.is-reference-fixture .party-list { width: auto; margin-left: 0; }
+  body.is-reference-fixture .status-rail { background: #11191c; }
+  body.is-reference-fixture .status-agent-avatar { overflow: hidden; }
+  body.is-reference-fixture .status-agent-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 34%;
+    image-rendering: pixelated;
+  }
+  body.is-reference-fixture .nav-button.is-active { background: #22323f; }
+  body.is-reference-fixture .quick-add { width: 183px; background: #126ce5; border-color: #126ce5; }
+}
+
+/* v4.3: WQHD/4K density pass. Appended last so it outranks earlier same-specificity ≥1061px
+   shell rules via source order. Widens the rail/sidebar tracks and bumps type/row/card size
+   so extra width buys density and readability, not just wider margins. Grid structure (column
+   count, .app-shell track roles, quest-row column layout) is untouched — sizing only. */
+@media (min-width: 1920px) {
+  body { font-size: 16px; }
+  .app-shell { grid-template-columns: 260px minmax(0, 1fr) 360px; }
+  .topbar { min-height: 108px; }
+  .status-card { padding: 15px 16px; }
+  .status-card strong, .focus-card button b { font-size: 22px; }
+  .quest-row { min-height: 96px; padding: 14px 10px; }
+  .quest-summary strong, .agent-chip strong { font-size: 16px; }
+  .nav-button { min-height: 46px; padding: 8px 10px; }
+  .nav-button b { font-size: 15px; }
+  .nav-icon { width: 30px; height: 30px; }
+  .status-rail { padding: 14px 14px 16px; }
+}
+
+@media (min-width: 2560px) {
+  body { font-size: 17px; }
+  .app-shell { grid-template-columns: 300px minmax(0, 1fr) 400px; }
+  .topbar { min-height: 118px; }
+  .status-card { padding: 18px; }
+  .status-card strong, .focus-card button b { font-size: 25px; }
+  .quest-row { min-height: 106px; padding: 16px 12px; }
+  .quest-summary strong, .agent-chip strong { font-size: 17px; }
+  .nav-button { min-height: 50px; padding: 9px 12px; }
+  .nav-button b { font-size: 16px; }
+  .nav-icon { width: 32px; height: 32px; }
+  .status-rail { padding: 16px 16px 18px; }
 }

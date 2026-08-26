@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping QuestForge become a distinct, reliable task RPG.
+Thanks for helping Guilduo become a distinct, responsible Human × AI Work Platform.
 
 ## Before A Change
 
@@ -26,7 +26,7 @@ Add focused tests for behavior changes. REST and MCP operations must share the s
 - Keep the interface quiet, practical, and readable on 360px mobile through desktop.
 - Use natural Japanese and clear English rather than literal internal terminology.
 - Respect reduced motion and keyboard navigation.
-- Avoid recreating Habitica screens or assets. Build around QuestForge's MP planning, command battle, agent assignments, and social party model.
+- Avoid recreating Habitica screens or assets. Build around Guilduo's Relay, Evidence, Decision, MP planning, command battle, agent assignments, and social party model.
 
 ## Pull Requests
 

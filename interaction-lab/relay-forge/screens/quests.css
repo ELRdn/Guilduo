@@ -1,0 +1,289 @@
+/* ------------------------------------------------------------------ *
+ * Quests — portfolio workspace
+ *
+ * Composition: header / metrics / filters are fixed; the portfolio table is the
+ * one scrolling region; the detail rail is fixed beside it. Nothing here copies
+ * Command's Loom/Selected/Lens geometry — the star is the comparable table.
+ * ------------------------------------------------------------------ */
+
+.rf-screen--quests {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  height: 100%;
+}
+
+/* Table 74% / detail rail 26%: the inverse weighting of Command, because here
+ * comparison is the job and the detail is support. */
+.rf-q-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 26%);
+  gap: var(--qf-pane-gap);
+  min-height: 0;
+}
+
+.rf-q-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  flex-wrap: wrap;
+}
+
+.rf-q-sort {
+  display: flex;
+  gap: var(--qf-space-1);
+  flex: 0 0 auto;
+}
+
+.rf-q-sort-option {
+  height: var(--qf-control-default);
+  padding-inline: var(--qf-space-4);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-xs);
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-q-sort-option[data-selected="true"] {
+  color: var(--qf-color-fg-strong);
+  border-color: var(--qf-color-accent);
+  background: var(--qf-color-inset);
+}
+
+/* ---------------- table ---------------- */
+
+.rf-q-table { display: flex; flex-direction: column; min-width: 0; }
+
+/* The table is the tab stop; the focus ring belongs on it, not on 60 rows. */
+.rf-q-table:focus-visible {
+  outline: var(--qf-focus-width) solid var(--qf-color-focus);
+  outline-offset: var(--qf-focus-offset);
+}
+
+/* One column template, shared by the header and every row, so the columns line
+ * up without a table element and still reflow on narrow desktops. */
+.rf-q-head,
+.rf-q-row {
+  display: grid;
+  grid-template-columns:
+    minmax(96px, 108px)     /* state chip   */
+    minmax(72px, 84px)      /* QF id        */
+    minmax(0, 1fr)          /* title        */
+    minmax(160px, 200px)    /* owner        */
+    minmax(104px, 124px)    /* impact       */
+    minmax(72px, 84px)      /* due          */
+    minmax(80px, 92px);     /* evidence     */
+  gap: var(--qf-space-4);
+  align-items: center;
+}
+
+.rf-q-head {
+  position: sticky;
+  top: 0;
+  z-index: var(--qf-z-sticky);
+  padding: var(--qf-space-2) var(--qf-space-4);
+  background: var(--qf-color-surface);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-default);
+}
+
+.rf-q-head > span {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-q-body { display: flex; flex-direction: column; }
+
+.rf-q-row { min-height: var(--qf-row-comfortable); }
+
+.rf-q-row + .rf-q-row { border-top: var(--qf-border-width) solid var(--qf-color-border-subtle); }
+
+.rf-q-cell { min-width: 0; display: flex; align-items: center; }
+
+.rf-q-cell-title { flex-direction: column; align-items: flex-start; gap: var(--qf-space-1); }
+
+/* Blocked rows carry a second, non-colour signal on the leading edge so a dense
+ * table still separates "stuck" from "needs me" at a glance. */
+.rf-q-row[data-bucket="blocked"] { border-left-color: var(--qf-color-danger); }
+.rf-q-row[data-bucket="review"] { border-left-color: var(--qf-color-review); }
+.rf-q-row[data-bucket="done"] .rf-srow-title { color: var(--qf-color-fg-muted); }
+
+.rf-q-owner { display: flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
+.rf-q-owner-copy { display: flex; flex-direction: column; min-width: 0; }
+
+.rf-q-impact { display: flex; flex-direction: column; gap: var(--qf-space-1); min-width: 0; }
+
+.rf-q-impact-down {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+/* A heavy downstream count is the number that should stop the eye. */
+.rf-q-impact-down[data-heavy="true"] { color: var(--qf-color-warning); font: var(--qf-text-component); font-size: 13px; }
+
+.rf-q-impact-up { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+.rf-q-due { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-muted); white-space: nowrap; }
+.rf-q-due[data-overdue="true"] { color: var(--qf-color-danger); }
+
+.rf-q-evidence { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+.rf-q-evidence[data-present="true"] { color: var(--qf-color-success); }
+
+/* ---------------- detail rail ---------------- */
+
+.rf-screen-region[data-variant="detail"] { gap: var(--qf-space-4); }
+
+.rf-q-detail-head { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+.rf-q-detail-title {
+  font: var(--qf-text-section);
+  color: var(--qf-color-fg-strong);
+  margin: 0;
+}
+
+.rf-q-detail-next { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); margin: 0; }
+.rf-q-detail-next b { color: var(--qf-color-fg-muted); font: var(--qf-text-label); font-size: 12px; letter-spacing: 0.06em; }
+
+.rf-q-detail-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+  margin: var(--qf-space-2) 0 0;
+}
+
+.rf-q-detail-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-2);
+  margin: 0;
+  padding-left: var(--qf-space-6);
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+}
+
+.rf-q-detail-actions { display: flex; gap: var(--qf-space-3); flex-wrap: wrap; }
+.rf-q-detail-note { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+/* ---------------- relay line ---------------- */
+
+.rf-q-relay {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--qf-space-7) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--qf-space-3);
+  padding: var(--qf-space-4);
+  background: var(--qf-color-inset);
+  border-radius: var(--qf-radius-sm);
+}
+
+.rf-q-relay-leg { display: flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
+.rf-q-relay-copy { display: flex; flex-direction: column; min-width: 0; }
+
+/* The connector: a solid rule plus an arrow head, matching Command's Relay
+ * language rather than an emoji or an icon font. */
+.rf-q-relay-arrow {
+  position: relative;
+  height: 1px;
+  background: var(--qf-color-border-strong);
+}
+
+.rf-q-relay-arrow::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: var(--qf-space-3);
+  height: var(--qf-space-3);
+  border-top: var(--qf-border-width) solid var(--qf-color-border-strong);
+  border-right: var(--qf-border-width) solid var(--qf-color-border-strong);
+  transform: translate(0, -50%) rotate(45deg);
+}
+
+/* ---------------- 1440 and narrower desktop ---------------- */
+
+@media (max-width: 1600px) and (min-width: 901px) {
+  /* Evidence is the first column to go: its content is a yes/no already carried
+   * in the detail rail. */
+  .rf-q-head > span:nth-child(7),
+  .rf-q-cell-evidence { display: none; }
+
+  .rf-q-head,
+  .rf-q-row {
+    grid-template-columns:
+      minmax(96px, 108px)
+      minmax(72px, 84px)
+      minmax(0, 1fr)
+      minmax(150px, 180px)
+      minmax(96px, 116px)
+      minmax(72px, 84px);
+  }
+
+  .rf-q-workspace { grid-template-columns: minmax(0, 1fr) minmax(300px, 24%); }
+}
+
+/* ---------------- mobile ---------------- */
+
+@media (max-width: 900px) {
+  .rf-screen--quests { grid-template-rows: none; height: auto; }
+  .rf-q-workspace { display: contents; }
+  .rf-q-filters { flex-direction: column; align-items: stretch; }
+  .rf-q-sort { overflow-x: auto; }
+  .rf-q-sort-option { min-height: var(--qf-space-11); }
+
+  .rf-q-cards { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+
+  .rf-q-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-3);
+    padding: var(--qf-space-4);
+    min-height: var(--qf-space-12);
+    text-align: left;
+    background: var(--qf-color-surface);
+    border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+    border-left-width: var(--qf-selection-width);
+    border-radius: var(--qf-radius-sm);
+  }
+
+  .rf-q-card[data-bucket="review"] { border-left-color: var(--qf-color-review); }
+  .rf-q-card[data-bucket="blocked"] { border-left-color: var(--qf-color-danger); }
+  .rf-q-card[data-bucket="working"] { border-left-color: var(--qf-color-accent); }
+  .rf-q-card[data-bucket="scheduled"] { border-left-color: var(--qf-color-border-strong); }
+  .rf-q-card[data-bucket="done"] { border-left-color: var(--qf-color-success); }
+
+  .rf-q-card-top { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+  .rf-q-card-title {
+    font: var(--qf-text-component);
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--qf-color-fg-strong);
+    /* Two lines, then ellipsis: a mobile card must stay one predictable height
+     * so the list can be scanned by shape. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .rf-q-card-bottom { display: flex; align-items: center; gap: var(--qf-space-3); }
+  .rf-q-card-spacer { flex: 1; }
+
+  .rf-q-mobile-bar { display: flex; }
+  .rf-q-back { width: 100%; min-height: var(--qf-space-11); }
+
+  /* The sticky action sits above the bottom navigation, never over it. The
+   * shell owns the offset; this only fills the width. */
+  .rf-q-sticky { display: flex; gap: var(--qf-space-3); }
+  .rf-q-sticky > * { flex: 1; min-height: var(--qf-space-11); }
+
+  .rf-q-relay { grid-template-columns: minmax(0, 1fr); gap: var(--qf-space-3); }
+  .rf-q-relay-arrow { height: var(--qf-space-5); width: 1px; justify-self: start; margin-left: var(--qf-space-5); }
+  .rf-q-relay-arrow::after { right: auto; left: 50%; top: 100%; transform: translate(-50%, -50%) rotate(135deg); }
+}
