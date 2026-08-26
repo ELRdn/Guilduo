@@ -11,6 +11,7 @@ const valueAfter = (name: string): string => {
   return index >= 0 ? String(process.argv[index + 1] || "") : "";
 };
 const execute = args.has("--execute");
+const summaryOnly = args.has("--summary-only");
 const statePath = valueAfter("--state-export");
 const usersPath = valueAfter("--users-export");
 if (!statePath || !usersPath) throw new Error("Usage: migrate:appwrite -- --state-export <rtdb.json> --users-export <auth.json> [--execute]");
@@ -52,7 +53,14 @@ for (const [firebaseUid, rawUser] of Object.entries(rootUsers)) {
   });
 }
 
-console.log(JSON.stringify({ mode: execute ? "execute" : "dry-run", usersInDatabase: Object.keys(rootUsers).length, usersWithAuthEmail: emailByUid.size, ready: items.length, skipped: skipped.length, checksums: items.map(({ firebaseUid, checksum }) => ({ firebaseUid, checksum })) }, null, 2));
+console.log(JSON.stringify({
+  mode: execute ? "execute" : "dry-run",
+  usersInDatabase: Object.keys(rootUsers).length,
+  usersWithAuthEmail: emailByUid.size,
+  ready: items.length,
+  skipped: skipped.length,
+  ...(summaryOnly ? {} : { checksums: items.map(({ firebaseUid, checksum }) => ({ firebaseUid, checksum })) }),
+}, null, 2));
 if (!execute) process.exit(0);
 
 const required = ["APPWRITE_ENDPOINT", "APPWRITE_PROJECT_ID", "APPWRITE_DATABASE_ID", "APPWRITE_LEGACY_TABLE_ID", "APPWRITE_API_KEY"] as const;
