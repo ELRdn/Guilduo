@@ -14,6 +14,14 @@
     ],
     "rewrites": [
       {
+        "source": "/lp",
+        "destination": "/lp/index.html"
+      },
+      {
+        "source": "/lp/en",
+        "destination": "/lp/en/index.html"
+      },
+      {
         "source": "/next",
         "destination": "/next/index.html"
       },
@@ -56,6 +64,15 @@
       },
       {
         "source": "/next/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/lp/**",
         "headers": [
           {
             "key": "Cache-Control",

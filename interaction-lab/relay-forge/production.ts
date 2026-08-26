@@ -21,12 +21,14 @@ type JsonRecord = Record<string, unknown>;
 export interface RelayForgeRuntime {
   readonly mode: "production";
   readonly model: CommandModel;
+  readonly profile: ProfileRecord | null;
   readonly quests: readonly Quest[];
   readonly selfUid: string;
   readonly members: readonly PartyMemberRecord[];
   readonly agents: readonly AgentRecord[];
   readonly integrations: readonly IntegrationRecord[];
   readonly partyName: string;
+  readonly questPort: Pick<QuestForgeRepository, "createQuest" | "updateQuest">;
   readonly handoffPort: HandoffPort;
   readonly battlePort: BattlePort;
   readonly battleSession: BattleSession | null;
@@ -122,12 +124,14 @@ export async function createProductionRuntime(
   return {
     mode: "production",
     model,
+    profile,
     quests,
     selfUid,
     members: normalizeMembers(party),
     agents,
     integrations,
     partyName: text(party.name) || "Guild Party",
+    questPort: repository,
     handoffPort: repository,
     battlePort: new RepositoryBattlePort(repository),
     battleSession: Object.keys(snapshot.battle).length === 0 ? null : snapshot.battle as unknown as BattleSession,

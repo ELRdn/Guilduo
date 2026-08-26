@@ -41,7 +41,7 @@ body {
 }
 
 .rf-bootstrap-brand {
-  color: var(--qf-color-accent-review);
+  color: var(--qf-color-review);
   font: var(--qf-text-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -58,13 +58,13 @@ body {
   min-height: 44px;
   padding: 0 var(--qf-space-5);
   border: 1px solid var(--qf-color-border-strong);
-  background: var(--qf-color-surface-raised);
+  background: var(--qf-color-raised);
   color: var(--qf-color-fg-default);
 }
 
 .rf-bootstrap .rf-bootstrap-primary {
-  border-color: var(--qf-color-accent-review);
-  background: var(--qf-color-accent-review);
+  border-color: var(--qf-color-review);
+  background: var(--qf-color-review);
   color: var(--qf-color-canvas);
 }
 

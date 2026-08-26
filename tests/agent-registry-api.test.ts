@@ -4,7 +4,7 @@ import type { AuthIdentity } from "../worker/src/security.ts";
 import type { WorkerEnv } from "../worker/src/worker-types.ts";
 import { asQuestForgeState, hasErrorCode, json, type TestContext, type TestRequestOptions } from "./test-helpers.ts";
 
-const env: WorkerEnv = { DEV_BEARER_TOKEN: "agent-test-token", DEV_USER_ID: "agent-user", FIREBASE_PROJECT_ID: "questforge-test", ALLOWED_ORIGINS: "http://localhost:5173" };
+const env: WorkerEnv = { DEV_BEARER_TOKEN: "agent-test-token", DEV_USER_ID: "agent-user", ALLOWED_ORIGINS: "http://localhost:5173" };
 const context: TestContext = { waitUntil(promise: Promise<unknown>): void { promise.catch(() => {}); } };
 
 async function workerCall(path: string, options: TestRequestOptions = {}): Promise<Response> {
@@ -18,7 +18,7 @@ async function workerCall(path: string, options: TestRequestOptions = {}): Promi
 test.beforeEach(async () => {
   const agentStore = await import("../worker/src/agent-store.ts");
   agentStore.resetAgentMemoryForTests();
-  const { writeState, readState } = await import("../worker/src/firebase-store.ts");
+  const { writeState, readState } = await import("../worker/src/appwrite-store.ts");
   const current = await readState(env, "agent-user");
   await writeState(env, "agent-user", { schemaVersion: 6, state: asQuestForgeState({ schemaVersion: 6, tasks: [], taskEvents: [], syncEvents: [], rewardClaims: {}, character: { level: 1, hp: 50, maxHp: 50, xp: 0, nextXp: 100, gems: 0, ownedItems: [], equippedItems: [] }, battle: { mp: 0, maxMp: 80 }, boss: { hp: 100, maxHp: 100 } }), clientUpdatedAt: new Date().toISOString() }, current.etag);
 });

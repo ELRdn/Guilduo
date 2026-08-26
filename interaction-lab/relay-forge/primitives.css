@@ -495,7 +495,7 @@
   min-width: 0;
 }
 
-.rf-selected-actions { display: flex; align-items: center; gap: var(--qf-space-4); flex: none; }
+.rf-selected-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--qf-space-4); flex: none; }
 
 /* `Review output` inspects evidence. It is deliberately lighter than the Lens
  * `Approve handoff`, which is the final decision (section 8 of the brief). */
@@ -990,6 +990,8 @@
 .rf-decision-blocked { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-warning); }
 
 .rf-decision-actions { display: flex; gap: var(--qf-space-4); }
+.rf-task-actions { flex-wrap: wrap; }
+.rf-task-actions > * { min-width: 0; }
 
 /* The only filled review-coloured control on the screen: the final decision. */
 .rf-decision-approve {

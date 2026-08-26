@@ -29,6 +29,7 @@ import {
 } from "./model.ts";
 import { actorAvatar } from "./primitives/avatar.ts";
 import { el } from "./primitives/dom.ts";
+import type { QuestActionId, QuestActionState } from "./quest-actions.ts";
 
 export interface MobileCallbacks {
   readonly onSelect: (questId: string, trigger: HTMLElement) => void;
@@ -41,6 +42,7 @@ export interface MobileCallbacks {
   readonly onRevisionInput: (value: string) => void;
   readonly onSubmitRevision: () => void;
   readonly onCancelRevision: () => void;
+  readonly onQuestAction: (action: QuestActionId) => void;
 }
 
 export interface MobileState {
@@ -48,6 +50,7 @@ export interface MobileState {
   readonly selectedQuestId: string | null;
   readonly view: SelectedQuestView | null;
   readonly intervention: Intervention | null;
+  readonly questActions: QuestActionState;
   readonly evidenceOpen: boolean;
   readonly supportingOpen: boolean;
   readonly chronicleOpen: boolean;
@@ -498,6 +501,28 @@ export function mobileDecisionBar(
       state.resultMessage,
     );
 
+  if (state.questActions.mode !== "handoff-decision") {
+    const labels: Readonly<Record<QuestActionId, string>> = {
+      start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive",
+    };
+    const buttons = state.questActions.actions.map((action, index) => {
+      const button = el("button", {
+        type: "button",
+        class: index === 0 ? "rf-decision-approve" : "rf-secondary-button",
+        disabled: state.submitting || state.writeLocked ? true : null,
+        "data-quest-action": action,
+      }, labels[action]);
+      button.addEventListener("click", () => callbacks.onQuestAction(action));
+      return button;
+    });
+    return el(
+      "div",
+      { class: "rf-m-decision", "data-shape": buttons.length > 0 ? "ready" : "compact", role: "region", "aria-label": "Task actions" },
+      el("div", { class: "rf-m-decision-copy" }, el("p", { class: "rf-decision-status" }, state.questActions.statusLabel)),
+      result,
+      buttons.length === 0 ? null : el("div", { class: "rf-decision-actions rf-task-actions" }, ...buttons),
+    );
+  }
   if (state.revisionOpen) {
     const field = el("textarea", {
       class: "rf-revision-input",

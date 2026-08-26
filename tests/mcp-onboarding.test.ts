@@ -36,16 +36,17 @@ test("infrastructure overrides stay inside developer settings", () => {
   assert.match(html, /data-view="integrations">AI連携<\/button>/);
 });
 
-test("OAuth delegates the signed-in Firebase session without an admin key", () => {
+test("OAuth delegates a short-lived Appwrite JWT without exposing an API key", () => {
   const oauth = fs.readFileSync(path.join(root, "worker", "src", "oauth.ts"), "utf8");
   const security = fs.readFileSync(path.join(root, "worker", "src", "security.ts"), "utf8");
-  const store = fs.readFileSync(path.join(root, "worker", "src", "firebase-store.ts"), "utf8");
+  const store = fs.readFileSync(path.join(root, "worker", "src", "appwrite-store.ts"), "utf8");
 
-  assert.match(oauth, /firebaseRefreshToken=result\.user\.refreshToken/);
-  assert.match(oauth, /securetoken\.googleapis\.com\/v1\/token/);
+  assert.match(oauth, /account\/jwts/);
+  assert.match(oauth, /verifyAppwriteJwt/);
   assert.match(oauth, /accessRecord\?\.refreshHash/);
-  assert.match(security, /firebaseIdToken: token/);
-  assert.match(store, /url\.searchParams\.set\("auth", normalized\.firebaseIdToken\)/);
+  assert.match(security, /x-appwrite-jwt/);
+  assert.match(store, /x-appwrite-key/);
+  assert.doesNotMatch(oauth, /APPWRITE_API_KEY|x-appwrite-key/);
 });
 
 test("dynamic OAuth registration rejects insecure remote callbacks", () => {

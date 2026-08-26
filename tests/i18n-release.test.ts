@@ -87,7 +87,7 @@ test("locale preference is device-local and PWA fallback manifests are available
 
 test("release metadata, license, public docs, and CI are present", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.5.0-beta.1");
+  assert.equal(packageJson.version, "0.6.0-beta.1");
   assert.equal(packageJson.license, "AGPL-3.0-only");
   assert.match(fs.readFileSync(path.join(root, "LICENSE"), "utf8"), /GNU AFFERO GENERAL PUBLIC LICENSE/);
   for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", "RELEASE_SETUP.md", ".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
@@ -98,13 +98,13 @@ test("release metadata, license, public docs, and CI are present", () => {
 test("public examples omit local absolute paths and private deployment identifiers", () => {
   const files = [
     "README.md", "API_MCP_SETUP.md", "mcp-local/client-configs.md", "runtime-config.example.js",
-    "wrangler.example.jsonc", ".firebaserc.example", "api/openapi.json",
+    "wrangler.example.jsonc", "appwrite-config.example.js", "api/openapi.json",
   ];
   const content = files.map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
   assert.doesNotMatch(content, /C:\\Users\\hiron|C:\/Users\/hiron/i);
   assert.doesNotMatch(content, /guangchuannaito|questforge-cb6ba|AIzaSyAs44|5a8a50b8|98241f88/i);
   const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
-  for (const ignored of ["runtime-config.js", ".firebaserc", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const ignored of ["runtime-config.js", "appwrite-config.js", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("generated contracts expose Agent Registry, social, Quest Tree, battle, and MCP v2.7 operations", () => {

@@ -66,11 +66,11 @@ openapi.servers = [
 Object.assign(openapi.paths, {
   "/v1/agents": {
     get: { summary: "List the signed-in user's private Agent Registry", parameters: [{ name: "includeArchived", in: "query", schema: { type: "boolean", default: false } }], responses: ok("Agent list", { type: "object", properties: { agents: { type: "array", items: { $ref: "#/components/schemas/RegisteredAgent" } } } }) },
-    post: { summary: "Register an Agent from the Firebase-authenticated web app", requestBody: body({ $ref: "#/components/schemas/RegisteredAgentInput" }), responses: { "201": { description: "Agent registered" } } },
+    post: { summary: "Register an Agent from the Appwrite-authenticated web app", requestBody: body({ $ref: "#/components/schemas/RegisteredAgentInput" }), responses: { "201": { description: "Agent registered" } } },
   },
   "/v1/agents/{agentId}": {
     get: { summary: "Get one registered Agent", parameters: [parameter("agentId")], responses: ok("Registered Agent", { type: "object", properties: { agent: { $ref: "#/components/schemas/RegisteredAgent" } } }) },
-    patch: { summary: "Update, disable, or archive an Agent from the Firebase-authenticated web app", parameters: [parameter("agentId")], requestBody: body({ $ref: "#/components/schemas/RegisteredAgentPatch" }), responses: ok("Updated Agent") },
+    patch: { summary: "Update, disable, or archive an Agent from the Appwrite-authenticated web app", parameters: [parameter("agentId")], requestBody: body({ $ref: "#/components/schemas/RegisteredAgentPatch" }), responses: ok("Updated Agent") },
   },
   "/v1/agent-connections": {
     get: { summary: "List OAuth MCP clients and Agent links for the signed-in web user", responses: ok("Agent connections") },
@@ -146,7 +146,7 @@ Object.assign(openapi.paths, {
     post: { summary: "Preview or create/update a Toggl Focus task for one Quest", parameters: [parameter("questId")], requestBody: body({ type: "object", properties: { dryRun: { type: "boolean", default: true } } }), responses: ok("Focus task sync") },
   },
   "/v1/integrations/toggl-focus/connect": {
-    post: { summary: "Connect Toggl Focus from the QuestForge web app", description: "Web/Firebase-authenticated endpoint only. The personal API key is encrypted in D1 and never returned by REST or MCP.", requestBody: body({ $ref: "#/components/schemas/TogglFocusConnectInput" }), responses: ok("Focus connection") },
+    post: { summary: "Connect Toggl Focus from the Guilduo web app", description: "Web/Appwrite-authenticated endpoint only. The personal API key is encrypted in D1 and never returned by REST or MCP.", requestBody: body({ $ref: "#/components/schemas/TogglFocusConnectInput" }), responses: ok("Focus connection") },
   },
   "/v1/integrations/toggl-focus/resources": {
     get: { summary: "List configured Toggl Focus projects and tags", responses: ok("Focus resources") },

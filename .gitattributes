@@ -1,0 +1,9 @@
+# Text files are stored and checked out with LF. Without this, core.autocrlf=true
+# gives a Windows clone CRLF working files, which breaks `npm run design:check`,
+# `npm run tokens:check` and tests/panel-differential-render.test.ts.
+* text=auto eol=lf
+*.png binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
+*.ico binary

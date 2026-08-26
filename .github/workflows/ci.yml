@@ -18,7 +18,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: cp firebase-config.example.js firebase-config.js
+      - run: cp appwrite-config.example.js appwrite-config.js
       - run: cp runtime-config.example.js runtime-config.js
       - run: cp wrangler.example.jsonc wrangler.jsonc
       - run: npm run api:generate
@@ -29,3 +29,11 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+      - name: Verify landing page in preview server
+        shell: bash
+        run: |
+          npm run preview -- --port 4173 > /tmp/guilduo-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in {1..30}; do curl -fsS http://127.0.0.1:4173/lp/ >/dev/null && break; sleep 1; done
+          npm run lp:verify -- http://127.0.0.1:4173

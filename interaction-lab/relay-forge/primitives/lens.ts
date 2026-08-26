@@ -21,6 +21,7 @@ import {
 } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el } from "./dom.ts";
+import type { QuestActionId, QuestActionState } from "../quest-actions.ts";
 
 export type LensState = "closed" | "peek" | "open" | "pinned";
 
@@ -52,6 +53,8 @@ export interface LensOptions {
   readonly onCancelRevision: () => void;
   readonly onRevisionInput: (value: string) => void;
   readonly onSubmitRevision: () => void;
+  readonly questActions: QuestActionState;
+  readonly onQuestAction: (action: QuestActionId) => void;
 }
 
 function section(title: string, ...children: (Node | string | null)[]): HTMLElement {
@@ -237,6 +240,35 @@ export function interventionLens(
     el("div", { class: "rf-decision-actions" }, submitRevision, cancelRevision),
   );
 
+  const taskLabels: Readonly<Record<QuestActionId, string>> = {
+    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive",
+  };
+  const taskFooter = el(
+    "footer",
+    { class: "rf-decision", "data-phase": options.submitting ? "submitting" : "idle" },
+    el("div", { class: "rf-decision-head" },
+      el("h3", { class: "rf-region-label" }, "Task actions"),
+      el("span", { class: "rf-decision-info", "aria-hidden": "true" }),
+    ),
+    el("p", { class: "rf-decision-status" }, options.questActions.statusLabel),
+    options.resultTone === null ? null : el("p", {
+      class: "rf-decision-result", "data-tone": options.resultTone,
+      role: options.resultTone === "error" ? "alert" : "status",
+    }, options.resultMessage),
+    el("div", { class: "rf-decision-actions rf-task-actions" },
+      ...options.questActions.actions.map((action, index) => {
+        const button = el("button", {
+          type: "button",
+          class: index === 0 ? "rf-decision-approve" : "rf-secondary-button",
+          disabled: options.submitting || options.writeLocked ? true : null,
+          "data-quest-action": action,
+        }, taskLabels[action]);
+        button.addEventListener("click", () => options.onQuestAction(action));
+        return button;
+      }),
+    ),
+    options.writeLocked ? el("p", { class: "rf-decision-blocked", role: "status" }, "再接続まで書き込みは保留中です") : null,
+  );
   return el(
     "aside",
     { class: "rf-lens", "data-state": options.state, "aria-label": "Intervention Lens" },
@@ -287,7 +319,7 @@ export function interventionLens(
           ),
       ),
     ),
-    el(
+    options.questActions.mode !== "handoff-decision" ? taskFooter : el(
       "footer",
       { class: "rf-decision", "data-phase": options.submitting ? "submitting" : "idle" },
       el(

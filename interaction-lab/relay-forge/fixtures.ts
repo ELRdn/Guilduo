@@ -48,7 +48,7 @@ const ACTOR_LIST: readonly Actor[] = [
   { id: "a-forge", kind: "agent", name: "Forge Runner", role: "Build and test executor", initials: "FR", provider: "generic" },
   { id: "a-scribe", kind: "agent", name: "Scribe", role: "Document synthesiser", initials: "SC", provider: "generic" },
   { id: "a-warden", kind: "agent", name: "Warden", role: "Contract checker", initials: "WD", provider: "generic" },
-  { id: "s-sync", kind: "system", name: "Sync", role: "Firebase replication", initials: "SY" },
+  { id: "s-sync", kind: "system", name: "Sync", role: "Appwrite replication", initials: "SY" },
   { id: "s-oauth", kind: "system", name: "OAuth", role: "Connection broker", initials: "OA" },
 ];
 
@@ -482,7 +482,7 @@ export const fixtureChronicle: readonly ChronicleEvent[] = [
     kind: "system_event",
     verb: "replicated",
     object: "12 Quest records",
-    detail: "Firebase / 240ms",
+    detail: "Appwrite / 240ms",
   },
   {
     id: "ev-5",
@@ -491,7 +491,7 @@ export const fixtureChronicle: readonly ChronicleEvent[] = [
     kind: "system_event",
     verb: "replicated",
     object: "4 handoff records",
-    detail: "Firebase / 118ms",
+    detail: "Appwrite / 118ms",
   },
   {
     id: "ev-4",

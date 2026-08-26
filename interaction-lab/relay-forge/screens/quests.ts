@@ -59,12 +59,13 @@ export interface QuestsState {
   segment: PortfolioBucket | "all";
   query: string;
   sort: "priority" | "due" | "updated" | "impact";
+  showArchived: boolean;
   /** Mobile only: the detail panel replaces the list rather than stacking. */
   mobileDetailOpen: boolean;
 }
 
 export function initialQuestsState(): QuestsState {
-  return { segment: "all", query: "", sort: "priority", mobileDetailOpen: false };
+  return { segment: "all", query: "", sort: "priority", showArchived: false, mobileDetailOpen: false };
 }
 
 const SORT_LABEL: Readonly<Record<QuestsState["sort"], string>> = {
@@ -86,6 +87,7 @@ const BUCKET_WEIGHT: Readonly<Record<PortfolioBucket, number>> = {
 function visibleRows(model: QuestsModel, state: QuestsState): readonly QuestRow[] {
   const query = state.query.trim().toLowerCase();
   const filtered = model.rows.filter((row) => {
+    if (!state.showArchived && row.archived) return false;
     if (state.segment !== "all" && row.bucket !== state.segment) return false;
     if (query === "") return true;
     return row.title.toLowerCase().includes(query) || row.ref.toLowerCase().includes(query);
@@ -120,6 +122,33 @@ function bucketCount(model: QuestsModel, bucket: PortfolioBucket): number {
  * Shared pieces
  * ------------------------------------------------------------------ */
 
+function scopedRows(model: QuestsModel, state: QuestsState): readonly QuestRow[] {
+  return state.showArchived ? model.rows : model.rows.filter((row) => !row.archived);
+}
+
+function scopedBucketCount(model: QuestsModel, state: QuestsState, bucket: PortfolioBucket): number {
+  return scopedRows(model, state).filter((row) => row.bucket === bucket).length;
+}
+
+function archiveToggle(model: QuestsModel, state: QuestsState, context: ScreenContext): HTMLButtonElement {
+  const count = model.rows.filter((row) => row.archived).length;
+  const button = el(
+    "button",
+    {
+      type: "button",
+      class: "rf-secondary-button rf-q-archive-toggle",
+      "aria-pressed": state.showArchived ? "true" : "false",
+      disabled: count === 0,
+    },
+    state.showArchived ? `アーカイブを隠す (${count})` : `アーカイブを表示 (${count})`,
+  );
+  button.addEventListener("click", () => {
+    state.showArchived = !state.showArchived;
+    state.mobileDetailOpen = false;
+    context.rerender();
+  });
+  return button;
+}
 function bucketChip(bucket: PortfolioBucket): HTMLElement {
   return stateChip({ tone: BUCKET_TONE[bucket], label: BUCKET_LABEL[bucket], mark: BUCKET_MARK[bucket] });
 }
@@ -190,6 +219,8 @@ function evidenceCell(row: QuestRow): HTMLElement {
 export interface QuestsCallbacks {
   /** Assign the Quest to a different actor. Backed by `updateQuest`. */
   readonly onAssign?: (questId: string, actorId: string) => void;
+  /** Edit title, due date, estimate, next action, or assignee. */
+  readonly onEdit?: (questId: string) => void;
   /** Move to Command with this Quest selected. */
   readonly onSendToCommand: (questId: string) => void;
   /** Open Network focused on this Quest's dependency chain. */
@@ -255,6 +286,8 @@ function detailRail(
 
   const inspect = el("button", { type: "button", class: "rf-secondary-button" }, "依存を追跡");
   inspect.addEventListener("click", () => callbacks.onInspectNetwork(row.id));
+  const edit = el("button", { type: "button", class: "rf-secondary-button" }, "Questを編集");
+  if (callbacks.onEdit !== undefined) edit.addEventListener("click", () => callbacks.onEdit?.(row.id));
 
   return screenRegion(
     "選択中のQuest",
@@ -294,8 +327,8 @@ function detailRail(
     ),
     el("h4", { class: "rf-q-detail-label" }, "次の操作"),
     row.interventionCandidate
-      ? el("div", { class: "rf-q-detail-actions" }, sendToCommand, inspect)
-      : el("div", { class: "rf-q-detail-actions" }, inspect),
+      ? el("div", { class: "rf-q-detail-actions" }, callbacks.onEdit === undefined || row.archived ? null : edit, sendToCommand, inspect)
+      : el("div", { class: "rf-q-detail-actions" }, callbacks.onEdit === undefined || row.archived ? null : edit, inspect),
     row.interventionCandidate
       ? null
       : el("p", { class: "rf-q-detail-note" }, "このQuestは人間の判断待ちではないため、Commandへは送りません。"),
@@ -317,11 +350,11 @@ function portfolioMetrics(model: QuestsModel, state: QuestsState, context: Scree
     context.rerender();
   };
   return [
-    { label: "要判断", value: String(bucketCount(model, "review")), note: "Commandへ送れます", tone: "review", onAct: select("review") },
-    { label: "停止", value: String(bucketCount(model, "blocked")), note: `下流 ${blockedDownstream}件が待機`, tone: "blocked", onAct: select("blocked") },
-    { label: "進行中", value: String(bucketCount(model, "working")), note: "Agent / 自分が実行中", tone: "working", onAct: select("working") },
+    { label: "要判断", value: String(scopedBucketCount(model, state, "review")), note: "Commandへ送れます", tone: "review", onAct: select("review") },
+    { label: "停止", value: String(scopedBucketCount(model, state, "blocked")), note: `下流 ${blockedDownstream}件が待機`, tone: "blocked", onAct: select("blocked") },
+    { label: "進行中", value: String(scopedBucketCount(model, state, "working")), note: "Agent / 自分が実行中", tone: "working", onAct: select("working") },
     { label: "期限超過", value: String(overdue), note: "完了以外", tone: overdue > 0 ? "danger" : "neutral" },
-    { label: "全体", value: String(model.rows.length), note: "読み込み済み", tone: "neutral", onAct: select("all") },
+    { label: "全体", value: String(scopedRows(model, state).length), note: state.showArchived ? "アーカイブを含む" : `アーカイブ ${model.rows.filter((row) => row.archived).length}件を除外`, tone: "neutral", onAct: select("all") },
   ];
 }
 
@@ -351,12 +384,12 @@ function filterBar(model: QuestsModel, state: QuestsState, context: ScreenContex
     segmentControl(
       "状態で絞り込む",
       [
-        { id: "all", label: "すべて", count: model.rows.length },
-        { id: "review", label: BUCKET_LABEL.review, count: bucketCount(model, "review") },
-        { id: "blocked", label: BUCKET_LABEL.blocked, count: bucketCount(model, "blocked") },
-        { id: "working", label: BUCKET_LABEL.working, count: bucketCount(model, "working") },
-        { id: "scheduled", label: BUCKET_LABEL.scheduled, count: bucketCount(model, "scheduled") },
-        { id: "done", label: BUCKET_LABEL.done, count: bucketCount(model, "done") },
+        { id: "all", label: "すべて", count: scopedRows(model, state).length },
+        { id: "review", label: BUCKET_LABEL.review, count: scopedBucketCount(model, state, "review") },
+        { id: "blocked", label: BUCKET_LABEL.blocked, count: scopedBucketCount(model, state, "blocked") },
+        { id: "working", label: BUCKET_LABEL.working, count: scopedBucketCount(model, state, "working") },
+        { id: "scheduled", label: BUCKET_LABEL.scheduled, count: scopedBucketCount(model, state, "scheduled") },
+        { id: "done", label: BUCKET_LABEL.done, count: scopedBucketCount(model, state, "done") },
       ],
       state.segment,
       (id) => {
@@ -364,6 +397,7 @@ function filterBar(model: QuestsModel, state: QuestsState, context: ScreenContex
         context.rerender();
       },
     ),
+    archiveToggle(model, state, context),
     searchField("Questを検索", state.query, "タイトル / QF-ID", (value) => {
       state.query = value;
       context.rerender();
@@ -417,6 +451,7 @@ export function renderQuestsDesktop(
 ): ScreenRender {
   const loading = model.notices.some((notice) => notice.status === "loading");
   const rows = visibleRows(model, state);
+  const visibleSelectedId = rows.some((row) => row.id === selectedId) ? selectedId : rows[0]?.id ?? null;
 
   const create = el("button", { type: "button", class: "rf-primary-button" }, "Questを作成");
   if (callbacks.onCreate !== undefined) create.addEventListener("click", () => callbacks.onCreate?.());
@@ -460,7 +495,7 @@ export function renderQuestsDesktop(
         : el(
           "div",
           { class: "rf-q-body" },
-          ...rows.map((row) => portfolioRow(row, context, selectedId, (id) => {
+          ...rows.map((row) => portfolioRow(row, context, visibleSelectedId, (id) => {
             context.onSelectQuest(id);
             context.announce(`${row.ref} を選択しました`);
           })),
@@ -492,7 +527,7 @@ export function renderQuestsDesktop(
       title: "Quests",
       question: "何を進め、何が止まり、次に何を選ぶべきか。",
       meta: [
-        { label: "対象", value: countLabel(model.rows.length) },
+        { label: "対象", value: countLabel(scopedRows(model, state).length) },
         { label: "表示中", value: countLabel(rows.length) },
       ],
       actions: callbacks.onCreate === undefined ? [] : [create],
@@ -504,7 +539,7 @@ export function renderQuestsDesktop(
       "div",
       { class: "rf-q-workspace" },
       screenRegion("Quest portfolio", { scroll: true, variant: "portfolio" }, table),
-      detailRail(model, state, context, callbacks, selectedId),
+      detailRail(model, state, context, callbacks, visibleSelectedId),
     ),
   );
 
@@ -561,7 +596,7 @@ export function renderQuestsMobile(
 ): ScreenRender {
   const loading = model.notices.some((notice) => notice.status === "loading");
   const rows = visibleRows(model, state);
-  const selectedRow = model.rows.find((row) => row.id === selectedId) ?? null;
+  const selectedRow = rows.find((row) => row.id === selectedId) ?? null;
 
   /* The detail replaces the list rather than sitting under it: on a 390px
    * screen a stacked detail means the list is never reachable again without a
@@ -583,7 +618,7 @@ export function renderQuestsMobile(
         "div",
         { class: "rf-screen rf-screen--quests", "data-mobile-view": "detail" },
         el("div", { class: "rf-q-mobile-bar" }, back),
-        detailRail(model, state, context, callbacks, selectedId),
+        detailRail(model, state, context, callbacks, selectedRow.id),
       ),
       sticky: selectedRow.interventionCandidate
         ? el("div", { class: "rf-q-sticky" }, send)
@@ -601,20 +636,20 @@ export function renderQuestsMobile(
       title: "Quests",
       question: "何を進め、何が止まり、次に何を選ぶべきか。",
       meta: [
-        { label: "要判断", value: String(bucketCount(model, "review")) },
-        { label: "停止", value: String(bucketCount(model, "blocked")) },
+        { label: "要判断", value: String(scopedBucketCount(model, state, "review")) },
+        { label: "停止", value: String(scopedBucketCount(model, state, "blocked")) },
       ],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     segmentControl(
       "状態で絞り込む",
       [
-        { id: "all", label: "すべて", count: model.rows.length },
-        { id: "review", label: BUCKET_LABEL.review, count: bucketCount(model, "review") },
-        { id: "blocked", label: BUCKET_LABEL.blocked, count: bucketCount(model, "blocked") },
-        { id: "working", label: BUCKET_LABEL.working, count: bucketCount(model, "working") },
-        { id: "scheduled", label: BUCKET_LABEL.scheduled, count: bucketCount(model, "scheduled") },
-        { id: "done", label: BUCKET_LABEL.done, count: bucketCount(model, "done") },
+        { id: "all", label: "すべて", count: scopedRows(model, state).length },
+        { id: "review", label: BUCKET_LABEL.review, count: scopedBucketCount(model, state, "review") },
+        { id: "blocked", label: BUCKET_LABEL.blocked, count: scopedBucketCount(model, state, "blocked") },
+        { id: "working", label: BUCKET_LABEL.working, count: scopedBucketCount(model, state, "working") },
+        { id: "scheduled", label: BUCKET_LABEL.scheduled, count: scopedBucketCount(model, state, "scheduled") },
+        { id: "done", label: BUCKET_LABEL.done, count: scopedBucketCount(model, state, "done") },
       ],
       state.segment,
       (id) => {
@@ -622,6 +657,7 @@ export function renderQuestsMobile(
         context.rerender();
       },
     ),
+    archiveToggle(model, state, context),
     searchField("Questを検索", state.query, "タイトル / QF-ID", (value) => {
       state.query = value;
       context.rerender();

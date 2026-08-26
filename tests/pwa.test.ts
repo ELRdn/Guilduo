@@ -30,10 +30,9 @@ test("service worker uses the root navigation fallback", () => {
   assert.match(worker, /requestUrl\.pathname === "\/next"/);
 });
 
-test("service worker upgrades an existing QuestForge client once", () => {
+test("service worker upgrades an existing Guilduo client once", () => {
   const worker = fs.readFileSync(path.join(root, "service-worker.ts"), "utf8");
   const app = fs.readFileSync(path.join(root, "app.ts"), "utf8");
-  const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 
   assert.match(worker, /const CACHE_PREFIX = "questforge-pwa-"/);
   assert.match(worker, /hadPriorQuestForgeCache/);
@@ -43,14 +42,13 @@ test("service worker upgrades an existing QuestForge client once", () => {
   assert.match(worker, /fetch\(request, \{ cache: "no-store" \}\)/);
   assert.match(app, /updateViaCache: "none"/);
   assert.match(app, /showAppUpdateAvailable/);
-  const noCachePaths = firebase.hosting.headers
-    .filter((entry: { headers: Array<{ value: string }>; source: string }) => entry.headers.some((header) => header.value.includes("no-store")))
-    .map((entry: { source: string }) => entry.source);
-  assert.deepEqual(noCachePaths, ["/", "/index.html", "/next", "/next/**"]);
+  assert.match(fs.readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8"), /Deploy Appwrite Site/);
 });
 
-test("Firebase routes the beta UI before the root SPA fallback", () => {
-  const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
-  assert.equal(firebase.hosting.rewrites[0].destination, "/next/index.html");
-  assert.equal(firebase.hosting.rewrites.at(-1).destination, "/index.html");
+test("Vite emits the LP and beta UI as Appwrite Sites static routes", () => {
+  const vite = fs.readFileSync(path.join(root, "vite.config.ts"), "utf8");
+  assert.match(vite, /landingJa: resolve\(root, "lp\/index\.html"\)/);
+  assert.match(vite, /landingEn: resolve\(root, "lp\/en\/index\.html"\)/);
+  assert.match(vite, /next: resolve\(root, "interaction-lab\/index\.html"\)/);
+  assert.match(vite, /renameSync\(generatedLab, betaDestination\)/);
 });

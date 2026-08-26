@@ -1,46 +1,12 @@
-import { getApps, initializeApp } from "firebase/app";
-import {
-  GoogleAuthProvider,
-  type User,
-  type Unsubscribe,
-  type Auth,
-  getAuth,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut,
-} from "firebase/auth";
-import firebaseConfig from "../firebase-config.js";
+import { beginGoogleSignIn, currentAccount, getAccessToken, refreshAccount, signOutAccount, type GuilduoUser } from "../appwrite-auth.ts";
 
-let auth: Auth | undefined;
-let provider: GoogleAuthProvider | undefined;
-
-function ensureAuth(): Auth {
-  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig, "questforge-interaction-lab");
-  auth ||= getAuth(app);
-  provider ||= new GoogleAuthProvider();
-  return auth;
+export type Unsubscribe = () => void;
+export function observeAuth(callback: (user: GuilduoUser | null) => void): Unsubscribe {
+  let active = true;
+  refreshAccount().then((user) => { if (active) callback(user); }).catch(() => { if (active) callback(null); });
+  return () => { active = false; };
 }
-
-export function observeAuth(callback: (user: User | null) => void): Unsubscribe {
-  return onAuthStateChanged(ensureAuth(), callback);
-}
-
-export async function signIn(): Promise<User> {
-  const currentAuth = ensureAuth();
-  const result = await signInWithPopup(currentAuth, provider || new GoogleAuthProvider());
-  return result.user;
-}
-
-export async function signOutUser() {
-  await signOut(ensureAuth());
-}
-
-export async function getIdToken(forceRefresh = false): Promise<string> {
-  const user = ensureAuth().currentUser;
-  return user ? user.getIdToken(forceRefresh) : "";
-}
-
-export function currentUser(): { uid: string; email: string; displayName: string } | null {
-  const user = ensureAuth().currentUser;
-  return user ? { uid: user.uid, email: user.email || "", displayName: user.displayName || "" } : null;
-}
+export async function signIn(): Promise<GuilduoUser> { return beginGoogleSignIn(); }
+export async function signOutUser(): Promise<void> { await signOutAccount(); }
+export const getIdToken = getAccessToken;
+export function currentUser(): GuilduoUser | null { return currentAccount(); }

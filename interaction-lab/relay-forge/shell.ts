@@ -90,7 +90,7 @@ import {
   renderBattleMobile,
 } from "./screens/battle.ts";
 import { type BattleFailure, FixtureBattlePort, fixtureBattleState } from "./screens/battle-port.ts";
-import type { BattleSession } from "../../types/questforge.ts";
+import type { BattleSession, Quest } from "../../types/questforge.ts";
 import {
   type ConnectionsState,
   initialConnectionsState,
@@ -104,6 +104,8 @@ import {
   REQUIRED_SCOPES,
 } from "./screens/connections-port.ts";
 import type { RelayForgeRuntime } from "./production.ts";
+import { normalizeCommandModel } from "./adapter.ts";
+import { questActionState, type QuestActionId } from "./quest-actions.ts";
 
 /**
  * Section 5.1 primary domains of NEWDESIGN.md.
@@ -155,6 +157,9 @@ interface ShellState {
   revisionReason: string;
   revisionError: string | null;
   decision: DecisionResult;
+  taskSubmitting: boolean;
+  taskMessage: string;
+  taskTone: "success" | "error" | null;
   theme: "light" | "dark" | "system";
   /** Element focus returns to when the Lens closes. */
   lensTrigger: HTMLElement | null;
@@ -205,6 +210,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     revisionReason: "",
     revisionError: null,
     decision: IDLE_DECISION,
+    taskSubmitting: false,
+    taskMessage: "",
+    taskTone: null,
     theme: readStoredTheme(),
     lensTrigger: null,
     screens: {
@@ -289,6 +297,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   const rail = el("nav", { class: "rf-rail", "aria-label": "Guilduo domains" });
   const operationBar = el("header", { class: "rf-operation-bar" });
+  operationBar.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target.closest(".rf-create, .rf-create-more") : null;
+    if (target !== null) openCreate();
+  });
   const bandRegion = el("div", { class: "rf-band-region" });
   const shelfRegion = el("div", { class: "rf-shelf-region" });
   const workfield = el("main", { class: "rf-workfield", id: "rf-workfield" });
@@ -310,6 +322,234 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const screenHost = el("div", { class: "rf-screen-host", id: "rf-screen-host" });
   const screenSticky = el("div", { class: "rf-screen-sticky" });
 
+  function createField(label: string, control: HTMLElement, hint = ""): HTMLLabelElement {
+    return el(
+      "label",
+      { class: "rf-create-field" },
+      el("span", { class: "rf-create-label" }, label),
+      control,
+      hint === "" ? null : el("small", { class: "rf-create-hint" }, hint),
+    );
+  }
+
+  const createTitle = el("input", {
+    class: "rf-create-input",
+    name: "title",
+    type: "text",
+    maxlength: "160",
+    autocomplete: "off",
+    required: true,
+    placeholder: "何を完了させますか？",
+  });
+  const createNextAction = el("input", {
+    class: "rf-create-input",
+    name: "nextAction",
+    type: "text",
+    maxlength: "160",
+    autocomplete: "off",
+    placeholder: "次に実行する具体的な一手",
+  });
+  const createDue = el("input", { class: "rf-create-input", name: "dueDate", type: "date" });
+  const createEstimate = el("input", {
+    class: "rf-create-input",
+    name: "estimatedMinutes",
+    type: "number",
+    min: "5",
+    max: "1440",
+    step: "5",
+    value: "30",
+    inputmode: "numeric",
+  });
+  const createAssignee = el("select", { class: "rf-create-input", name: "assignee" });
+  createAssignee.append(el("option", { value: "self" }, runtime?.profile?.displayName || "自分"));
+  for (const agent of runtime?.agents ?? []) {
+    createAssignee.append(el("option", { value: agent.agentId }, `${agent.displayName} · Agent`));
+  }
+  const createError = el("p", { class: "rf-create-error", role: "alert", hidden: true });
+  const createHeading = el("h2", { class: "rf-create-title", id: "rf-create-title" }, "Questを作成");
+  const createKicker = el("p", { class: "rf-region-label" }, "NEW QUEST");
+  const createSubmit = el("button", { type: "submit", class: "rf-primary-button rf-create-submit" }, "Questを作成");
+  const createCancel = el("button", { type: "button", class: "rf-secondary-button" }, "キャンセル");
+  const createClose = el(
+    "button",
+    { type: "button", class: "rf-icon-button rf-create-close", title: "閉じる" },
+    el("span", { class: "rf-visually-hidden" }, "閉じる"),
+    el("span", { class: "rf-close-mark", "aria-hidden": "true" }),
+  );
+  const createForm = el(
+    "form",
+    { class: "rf-create-form" },
+    el(
+      "header",
+      { class: "rf-create-header" },
+      el("div", null, createKicker, createHeading),
+      createClose,
+    ),
+    el(
+      "div",
+      { class: "rf-create-body" },
+      createField("Quest名", createTitle),
+      createField("次の一手", createNextAction, "空欄でも作成できます"),
+      el(
+        "div",
+        { class: "rf-create-pair" },
+        createField("期限", createDue),
+        createField("見積時間（分）", createEstimate),
+      ),
+      createField("担当", createAssignee, "登録済みAgentへ直接渡すこともできます"),
+      createError,
+    ),
+    el("footer", { class: "rf-create-actions" }, createCancel, createSubmit),
+  );
+  const createDialog = el(
+    "dialog",
+    { class: "rf-create-dialog", "aria-labelledby": "rf-create-title" },
+    createForm,
+  );
+
+  let editingQuestId: string | null = null;
+
+  function closeCreate(): void {
+    if (createDialog.open) createDialog.close();
+  }
+
+  function openCreate(): void {
+    editingQuestId = null;
+    createKicker.textContent = "NEW QUEST";
+    createHeading.textContent = "Questを作成";
+    createSubmit.textContent = "Questを作成";
+    createError.hidden = true;
+    createError.textContent = "";
+    if (!createDialog.open) createDialog.showModal();
+    queueMicrotask(() => createTitle.focus());
+  }
+
+  function openEdit(quest: Quest): void {
+    editingQuestId = quest.id;
+    createKicker.textContent = "EDIT QUEST";
+    createHeading.textContent = "Questを編集";
+    createSubmit.textContent = "変更を保存";
+    createTitle.value = quest.title;
+    createNextAction.value = quest.nextAction;
+    createDue.value = quest.dueDate;
+    createEstimate.value = String(quest.estimatedMinutes || 30);
+    createAssignee.value = quest.assignee.type === "agent" ? quest.assignee.id : "self";
+    createError.hidden = true;
+    createError.textContent = "";
+    if (!createDialog.open) createDialog.showModal();
+    queueMicrotask(() => createTitle.focus());
+  }
+
+  createCancel.addEventListener("click", closeCreate);
+  createClose.addEventListener("click", closeCreate);
+  createDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeCreate();
+  });
+  createDialog.addEventListener("close", () => {
+    createForm.reset();
+    createEstimate.value = "30";
+    editingQuestId = null;
+    createError.hidden = true;
+    queueMicrotask(() => shell.querySelector<HTMLElement>(".rf-create")?.focus());
+  });
+  createForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void submitCreate();
+  });
+
+  async function submitCreate(): Promise<void> {
+    const title = createTitle.value.trim();
+    if (title === "") {
+      createError.textContent = "Quest名を入力してください。";
+      createError.hidden = false;
+      createTitle.focus();
+      return;
+    }
+    if (runtime === null) {
+      createError.textContent = "デモでは保存できません。Googleでサインインしてから作成してください。";
+      createError.hidden = false;
+      return;
+    }
+
+    const dueDate = createDue.value;
+    const estimatedMinutes = Math.max(5, Math.min(1440, Number(createEstimate.value) || 30));
+    const selectedAgent = runtime.agents.find((agent) => agent.agentId === createAssignee.value);
+    const editing = editingQuestId !== null;
+    const editedQuest = editingQuestId === null ? null : sharedQuests.find((quest) => quest.id === editingQuestId) ?? null;
+    const assigneePatch = editing
+      ? selectedAgent === undefined
+        ? { type: "self" as const, id: runtime.selfUid, label: runtime.profile?.displayName || "自分", handoffState: "none" as const }
+        : {
+          type: "agent" as const,
+          id: selectedAgent.agentId,
+          label: selectedAgent.displayName,
+          handoffState: editedQuest?.assignee.type === "agent"
+            ? editedQuest.assignee.handoffState
+            : selectedAgent.defaultHandoffState || "ready",
+        }
+      : selectedAgent === undefined ? null : {
+        type: "agent" as const,
+        id: selectedAgent.agentId,
+        label: selectedAgent.displayName,
+        handoffState: selectedAgent.defaultHandoffState || "ready",
+      };
+    createSubmit.disabled = true;
+    createSubmit.textContent = "作成しています…";
+    createError.hidden = true;
+
+    try {
+      const payload = {
+        title,
+        nextAction: createNextAction.value.trim(),
+        estimatedMinutes,
+        dueDate,
+        scheduledDate: dueDate,
+        planningMode: dueDate === "" ? "on_date" : "until_due",
+        planningState: dueDate === "" ? "backlog" : "scheduled",
+        ...(assigneePatch === null ? {} : { assignee: assigneePatch }),
+      };
+      const response = editingQuestId === null
+        ? await runtime.questPort.createQuest({
+          kind: "todo",
+          notes: "",
+          difficulty: "medium",
+          lifecycleState: "active",
+          impact: "medium",
+          ...payload,
+        })
+        : await runtime.questPort.updateQuest(editingQuestId, payload);
+      const value = response.quest;
+      if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("作成結果にQuestが含まれていません。");
+      }
+      const created = value as Quest;
+      if (typeof created.id !== "string" || created.id === "" || typeof created.title !== "string") {
+        throw new Error("作成されたQuestの形式を確認できませんでした。");
+      }
+
+      sharedQuests = [created, ...sharedQuests.filter((quest) => quest.id !== created.id)];
+      rawHandoffStates.set(created.id, created.assignee.handoffState);
+      const normalized = normalizeCommandModel({
+        profile: runtime.profile,
+        agents: runtime.agents,
+        quests: sharedQuests,
+        syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+      });
+      state.model = { ...normalized, chronicle: state.model.chronicle };
+      state.selectedQuestId = created.id;
+      state.shelfUserScrolled = false;
+      closeCreate();
+      render();
+      announce(editing ? `${created.title}を更新しました。` : `${created.title}を作成しました。`);
+    } catch (error) {
+      createError.textContent = error instanceof Error ? error.message : "Questを作成できませんでした。もう一度お試しください。";
+      createError.hidden = false;
+    } finally {
+      createSubmit.disabled = false;
+      createSubmit.textContent = editing ? "変更を保存" : "Questを作成";
+    }
+  }
   const shell = el(
     "div",
     { class: "rf-shell" },
@@ -326,6 +566,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     screenHost,
     screenSticky,
     sheetHost,
+    createDialog,
     liveRegion,
   );
   replaceChildren(root, shell);
@@ -339,6 +580,70 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     return state.model.quests.find((quest) => quest.id === state.selectedQuestId) ?? null;
   }
 
+
+  function selectedRawQuest(): Quest | null {
+    if (state.selectedQuestId === null) return null;
+    return sharedQuests.find((quest) => quest.id === state.selectedQuestId) ?? null;
+  }
+
+  function selectedQuestActions() {
+    return questActionState(selectedRawQuest());
+  }
+
+  function applyQuestRecord(quest: Quest): void {
+    sharedQuests = sharedQuests.map((entry) => entry.id === quest.id ? quest : entry);
+    rawHandoffStates.set(quest.id, quest.assignee.handoffState);
+    if (runtime === null) return;
+    const normalized = normalizeCommandModel({
+      profile: runtime.profile,
+      agents: runtime.agents,
+      quests: sharedQuests,
+      syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+    });
+    state.model = { ...normalized, chronicle: state.model.chronicle };
+    if (!state.model.quests.some((entry) => entry.id === state.selectedQuestId)) {
+      state.selectedQuestId = state.model.interventions[0]?.questId ?? state.model.quests[0]?.id ?? null;
+    }
+  }
+
+  async function runQuestAction(action: QuestActionId): Promise<void> {
+    const quest = selectedRawQuest();
+    if (quest === null || runtime === null || state.taskSubmitting) return;
+    if (action === "edit") { openEdit(quest); return; }
+    if (action === "archive" && !window.confirm(`「${quest.title}」をアーカイブしますか？`)) return;
+
+    const patch: Record<string, unknown> = action === "complete"
+      ? { lifecycleState: "completed" }
+      : action === "archive"
+        ? { lifecycleState: "archived" }
+        : {
+          assignee: { ...quest.assignee, handoffState: action === "start" ? "working" : "none" },
+          ...(action === "start" ? { handoff: { ...quest.handoff, startedAt: quest.handoff.startedAt || new Date().toISOString() } } : {}),
+        };
+    state.taskSubmitting = true;
+    state.taskMessage = "";
+    state.taskTone = null;
+    render();
+    try {
+      const response = await runtime.questPort.updateQuest(quest.id, patch);
+      const value = response.quest;
+      if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("更新結果にQuestが含まれていません。");
+      applyQuestRecord(value as Quest);
+      state.taskTone = "success";
+      state.taskMessage = action === "start" ? "Questを開始しました"
+        : action === "stop" ? "Questを停止しました"
+          : action === "complete" ? "Questを完了しました"
+            : "Questをアーカイブしました";
+      announce(state.taskMessage);
+    } catch (error) {
+      state.taskTone = "error";
+      state.taskMessage = error instanceof Error ? error.message : "Questを更新できませんでした。";
+      announce(state.taskMessage);
+    } finally {
+      state.taskSubmitting = false;
+      render();
+    }
+  }
   /**
    * Every selectable Quest gets a workspace. Curated intervention views win;
    * anything else is derived from the Quest already on screen so the Loom is
@@ -829,6 +1134,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           workfield.querySelector<HTMLElement>(".rf-review-button")?.focus();
         },
         onRequestRevision: focusRevision,
+        questActions: selectedQuestActions(),
+        onQuestAction: (action) => { void runQuestAction(action); },
       });
 
     // A3: the workspace scroll offset belongs to the current Quest only.
@@ -868,15 +1175,16 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         state: state.lensState,
         writeLocked: state.stale,
         blockedReason: blockingReason(decisionGate(), state.decision.phase),
-        submitting: state.decision.phase === "submitting",
+        submitting: selectedQuestActions().mode === "handoff-decision" ? state.decision.phase === "submitting" : state.taskSubmitting,
         verification: verificationSummary(),
         revisionOpen: state.revisionOpen,
         revisionReason: state.revisionReason,
         revisionError: state.revisionError,
-        resultTone: state.decision.phase === "succeeded" ? "success"
-          : state.decision.phase === "failed" && state.decision.code !== "blocked" ? "error"
-          : null,
-        resultMessage: state.decision.message,
+        resultTone: selectedQuestActions().mode === "handoff-decision"
+          ? (state.decision.phase === "succeeded" ? "success"
+            : state.decision.phase === "failed" && state.decision.code !== "blocked" ? "error" : null)
+          : state.taskTone,
+        resultMessage: selectedQuestActions().mode === "handoff-decision" ? state.decision.message : state.taskMessage,
         onClose: closeLens,
         onTogglePin: () => {
           state.lensState = state.lensState === "pinned" ? "open" : "pinned";
@@ -898,6 +1206,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         },
         onRevisionInput: (value: string) => { state.revisionReason = value; },
         onSubmitRevision: () => { void runDecision("revise"); },
+        questActions: selectedQuestActions(),
+        onQuestAction: (action) => { void runQuestAction(action); },
       }),
     );
   }
@@ -908,6 +1218,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       selectedQuestId: state.selectedQuestId,
       view: selectedView(),
       intervention: selectedIntervention(),
+      questActions: selectedQuestActions(),
       evidenceOpen: state.mobileEvidenceOpen,
       supportingOpen: state.mobileSupportingOpen,
       chronicleOpen: state.mobileChronicleOpen,
@@ -917,11 +1228,13 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       revisionOpen: state.revisionOpen,
       revisionReason: state.revisionReason,
       revisionError: state.revisionError,
-      resultTone: state.decision.phase === "succeeded" ? "success" as const
+      resultTone: selectedQuestActions().mode === "handoff-decision"
+        ? (state.decision.phase === "succeeded" ? "success" as const
         : state.decision.phase === "failed" && state.decision.code !== "blocked" ? "error" as const
-        : null,
-      resultMessage: state.decision.message,
-      submitting: state.decision.phase === "submitting",
+        : null)
+        : state.taskTone,
+      resultMessage: selectedQuestActions().mode === "handoff-decision" ? state.decision.message : state.taskMessage,
+      submitting: selectedQuestActions().mode === "handoff-decision" ? state.decision.phase === "submitting" : state.taskSubmitting,
       permissionMissing: forcedState === "permission"
         ? "handoff:write スコープが不足しています。Connections で権限を追加してください。"
         : null,
@@ -995,6 +1308,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       },
       onRevisionInput: (value: string) => { state.revisionReason = value; },
       onSubmitRevision: () => { void runDecision("revise"); },
+      onQuestAction: (action: QuestActionId) => { void runQuestAction(action); },
       onCancelRevision: () => {
         state.revisionOpen = false;
         state.revisionReason = "";
@@ -1072,6 +1386,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         today: screenToday(),
       });
       const callbacks = {
+        onCreate: openCreate,
+        onEdit: (questId: string) => {
+          const quest = sharedQuests.find((entry) => entry.id === questId);
+          if (quest !== undefined) openEdit(quest);
+        },
         onSendToCommand: (questId: string) => context.onNavigate("command", questId),
         onInspectNetwork: (questId: string) => context.onNavigate("network", questId),
       };

@@ -1,10 +1,12 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-const root = dirname(fileURLToPath(import.meta.url));
+// The checkout is exposed through a Windows path alias while Node resolves the
+// files on another drive. Give Vite the same real root it sees for HTML inputs
+// so emitted page names remain relative.
+const root = realpathSync(process.cwd());
 
 function copyRuntimeAssets(source: string, destination: string): void {
   for (const entry of readdirSync(source, { withFileTypes: true })) {
@@ -42,6 +44,7 @@ const copyQuestForgeRuntime = {
 };
 
 export default defineConfig({
+  root,
   base: "./",
   publicDir: false,
   plugins: [react(), copyQuestForgeRuntime],
@@ -51,6 +54,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: resolve(root, "index.html"),
+        landingJa: resolve(root, "lp/index.html"),
+        landingEn: resolve(root, "lp/en/index.html"),
         next: resolve(root, "interaction-lab/index.html"),
         // Relay Forge successor shell. It builds into dist/interaction-lab/
         // relay-forge and is carried to dist/next/relay-forge by the rename in

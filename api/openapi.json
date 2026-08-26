@@ -1529,8 +1529,8 @@
     },
     "/v1/integrations/toggl-focus/connect": {
       "post": {
-        "summary": "Connect Toggl Focus from the QuestForge web app",
-        "description": "Web/Firebase-authenticated endpoint only. The personal API key is encrypted in D1 and never returned by REST or MCP.",
+        "summary": "Connect Toggl Focus from the Guilduo web app",
+        "description": "Web/Appwrite-authenticated endpoint only. The personal API key is encrypted in D1 and never returned by REST or MCP.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1837,7 +1837,7 @@
         }
       },
       "post": {
-        "summary": "Register an Agent from the Firebase-authenticated web app",
+        "summary": "Register an Agent from the Appwrite-authenticated web app",
         "requestBody": {
           "required": true,
           "content": {
@@ -1887,7 +1887,7 @@
         }
       },
       "patch": {
-        "summary": "Update, disable, or archive an Agent from the Firebase-authenticated web app",
+        "summary": "Update, disable, or archive an Agent from the Appwrite-authenticated web app",
         "parameters": [
           {
             "name": "agentId",

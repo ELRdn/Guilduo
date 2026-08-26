@@ -1,37 +1,39 @@
-# QuestForge tagged release setup
+# Guilduo tagged release setup
 
-`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。公開βの候補は`v0.5.0-beta.1`です。
+`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。最初のAppwrite版候補は`v0.6.0-beta.1`です。
 
 ## GitHub Environment
 
-Repository Settingsで`production` Environmentを作成し、必要ならRequired reviewersを設定します。
+Repository Settingsで`production` Environmentを作成し、Required reviewersを設定します。
 
 ### Secrets
 
 - `CLOUDFLARE_API_TOKEN`: Workers Scripts Editと対象D1の編集だけを許可したトークン
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare Account ID
-- `FIREBASE_SERVICE_ACCOUNT`: Firebase HostingとRealtime Database Rulesを公開できるサービスアカウントJSON全文
+- `APPWRITE_API_KEY`: `databases.read`、`tables.read`、`rows.read`、`rows.write`だけを許可したサーバーキー
+- `APPWRITE_DEPLOY_KEY`: `sites.read`と`sites.write`だけを許可したデプロイキー
 
 ### Variables
 
-- `WORKER_BASE_URL`: 例 `https://questforge-gateway.example.workers.dev`
-- `WEB_APP_URL`: 例 `https://questforge-cb6ba.web.app`
-- `FIREBASE_PROJECT_ID`、`FIREBASE_DATABASE_URL`、`FIREBASE_API_KEY`、`FIREBASE_AUTH_DOMAIN`
-- `FIREBASE_STORAGE_BUCKET`、`FIREBASE_MESSAGING_SENDER_ID`、`FIREBASE_APP_ID`
+- `WORKER_BASE_URL`: 例 `https://guilduo-gateway.example.workers.dev`
+- `WEB_APP_URL`: Appwrite Sitesの本番URL
+- `APPWRITE_ENDPOINT`: 例 `https://sgp.cloud.appwrite.io/v1`
+- `APPWRITE_PROJECT_ID`、`APPWRITE_DATABASE_ID`、`APPWRITE_STATE_TABLE_ID`、`APPWRITE_LEGACY_TABLE_ID`、`APPWRITE_SITE_ID`
 - `D1_DATABASE_NAME`、`D1_DATABASE_ID`、`KV_NAMESPACE_ID`
-- `EXTERNAL_OAUTH_ENABLED`: 公開βでは`false`。Provider OAuthの受入完了後だけ`true`
-- `SOURCE_URL`: privateリポジトリのURL。空でも可
+- `EXTERNAL_OAUTH_ENABLED`: 公開βでは`false`
+- `SOURCE_URL`: リポジトリURL
 
-Firebase Web設定、Worker URL、D1/KV IDは公開識別子なのでVariablesへ置きます。サービスアカウントJSONとCloudflare API TokenだけをSecretsへ保存します。Workflowはこれらからgitignore対象の設定ファイルを一時生成します。
+公開識別子はVariablesへ置き、Appwrite API KeyとCloudflare API TokenはSecretsへ保存します。ブラウザ向け設定へAPI Keyを混ぜてはいけません。
 
 ## Release order
 
-1. API契約差分、構文、テスト、ビルドを検証
-2. D1の追加migrationを適用
-3. Workerを公開
-4. `/health`が`2.7.0`、Schema 7、51 tools、D1 Agent Storageを返すことを確認
-5. 成功した場合だけFirebase Database RulesとHostingを公開
-6. `/`、`/next/`、OAuth metadata、MCP認証拒否を確認
-7. GitHub Releaseを作成
+1. API契約差分、型、テスト、ビルド、LPを検証
+2. FirebaseエクスポートをAppwrite `legacy_states`へ投入し、件数とchecksumを照合
+3. D1の追加migrationを適用
+4. Worker Secretを設定してWorkerを公開
+5. `/health`と認証済み`/v1/state`の読み書きを確認
+6. Appwrite Sitesを公開し、`/`、`/next/`、`/lp/`、OAuth metadata、MCP認証拒否を確認
+7. Firebaseを読み取り専用にして24時間監視し、その後停止
+8. GitHub Releaseを作成
 
-Workerの確認に失敗した場合、Firebaseの公開処理には進みません。今回の実装ではタグを作成しません。
+どのゲートでも失敗した場合はタグ公開を進めません。詳細は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)を参照してください。

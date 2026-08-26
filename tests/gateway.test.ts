@@ -18,7 +18,6 @@ type McpPromptsResponse = { prompts: Array<{ name: string }> };
 const env: WorkerEnv = {
   DEV_BEARER_TOKEN: "test-token",
   DEV_USER_ID: "test-user",
-  FIREBASE_PROJECT_ID: "questforge-test",
   ALLOWED_ORIGINS: "http://localhost:5173",
 };
 
@@ -55,7 +54,7 @@ async function call(path: string, options: TestRequestOptions = {}): Promise<Res
 }
 
 test.beforeEach(async () => {
-  const { writeState, readState } = await import("../worker/src/firebase-store.ts");
+  const { writeState, readState } = await import("../worker/src/appwrite-store.ts");
   const current = await readState(env, "test-user");
   await writeState(env, "test-user", { schemaVersion: 3, state: initialState(), clientUpdatedAt: new Date().toISOString() }, current.etag);
 });
@@ -314,10 +313,10 @@ test("gateway rejects unauthenticated API and publishes OAuth metadata", async (
   assert.ok(body.scopes_supported.includes("quests:write"));
 });
 
-test("OAuth tokens carry and rotate the delegated Firebase session", async () => {
+test("OAuth tokens carry and rotate the delegated Guilduo session", async () => {
   const { authenticateRequest, getKv, sha256 } = await import("../worker/src/security.ts");
   const { revokeToken, tokenEndpoint } = await import("../worker/src/oauth.ts");
-  const oauthEnv = { ...env, FIREBASE_API_KEY: "test-firebase-key" };
+  const oauthEnv = { ...env };
   const verifier = "questforge-pkce-verifier";
   const code = "questforge-test-code";
   const kv = getKv(oauthEnv);
@@ -328,8 +327,6 @@ test("OAuth tokens carry and rotate the delegated Firebase session", async () =>
     uid: "test-user",
     email: "test@example.com",
     scopes: ["quests:read", "quests:write"],
-    firebaseIdToken: "initial-firebase-id-token",
-    firebaseRefreshToken: "initial-firebase-refresh-token",
   }), { expirationTtl: 300 });
 
   const originalFetch = global.fetch;
@@ -362,7 +359,7 @@ test("OAuth tokens carry and rotate the delegated Firebase session", async () =>
     }), oauthEnv);
     if (!identity) throw new Error("OAuth identity was unexpectedly empty.");
     assert.equal(identity.uid, "test-user");
-    assert.equal(identity.firebaseIdToken, "fresh-firebase-id-token");
+    assert.equal(identity.authType, "oauth");
 
     await revokeToken(new Request("http://worker.test/oauth/revoke", {
       method: "POST",
