@@ -38,20 +38,35 @@ try {
       const browser = globalThis as unknown as {
         document: {
           documentElement: { scrollWidth: number; clientWidth: number; lang: string };
-          querySelector(selector: string): { textContent?: string | null; disabled?: boolean } | null;
+          querySelector(selector: string): {
+            textContent?: string | null;
+            disabled?: boolean;
+            tagName?: string;
+            href?: string;
+            dataset?: { state?: string };
+          } | null;
         };
       };
+      const joinCta = browser.document.querySelector("[data-join-cta]");
       return {
         scrollWidth: browser.document.documentElement.scrollWidth,
         clientWidth: browser.document.documentElement.clientWidth,
         lang: browser.document.documentElement.lang,
         toolCount: browser.document.querySelector("[data-tool-count]")?.textContent,
-        disabledJoin: browser.document.querySelector("[data-join-cta]")?.disabled,
+        joinCta: joinCta ? {
+          tagName: joinCta.tagName,
+          disabled: joinCta.disabled,
+          href: joinCta.href,
+          state: joinCta.dataset?.state,
+        } : null,
       };
     });
     check(`${frame.width}px has no horizontal overflow`, metrics.scrollWidth <= metrics.clientWidth, JSON.stringify(metrics));
     check(`${frame.width}px hydrates source-backed facts`, metrics.toolCount === "51", JSON.stringify(metrics));
-    check(`${frame.width}px missing CTA stays disabled`, metrics.disabledJoin === true, JSON.stringify(metrics));
+    const joinCtaValid = metrics.joinCta?.tagName === "A"
+      ? metrics.joinCta.state === "ready" && new URL(metrics.joinCta.href ?? "", baseUrl).pathname === "/next/"
+      : metrics.joinCta?.tagName === "BUTTON" && metrics.joinCta.disabled === true;
+    check(`${frame.width}px CTA follows runtime configuration`, joinCtaValid, JSON.stringify(metrics));
     const brokenPhraseLocks = await page.evaluate(() => {
       const browser = globalThis as unknown as {
         document: {

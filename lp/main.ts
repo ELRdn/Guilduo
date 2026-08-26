@@ -62,6 +62,7 @@ function activateCta(selector: string, configuredUrl: unknown): void {
     link.className = button.className;
     link.textContent = button.textContent;
     link.href = href;
+    Object.assign(link.dataset, button.dataset);
     link.dataset.state = "ready";
     if (new URL(href).origin !== window.location.origin) {
       link.target = "_blank";
