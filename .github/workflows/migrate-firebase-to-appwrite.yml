@@ -1,0 +1,54 @@
+name: Migrate Firebase to Appwrite
+
+on:
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: Write validated legacy states to Appwrite
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-firebase-to-appwrite-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Export Firebase Auth and Realtime Database
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_DATABASE_URL: ${{ vars.FIREBASE_DATABASE_URL }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
+          APPWRITE_LEGACY_TABLE_ID: ${{ vars.APPWRITE_LEGACY_TABLE_ID }}
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+        run: |
+          set +x
+          service_account="$RUNNER_TEMP/firebase-service-account.json"
+          users_export="$RUNNER_TEMP/firebase-auth-users.json"
+          state_export="$RUNNER_TEMP/firebase-rtdb.json"
+          cleanup() { rm -f "$service_account" "$users_export" "$state_export"; }
+          trap cleanup EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$service_account"
+          chmod 600 "$service_account"
+          node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$service_account"
+          export GOOGLE_APPLICATION_CREDENTIALS="$service_account"
+          npx --yes firebase-tools@14.12.1 auth:export "$users_export" --format=json --project "$FIREBASE_PROJECT_ID" --non-interactive
+          npx --yes firebase-tools@14.12.1 database:get / --output "$state_export" --project "$FIREBASE_PROJECT_ID" --instance "$(node -e 'console.log(new URL(process.argv[1]).hostname.split(".")[0])' "$FIREBASE_DATABASE_URL")" --non-interactive
+          npm run migrate:appwrite -- --state-export "$state_export" --users-export "$users_export" --summary-only ${{ inputs.execute && '--execute' || '' }}
