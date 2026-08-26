@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-theme-choice="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="description" content="Guilduo is the Human × AI Work Platform where humans and AI agents can delegate, own, relay, and review work together." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Guilduo" />
+    <meta property="og:title" content="Guilduo — Humans aren’t the only ones who delegate." />
+    <meta property="og:description" content="Humans and AI can both delegate. Humans and AI can both take ownership." />
+    <meta property="og:locale" content="en_US" />
+    <meta name="guilduo:canonical-path" content="/lp/en/" />
+    <link rel="icon" href="/assets/icons/icon-192.png" />
+    <title>Guilduo — Humans aren’t the only ones who delegate.</title>
+    <script>
+      (() => {
+        let choice = "dark";
+        try {
+          const stored = localStorage.getItem("guilduo-lp-theme");
+          if (["dark", "light", "system"].includes(stored)) choice = stored;
+        } catch {}
+        const resolved = choice === "system"
+          ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : choice;
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.dataset.themeChoice = choice;
+        document.documentElement.style.colorScheme = resolved;
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-nav" aria-label="Guilduo navigation">
+      <a class="wordmark" href="./index.html" aria-label="Guilduo home"><span class="wordmark-mark" aria-hidden="true">G</span><span>Guilduo</span></a>
+      <div class="nav-tools">
+        <a class="language-link" href="../index.html" lang="ja" hreflang="ja">JA</a>
+        <label class="theme-field"><span class="visually-hidden">Theme</span><select data-theme-control aria-label="Theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
+        <button class="button button-primary nav-cta" type="button" data-join-cta disabled>Join the Guild</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero page-shell" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="category-line">Human × AI Work Platform.</p>
+          <h1 id="hero-title">Humans aren’t the only ones who delegate.</h1>
+          <p class="hero-philosophy">Humans and AI can both delegate. Humans and AI can both take ownership.</p>
+          <p class="hero-support">From humans to AI. From AI to humans.<br />Codex, AI agents, teammates, or yourself. Delegate work, share progress, and review results.</p>
+          <div class="hero-actions" aria-describedby="cta-status-hero"><button class="button button-primary" type="button" data-join-cta disabled>Join the Guild</button><button class="button button-secondary" type="button" data-source-cta disabled>View on GitHub</button></div>
+          <p class="cta-status" id="cta-status-hero">Public URLs are supplied through Runtime Config.</p>
+        </div>
+        <div class="hero-loom" aria-label="A Quest relays from a Human to an AI Agent and returns for Human Review">
+          <svg class="loom-svg" viewBox="0 0 760 600" role="img" aria-labelledby="loom-title loom-desc">
+            <title id="loom-title">Quest Loom</title><desc id="loom-desc">A Quest moves from a Human to an Agent and the result returns for Human Review</desc>
+            <g class="loom-grid" aria-hidden="true"><path d="M40 80H720M40 200H720M40 320H720M40 440H720M160 40V560M380 40V560M600 40V560" /></g>
+            <path class="loom-route loom-route-out" d="M170 178 C260 178 286 286 380 286 S500 178 590 178" />
+            <circle class="quest-relay-dot" cx="0" cy="0" r="7" />
+            <path class="loom-route loom-route-back" d="M590 402 C500 402 474 500 380 500 S260 402 170 402" />
+            <g class="actor actor-human" transform="translate(92 124)"><rect width="156" height="108" rx="6" /><circle cx="28" cy="30" r="9" /><text x="48" y="35">HUMAN</text><text class="actor-state" x="20" y="76">origin / review</text></g>
+            <g class="actor actor-agent" transform="translate(512 124)"><rect width="156" height="108" rx="6" /><rect x="20" y="21" width="18" height="18" rx="2" /><text x="48" y="35">AGENT</text><text class="actor-state" x="20" y="76">execute / relay</text></g>
+            <g class="quest-token quest-token-out" transform="translate(348 252)"><rect width="64" height="64" rx="4" /><text x="32" y="28" text-anchor="middle">Q</text><text class="quest-id" x="32" y="47" text-anchor="middle">184</text></g>
+            <g class="review-token" transform="translate(344 468)"><path d="M36 0 66 14v25c0 20-12 34-30 43C18 73 6 59 6 39V14Z" /><path d="m24 39 8 8 17-19" /></g>
+            <text class="route-label" x="380" y="180" text-anchor="middle">QUEST RELAY</text><text class="route-label" x="380" y="426" text-anchor="middle">EVIDENCE → REVIEW</text>
+          </svg>
+          <p class="loom-motto">2 Sides. 1 Team. Work Goes Both Ways.</p>
+        </div>
+      </section>
+
+      <section class="relationship" id="relationship" data-relay-bridge aria-labelledby="relationship-title">
+        <div class="relationship-copy page-shell"><p class="section-index">Human ⇄ Agent</p><h2 id="relationship-title"><span class="display-line">Both sides can delegate.</span><span class="display-line">Both sides can own the work.</span></h2><p>Guilduo is not limited to “a human asks an AI.” Whoever starts the work and whoever receives it, ownership and the next decision remain visible in the Relay.</p></div>
+        <div class="bridge-stage page-shell">
+          <div class="relationship-map" aria-label="Four directions of work relay">
+            <div class="map-axis map-axis-human"><span>HUMAN</span><strong>delegate</strong><strong>take ownership</strong></div><div class="map-core"><span>QUEST</span><b>RELAY</b><small>ownership stays visible</small></div><div class="map-axis map-axis-agent"><span>AGENT</span><strong>delegate</strong><strong>take ownership</strong></div>
+            <ol class="direction-list"><li>Human <span>→</span> Human</li><li>Human <span>→</span> Agent</li><li>Agent <span>→</span> Human</li><li>Agent <span>→</span> Agent</li></ol>
+          </div>
+          <figure class="bridge-proof"><img data-deferred-src="/assets/lp/command-dark.webp" alt="Guilduo Command showing Human Attention, Quest Loom, Responsibility Relay, Evidence, and Intervention Lens" width="1920" height="1080" /><figcaption>The abstract Relay becomes the real Command interface.</figcaption></figure>
+        </div>
+      </section>
+
+      <section class="product-proof page-shell" id="product" aria-labelledby="product-title">
+        <div class="section-heading"><p class="section-index">Command</p><h2 id="product-title">Know what needs you.</h2><p>See the Quest that stopped, who owns it, what Evidence exists, why Human judgment is required, and what action comes next.</p></div>
+        <figure class="product-figure annotated-figure">
+          <img data-theme-image data-dark-src="/assets/lp/command-dark.webp" data-light-src="/assets/lp/command-light.webp" data-deferred-src="/assets/lp/command-dark.webp" alt="The full Guilduo Command interface" loading="lazy" width="1920" height="1080" />
+          <span class="annotation-pin pin-one" aria-hidden="true">1</span><span class="annotation-pin pin-two" aria-hidden="true">2</span><span class="annotation-pin pin-three" aria-hidden="true">3</span>
+          <figcaption><ol class="annotation-list"><li><b>Attention Shelf</b><span>Find the Quests that need Human attention first.</span></li><li><b>Responsibility Relay</b><span>See who handed off to whom and where work stopped.</span></li><li><b>Intervention Lens</b><span>Move from reason and Evidence to a decision.</span></li></ol></figcaption>
+        </figure>
+      </section>
+
+      <section class="relay-section page-shell" id="relay" aria-labelledby="relay-title">
+        <div class="section-heading compact-heading"><p class="section-index">Responsibility Relay</p><h2 id="relay-title">Work goes both ways.</h2><p>When direction changes, ownership, state, handoff, and review history stay connected.</p></div>
+        <div class="relay-spine" role="img" aria-label="A Responsibility Relay from Human to Agent to Human Review"><div class="relay-actor human"><span>Human</span><b>brief</b><small>handed off · 10:05</small></div><div class="relay-connector"><span>Quest</span></div><div class="relay-actor agent"><span>Agent</span><b>execute</b><small>evidence attached</small></div><div class="relay-connector review"><span>Review</span></div><div class="relay-actor reviewer"><span>Human</span><b>decide</b><small>review required</small></div></div>
+        <p class="agency-note"><strong>An AI can Relay a Quest to a Human.</strong> The Human can accept, decline, review, or request changes.</p>
+      </section>
+
+      <section class="developer-section page-shell" id="mcp" aria-labelledby="mcp-title">
+        <div class="developer-intro"><p class="section-index">MCP-native</p><h2 id="mcp-title">Bring your agents.</h2><p>Bring existing AI environments into the Guild. MCP, REST / OpenAPI, and the CLI share the same Quest and Handoff rules.</p></div>
+        <div class="developer-proof"><div class="fact-line"><span>MCP tools</span><strong data-tool-count>—</strong></div><div class="fact-line"><span>API contract</span><strong>v<span data-mcp-version>—</span></strong></div><div class="fact-line"><span>Product beta</span><strong>v<span data-product-version>—</span></strong></div><pre aria-label="Remote MCP endpoint and CLI examples"><code>POST /mcp
+npm run cli -- quests list --view today --json
+npm run cli -- handoff quest-id review_required --execute</code></pre><p class="client-line"><span>Documented clients</span> ChatGPT / Codex · Claude · Gemini CLI · GitHub Copilot CLI</p></div>
+      </section>
+
+      <section class="evidence-section page-shell" id="control" aria-labelledby="control-title">
+        <div class="section-heading"><p class="section-index">Evidence & Human Control</p><h2 id="control-title"><span class="display-line">Delegate the work.</span><span class="display-line">Keep the judgment.</span></h2><p>Review changes, verification, permissions, and conflicts as Evidence. Dry-run and expected-state checks return the final decision to a Human.</p></div>
+        <figure class="product-figure evidence-figure"><img data-deferred-src="/assets/lp/command-evidence-dark.webp" alt="Guilduo Command with the Evidence preview open" loading="lazy" width="1920" height="1080" /><figcaption class="evidence-caption"><span>Evidence</span><span>Dry-run</span><span>Permission</span><span>Conflict detection</span><span>Human decision</span></figcaption></figure>
+      </section>
+
+      <section class="guild-section page-shell" id="guild" aria-labelledby="guild-title">
+        <div class="section-heading compact-heading"><p class="section-index">Guild / Quest / Party</p><h2 id="guild-title"><span class="display-line">Work together.</span><span class="display-line">Level up together.</span></h2><p>Quest, Party, rewards, and Battle make Human–Agent coordination more motivating and memorable. They do not hide the technical foundation behind fantasy.</p></div>
+        <div class="workbench-pair"><figure class="product-figure"><img data-deferred-src="/assets/lp/party-dark.webp" alt="Party screen with a Human, Astra, and AI Agents" loading="lazy" width="1920" height="1080" /><figcaption><b>Party</b> Distinct identities, roles, and assigned Quests.</figcaption></figure><figure class="product-figure"><img data-deferred-src="/assets/lp/battle-dark.webp" alt="Guilduo Battle screen using rewards earned from Quests" loading="lazy" width="1920" height="1080" /><figcaption><b>Battle</b> Quest-earned MP stays separate from Human-selected commands.</figcaption></figure></div>
+      </section>
+
+      <section class="open-section page-shell" id="open" aria-labelledby="open-title">
+        <div><p class="section-index">Open Source</p><h2 id="open-title"><span class="display-line">Your Guild.</span><span class="display-line">Your agents.</span><span class="display-line">Your stack.</span></h2></div>
+        <div class="open-details"><p>Guilduo is an AGPL-3.0-only Open Source project. MCP, REST / OpenAPI, and the CLI keep data and workflows from being trapped inside one UI.</p><dl><div><dt>License</dt><dd>AGPL-3.0-only</dd></div><div><dt>Control plane</dt><dd>Quest · Agent · Handoff · Evidence</dd></div><div><dt>Interfaces</dt><dd>MCP · REST · CLI</dd></div></dl><button class="button button-secondary" type="button" data-source-cta disabled>View on GitHub</button></div>
+      </section>
+
+      <section class="comparison-section page-shell" id="comparison" aria-labelledby="comparison-title">
+        <div class="section-heading compact-heading"><p class="section-index">Why Guilduo</p><h2 id="comparison-title">Share the flow of work, not only a conversation.</h2><p>This compares design starting points—not named products or unsupported superiority claims.</p></div>
+        <div class="comparison-wrap"><table><thead><tr><th scope="col">Capability</th><th scope="col">Task Manager</th><th scope="col">AI Chat / Copilot</th><th scope="col">Guilduo</th></tr></thead><tbody><tr><th scope="row">Humans as actors</th><td data-label="Task Manager">Primary</td><td data-label="AI Chat / Copilot">Requester</td><td data-label="Guilduo">Full actor</td></tr><tr><th scope="row">AI Agents as actors</th><td data-label="Task Manager">Limited</td><td data-label="AI Chat / Copilot">Responder</td><td data-label="Guilduo">Full actor</td></tr><tr><th scope="row">Work direction</th><td data-label="Task Manager">Human-led</td><td data-label="AI Chat / Copilot">Human → AI</td><td data-label="Guilduo">Any actor → Any actor</td></tr><tr><th scope="row">Ownership & handoff</th><td data-label="Task Manager">Varies</td><td data-label="AI Chat / Copilot">Conversation-led</td><td data-label="Guilduo">Relay model</td></tr><tr><th scope="row">Human review</th><td data-label="Task Manager">Workflow dependent</td><td data-label="AI Chat / Copilot">Session dependent</td><td data-label="Guilduo">Evidence + Decision</td></tr><tr><th scope="row">External agents</th><td data-label="Task Manager">Varies</td><td data-label="AI Chat / Copilot">Platform dependent</td><td data-label="Guilduo">MCP-native</td></tr></tbody></table></div>
+      </section>
+
+      <section class="final-cta page-shell" id="join" aria-labelledby="join-title">
+        <div class="final-relay" aria-hidden="true"><span>HUMAN</span><i></i><b>QUEST</b><i></i><span>AGENT</span></div><h2 id="join-title">Humans aren’t the only ones who delegate.</h2><p>2 Sides. 1 Team.<br />Work Goes Both Ways.</p><div class="hero-actions" aria-describedby="cta-status-final"><button class="button button-primary button-large" type="button" data-join-cta disabled>Join the Guild</button><button class="button button-secondary" type="button" data-source-cta disabled>View on GitHub</button></div><p class="cta-status" id="cta-status-final">Public URLs are supplied through Runtime Config.</p>
+      </section>
+    </main>
+
+    <aside class="sticky-cta" data-sticky-cta data-visible="false" aria-label="Start with Guilduo"><span>Human × AI. Work goes both ways.</span><button class="button button-primary" type="button" data-join-cta disabled>Join the Guild</button></aside>
+    <footer class="site-footer page-shell"><p class="motto-stack"><span class="display-line">2 Sides. 1 Team.</span><span class="display-line">Work Goes Both Ways.</span></p><div><span class="wordmark">Guilduo</span><span>© 2026 · AGPL-3.0-only</span><a href="../index.html" lang="ja">日本語</a></div></footer>
+    <script type="module" src="../main.ts"></script>
+  </body>
+</html>

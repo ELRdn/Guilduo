@@ -11,6 +11,7 @@ import {
 import { blockingReason, submitDecision } from "../interaction-lab/relay-forge/decision.ts";
 import type { Quest } from "../types/questforge.ts";
 import { transitionQuestHandoff } from "../server/questforge-domain.ts";
+import { questActionState } from "../interaction-lab/relay-forge/quest-actions.ts";
 
 /**
  * These tests run the Command adapter against the real domain, not against the
@@ -140,6 +141,50 @@ test("only one identity entry exists per actor id across every surface", () => {
   }
 });
 
+test("an archived Quest is excluded from the operational Command model", () => {
+  const model = normalizeCommandModel({
+    profile: { uid: "uid-1", displayName: "Hironao" },
+    agents: [],
+    quests: [buildQuest({
+      id: "q-archived",
+      title: "Archived completion",
+      done: true,
+      lifecycleState: "archived",
+      assignee: { type: "self", id: "uid-1", label: "Hironao", handoffState: "none" },
+    })],
+    syncLabel: "10:52",
+  });
+
+  assert.equal(model.quests.length, 0);
+  assert.equal(model.interventions.length, 0);
+});
+test("a self-owned planned Quest exposes task actions instead of Handoff decisions", () => {
+  const quest = buildQuest({
+    id: "q-self",
+    title: "Daily review",
+    assignee: { type: "self", id: "uid-1", label: "Hironao", handoffState: "none" },
+  });
+  assert.deepEqual(questActionState(quest), {
+    mode: "self-task",
+    statusLabel: "あなたの担当 Quest です",
+    actions: ["start", "edit", "complete", "archive"],
+  });
+});
+
+test("Request revision remains exclusive to Agent review", () => {
+  const review = buildQuest({ id: "q-review", title: "Review" });
+  assert.equal(questActionState(review).mode, "handoff-decision");
+  const working = buildQuest({
+    id: "q-agent",
+    title: "Working",
+    assignee: { type: "agent", id: "forge-runner", label: "Forge Runner", handoffState: "working" },
+  });
+  assert.deepEqual(questActionState(working), {
+    mode: "read-only",
+    statusLabel: "Agent がこの Quest を保持しています",
+    actions: ["edit"],
+  });
+});
 test("the transition table matches the domain", () => {
   assert.equal(canTransition("review_required", "accepted"), true);
   assert.equal(canTransition("review_required", "working"), true);

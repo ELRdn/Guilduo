@@ -45,7 +45,7 @@ test("beta repository keeps Quest loading independent from optional panels", () 
   assert.match(repository, /panelErrors/);
 });
 
-test("public beta keeps external provider OAuth in preparation while Firebase and MCP remain available", () => {
+test("public beta keeps external provider OAuth in preparation while Appwrite and MCP remain available", () => {
   const runtime = read("runtime-config.example.js");
   const lab = read("interaction-lab/app.ts");
   const labHtml = read("interaction-lab/index.html");
@@ -73,16 +73,16 @@ test("CLI, Skill bundle, and MCP App handoff package are present without credent
   assert.doesNotMatch([mcp, submission].join("\n"), /AIzaSy|client_secret|private_key|Bearer\s+[A-Za-z0-9]/i);
 });
 
-test("tagged release gates Firebase behind D1, Worker, and health verification", () => {
+test("tagged release gates Appwrite Sites behind D1, Worker, and health verification", () => {
   const workflow = read(".github/workflows/release.yml");
   const d1 = workflow.indexOf("d1 migrations apply");
   const worker = workflow.indexOf("wrangler-action@v3");
-  const health = workflow.indexOf("Verify Worker before Firebase");
-  const firebase = workflow.indexOf("Deploy Firebase rules and hosting");
+  const health = workflow.indexOf("Verify Worker before Appwrite Sites");
+  const sites = workflow.indexOf("Smoke test public routes");
   assert.match(workflow, /tags: \["v\*"\]/);
-  assert.ok(d1 > 0 && d1 < worker && worker < health && health < firebase);
+  assert.ok(d1 > 0 && d1 < worker && worker < health && health < sites);
   assert.match(workflow, /agentStorage!=="d1"/);
-  assert.doesNotMatch(workflow, /firebase deploy.*\|\| true/);
+  assert.doesNotMatch(workflow, /firebase deploy/);
 });
 
 test("anonymous telemetry is opt-in, delayed, and retained in the Worker only", () => {

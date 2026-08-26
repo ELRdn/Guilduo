@@ -8,7 +8,6 @@ import { asQuestForgeState, json, type TestContext, type TestRequestOptions } fr
 const env: WorkerEnv = {
   DEV_BEARER_TOKEN: "social-token",
   DEV_USER_ID: "alpha",
-  FIREBASE_PROJECT_ID: "questforge-test",
   ALLOWED_ORIGINS: "http://localhost:5173",
 };
 
@@ -91,7 +90,7 @@ test("MCP social tools use the same store as REST", async () => {
 });
 
 test("REST and MCP battle commands share state and idempotency", async () => {
-  const { writeState, readState } = await import("../worker/src/firebase-store.ts");
+  const { writeState, readState } = await import("../worker/src/appwrite-store.ts");
   const battleState: QuestForgeState = asQuestForgeState({
     schemaVersion: 5,
     tasks: [{ id: "plain", kind: "todo", title: "No notes", notes: "", difficulty: "easy", lifecycleState: "active", planningState: "scheduled", done: false }],

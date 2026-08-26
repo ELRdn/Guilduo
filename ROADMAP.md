@@ -1,6 +1,6 @@
 # Guilduo 公開βロードマップ
 
-最終更新: 2026-08-18
+最終更新: 2026-08-26
 
 ## 設計書の正本
 
@@ -21,7 +21,7 @@
 - 手書きアプリ、Worker、MCP、CLI、テストを`.ts`へ移行し、Vite・tsx・Wrangler型生成の基盤を追加
 - `npm run typecheck`でWorker型生成、`wrangler types --check`、TypeScriptプロジェクト検査を実行
 - TypeScript移行後の実運用ソースはstrict型チェック済み。共有型・境界検証・ブラウザ・Worker・CLI・テスト・バトル原型を`npm run typecheck`で継続検査する
-- Firebaseデータ、Schema 7、REST 2.7.0、MCP 51ツール、OpenAPI 52パスは変更しない
+- Firebase移行データを保全し、Schema 7、REST 2.7.0、MCP 51ツール、OpenAPI 52パスの互換を維持する
 
 ## 現在地
 
@@ -33,8 +33,8 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 
 ### 実装済み
 
-- / の現行UIと /next/ の公開βUIを同じFirebase Hostingへビルド
-- Firebase Authの復元、ユーザー単位のリモートキャッシュ、再接続、同期中スケルトン、書き込みロック
+- / の現行UI、/next/ の公開βUI、/lp/ を同じAppwrite Sites成果物へビルド
+- Appwrite Authの復元、Worker経由のユーザー単位TablesDB同期、再接続、同期中スケルトン、書き込みロック
 - TodayのPC・タブレット固定レイアウトと中央Quest欄の独立スクロール
 - スマホのページスクロール、下部Quest詳細、ポップアップ詳細切替
 - Questの完了・保管・復元、Shift範囲選択、Ctrl／⌘個別選択
@@ -45,7 +45,7 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 - 日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語
 - Google Calendar、Google Tasks、Toggl、Notionの状態表示。Provider OAuthは公開βではEarly Accessとして停止
 - 匿名計測の同意UI、許可イベント限定のクライアント送信、Worker `/telemetry` 受け口、D1保存、90日保持上限
-- v0.5.0-beta.1のリリース設定と、D1 → Worker → Health Check → Firebaseのタグ専用Workflow
+- v0.6.0-beta.1のリリース設定と、D1 → Worker → Health Check → Appwrite Sitesのタグ専用Workflow
 - Unity Battle Labはペンディングのまま本体リリースから分離
 
 ## 検証結果
@@ -82,14 +82,16 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 - 同期中に完了・編集・保管が無効になることを確認
 - Agent登録、MCPクライアント紐付け、Quest割り当て、Handoffを実アカウントで確認
 
-### P0: デプロイ確認
+### P0: Appwrite移行とデプロイ確認
 
-- Firebase Authorized Domainsを確認
-- GitHub Environment productionのCloudflare/Firebase Secretを確認
+- Appwrite Web Platform、Google OAuth、Sites生成ドメインを確認
+- Firebase AuthユーザーとRealtime Databaseをエクスポートし、`legacy_states`の件数・checksumを照合
+- GitHub Environment productionのCloudflare/Appwrite Secretを確認
 - Workerを先にデプロイし、/healthでVersion、Schema、D1接続を確認
-- Firebase HostingとDatabase Rulesをデプロイ
+- Appwrite JWTで`/v1/state`の作成・更新・競合検知・再読込を確認
+- Appwrite Sitesをデプロイ
 - /、/next/、/mcp、OAuth metadata、未認証401をスモークテスト
-- CI成功後にだけv0.5.0-beta.1タグとGitHub Releaseを作成
+- CI成功後にだけv0.6.0-beta.1タグとGitHub Releaseを作成
 
 ### P1: 手動登録が必要な外部手続き
 

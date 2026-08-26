@@ -39,7 +39,7 @@ interface QuestForgeI18nApi {
   resetLocaleForTests: () => void;
 }
 
-interface QuestForgeFirebaseApi {
+interface GuilduoAuthApi {
   getIdToken: (forceRefresh?: boolean) => Promise<string>;
   getUser: () => QuestForgeUser | null;
   flushState: () => Promise<boolean>;
@@ -87,14 +87,18 @@ interface QuestForgeCoreApi {
 declare global {
   interface QuestForgeRuntimeConfig {
     gatewayUrl?: string;
+    joinGuildUrl?: string;
     sourceUrl?: string;
     externalOAuthEnabled?: boolean;
     telemetryEndpoint?: string;
+    appwriteEndpoint?: string;
+    appwriteProjectId?: string;
   }
 
   interface Window {
     webkitAudioContext?: typeof AudioContext;
-    QuestForgeFirebase?: QuestForgeFirebaseApi;
+    QuestForgeFirebase?: GuilduoAuthApi;
+    GuilduoAuth?: GuilduoAuthApi;
   }
 
   interface Navigator {
@@ -107,7 +111,8 @@ declare global {
   var QuestForgeBattleRules: QuestForgeBattleRulesApi | undefined;
   var QuestForgeBridge: QuestForgeBridgeApi | undefined;
   var QuestForgeTelemetry: QuestForgeTelemetryApi | undefined;
-  var QuestForgeFirebase: QuestForgeFirebaseApi | undefined;
+  var QuestForgeFirebase: GuilduoAuthApi | undefined;
+  var GuilduoAuth: GuilduoAuthApi | undefined;
 
   interface WindowEventMap {
     "questforge:state-saved": CustomEvent<{ state?: QuestForgeState }>;

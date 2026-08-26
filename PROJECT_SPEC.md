@@ -3,7 +3,7 @@
 > **English summary:** Guilduo is a Human × AI Work Platform where humans and AI agents coordinate work in the same workspace. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).
 
 最終更新: 2026-08-17  
-対象: `0.5.0-beta.1` / REST・MCP `2.7.0` / Schema `7`  
+対象: `0.6.0-beta.1` / REST・MCP `2.7.0` / Schema `7`
 文書の位置づけ: アーキテクチャ、ドメイン、API、認証、安全性、運用の正本
 
 ## 1. 目的と境界
@@ -45,7 +45,7 @@ Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じwork
 
 | 用語 | 意味 | 所有する責務 |
 | --- | --- | --- |
-| ユーザー | Firebaseで認証された本人 | 目的、最終判断、公開範囲、Agent設定 |
+| ユーザー | Appwriteで認証された本人 | 目的、最終判断、公開範囲、Agent設定 |
 | Astra | ユーザーが選ぶ相棒キャラクター | 見た目、役職、MBTI、Battle上のキャラクター表現 |
 | Agent | 作業を担当するAIの台帳エントリ | 表示名、Provider、許可スコープ、Handoff既定値 |
 | MCPクライアント | ChatGPT、Codex、Claude等の接続元 | OAuth接続、利用スコープ、Agentへの紐付け |
@@ -59,11 +59,12 @@ Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じwork
 
 | サーフェス | 役割 | 正式な位置づけ |
 | --- | --- | --- |
-| `/` | 現行UI、Firebase同期、従来操作との互換 | 安定版の基準 |
+| `/` | 現行UI、Appwrite同期、従来操作との互換 | 安定版の基準 |
 | `/next/` | Interaction Lab、新UI、操作検証 | 公開β・検証レーン |
 | `/lp/`・`/lp/en/` | Guilduoの説明、Product Proof、公開CTA | 日本語・英語の公式マーケティングSurface |
-| Firebase Auth | Googleログインとユーザー識別 | 認証の基準 |
-| Firebase Realtime Database | 現行UIのQuest・キャラクター状態 | ユーザー状態の保存先 |
+| Appwrite Auth | Googleログインとユーザー識別 | 認証の基準 |
+| Appwrite TablesDB | Quest・キャラクター・Battle状態 | ユーザー状態の保存先 |
+| Appwrite Sites | Web/PWAとLPの静的配信 | 公開Webの配信面 |
 | Cloudflare Worker | REST、OAuth、MCP、Webhook、拡張機能境界 | APIの実行面 |
 | Cloudflare D1/KV | Agent、接続、プロフィール、短期OAuth状態 | Worker側メタデータ保存 |
 | CLI | 人間・CI向けのREST/JSON操作 | MCPとは別の操作面 |
@@ -73,15 +74,15 @@ Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じwork
 flowchart LR
   User[ユーザー] --> Root[現行UI /]
   User --> Next[Next UI /next/]
-  Root --> Auth[Firebase Auth]
-  Root --> RTDB[Firebase Realtime Database]
+  Root --> Auth[Appwrite Auth]
+  Root --> Worker[Cloudflare Worker]
   Next --> Auth
-  Next --> Worker[Cloudflare Worker]
+  Next --> Worker
   CLI[CLI] --> Worker
   MCP[MCPクライアント] --> Worker
     Skill[Guilduo Skill] -.操作手順.-> MCP
     Worker --> Domain[共有Guilduoドメイン]
-  Domain --> RTDB
+  Domain --> TablesDB[Appwrite TablesDB]
   Worker --> D1[D1 / Agent・接続メタデータ]
   Harness[外部Harness] --> MCP
   Harness -.モデル・Tool・Session・Sandbox.-> HarnessRuntime[Harness実行面]
@@ -91,7 +92,9 @@ flowchart LR
 
 - Quest、キャラクター、Battle、報酬、イベントの業務ルールは共有ドメインを正本にする。
 - APIの入力・出力は`api/openapi.json`、MCPのツール契約は`api/mcp-tools.json`を正本にする。
-- `/`はFirebase Realtime Databaseを中心に同期する。`/next/`はFirebase Authで本人を識別し、Worker RESTから本体スナップショットを取得する。
+- `/`と`/next/`はAppwrite Authで本人を識別し、Worker RESTから本体スナップショットを取得する。ブラウザへAppwrite API Keyを渡さない。
+- Workerは短命なAppwrite JWTを検証し、サーバー専用API KeyでTablesDBを読み書きする。`user_states`の行IDはAppwrite UIDとし、直接クライアント権限を付けない。
+- Firebase移行データは`legacy_states`へ暗号学的メールハッシュをキーとして一時格納し、同じメールでの初回Appwriteログイン時に`user_states`へ一度だけ移管する。移行元は検証期間中だけロールバック用に保持する。
 - Next版のローカル保存はゲスト利用、表示設定、前回スナップショットのためだけに使う。ログイン済みユーザーの本体データを別ユーザーへ表示しない。
 - API、MCP、外部連携から受け取るJSONは未検証の外部入力として扱い、ドメイン境界で正規化する。
 
@@ -150,7 +153,7 @@ local
 
 ### 5.2 保存してはいけない情報
 
-- Firebase IDトークン、OAuthトークン、Provider Secret
+- Appwrite JWT、OAuthトークン、Appwrite API Key、Provider Secret
 - モデルAPIキー、パスワード、外部実行URL
 - Quest本文・メモ・UIDを匿名計測へ送信すること
 - HarnessのSession履歴、Sandbox内部データ、モデル推論ログ
@@ -194,11 +197,11 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 
 ## 7. 開発・変更・リリースルール
 
-- 共有ドメイン、API、MCP、Firebase Schemaを変更する前に、この文書を更新する。
+- 共有ドメイン、API、MCP、Appwrite Schemaを変更する前に、この文書を更新する。
 - API/MCPの契約変更は、互換性、dry-run、認証、ユーザー分離、既存クライアントへの影響を確認する。
 - UIの見た目、コンポーネント、レイアウト、モーションを変更する場合は[`DESIGN.md`](DESIGN.md)を先に更新する。
 - `/next/`のUI実験は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)へ記録し、現行版へ自動昇格しない。
-- 本番リリースは型チェック、テスト、ビルド、契約差分、Worker health、Firebase smoke testを通過してから行う。
+- 本番リリースは型チェック、テスト、ビルド、契約差分、Worker health、Appwrite Auth/TablesDB/Sites smoke testを通過してから行う。
 - Unity、外部OAuth、Agent自動実行は、この文書の更新なしに公開βへ戻さない。
 
 ## 8. 参照先

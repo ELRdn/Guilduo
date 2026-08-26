@@ -20,12 +20,12 @@ export interface D1DatabaseLike {
 export interface WorkerEnv {
   QUESTFORGE_KV?: KvNamespaceLike;
   QUESTFORGE_DB?: D1DatabaseLike;
-  FIREBASE_PROJECT_ID?: string;
-  FIREBASE_DATABASE_URL?: string;
-  FIREBASE_API_KEY?: string;
-  FIREBASE_AUTH_DOMAIN?: string;
-  FIREBASE_CLIENT_EMAIL?: string;
-  FIREBASE_PRIVATE_KEY?: string;
+  APPWRITE_ENDPOINT?: string;
+  APPWRITE_PROJECT_ID?: string;
+  APPWRITE_DATABASE_ID?: string;
+  APPWRITE_STATE_TABLE_ID?: string;
+  APPWRITE_LEGACY_TABLE_ID?: string;
+  APPWRITE_API_KEY?: string;
   PUBLIC_BASE_URL?: string;
   WEB_APP_URL?: string;
   ALLOWED_ORIGINS?: string;

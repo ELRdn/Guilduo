@@ -395,7 +395,7 @@ export interface LoomQuestInput {
 export function toLoomQuest(input: LoomQuestInput): LoomQuest {
   const { quest } = input;
   const state = input.overrideState
-    ?? toVisualState(quest.assignee.handoffState, quest.lifecycleState);
+    ?? (quest.done ? "completed" : toVisualState(quest.assignee.handoffState, quest.lifecycleState));
   return {
     id: quest.id,
     ref: questRef(quest.id),

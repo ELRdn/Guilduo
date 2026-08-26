@@ -1,4 +1,4 @@
-import { ALL_SCOPES, getKv, randomToken, sha256, verifyFirebaseIdToken } from "./security.ts";
+import { ALL_SCOPES, getKv, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
 import type { AuthIdentity } from "./security.ts";
 import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
 
@@ -12,10 +12,8 @@ type AuthorizationRequest = {
   scopes: string[];
   uid?: string;
   email?: string;
-  firebaseIdToken?: string;
-  firebaseRefreshToken?: string;
 };
-type ClientGrant = { uid: string; clientId: string; clientName?: string; scopes: string[]; firstConnectedAt?: string; lastUsedAt?: string; revokedAt?: string; accessHash?: string; refreshHash?: string; email?: string; firebaseIdToken?: string; firebaseRefreshToken?: string; redirectUri?: string; challenge?: string };
+type ClientGrant = { uid: string; clientId: string; clientName?: string; scopes: string[]; firstConnectedAt?: string; lastUsedAt?: string; revokedAt?: string; accessHash?: string; refreshHash?: string; email?: string; redirectUri?: string; challenge?: string };
 
 function asRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
@@ -39,8 +37,6 @@ function asAuthorizationRequest(value: unknown): AuthorizationRequest | null {
     scopes: Array.isArray(item.scopes) ? item.scopes.filter((scope): scope is string => typeof scope === "string") : [],
     ...(typeof item.uid === "string" ? { uid: item.uid } : {}),
     ...(typeof item.email === "string" ? { email: item.email } : {}),
-    ...(typeof item.firebaseIdToken === "string" ? { firebaseIdToken: item.firebaseIdToken } : {}),
-    ...(typeof item.firebaseRefreshToken === "string" ? { firebaseRefreshToken: item.firebaseRefreshToken } : {}),
   };
 }
 
@@ -157,28 +153,23 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
     scopes: allowedScopes(url.searchParams.get("scope")),
   };
   await getKv(env).put(`authorize:${requestId}`, JSON.stringify(authorizationRequest), { expirationTtl: 600 });
-  const firebaseConfig = {
-    apiKey: env.FIREBASE_API_KEY || "",
-    authDomain: env.FIREBASE_AUTH_DOMAIN || `${env.FIREBASE_PROJECT_ID}.firebaseapp.com`,
-    projectId: env.FIREBASE_PROJECT_ID || "",
-  };
-  const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(copy.title)}</title><style>body{font-family:system-ui;margin:0;background:#eef1ed;color:#202a32}.box{max-width:520px;margin:8vh auto;background:white;border:1px solid #d7ddd8;padding:24px;border-radius:8px;box-shadow:0 18px 45px #20302a20}button{width:100%;padding:13px;border:0;border-radius:7px;background:#526b5c;color:white;font-weight:800}.scopes{padding:12px;background:#f4f6f3;border-radius:7px;line-height:1.8}small{color:#66716b}@media(prefers-color-scheme:dark){body{background:#171c1a;color:#edf2ee}.box{background:#222a26;border-color:#3b4741}.scopes{background:#18201c}small{color:#b7c2bb}}</style></head><body><main class="box"><h1>${escapeHtml(copy.heading)}</h1><p><strong>${escapeHtml(client.clientName)}</strong> ${escapeHtml(copy.request)}</p><div class="scopes">${authorizationRequest.scopes.map(escapeHtml).join("<br>")}</div><p><small>${escapeHtml(copy.privacy)}</small></p><button id="approve">${escapeHtml(copy.approve)}</button><p id="status" role="status"></p></main><script src="https://www.gstatic.com/firebasejs/12.1.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/12.1.0/firebase-auth-compat.js"></script><script>firebase.initializeApp(${JSON.stringify(firebaseConfig)});document.querySelector('#approve').onclick=async()=>{const status=document.querySelector('#status');status.textContent=${JSON.stringify(copy.connecting)};try{const result=await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());const idToken=await result.user.getIdToken(true);const firebaseRefreshToken=result.user.refreshToken;const response=await fetch('/oauth/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:${JSON.stringify(requestId)},idToken,firebaseRefreshToken})});const data=await response.json();if(!response.ok)throw new Error(data.error||'authorization_failed');location.href=data.redirect;}catch(error){status.textContent=${JSON.stringify(copy.failed)}+error.message;}};</script></body></html>`;
+  const appwriteEndpoint = String(env.APPWRITE_ENDPOINT || "").replace(/\/$/, "");
+  const appwriteProjectId = env.APPWRITE_PROJECT_ID || "";
+  const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(copy.title)}</title><style>body{font-family:system-ui;margin:0;background:#eef1ed;color:#202a32}.box{max-width:520px;margin:8vh auto;background:white;border:1px solid #d7ddd8;padding:24px;border-radius:8px;box-shadow:0 18px 45px #20302a20}button{width:100%;padding:13px;border:0;border-radius:7px;background:#526b5c;color:white;font-weight:800}.scopes{padding:12px;background:#f4f6f3;border-radius:7px;line-height:1.8}small{color:#66716b}@media(prefers-color-scheme:dark){body{background:#171c1a;color:#edf2ee}.box{background:#222a26;border-color:#3b4741}.scopes{background:#18201c}small{color:#b7c2bb}}</style></head><body><main class="box"><h1>${escapeHtml(copy.heading)}</h1><p><strong>${escapeHtml(client.clientName)}</strong> ${escapeHtml(copy.request)}</p><div class="scopes">${authorizationRequest.scopes.map(escapeHtml).join("<br>")}</div><p><small>${escapeHtml(copy.privacy)}</small></p><button id="approve">${escapeHtml(copy.approve)}</button><p id="status" role="status"></p></main><script>const endpoint=${JSON.stringify(appwriteEndpoint)},project=${JSON.stringify(appwriteProjectId)};const headers={'content-type':'application/json','x-appwrite-project':project};document.querySelector('#approve').onclick=async()=>{const status=document.querySelector('#status');status.textContent=${JSON.stringify(copy.connecting)};try{const account=await fetch(endpoint+'/account',{credentials:'include',headers});if(account.status===401){const oauth=new URL(endpoint+'/account/sessions/oauth2/google');oauth.searchParams.set('project',project);oauth.searchParams.set('success',location.href);oauth.searchParams.set('failure',location.href);location.href=oauth.toString();return;}if(!account.ok)throw new Error('account_'+account.status);const jwtResponse=await fetch(endpoint+'/account/jwts',{method:'POST',credentials:'include',headers,body:'{}'});if(!jwtResponse.ok)throw new Error('jwt_'+jwtResponse.status);const jwt=(await jwtResponse.json()).jwt;const response=await fetch('/oauth/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:${JSON.stringify(requestId)},jwt})});const data=await response.json();if(!response.ok)throw new Error(data.error||'authorization_failed');location.href=data.redirect;}catch(error){status.textContent=${JSON.stringify(copy.failed)}+error.message;}};</script></body></html>`;
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
 export async function approveAuthorization(request: Request, env: WorkerEnv): Promise<Response> {
   const input = asRecord(await request.json());
   const requestId = typeof input.requestId === "string" ? input.requestId : "";
-  const idToken = typeof input.idToken === "string" ? input.idToken : "";
-  const firebaseRefreshToken = typeof input.firebaseRefreshToken === "string" ? input.firebaseRefreshToken : "";
+  const jwt = typeof input.jwt === "string" ? input.jwt : "";
   const kv = getKv(env);
   const pending = asAuthorizationRequest(await kv.get(`authorize:${requestId}`, "json"));
   if (!pending) return json({ error: "authorization_request_expired" }, 400);
   let identity;
-  try { identity = await verifyFirebaseIdToken(idToken, env); } catch { return json({ error: "invalid_firebase_token" }, 401); }
+  try { identity = await verifyAppwriteJwt(jwt, env); } catch { return json({ error: "invalid_appwrite_token" }, 401); }
   const code = randomToken("qfcode");
-  if (!firebaseRefreshToken) return json({ error: "firebase_session_unavailable" }, 401);
-  await kv.put(`code:${await sha256(code)}`, JSON.stringify({ ...pending, uid: identity.uid, email: identity.email, firebaseIdToken: idToken, firebaseRefreshToken }), { expirationTtl: 300 });
+  await kv.put(`code:${await sha256(code)}`, JSON.stringify({ ...pending, uid: identity.uid, email: identity.email }), { expirationTtl: 300 });
   await kv.delete(`authorize:${requestId}`);
   const redirect = new URL(pending.redirectUri);
   redirect.searchParams.set("code", code);
@@ -259,30 +250,16 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
   return publicClientGrant(record);
 }
 
-async function refreshFirebaseSession(env: WorkerEnv, refreshToken: string): Promise<{ firebaseIdToken: string; firebaseRefreshToken: string }> {
-  const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(env.FIREBASE_API_KEY || "")}`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
-  });
-  if (!response.ok) throw new Error("Unable to refresh the QuestForge login session");
-  const value = asRecord(await response.json());
-  return { firebaseIdToken: String(value.id_token || ""), firebaseRefreshToken: String(value.refresh_token || refreshToken) };
-}
-
 async function issueTokens(env: WorkerEnv, grant: ClientGrant): Promise<JsonRecord> {
   const kv = getKv(env);
   const accessToken = randomToken("qf");
   const refreshToken = randomToken("qfr");
   const expiresIn = 3600;
-  const firebaseSession = grant.firebaseRefreshToken
-    ? await refreshFirebaseSession(env, grant.firebaseRefreshToken)
-    : { firebaseIdToken: grant.firebaseIdToken, firebaseRefreshToken: "" };
   const accessHash = await sha256(accessToken);
   const refreshHash = await sha256(refreshToken);
   const record = { uid: grant.uid, email: grant.email, scopes: grant.scopes, clientId: grant.clientId };
-  await kv.put(`access:${accessHash}`, JSON.stringify({ ...record, firebaseIdToken: firebaseSession.firebaseIdToken, refreshHash, expiresAt: Date.now() + expiresIn * 1000 }), { expirationTtl: expiresIn });
-  await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, firebaseRefreshToken: firebaseSession.firebaseRefreshToken, accessHash }), { expirationTtl: 2592000 });
+  await kv.put(`access:${accessHash}`, JSON.stringify({ ...record, refreshHash, expiresAt: Date.now() + expiresIn * 1000 }), { expirationTtl: expiresIn });
+  await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, accessHash }), { expirationTtl: 2592000 });
   await writeClientGrantIndex(env, grant, { accessHash, refreshHash });
   return { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: expiresIn, scope: grant.scopes.join(" ") };
 }

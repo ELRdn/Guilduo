@@ -7,13 +7,13 @@ const root = path.join(__dirname, "..");
 
 test("guest starts without developer To Do samples and can add the first quest", () => {
   const app = fs.readFileSync(path.join(root, "app.ts"), "utf8");
-  const firebase = fs.readFileSync(path.join(root, "firebase-client.ts"), "utf8");
+  const appwrite = fs.readFileSync(path.join(root, "appwrite-client.ts"), "utf8");
   const japaneseCatalog = fs.readFileSync(path.join(root, "locales/ja.ts"), "utf8");
 
   assert.doesNotMatch(app, /id: "t1"/);
   assert.doesNotMatch(app, /id: "t2"/);
   assert.match(app, /task\.emptyTodoAction/);
-  assert.match(firebase, /sync\.local/);
+  assert.match(appwrite, /sync\.local/);
   assert.match(japaneseCatalog, /"task\.emptyTodoAction": "最初のTo Doを追加"/);
   assert.match(japaneseCatalog, /"sync\.local": "この端末に保存中"/);
 });

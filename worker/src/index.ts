@@ -24,7 +24,7 @@ import {
   transitionQuestHandoff,
 } from "../../server/questforge-domain.ts";
 import type { DomainInput, DomainRecord } from "../../server/questforge-domain.ts";
-import { mutateState, readState } from "./firebase-store.ts";
+import { mutateState, readState, writeState } from "./appwrite-store.ts";
 import { authenticateRequest } from "./security.ts";
 import {
   approveAuthorization,
@@ -491,19 +491,19 @@ async function acceptTelemetry(request: Request, env: WorkerEnv): Promise<Respon
 }
 
 function assertTogglFocusWebConnection(request: Request, env: WorkerEnv, identity: AuthIdentity): void {
-  if (!identity || !["firebase", "dev"].includes(identity.authType)) {
+  if (!identity || !["appwrite", "dev"].includes(identity.authType)) {
     throw new DomainError(403, "focus_web_connection_required", "Toggl Focus API keys can only be connected from the QuestForge web app.");
   }
-  if (identity.authType === "firebase" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+  if (identity.authType === "appwrite" && !corsHeaders(request, env)["access-control-allow-origin"]) {
     throw new DomainError(403, "focus_web_origin_required", "Open QuestForge in an approved browser origin to connect Toggl Focus.");
   }
 }
 
 function assertAgentRegistryWebMutation(request: Request, env: WorkerEnv, identity: AuthIdentity): void {
-  if (!identity || !["firebase", "dev"].includes(identity.authType)) {
+  if (!identity || !["appwrite", "dev"].includes(identity.authType)) {
     throw new DomainError(403, "agent_registry_web_required", "Agent Registry settings can only be changed from the QuestForge web app.");
   }
-  if (identity.authType === "firebase" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+  if (identity.authType === "appwrite" && !corsHeaders(request, env)["access-control-allow-origin"]) {
     throw new DomainError(403, "agent_registry_origin_required", "Open QuestForge in an approved browser origin to change Agent Registry settings.");
   }
 }
@@ -555,7 +555,7 @@ function addDaysText(dateText: string, amount: number): string {
 
 async function stateFor(env: WorkerEnv, identity: WorkerIdentity): Promise<QuestForgeState> {
   const { payload } = await readState(env, identity);
-  if (!payload?.state) throw Object.assign(new Error("Open QuestForge and complete Firebase sync before connecting an AI client."), { status: 409, code: "state_unavailable" });
+  if (!payload?.state) throw Object.assign(new Error("Open Guilduo and complete cloud sync before connecting an AI client."), { status: 409, code: "state_unavailable" });
   if (Number(payload.state.schemaVersion || 0) < 7) {
     const migrated = await mutateState(env, identity, (state) => {
       migrateState(state);
@@ -576,6 +576,28 @@ async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context
 
 async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
   const method = request.method;
+  if (path === "/v1/state" && method === "GET") {
+    const { payload } = await readState(env, identity);
+    if (!payload.state) return json({ error: { code: "state_not_found", message: "No synchronized Guilduo state exists." } }, 404);
+    return json(payload);
+  }
+  if (path === "/v1/state" && method === "PUT") {
+    const input = await requestRecord(request);
+    if (!input.state || typeof input.state !== "object" || Array.isArray(input.state)) {
+      throw new DomainError(400, "invalid_state", "state must be a Guilduo state object.");
+    }
+    const current = await readState(env, identity);
+    const payload = {
+      schemaVersion: Number(asRecord(input.state).schemaVersion || input.schemaVersion || 3),
+      clientUpdatedAt: String(input.clientUpdatedAt || asRecord(input.state).updatedAt || new Date().toISOString()),
+      deviceId: String(input.deviceId || "guilduo-web"),
+      state: input.state as unknown as QuestForgeState,
+    };
+    if (!await writeState(env, identity, payload, current.etag)) {
+      throw new DomainError(409, "state_conflict", "The Guilduo state changed on another device.");
+    }
+    return json(payload);
+  }
   if (path === "/v1/agents" && method === "GET") {
     assertScope(identity.scopes, "agents:read");
     const includeArchived = new URL(request.url).searchParams.get("includeArchived") === "true";
@@ -1222,7 +1244,7 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
   if (path === "/openapi.json") return fetch(new URL("/api/openapi.json", env.WEB_APP_URL || "http://localhost:5173"));
 
   const authenticated = await authenticateRequest(request, env);
-  if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Firebase bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` });
+  if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` });
   const identity = await identityWithAgentContext(env, authenticated);
   if (path === "/mcp") return handleMcp(request, env, context, identity);
   if (path === "/mcp-next") return handleMcpNext(request, env, context, identity);

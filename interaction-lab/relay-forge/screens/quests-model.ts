@@ -39,6 +39,7 @@ export interface QuestRow {
   readonly ref: string;
   readonly title: string;
   readonly bucket: PortfolioBucket;
+  readonly archived: boolean;
   readonly nextAction: string;
   readonly ownerActorId: string;
   readonly relay: QuestRelayView;
@@ -191,6 +192,7 @@ export function normalizeQuestsModel(options: NormalizeQuestsOptions): QuestsMod
       ref: quest.id.toUpperCase().startsWith("QF-") ? quest.id.toUpperCase() : `QF-${quest.id.replace(/^q-/i, "").toUpperCase()}`,
       title: quest.title,
       bucket,
+      archived: quest.lifecycleState === "archived",
       nextAction: quest.nextAction,
       ownerActorId,
       relay: {

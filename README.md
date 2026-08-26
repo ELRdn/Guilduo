@@ -15,7 +15,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | 項目 | 状態 |
 |---|---|
 | Web / PWA | 公開βの中心機能 |
-| Firebase Googleログイン・端末ゲスト保存 | 利用可能 |
+| Appwrite Googleログイン・端末ゲスト保存 | 移行中（Google OAuth設定後に公開） |
 | Quest CRUD、保管、Quest Tree、MPバトル | 利用可能 |
 | Agent Registry、MCPクライアント紐付け、Handoff | 利用可能 |
 | REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
@@ -24,7 +24,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
 | Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
 
-アプリ版は `0.5.0-beta.1`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。FirebaseログインとMCP OAuthは利用できます。
+アプリ版は `0.6.0-beta.1`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
 
 ## 設計原則
 
@@ -37,26 +37,26 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 
 ## 画面とデータ
 
-- `/`：現行UI。ログイン前は端末保存、ログイン後はFirebaseへ同期します。
+- `/`：現行UI。ログイン前は端末保存、ログイン後はWorker経由でAppwriteへ同期します。
 - `/lp/`・`/lp/en/`：Guilduo公式Landing Pageの日本語版・英語版です。CTA URLはRuntime Configから供給し、未設定時は安全に無効化します。
 - `/interaction-lab/`：ローカル開発・キャプチャ用のNextソースルートです。
-- `/next/`：Firebase Hosting上の公開βルートです。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
+- `/next/`：Appwrite Sites上の公開βルートです。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
 - 視覚設計の正本は[`DESIGN.md`](DESIGN.md)、技術仕様の正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)、Next版の差分設計は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)です。数値トークンは[`design/TOKENS.json`](design/TOKENS.json)、部品は[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面構成は[`design/SCREENS.md`](design/SCREENS.md)を参照します。
-- 更新時はFirebase Auth状態を復元し、前回同期データがあれば読み取り専用で残します。再接続中はQuest一覧を消さず、スケルトン・再接続ボタン・書き込みロックを表示します。
+- 更新時はAppwrite Auth状態を復元し、前回同期データがあれば読み取り専用で残します。再接続中はQuest一覧を消さず、スケルトン・再接続ボタン・書き込みロックを表示します。
 - Questの完了状態とAgent Handoff状態は別管理です。単発To Doは完了時に保管、日課・習慣・繰り返しTo Doは次回へ復帰します。
 - 公開プロフィールは表示名、`@handle`、紹介文、アバター、レベルだけです。Quest本文、メモ、UID、OAuth情報は公開しません。
 
-## Firebase / Worker構成
+## Appwrite / Worker構成
 
 | 層 | 役割 |
 |---|---|
-| Firebase Hosting | Web/PWA配信 |
-| Firebase Auth / Realtime Database | Googleログイン、ユーザー単位のQuest・キャラクター状態 |
+| Appwrite Sites | Web/PWA配信 |
+| Appwrite Auth / TablesDB | Googleログイン、ユーザー単位のQuest・キャラクター状態 |
 | Cloudflare Worker | REST、OAuth、MCP、Webhook、拡張機能境界 |
 | Cloudflare D1 | Agent Registry、MCP接続、プロフィール、連携メタデータ |
 | Cloudflare KV | OAuth state、短期状態、MCPクライアント |
 
-トークン、APIキー、秘密情報はFirebaseやブラウザのLocal Storageに保存しません。Agent RegistryにもモデルAPIキー、パスワード、実行URLは保存しません。
+トークン、APIキー、秘密情報はAppwriteの公開行やブラウザのLocal Storageに保存しません。Appwrite API KeyはWorker Secretだけに置きます。Agent RegistryにもモデルAPIキー、パスワード、実行URLは保存しません。
 
 ## MCP
 
@@ -106,7 +106,7 @@ Skillは、読み取り、dry-run、確認、実行、レビュー返却の順�
 
 ## 9言語
 
-日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語に対応します。言語設定は端末単位で保存し、Firebase同期には含めません。日付・数値・比較順はIntl APIを使います。
+日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語に対応します。言語設定は端末単位で保存し、クラウド同期には含めません。日付・数値・比較順はIntl APIを使います。
 
 ## 外部サービスのロードマップ
 
@@ -127,13 +127,12 @@ Pixel 9相当を基準に、LCP 2.5秒以下、INP 200ms以下、CLS 0.1以下�
 
 ## ローカル開発
 
-要件はNode.js 22+、Firebase CLI、Wranglerです。
+要件はNode.js 22+とWranglerです。Appwriteのリソース管理にはAppwrite ConsoleまたはMCPを使います。
 
 ```bash
 npm install
-cp firebase-config.example.js firebase-config.js
+cp appwrite-config.example.js appwrite-config.js
 cp runtime-config.example.js runtime-config.js
-cp .firebaserc.example .firebaserc
 cp wrangler.example.jsonc wrangler.jsonc
 npm run dev
 ```
@@ -151,7 +150,7 @@ npm run worker:dev
 
 TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自動生成します。`npm run typecheck`は型生成、生成結果の整合性確認、明示的な`any`と`@ts-nocheck`の検査、ブラウザ・Worker・Node・バトル原型のstrict型チェックをまとめて実行します。Viteの変換と型チェックは分離し、API/MCPの契約は別テストで維持します。
 
-公開デプロイは `v*` タグ専用GitHub Actionsです。WorkerのD1 migration・deploy・health確認が成功した場合だけFirebaseを更新します。今回の作業終了地点は、**実装・テスト・スクリーンショット検証済みのデプロイ直前**です。
+公開デプロイは `v*` タグ専用GitHub Actionsです。D1 migration、Worker deploy、health確認の順にゲートし、Appwrite Sitesの公開先をスモークテストします。Firebaseからの移行は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)の検証と切替手順に従います。
 
 ## ドキュメント
 

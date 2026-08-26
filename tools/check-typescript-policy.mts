@@ -4,7 +4,8 @@ import { extname, join, relative } from "node:path";
 const sourceRoots = [
   "app.ts",
   "main.ts",
-  "firebase-client.ts",
+  "appwrite-client.ts",
+  "appwrite-auth.ts",
   "questforge-core.ts",
   "i18n.ts",
   "i18n-browser.ts",
@@ -45,8 +46,8 @@ const ignoredDirectories = new Set([
   "webgl-build",
 ]);
 const allowedJavaScript = new Set([
-  "firebase-config.js",
-  "firebase-config.example.js",
+  "appwrite-config.js",
+  "appwrite-config.example.js",
   "runtime-config.js",
   "runtime-config.example.js",
 ]);

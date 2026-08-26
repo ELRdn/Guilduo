@@ -12,8 +12,8 @@ import("./telemetry.ts").then(({ initializeTelemetry }) => {
   globalThis.dispatchEvent?.(new CustomEvent("questforge:telemetry-ready"));
 }).catch(() => {});
 
-import("./firebase-client.ts").catch((error) => {
-  console.warn("QuestForge Firebase module failed to load:", error);
+import("./appwrite-client.ts").catch((error) => {
+  console.warn("Guilduo Appwrite module failed to load:", error);
   const status = document.querySelector<HTMLElement>("#syncStatus");
   const panel = document.querySelector<HTMLElement>("#syncPanel");
   if (status) status.textContent = globalThis.QuestForgeI18n?.t?.("sync.local") || "Local storage";

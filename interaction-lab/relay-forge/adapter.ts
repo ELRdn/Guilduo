@@ -148,13 +148,23 @@ function stateLabelFor(quest: Quest, holder: Actor | undefined): string {
     case "accepted":
       return `${holderName} accepted the output`;
     default:
-      return quest.lifecycleState === "completed" ? "Completed" : "Not started";
+      return quest.done || quest.lifecycleState === "completed" ? "Completed" : "Not started";
   }
 }
 
 /** Relay derived from the Quest's own assignee and handoff record. */
 function spineFor(quest: Quest, selfActorId: string): RelaySpine {
   const agentId = quest.assignee.type === "agent" ? quest.assignee.id : selfActorId;
+  if (quest.done || quest.lifecycleState === "completed") {
+    return {
+      legs: [
+        { actorId: agentId, connector: "completed", nodeState: "completed" },
+        { actorId: selfActorId, connector: null, nodeState: "completed" },
+      ],
+      currentIndex: 1,
+      hiddenBefore: 0,
+    };
+  }
   switch (quest.assignee.handoffState) {
     case "review_required":
       return {
@@ -232,6 +242,8 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
   const interventions: Intervention[] = [];
 
   for (const quest of options.quests) {
+    // Command is an operational surface. Archived history stays available in Quests.
+    if (quest.lifecycleState === "archived") continue;
     if (quest.assignee.type === "agent" && !known.has(quest.assignee.id)) {
       known.set(quest.assignee.id, placeholderActor(quest.assignee.id, "agent"));
     }

@@ -27,6 +27,7 @@ import {
 } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el, svg } from "./dom.ts";
+import type { QuestActionId, QuestActionState } from "../quest-actions.ts";
 
 export interface SelectedQuestOptions {
   readonly writeLocked: boolean;
@@ -35,6 +36,8 @@ export interface SelectedQuestOptions {
   readonly onReviewOutput: (artifactId: string) => void;
   readonly onClosePreview: () => void;
   readonly onRequestRevision: () => void;
+  readonly questActions: QuestActionState;
+  readonly onQuestAction: (action: QuestActionId) => void;
 }
 
 /* ------------------------------------------------------------------ *
@@ -279,6 +282,19 @@ export function selectedQuestWorkspace(
     "Request revision",
   );
   requestRevision.addEventListener("click", options.onRequestRevision);
+  const actionLabels: Readonly<Record<QuestActionId, string>> = {
+    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive",
+  };
+  const taskActions = options.questActions.actions.map((action, index) => {
+    const button = el("button", {
+      type: "button",
+      class: index === 0 ? "rf-review-button" : "rf-secondary-button",
+      "data-quest-action": action,
+      disabled: options.writeLocked ? true : null,
+    }, actionLabels[action]);
+    button.addEventListener("click", () => options.onQuestAction(action));
+    return button;
+  });
 
   const header = el(
     "header",
@@ -296,8 +312,7 @@ export function selectedQuestWorkspace(
       el(
         "div",
         { class: "rf-selected-actions" },
-        reviewOutput,
-        requestRevision,
+        ...(options.questActions.mode === "handoff-decision" ? [reviewOutput, requestRevision] : taskActions),
         el(
           "button",
           { type: "button", class: "rf-icon-button", title: "More actions" },

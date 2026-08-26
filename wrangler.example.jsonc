@@ -6,13 +6,14 @@
 	"compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "vars": {
-    "FIREBASE_PROJECT_ID": "your-firebase-project-id",
-    "FIREBASE_DATABASE_URL": "https://your-firebase-project-id-default-rtdb.REGION.firebasedatabase.app",
-    "FIREBASE_API_KEY": "your-public-firebase-web-api-key",
-    "FIREBASE_AUTH_DOMAIN": "your-firebase-project-id.firebaseapp.com",
+    "APPWRITE_ENDPOINT": "https://sgp.cloud.appwrite.io/v1",
+    "APPWRITE_PROJECT_ID": "your-appwrite-project-id",
+    "APPWRITE_DATABASE_ID": "guilduo",
+    "APPWRITE_STATE_TABLE_ID": "user_states",
+    "APPWRITE_LEGACY_TABLE_ID": "legacy_states",
     "PUBLIC_BASE_URL": "https://your-questforge-worker.example.workers.dev",
-    "WEB_APP_URL": "https://your-firebase-project-id.web.app",
-    "ALLOWED_ORIGINS": "https://your-firebase-project-id.web.app,http://localhost:5173,http://127.0.0.1:5173"
+    "WEB_APP_URL": "https://your-guilduo-site.appwrite.network",
+    "ALLOWED_ORIGINS": "https://your-guilduo-site.appwrite.network,http://localhost:5173,http://127.0.0.1:5173"
   },
   "triggers": { "crons": ["*/15 * * * *"] },
   "d1_databases": [

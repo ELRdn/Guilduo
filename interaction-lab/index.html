@@ -4,26 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#20292d" />
-    <title>QuestForge Interaction Lab</title>
+    <title>Guilduo Interaction Lab</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="../assets/icons/icon-192.png" />
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar" aria-label="QuestForge navigation">
+      <aside class="sidebar" aria-label="Guilduo navigation">
         <div class="brand">
           <span class="brand-mark">QF</span>
           <span class="brand-copy">
-            <strong>QuestForge</strong>
-            <small>FORGE OPS <b class="beta-badge">BETA</b></small>
+            <strong>Guilduo</strong>
+            <small>RELAY FORGE <b class="beta-badge">BETA</b></small>
           </span>
         </div>
-        <div class="reference-brand" aria-label="QuestForge Agent Command Center">
+        <div class="reference-brand" aria-label="Guilduo Agent Command Center">
           <span class="reference-brand-mark"><span data-qf-icon="bot" data-qf-icon-size="19"></span></span>
           <span class="reference-brand-copy"><strong>QUESTFORGE</strong><small>AI Agent Command Center</small><em>/next/</em></span>
         </div>
 
-        <a class="legacy-link" href="../" aria-label="QuestForge現行版へ戻る">現行版へ戻る</a>
+        <a class="legacy-link" href="../" aria-label="Guilduo現行版へ戻る">現行版へ戻る</a>
         <section id="designLabControls" class="design-lab-controls" aria-label="Design Lab controls">
           <p>DESIGN LAB</p>
           <label><span>Theme</span><select id="labThemeSelect"><option value="arcane">Arcane</option><option value="soft-ops">Soft Ops</option><option value="retro">Retro</option></select></label>
@@ -361,7 +361,7 @@
           </div>
           <section class="integration-runway">
             <ol>
-            <li class="is-done"><b>1</b><span data-i18n="integration.step.login">QuestForgeへログイン</span></li>
+            <li class="is-done"><b>1</b><span data-i18n="integration.step.login">Guilduoへログイン</span></li>
             <li class="is-current"><b>2</b><span data-i18n="integration.step.connect">サービスを接続</span></li>
             <li><b>3</b><span data-i18n="integration.step.resource">対象を選択</span></li>
             <li><b>4</b><span data-i18n="integration.step.sync">プレビューして同期</span></li>
@@ -391,7 +391,7 @@
               <button class="primary-action" type="button" id="syncButton" data-i18n="integration.confirmSync">同期を確認</button>
             </div>
           </section>
-          <p class="integration-public-beta-note" id="integrationPublicBetaNote" role="status">公開βでは外部サービスのOAuth接続を準備中です。FirebaseログインとMCP接続は利用できます。</p>
+          <p class="integration-public-beta-note" id="integrationPublicBetaNote" role="status">公開βでは外部サービスのOAuth接続を準備中です。GuilduoログインとMCP接続は利用できます。</p>
         </section>
 
         <section class="view" data-panel="profile" aria-labelledby="profileTitle" hidden>
@@ -425,13 +425,13 @@
               </dl>
             </section>
             <section class="profile-current-card">
-              <p>CURRENT CAMPAIGN</p><h2 id="campaignTitle">QuestForgeの公開準備</h2>
+              <p>CURRENT CAMPAIGN</p><h2 id="campaignTitle">Guilduoの公開準備</h2>
               <meter min="0" max="100" value="72">72</meter><span id="campaignProgress">72% / 3つの子Questのうち1つを完了</span>
               <button type="button" class="secondary-action" data-view="tree" id="openTreeButton">Quest Treeを開く</button>
             </section>
             <section class="profile-log-card">
               <p>ACCOUNT STATUS</p><h2 id="accountStatusTitle">同期と安全性</h2>
-              <dl><div><dt id="storageLocationLabel">保存先</dt><dd>Firebase同期</dd></div><div><dt id="externalConnectionsLabel">外部連携</dt><dd>2 connected</dd></div><div><dt id="aiConnectionLabel">AI接続</dt><dd>MCP ready</dd></div></dl>
+              <dl><div><dt id="storageLocationLabel">保存先</dt><dd>Appwrite同期</dd></div><div><dt id="externalConnectionsLabel">外部連携</dt><dd>2 connected</dd></div><div><dt id="aiConnectionLabel">AI接続</dt><dd>MCP ready</dd></div></dl>
               <button type="button" class="secondary-action" data-view="integrations" id="checkConnectionsButton">連携を確認</button>
             </section>
           </div>
@@ -464,7 +464,7 @@
               <button type="button" class="secondary-action" id="integrationShortcut" data-view="integrations">連携</button>
             </section>
             <section class="settings-card settings-connection-card">
-              <p>DATA / SYNC</p><h2 id="connectionHeading">QuestForge本体と接続</h2>
+              <p>DATA / SYNC</p><h2 id="connectionHeading">Guilduo本体と接続</h2>
               <div class="connection-status">
                 <strong id="dataSourceStatus" data-status="local-only">この端末に保存中</strong>
                 <small id="connectionUser">Googleログイン前。ローカルモードで利用中</small>
@@ -477,7 +477,7 @@
                 <button type="button" class="secondary-action" id="signOutButton" hidden>ログアウト</button>
                 <button type="button" class="secondary-action" id="useLocalButton">ローカルへ戻す</button>
               </div>
-              <label class="connection-preference"><input id="autoConnectToggle" type="checkbox" disabled /><span><b id="autoConnectTitle">起動時に本体へ自動接続</b><small id="autoConnectCopy">この端末のQuestForge起動時に自動で同期します。</small></span></label>
+              <label class="connection-preference"><input id="autoConnectToggle" type="checkbox" disabled /><span><b id="autoConnectTitle">起動時に本体へ自動接続</b><small id="autoConnectCopy">この端末のGuilduo起動時に自動で同期します。</small></span></label>
               <dl class="connection-meta"><div><dt id="lastSyncLabel">最終同期</dt><dd id="lastSyncAt">未同期</dd></div><div><dt id="currentStorageLabel">現在の保存先</dt><dd id="connectionMode">この端末</dd></div></dl>
             </section>
             <section class="settings-card settings-agent-card">
@@ -497,7 +497,7 @@
             </section>
           </div>
           <section class="settings-reference-surface" data-vf-id="InspectorShell" aria-label="Reference Control Plane Settings">
-            <header class="settings-reference-heading"><p>SETTINGS</p><h2>Control Plane Settings</h2><span>QuestForgeの表示、Agent、連携、安全性を管理します。</span></header>
+            <header class="settings-reference-heading"><p>SETTINGS</p><h2>Control Plane Settings</h2><span>Guilduoの表示、Agent、連携、安全性を管理します。</span></header>
             <div class="settings-reference-shell">
               <nav class="settings-reference-nav" aria-label="Settings sections">
                 <button type="button" class="is-active">General</button><button type="button">Appearance</button><button type="button">Agents</button><button type="button">MCP</button><button type="button">Integrations</button><button type="button">Battle</button><button type="button">Notifications</button><button type="button">Privacy &amp; Security</button><button type="button">Developer</button>

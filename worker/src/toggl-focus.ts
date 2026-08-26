@@ -507,7 +507,7 @@ export async function syncQuestToTogglFocus(env: WorkerEnv, identity: Identity, 
   }
   const normalized = normalizedTask(remote);
   if (!normalized.id) throw integrationError(502, "provider_invalid_response", "Toggl Focus did not return a task ID.");
-  // Save the remote ID first, so a Firebase retry updates this task instead of creating another one.
+  // Save the remote ID first, so a cloud-sync retry updates this task instead of creating another one.
   await saveTogglFocusTaskLink(env, uid, {
     questId: task.id,
     focusTaskId: normalized.id,
