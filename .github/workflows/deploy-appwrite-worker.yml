@@ -66,8 +66,16 @@ jobs:
           node -e 'const h=JSON.parse(process.argv[1]); if(h.version!=="2.7.0"||h.schemaVersion!==7||h.agentStorage!=="d1") process.exit(1)' "$health"
           curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-authorization-server' >/dev/null
           test "$(curl -s -o /dev/null -w '%{http_code}' '${{ vars.WORKER_BASE_URL }}/v1/quests')" = "401"
-          cors="$(curl -sS -D - -o /dev/null -X OPTIONS \
-            -H 'Origin: ${{ vars.WEB_APP_URL }}' \
-            -H 'Access-Control-Request-Method: GET' \
-            '${{ vars.WORKER_BASE_URL }}/v1/quests')"
-          printf '%s' "$cors" | grep -qi "access-control-allow-origin: ${{ vars.WEB_APP_URL }}"
+          cors_ok=false
+          for attempt in {1..10}; do
+            cors="$(curl -sS -D - -o /dev/null -X OPTIONS \
+              -H 'Origin: ${{ vars.WEB_APP_URL }}' \
+              -H 'Access-Control-Request-Method: GET' \
+              '${{ vars.WORKER_BASE_URL }}/v1/quests')"
+            if printf '%s' "$cors" | tr -d '\r' | grep -Fqi "access-control-allow-origin: ${{ vars.WEB_APP_URL }}"; then
+              cors_ok=true
+              break
+            fi
+            sleep 3
+          done
+          test "$cors_ok" = true
