@@ -1,0 +1,1613 @@
+/* Relay Forge primitives — NEWDESIGNv2.md sections 4-9.
+ *
+ * Attention Shelf, Quest Loom spine, Selected Quest workspace, Responsibility
+ * Relay, Details / Evidence, Intervention Lens and the Chronicle strip.
+ *
+ * Every colour, size, spacing, radius, duration and z-index resolves to a token
+ * from tokens.css. Region separation uses hierarchy, spacing, alignment and a
+ * surface shift before it reaches for a divider, and never for another card. */
+
+/* ---------------------------------------------------------------- *
+ * Shared region label — section 9.2
+ * ---------------------------------------------------------------- */
+
+.rf-region-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+  margin: 0;
+}
+
+.rf-region-count {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+/* ---------------------------------------------------------------- *
+ * Actor grammar — geometry first, colour second
+ * ---------------------------------------------------------------- */
+
+.rf-actor-node {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--qf-space-8);
+  height: var(--qf-space-8);
+}
+
+.rf-actor-shape { width: 100%; height: 100%; overflow: visible; }
+
+.rf-actor-node[data-actor-kind="human"] { color: var(--qf-color-human); }
+.rf-actor-node[data-actor-kind="agent"] { color: var(--qf-color-agent); }
+.rf-actor-node[data-actor-kind="system"] { color: var(--qf-color-system); }
+.rf-actor-node[data-actor-kind="companion"] { color: var(--qf-color-agent); }
+
+.rf-actor-node[data-filled="true"] .rf-actor-mark { stroke: var(--qf-color-field); }
+
+/* State overrides actor colour only where the state is the point. */
+.rf-actor-node[data-actor-state="blocked"] { color: var(--qf-color-danger); }
+.rf-actor-node[data-actor-state="review"] { color: var(--qf-color-review); }
+.rf-actor-node[data-actor-state="completed"] { color: var(--qf-color-success); }
+
+.rf-actor-identity { display: inline-flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
+.rf-actor-copy { display: flex; flex-direction: column; min-width: 0; }
+
+.rf-actor-name {
+  font: var(--qf-text-component);
+  color: var(--qf-color-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-actor-type { font: var(--qf-text-label); letter-spacing: 0.06em; color: var(--qf-color-fg-muted); }
+.rf-actor-role { font: var(--qf-text-metadata); color: var(--qf-color-fg-muted); }
+
+.rf-actor-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--qf-space-8);
+  height: var(--qf-space-8);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-border-width) solid currentColor;
+  font: var(--qf-text-micro);
+}
+
+/* ---------------------------------------------------------------- *
+ * 4. Attention Shelf
+ * ---------------------------------------------------------------- */
+
+.rf-shelf { display: flex; flex-direction: column; gap: var(--qf-space-4); }
+
+.rf-shelf-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--qf-space-5);
+}
+
+.rf-shelf-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--qf-space-5);
+}
+
+.rf-shelf-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head  actor"
+    "body  actor";
+  align-items: start;
+  gap: var(--qf-space-3) var(--qf-space-5);
+  min-height: calc(var(--qf-relay-default) + var(--qf-space-9));
+  padding: var(--qf-space-5) var(--qf-space-6);
+  text-align: left;
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-md);
+  transition: border-color var(--qf-motion-quick) var(--qf-ease-move),
+    background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-shelf-card:hover { border-color: var(--qf-color-border-strong); }
+
+/* Only the selected card is emphasised — restrained tint plus a 2px review
+ * border. No glow, no shadow, no scale (section 4). */
+.rf-shelf-card[data-selected="true"] {
+  border-width: var(--qf-selection-width);
+  border-color: var(--qf-color-review);
+  background: var(--qf-color-selected);
+}
+
+.rf-shelf-head { grid-area: head; display: flex; align-items: center; gap: var(--qf-space-4); }
+.rf-shelf-body { grid-area: body; display: flex; flex-direction: column; gap: var(--qf-space-3); min-width: 0; }
+.rf-shelf-actor { grid-area: actor; display: flex; flex-direction: column; align-items: center; gap: var(--qf-space-2); }
+
+/* Non-colour severity marks: diamond, plus, asterisk. */
+.rf-shelf-mark {
+  flex: none;
+  width: var(--qf-space-6);
+  height: var(--qf-space-6);
+  border: var(--qf-border-width) solid currentColor;
+}
+
+.rf-shelf-mark[data-severity="blocked"] { transform: rotate(45deg) scale(0.82); color: var(--qf-color-danger); }
+.rf-shelf-mark[data-severity="review"] { border-radius: var(--qf-radius-pill); color: var(--qf-color-review); }
+.rf-shelf-mark[data-severity="waiting"] { border-radius: var(--qf-radius-pill); border-style: dashed; color: var(--qf-color-waiting); }
+
+.rf-shelf-mark::after {
+  content: "";
+  position: absolute;
+}
+
+.rf-shelf-severity {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rf-shelf-card[data-severity="blocked"] .rf-shelf-severity { color: var(--qf-color-danger); }
+.rf-shelf-card[data-severity="review"] .rf-shelf-severity { color: var(--qf-color-review); }
+.rf-shelf-card[data-severity="waiting"] .rf-shelf-severity { color: var(--qf-color-waiting); }
+
+.rf-shelf-selected {
+  font: var(--qf-text-micro);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-inset);
+  border-radius: var(--qf-radius-xs);
+  padding: 0 var(--qf-space-3);
+  line-height: var(--qf-space-6);
+}
+
+.rf-shelf-age {
+  margin-left: auto;
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-shelf-reason {
+  font: var(--qf-text-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--qf-color-fg-strong);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rf-shelf-card[data-selected="true"] .rf-shelf-reason { color: var(--qf-color-fg-strong); }
+
+.rf-shelf-foot { display: flex; align-items: center; gap: var(--qf-space-5); }
+
+.rf-shelf-ref {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-shelf-count { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-danger); }
+
+.rf-shelf-actor-name {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- *
+ * 5. Quest Loom — chronology spine + dependency threads
+ * ---------------------------------------------------------------- */
+
+.rf-spine {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-md);
+  overflow: hidden;
+}
+
+.rf-spine-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-space-11);
+  padding-inline: var(--qf-space-5);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-spine-header .rf-region-label { flex: 1; }
+
+.rf-spine-grip {
+  width: var(--qf-space-5);
+  height: var(--qf-space-5);
+  border-top: var(--qf-border-width) solid var(--qf-color-fg-muted);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-fg-muted);
+  box-shadow: inset 0 0 0 0 transparent;
+  position: relative;
+}
+
+.rf-spine-grip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--qf-color-fg-muted);
+}
+
+.rf-spine-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--qf-space-4) var(--qf-space-5) var(--qf-space-6);
+}
+
+/* Row: [thread + node] [body]. The thread column carries the chronology spine
+ * and, for branch rows, the orthogonal dependency turn. */
+.rf-spine-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--qf-space-8) minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--qf-space-4);
+  padding: var(--qf-space-4) var(--qf-space-4) var(--qf-space-4) 0;
+  cursor: pointer;
+  border-radius: var(--qf-radius-sm);
+  transition: background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-spine-row:hover { background: var(--qf-color-inset); }
+
+/* Chronology spine: a 1px vertical line through the node column. */
+.rf-spine-thread {
+  position: absolute;
+  left: calc(var(--qf-space-8) / 2);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--qf-color-border-default);
+}
+
+/* Caps are global: only the first and last rows of the whole spine stop short,
+ * so the chronology line stays continuous through the hub. */
+.rf-spine-row[data-first="true"] .rf-spine-thread { top: var(--qf-space-7); }
+.rf-spine-row[data-last="true"] .rf-spine-thread { bottom: calc(100% - var(--qf-space-7)); }
+
+/* The hub sits on the spine rather than interrupting it. */
+.rf-spine-row[data-relation="hub"] .rf-spine-thread {
+  top: calc(var(--qf-space-5) * -1);
+  bottom: calc(var(--qf-space-5) * -1);
+}
+
+.rf-spine-row[data-relation="upstream"] .rf-spine-thread { background: var(--qf-color-success); }
+.rf-spine-row[data-relation="hub"] .rf-spine-thread { background: var(--qf-color-review); }
+
+/* Branch rows indent and take a dashed danger thread with a joint. */
+.rf-spine-row[data-relation="branch"] {
+  margin-left: var(--qf-space-6);
+  padding-left: var(--qf-space-6);
+}
+
+.rf-spine-row[data-relation="branch"] .rf-spine-thread {
+  left: calc(var(--qf-space-6) * -1 + var(--qf-space-8) / 2);
+  border-left: var(--qf-border-width) dashed var(--qf-color-danger);
+  background: none;
+  width: 0;
+}
+
+/* Orthogonal turn into the branch row, with a joint at the trunk. */
+.rf-spine-row[data-relation="branch"]::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--qf-space-6) * -1 + var(--qf-space-8) / 2);
+  top: var(--qf-space-7);
+  width: var(--qf-space-6);
+  border-top: var(--qf-border-width) dashed var(--qf-color-danger);
+}
+
+/* The branch trunk starts at the hub, so the head row draws its own stub. */
+.rf-spine-row[data-branch-head="true"] .rf-spine-thread {
+  top: calc(var(--qf-space-8) * -1);
+}
+
+.rf-spine-node {
+  position: relative;
+  z-index: var(--qf-z-sticky);
+  margin-top: var(--qf-space-4);
+  justify-self: center;
+  width: var(--qf-space-6);
+  height: var(--qf-space-6);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-border-width) solid var(--qf-color-border-strong);
+  background: var(--qf-color-surface);
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-spine-node[data-state="working"] { border-color: var(--qf-color-agent); }
+.rf-spine-node[data-state="review_required"] { border-color: var(--qf-color-review); border-width: var(--qf-selection-width); }
+.rf-spine-node[data-state="waiting"] { border-color: var(--qf-color-waiting); border-style: dashed; }
+.rf-spine-node[data-state="completed"] { border-color: var(--qf-color-success); background: var(--qf-color-success); }
+.rf-spine-node[data-state="blocked"] { border-color: var(--qf-color-danger); }
+
+/* Blocked node keeps a cross so state survives grayscale. */
+.rf-spine-node[data-state="blocked"]::before,
+.rf-spine-node[data-state="blocked"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--qf-space-4);
+  height: 1px;
+  background: var(--qf-color-danger);
+}
+
+.rf-spine-node[data-state="blocked"]::before { transform: rotate(45deg); }
+.rf-spine-node[data-state="blocked"]::after { transform: rotate(-45deg); }
+
+.rf-spine-body { display: flex; flex-direction: column; gap: var(--qf-space-2); min-width: 0; }
+
+.rf-spine-head { display: flex; align-items: baseline; gap: var(--qf-space-4); }
+
+.rf-spine-ref {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-spine-state-word {
+  margin-left: auto;
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-spine-row[data-state="working"] .rf-spine-state-word { color: var(--qf-color-agent); }
+.rf-spine-row[data-state="waiting"] .rf-spine-state-word { color: var(--qf-color-waiting); }
+.rf-spine-row[data-state="blocked"] .rf-spine-state-word { color: var(--qf-color-danger); }
+.rf-spine-row[data-state="completed"] .rf-spine-state-word { color: var(--qf-color-success); }
+
+.rf-spine-title {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--qf-color-fg-default);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rf-spine-blocker {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-danger);
+}
+
+/* The hub is the selected Quest: review border, stronger title, no fill riot. */
+.rf-spine-row[data-relation="hub"] {
+  background: var(--qf-color-selected);
+  border: var(--qf-selection-width) solid var(--qf-color-review);
+  padding-inline: var(--qf-space-4);
+  margin-block: var(--qf-space-3);
+}
+
+.rf-spine-row[data-relation="hub"] .rf-spine-title {
+  font: var(--qf-text-component);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-spine-row[data-relation="hub"] .rf-spine-state-word { color: var(--qf-color-review); }
+
+.rf-spine[data-collapsed="true"] .rf-spine-body,
+.rf-spine[data-collapsed="true"] .rf-region-label,
+.rf-spine[data-collapsed="true"] .rf-spine-grip,
+.rf-spine[data-collapsed="true"] .rf-spine-chevron {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- *
+ * 6. Selected Quest workspace
+ * ---------------------------------------------------------------- */
+
+.rf-selected {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-md);
+}
+
+.rf-selected-header {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-4);
+  padding: var(--qf-space-6) var(--qf-space-8) var(--qf-space-7);
+}
+
+.rf-selected-eyebrow { display: flex; align-items: center; gap: var(--qf-space-5); }
+
+.rf-selected-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-3);
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rf-selected-state::before {
+  content: "";
+  width: var(--qf-space-6);
+  height: var(--qf-space-6);
+  border: var(--qf-border-width) solid currentColor;
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-selected-state[data-kind="review"] { color: var(--qf-color-review); }
+.rf-selected-state[data-kind="blocked"] { color: var(--qf-color-danger); }
+.rf-selected-state[data-kind="waiting"] { color: var(--qf-color-waiting); }
+
+.rf-selected-ref {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-selected-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qf-space-8);
+}
+
+/* Section 6.1: the strongest text on the screen. */
+.rf-selected-title {
+  font-family: var(--qf-font-sans);
+  font-size: 26px;
+  line-height: 34px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--qf-color-fg-strong);
+  min-width: 0;
+}
+
+.rf-selected-actions { display: flex; align-items: center; gap: var(--qf-space-4); flex: none; }
+
+/* `Review output` inspects evidence. It is deliberately lighter than the Lens
+ * `Approve handoff`, which is the final decision (section 8 of the brief). */
+.rf-review-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-control-comfortable);
+  padding-inline: var(--qf-space-6);
+  border-radius: var(--qf-radius-sm);
+  border: var(--qf-selection-width) solid var(--qf-color-review);
+  background: transparent;
+  color: var(--qf-color-review);
+  font: var(--qf-text-component);
+  transition: background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-review-button:hover:not(:disabled) { background: var(--qf-color-selected); }
+.rf-review-button:disabled { border-color: var(--qf-color-border-subtle); color: var(--qf-color-fg-disabled); }
+
+.rf-selected-actions .rf-secondary-button { height: var(--qf-control-comfortable); }
+
+.rf-selected-reason {
+  font: var(--qf-text-body);
+  font-size: 14px;
+  color: var(--qf-color-fg-muted);
+}
+
+/* ---------------------------------------------------------------- *
+ * 6.2 Responsibility Relay
+ * ---------------------------------------------------------------- */
+
+.rf-resp {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-5);
+  padding: var(--qf-space-6) var(--qf-space-8) var(--qf-space-7);
+  border-top: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-resp-track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--qf-space-4);
+}
+
+/* Steps are aligned regions, not three floating cards: only the halted step
+ * gains a border, so the eye lands on where the relay stopped. */
+.rf-resp-step {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-5);
+  min-width: 0;
+  padding: var(--qf-space-5) var(--qf-space-6);
+  border: var(--qf-border-width) solid transparent;
+  border-radius: var(--qf-radius-md);
+  background: var(--qf-color-inset);
+}
+
+.rf-resp-step[data-halt="true"] {
+  border-width: var(--qf-selection-width);
+  background: var(--qf-color-selected);
+}
+
+.rf-resp-step[data-state="review"] { border-color: var(--qf-color-review); }
+.rf-resp-step[data-state="blocked"] { border-color: var(--qf-color-danger); }
+
+.rf-resp-portrait { flex: none; display: flex; }
+.rf-resp-portrait .rf-actor-node { width: var(--qf-space-10); height: var(--qf-space-10); }
+
+.rf-resp-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.rf-resp-name {
+  font: var(--qf-text-component);
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--qf-color-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-resp-step[data-state="executing"] .rf-resp-name { color: var(--qf-color-agent); }
+.rf-resp-step[data-state="review"] .rf-resp-name { color: var(--qf-color-review); }
+.rf-resp-step[data-state="blocked"] .rf-resp-name { color: var(--qf-color-danger); }
+
+.rf-resp-role { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+.rf-resp-state { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); }
+.rf-resp-time {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-resp-arrow { display: flex; align-items: center; color: var(--qf-color-border-strong); }
+.rf-resp-arrow-shape { width: var(--qf-space-9); height: var(--qf-space-5); overflow: visible; }
+.rf-resp-arrow-line,
+.rf-resp-arrow-head { stroke: currentColor; stroke-width: 1.5; fill: none; }
+.rf-resp-arrow[data-state="review"] { color: var(--qf-color-review); }
+.rf-resp-arrow[data-state="blocked"] { color: var(--qf-color-danger); }
+
+/* ---------------------------------------------------------------- *
+ * 6.3 / 6.4 Details and Evidence
+ * ---------------------------------------------------------------- */
+
+.rf-selected-lower {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  border-top: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-details,
+.rf-evidence-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-4);
+  min-width: 0;
+  padding: var(--qf-space-6) var(--qf-space-8) var(--qf-space-8);
+}
+
+.rf-details { border-right: var(--qf-border-width) solid var(--qf-color-border-subtle); }
+
+.rf-details-headline {
+  font: var(--qf-text-body);
+  font-size: 14px;
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-details-sub {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  margin-top: var(--qf-space-3);
+}
+
+.rf-details-list { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+
+.rf-details-point {
+  position: relative;
+  padding-left: var(--qf-space-6);
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--qf-color-fg-default);
+}
+
+.rf-details-point::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: var(--qf-space-2);
+  height: var(--qf-space-2);
+  border-radius: var(--qf-radius-pill);
+  background: var(--qf-color-fg-muted);
+}
+
+.rf-details-outputs,
+.rf-evidence-list { display: flex; flex-direction: column; gap: var(--qf-space-2); }
+
+/* Evidence rows are a list on the field, not stacked cards. Only the Primary
+ * row is raised, so the hierarchy is visible without a badge hunt. */
+.rf-evidence-row {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-3);
+  width: 100%;
+  min-height: var(--qf-control-comfortable);
+  padding: var(--qf-space-3) var(--qf-space-4);
+  text-align: left;
+  border: var(--qf-border-width) solid transparent;
+  border-radius: var(--qf-radius-sm);
+  background: var(--qf-color-inset);
+  transition: border-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-evidence-row:hover { border-color: var(--qf-color-border-default); }
+
+.rf-evidence-row[data-primary="true"] {
+  background: var(--qf-color-selected);
+  border-color: var(--qf-color-review);
+}
+
+.rf-evidence-icon {
+  width: var(--qf-space-6);
+  height: var(--qf-space-7);
+  border: var(--qf-border-width) solid var(--qf-color-fg-muted);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-evidence-badge {
+  font: var(--qf-text-micro);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--qf-color-fg-on-accent);
+  background: var(--qf-color-review);
+  border-radius: var(--qf-radius-xs);
+  padding: 0 var(--qf-space-3);
+  line-height: var(--qf-space-6);
+}
+
+.rf-evidence-name {
+  flex: none;
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  color: var(--qf-color-fg-strong);
+  white-space: nowrap;
+}
+
+.rf-evidence-summary-text,
+.rf-evidence-row .rf-evidence-summary {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-evidence-row > .rf-evidence-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+  display: block;
+}
+
+.rf-evidence-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-2);
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-success);
+  white-space: nowrap;
+}
+
+.rf-evidence-verified[data-ok="false"] { color: var(--qf-color-warning); }
+
+/* The verified mark is a check, not another ring: it saves the width the
+ * artifact summary needs and reads faster at a glance. */
+.rf-evidence-verified::before {
+  content: "";
+  width: var(--qf-space-4);
+  height: var(--qf-space-2);
+  border-left: var(--qf-border-width) solid currentColor;
+  border-bottom: var(--qf-border-width) solid currentColor;
+  transform: rotate(-45deg) translate(0, -1px);
+}
+
+.rf-evidence-time {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- *
+ * 7. Intervention Lens
+ * ---------------------------------------------------------------- */
+
+.rf-lens-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qf-space-4);
+  flex: none;
+  height: var(--qf-space-11);
+  padding-inline: var(--qf-space-6) var(--qf-space-4);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-lens-controls { display: flex; gap: var(--qf-space-1); }
+
+.rf-lens-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--qf-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-7);
+}
+
+.rf-lens-section { display: flex; flex-direction: column; gap: var(--qf-space-4); }
+
+/* WHY is the strongest body text inside the Lens (section 7.1). */
+.rf-lens-reason {
+  font-family: var(--qf-font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-lens-age {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-lens-ref { font: var(--qf-text-operational); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+.rf-lens-object-title {
+  font: var(--qf-text-component);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-lens-state { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
+.rf-lens-scope { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-danger); }
+
+.rf-lens-relay { display: flex; flex-direction: column; }
+
+/* Three tracks: icon, copy, meta. The icon track matches the Lens avatar size
+ * exactly (--qf-space-9 = 32px) so the avatar cannot overflow into the copy
+ * column and swallow the 8px gap, which is what made the name touch the icon.
+ * The track is fixed, so an image avatar and an initials fallback start their
+ * text at the same x. */
+.rf-lens-relay-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--qf-space-9) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--qf-space-4);
+  min-height: var(--qf-control-comfortable);
+  padding-block: var(--qf-space-3);
+}
+
+.rf-lens-relay-row > .rf-avatar { justify-self: center; }
+
+/* One thread joins the Lens relay so it reads as a path, not three rows. */
+.rf-lens-relay-row:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--qf-space-9) / 2);
+  top: 50%;
+  bottom: calc(var(--qf-space-3) * -1);
+  width: 1px;
+  background: var(--qf-color-border-default);
+}
+
+.rf-lens-relay-copy { display: flex; flex-direction: column; min-width: 0; }
+
+.rf-lens-relay-name {
+  font: var(--qf-text-component);
+  font-size: 14px;
+  color: var(--qf-color-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-lens-relay-row[data-state="executing"] .rf-lens-relay-name { color: var(--qf-color-agent); }
+.rf-lens-relay-row[data-state="review"] .rf-lens-relay-name { color: var(--qf-color-review); }
+.rf-lens-relay-row[data-state="blocked"] .rf-lens-relay-name { color: var(--qf-color-danger); }
+
+/* The supporting state sits directly under the name and shares its left edge. */
+.rf-lens-relay-state {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-lens-relay-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.rf-lens-relay-time {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+/* The mark carries a glyph as well as a colour so the relay state survives
+ * grayscale: a check for completed, a bar for executing, a stroke for review. */
+.rf-lens-relay-mark {
+  position: relative;
+  width: var(--qf-space-6);
+  height: var(--qf-space-6);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-border-width) solid var(--qf-color-border-strong);
+}
+
+.rf-lens-relay-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.rf-lens-relay-mark[data-state="completed"]::before {
+  width: var(--qf-space-3);
+  height: var(--qf-space-2);
+  border-left: var(--qf-border-width) solid currentColor;
+  border-bottom: var(--qf-border-width) solid currentColor;
+  transform: rotate(-45deg) translate(0, -1px);
+  color: var(--qf-color-success);
+}
+
+.rf-lens-relay-mark[data-state="executing"]::before {
+  width: var(--qf-space-2);
+  height: var(--qf-space-2);
+  border-radius: var(--qf-radius-pill);
+  background: var(--qf-color-agent);
+}
+
+.rf-lens-relay-mark[data-state="review"]::before,
+.rf-lens-relay-mark[data-state="blocked"]::before {
+  width: 1px;
+  height: var(--qf-space-4);
+  background: currentColor;
+  color: var(--qf-color-review);
+}
+
+.rf-lens-relay-mark[data-state="blocked"]::before { color: var(--qf-color-danger); }
+
+.rf-lens-relay-mark[data-state="completed"] { border-color: var(--qf-color-success); }
+.rf-lens-relay-mark[data-state="executing"] { border-color: var(--qf-color-agent); }
+.rf-lens-relay-mark[data-state="review"] { border-color: var(--qf-color-review); border-width: var(--qf-selection-width); }
+.rf-lens-relay-mark[data-state="blocked"] { border-color: var(--qf-color-danger); }
+
+.rf-evidence {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--qf-space-3) var(--qf-space-5);
+  padding: var(--qf-space-5);
+  background: var(--qf-color-inset);
+  border-radius: var(--qf-radius-sm);
+}
+
+.rf-evidence-label { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); white-space: nowrap; }
+
+.rf-evidence-value {
+  min-width: 0;
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+  overflow-wrap: anywhere;
+}
+
+.rf-evidence-value[data-operational="true"] {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-strong);
+}
+
+/* 7.4 Decision Bar — sticky terminus of the Lens. */
+.rf-decision {
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-4);
+  padding: var(--qf-space-6);
+  background: var(--qf-color-raised);
+  border-top: var(--qf-border-width) solid var(--qf-color-border-default);
+}
+
+.rf-decision-head { display: flex; align-items: center; justify-content: space-between; }
+
+.rf-decision-info {
+  width: var(--qf-space-6);
+  height: var(--qf-space-6);
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-decision-status {
+  font: var(--qf-text-component);
+  font-size: 14px;
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-decision-blocked { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-warning); }
+
+.rf-decision-actions { display: flex; gap: var(--qf-space-4); }
+
+/* The only filled review-coloured control on the screen: the final decision. */
+.rf-decision-approve {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-control-comfortable);
+  padding-inline: var(--qf-space-6);
+  border-radius: var(--qf-radius-sm);
+  background: var(--qf-color-review);
+  color: var(--qf-color-fg-on-accent);
+  font: var(--qf-text-component);
+  transition: background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-decision-approve:hover:not(:disabled) { background: var(--qf-color-warning); }
+
+.rf-decision-approve:disabled {
+  background: var(--qf-color-inset);
+  color: var(--qf-color-fg-disabled);
+}
+
+.rf-decision .rf-secondary-button { height: var(--qf-control-comfortable); }
+
+.rf-decision-impact { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+/* ---------------------------------------------------------------- *
+ * 8. Execution Chronicle
+ * ---------------------------------------------------------------- */
+
+.rf-chronicle-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-5);
+  height: var(--qf-space-11);
+  padding-inline: var(--qf-space-5) var(--qf-space-4);
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-md);
+}
+
+.rf-chronicle-new {
+  font: var(--qf-text-micro);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-inset);
+  border-radius: var(--qf-radius-xs);
+  padding: 0 var(--qf-space-3);
+  line-height: var(--qf-space-6);
+}
+
+.rf-chronicle-latest {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--qf-space-5);
+}
+
+.rf-chronicle-time {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-chronicle-sentence {
+  min-width: 0;
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-chronicle-name { font-weight: 600; color: var(--qf-color-fg-strong); }
+.rf-chronicle-verb { color: var(--qf-color-fg-muted); }
+
+.rf-chronicle-detail {
+  flex: none;
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-chronicle-viewall { margin-left: auto; }
+.rf-chronicle-empty { flex: 1; font: var(--qf-text-metadata); color: var(--qf-color-fg-muted); }
+
+.rf-chronicle-expanded {
+  margin-top: var(--qf-space-4);
+  max-height: 30vh;
+  overflow-y: auto;
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-md);
+}
+
+.rf-chronicle-row {
+  display: grid;
+  grid-template-columns: 72px var(--qf-space-8) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--qf-space-4);
+  min-height: var(--qf-control-comfortable);
+  padding-inline: var(--qf-space-5);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-chronicle-copy { display: flex; align-items: baseline; gap: var(--qf-space-5); min-width: 0; }
+.rf-chronicle-actor { display: flex; align-items: center; }
+
+.rf-chronicle-row[data-kind="blocked"] { border-left: var(--qf-selection-width) solid var(--qf-color-danger); }
+.rf-chronicle-row[data-kind="review_request"] { border-left: var(--qf-selection-width) solid var(--qf-color-review); }
+.rf-chronicle-row[data-kind="review_result"] { border-left: var(--qf-selection-width) solid var(--qf-color-success); }
+.rf-chronicle-row[data-kind="handoff"] { border-left: var(--qf-selection-width) solid var(--qf-color-border-strong); }
+.rf-chronicle-row[data-kind="human_action"] { border-left: var(--qf-selection-width) solid var(--qf-color-human); }
+.rf-chronicle-row[data-kind="agent_execution"] { border-left: var(--qf-selection-width) solid var(--qf-color-agent); }
+.rf-chronicle-row[data-kind="system_event"] { border-left: var(--qf-selection-width) solid transparent; }
+
+.rf-chronicle-group > summary { cursor: pointer; list-style: none; }
+.rf-chronicle-group > summary::-webkit-details-marker { display: none; }
+.rf-chronicle-nested .rf-chronicle-row { padding-left: var(--qf-space-9); background: var(--qf-color-inset); }
+
+/* ---------------------------------------------------------------- *
+ * Narrow adjustments
+ * ---------------------------------------------------------------- */
+
+@media (max-width: 1599px) {
+  .rf-resp-step { padding: var(--qf-space-4) var(--qf-space-5); gap: var(--qf-space-4); }
+  .rf-resp-name { white-space: normal; overflow: visible; }
+  .rf-resp-track { gap: var(--qf-space-3); }
+  .rf-resp-arrow-shape { width: var(--qf-space-7); }
+}
+
+@media (max-width: 1439px) {
+  .rf-selected-title { font-size: 22px; line-height: 30px; }
+  .rf-selected-header,
+  .rf-resp,
+  .rf-details,
+  .rf-evidence-summary { padding-inline: var(--qf-space-6); }
+  .rf-resp-portrait .rf-actor-node { width: var(--qf-space-9); height: var(--qf-space-9); }
+}
+
+@media (max-width: 1199px) {
+  .rf-selected-lower { grid-template-columns: minmax(0, 1fr); }
+  .rf-details { border-right: 0; border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle); }
+  .rf-resp-track { grid-template-columns: minmax(0, 1fr); }
+  .rf-resp-arrow { transform: rotate(90deg); justify-self: center; }
+}
+
+@media (max-width: 900px) {
+  .rf-shelf-track { grid-template-columns: minmax(0, 1fr); }
+
+  /* Evidence rows wrap instead of pushing the artifact time past the viewport. */
+  .rf-evidence-row {
+    flex-wrap: wrap;
+    row-gap: var(--qf-space-2);
+  }
+
+  .rf-evidence-row > .rf-evidence-summary { flex-basis: 100%; }
+  .rf-evidence-time { margin-left: auto; }
+
+  /* The Chronicle strip keeps one clipped line rather than overflowing. */
+  .rf-chronicle-latest { overflow: hidden; }
+  .rf-chronicle-strip { height: auto; padding-block: var(--qf-space-4); }
+  .rf-selected { overflow: visible; }
+  .rf-spine-list { overflow: visible; }
+  .rf-selected-title-row { flex-direction: column; align-items: flex-start; gap: var(--qf-space-5); }
+  .rf-selected-actions { width: 100%; }
+  .rf-review-button { flex: 1; justify-content: center; }
+  .rf-chronicle-detail { display: none; }
+}
+
+/* ---------------------------------------------------------------- *
+ * Actor identity — avatar, marker, identity block (brief A1)
+ *
+ * The frame owns the box, so every fallback step lands in the same place and a
+ * failed image never shifts layout. The marker is a corner badge on top of the
+ * avatar; it says what the actor is doing and never replaces who they are.
+ * ---------------------------------------------------------------- */
+
+.rf-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.rf-avatar[data-size="row"] { width: var(--qf-space-7); height: var(--qf-space-7); }
+.rf-avatar[data-size="shelf"] { width: var(--qf-space-8); height: var(--qf-space-8); }
+.rf-avatar[data-size="lens"] { width: var(--qf-space-9); height: var(--qf-space-9); }
+.rf-avatar[data-size="relay"] { width: var(--qf-space-11); height: var(--qf-space-11); }
+.rf-avatar[data-size="profile"] { width: var(--qf-space-12); height: var(--qf-space-12); }
+
+.rf-avatar-frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: var(--qf-border-width) solid currentColor;
+  background: var(--qf-color-inset);
+}
+
+/* Actor type is carried by the frame silhouette as well as by colour, so the
+ * four kinds stay distinguishable in grayscale and behind any portrait. */
+.rf-avatar-frame[data-actor-kind="human"] { border-radius: var(--qf-radius-pill); color: var(--qf-color-human); }
+.rf-avatar-frame[data-actor-kind="agent"] { border-radius: var(--qf-radius-sm); color: var(--qf-color-agent); }
+.rf-avatar-frame[data-actor-kind="system"] { border-radius: var(--qf-radius-xs); border-style: dashed; color: var(--qf-color-system); }
+.rf-avatar-frame[data-actor-kind="companion"] {
+  border-radius: var(--qf-radius-pill) var(--qf-radius-pill) var(--qf-radius-md) var(--qf-radius-md);
+  color: var(--qf-color-agent);
+}
+
+.rf-avatar-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Role crests are full-body illustrations; bias the crop to the head so the
+   * identity is still readable at 20-28px. */
+  object-position: 50% 18%;
+}
+
+.rf-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font: var(--qf-text-label);
+  letter-spacing: 0.04em;
+  color: currentColor;
+}
+
+.rf-avatar[data-size="row"] .rf-avatar-fallback { font-size: 10px; }
+.rf-avatar[data-size="shelf"] .rf-avatar-fallback { font-size: 11px; }
+.rf-avatar[data-size="lens"] .rf-avatar-fallback { font-size: 12px; }
+.rf-avatar[data-size="relay"] .rf-avatar-fallback { font-size: 15px; }
+
+/* State marker: a small badge on the avatar corner, never the identity. */
+.rf-avatar-marker {
+  position: absolute;
+  right: calc(var(--qf-space-1) * -1);
+  bottom: calc(var(--qf-space-1) * -1);
+  width: var(--qf-space-5);
+  height: var(--qf-space-5);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-selection-width) solid var(--qf-color-surface);
+  background: var(--qf-color-border-strong);
+}
+
+.rf-avatar[data-size="relay"] .rf-avatar-marker { width: var(--qf-space-6); height: var(--qf-space-6); }
+.rf-avatar[data-size="row"] .rf-avatar-marker { width: var(--qf-space-4); height: var(--qf-space-4); }
+
+.rf-avatar-marker[data-state="completed"] { background: var(--qf-color-success); }
+.rf-avatar-marker[data-state="current"] { background: var(--qf-color-agent); }
+.rf-avatar-marker[data-state="review"] { background: var(--qf-color-review); }
+.rf-avatar-marker[data-state="blocked"] { background: var(--qf-color-danger); }
+
+/* The marker also carries a shape so state survives grayscale. */
+.rf-avatar-marker[data-state="completed"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--qf-space-3);
+  height: var(--qf-space-1);
+  border-left: var(--qf-border-width) solid var(--qf-color-surface);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-surface);
+  transform: rotate(-45deg) translate(0, -1px);
+}
+
+.rf-avatar-marker[data-state="review"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 1px;
+  height: var(--qf-space-3);
+  background: var(--qf-color-surface);
+}
+
+.rf-avatar-marker[data-state="blocked"]::before,
+.rf-avatar-marker[data-state="blocked"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 1px;
+  height: var(--qf-space-3);
+  background: var(--qf-color-surface);
+}
+
+.rf-avatar-marker[data-state="blocked"]::before { transform: rotate(45deg); }
+.rf-avatar-marker[data-state="blocked"]::after { transform: rotate(-45deg); }
+
+.rf-identity-block { display: inline-flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
+.rf-identity-copy { display: flex; flex-direction: column; min-width: 0; }
+
+.rf-identity-name {
+  font: var(--qf-text-component);
+  font-size: 14px;
+  color: var(--qf-color-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-identity-meta { display: flex; align-items: baseline; gap: var(--qf-space-3); }
+
+.rf-identity-type {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-identity-secondary { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+/* ---------------------------------------------------------------- *
+ * A3 — the Selected Quest header never scrolls
+ * ---------------------------------------------------------------- */
+
+.rf-selected {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.rf-selected-header {
+  position: relative;
+  z-index: var(--qf-z-sticky);
+  background: var(--qf-color-surface);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-selected-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rf-selected-scroll > .rf-resp { border-top: 0; }
+
+/* ---------------------------------------------------------------- *
+ * A5 — Primary Evidence preview
+ * ---------------------------------------------------------------- */
+
+.rf-evidence-row[data-open="true"] {
+  border-color: var(--qf-color-review);
+  background: var(--qf-color-selected);
+}
+
+.rf-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-5);
+  padding: var(--qf-space-6) var(--qf-space-8) var(--qf-space-8);
+  border-top: var(--qf-border-width) solid var(--qf-color-border-default);
+  background: var(--qf-color-field);
+}
+
+.rf-preview-header {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-5);
+}
+
+.rf-preview-artifact {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-preview-verdict {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-success);
+}
+
+.rf-preview-verdict[data-verdict="fail"] { color: var(--qf-color-danger); }
+/* An unavailable result is stated, never dressed up as a pass. */
+.rf-preview-verdict[data-verdict="unavailable"] { color: var(--qf-color-warning); }
+
+.rf-preview-close { margin-left: auto; }
+
+.rf-preview-unavailable {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--qf-color-warning);
+  padding: var(--qf-space-4) var(--qf-space-5);
+  border-left: var(--qf-selection-width) solid var(--qf-color-warning);
+  background: var(--qf-color-inset);
+}
+
+.rf-preview-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--qf-space-8);
+}
+
+.rf-preview-column { display: flex; flex-direction: column; gap: var(--qf-space-3); min-width: 0; }
+.rf-preview-column .rf-details-sub:first-child { margin-top: 0; }
+
+.rf-preview-changes,
+.rf-preview-checks { display: flex; flex-direction: column; gap: var(--qf-space-2); }
+
+.rf-preview-change {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--qf-space-4);
+  padding: var(--qf-space-2) var(--qf-space-4);
+  background: var(--qf-color-inset);
+  border-left: var(--qf-selection-width) solid var(--qf-color-border-strong);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-preview-change[data-kind="added"] { border-left-color: var(--qf-color-success); }
+.rf-preview-change[data-kind="changed"] { border-left-color: var(--qf-color-review); }
+.rf-preview-change[data-kind="removed"] { border-left-color: var(--qf-color-danger); }
+
+.rf-preview-change-kind {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-preview-change-path {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  color: var(--qf-color-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-preview-change-detail {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-preview-check {
+  display: grid;
+  grid-template-columns: var(--qf-space-6) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--qf-space-4);
+  min-height: var(--qf-control-default);
+}
+
+.rf-preview-check-mark {
+  position: relative;
+  width: var(--qf-space-6);
+  height: var(--qf-space-6);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-border-width) solid var(--qf-color-border-strong);
+}
+
+.rf-preview-check[data-passed="true"] .rf-preview-check-mark { border-color: var(--qf-color-success); }
+.rf-preview-check[data-passed="false"] .rf-preview-check-mark { border-color: var(--qf-color-danger); }
+.rf-preview-check[data-passed="unknown"] .rf-preview-check-mark { border-style: dashed; }
+
+.rf-preview-check[data-passed="true"] .rf-preview-check-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--qf-space-3);
+  height: var(--qf-space-2);
+  border-left: var(--qf-border-width) solid var(--qf-color-success);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-success);
+  transform: rotate(-45deg) translate(0, -1px);
+}
+
+.rf-preview-check-label { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); }
+
+.rf-preview-check-result {
+  font: var(--qf-text-operational);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-preview-affected {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-danger);
+}
+
+.rf-preview-compat { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
+.rf-preview-empty { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+/* Loom rows keep their grammar: the avatar joins the head line and never
+ * displaces the Quest title, dependency thread or state column. */
+.rf-spine-head .rf-avatar { margin-right: var(--qf-space-1); }
+
+/* ---------------------------------------------------------------- *
+ * Decision execution — revision input, result, verification summary
+ * ---------------------------------------------------------------- */
+
+.rf-revision { display: flex; flex-direction: column; gap: var(--qf-space-4); }
+
+.rf-revision-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-revision-input {
+  width: 100%;
+  padding: var(--qf-space-4);
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-inset);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+  resize: vertical;
+}
+
+.rf-revision-input:focus-visible {
+  outline: var(--qf-focus-width) solid var(--qf-color-focus);
+  outline-offset: var(--qf-focus-offset);
+}
+
+.rf-revision-input[aria-invalid="true"] { border-color: var(--qf-color-danger); }
+
+.rf-revision-impact { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+.rf-revision-error { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-danger); }
+
+.rf-decision-verified {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-3);
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-success);
+}
+
+.rf-decision-verified::before {
+  content: "";
+  width: var(--qf-space-4);
+  height: var(--qf-space-2);
+  border-left: var(--qf-border-width) solid currentColor;
+  border-bottom: var(--qf-border-width) solid currentColor;
+  transform: rotate(-45deg) translate(0, -1px);
+}
+
+.rf-decision-result {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  padding: var(--qf-space-3) var(--qf-space-4);
+  border-left: var(--qf-selection-width) solid currentColor;
+  background: var(--qf-color-inset);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-decision-result[data-tone="success"] { color: var(--qf-color-success); }
+.rf-decision-result[data-tone="error"] { color: var(--qf-color-danger); }
+
+.rf-decision[data-phase="submitting"] .rf-decision-approve,
+.rf-decision[data-phase="submitting"] .rf-revision-submit { opacity: 0.7; }
+
+/* Same weight as Approve — it is also a write — but a distinct command. */
+.rf-revision-submit {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-control-comfortable);
+  padding-inline: var(--qf-space-6);
+  border-radius: var(--qf-radius-sm);
+  background: var(--qf-color-review);
+  color: var(--qf-color-fg-on-accent);
+  font: var(--qf-text-component);
+  transition: background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-revision-submit:hover:not(:disabled) { background: var(--qf-color-warning); }
+.rf-revision-submit:disabled { background: var(--qf-color-inset); color: var(--qf-color-fg-disabled); }
+
+/* A 1px ring keeps identity readable at 20-24px, where a portrait alone would
+ * read as a smudge, and it never touches the state marker's corner. */
+.rf-avatar[data-size="row"] .rf-avatar-frame,
+.rf-avatar[data-size="shelf"] .rf-avatar-frame {
+  box-shadow: inset 0 0 0 1px var(--qf-color-canvas);
+}
+
+/* Below 28px the crest crop tightens onto the head so the silhouette survives. */
+.rf-avatar[data-size="row"] .rf-avatar-image {
+  object-position: 50% 12%;
+  transform: scale(1.25);
+}
+
+.rf-avatar[data-size="shelf"] .rf-avatar-image { object-position: 50% 14%; transform: scale(1.15); }
+
+/* The marker sits outside the frame edge so it cannot cover the face. */
+.rf-avatar[data-size="row"] .rf-avatar-marker,
+.rf-avatar[data-size="shelf"] .rf-avatar-marker {
+  right: calc(var(--qf-space-2) * -1);
+  bottom: calc(var(--qf-space-2) * -1);
+  border-width: var(--qf-border-width);
+}

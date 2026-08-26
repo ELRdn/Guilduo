@@ -1,7 +1,7 @@
 ---
 version: alpha
-name: QuestForge Visual Constitution
-description: Visual identity and interaction rules for the QuestForge web surfaces.
+name: Guilduo Visual Constitution
+description: Visual identity and interaction rules for the Guilduo web surfaces.
 colors:
   primary: "#4F8A6D"
   secondary: "#243B3B"
@@ -231,9 +231,9 @@ components:
     padding: "{spacing.sm}"
 ---
 
-# QuestForge Design
+# Guilduo Design
 
-> **English summary:** QuestForge is a restrained RPG disguised as a tactical operations board. The productivity interface is primary, RPG language explains progress and reward, and restrained retro details provide identity. The root `/` surface is the visual baseline; `/next/` documents only its intentional visual and interaction differences.
+> **English summary:** Guilduo is a Human × AI Work Platform presented as a tactical operations board. The work interface is primary, RPG language adds motivation and identity, and Relay, Evidence, and Decision make human-agent coordination explicit. The root `/` surface is the visual baseline; `/next/` documents only its intentional visual and interaction differences.
 
 最終更新: 2026-08-17  
 対象: `0.5.0-beta.1` / REST・MCP `2.7.0` / Schema `7`  
@@ -243,7 +243,7 @@ components:
 
 ## 1. Visual Identity
 
-QuestForgeは、**作業のための作戦盤に、節度あるRPGの手触りを重ねる**。
+Guilduoは、**HumanとAI Agentの作戦盤に、節度あるRPGの手触りを重ねる**。
 
 視覚比率は次で固定する。
 
@@ -564,3 +564,14 @@ error
 | 保管 | archive |
 | 作戦盤 | operations board |
 | 視覚設計正本 | visual source of truth |
+
+## 14. Marketing Landing Page `/lp/`
+
+`/lp/`と`/lp/en/`はGuilduoの公開マーケティングSurfaceであり、現行UI `/`、公開β `/next/`とは責務を分離する。LP固有の情報設計と公式コピーは[`LPDESIGN.md`](LPDESIGN.md)、実Product UIの視覚正本は[`NEWDESIGNv2.md`](NEWDESIGNv2.md)とする。
+
+- LPはWorkbench型とし、実在するCommand、Evidence、Party、BattleのキャプチャをProduct Proofとして使う。
+- Heroの固有表現は`Quest Loom × Human/Agent Relay`とし、HTML、CSS、SVGで構成する。偽のProduct UI、ブラウザchrome、WebGL、常時動く装飾は使わない。
+- Darkを初期presentationとし、LightとSystemを選択可能にする。HumanはGreen、AgentはBlue、ReviewはGoldの意味色を維持する。
+- HeroからProduct Proofへの変化だけを主要motionとする。その他は短い状態遷移に留め、Reduced Motionでは静止した方向図へ置き換える。
+- 日本語と英語を別HTMLとして提供し、情報階層を共有する。CTA、言語、テーマ、比較表は320px幅でも横overflowを作らない。
+- LP用tokenとAssetはLPからだけ読み込み、既存の`/`、`/next/`、`/interaction-lab/`へ適用しない。

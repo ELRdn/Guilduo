@@ -304,6 +304,37 @@ export class QuestForgeRepository {
     });
   }
 
+  /**
+   * Start the provider consent flow for one integration.
+   * `POST /v1/integrations/{id}/connect` is already part of the published
+   * contract (api/openapi.json); this only exposes it to the client. The
+   * response carries the provider redirect the caller must follow — it is never
+   * logged and never rendered as text by any screen.
+   */
+  async connectIntegration(service: string): Promise<JsonRecord> {
+    return this.request(`/v1/integrations/${encodeURIComponent(service)}/connect`, { method: "POST", body: JSON.stringify({ source: "interaction-lab" }) });
+  }
+
+  /**
+   * Revoke and remove a provider connection. Per the contract this does not
+   * delete Quests, which is what the confirmation surface tells the user.
+   */
+  async disconnectIntegration(service: string): Promise<JsonRecord> {
+    return this.request(`/v1/integrations/${encodeURIComponent(service)}/disconnect`, { method: "POST", body: JSON.stringify({ source: "interaction-lab" }) });
+  }
+
+  /**
+   * Preview one battle turn. Same endpoint and same body as `battleCommand`
+   * with `dryRun: true`, which `BattleCommandInput` already allows; the domain
+   * computes the result on a clone and writes nothing.
+   */
+  async previewBattleCommand(command: string, expectedTurn: number): Promise<JsonRecord> {
+    return this.request("/v1/battle/commands", {
+      method: "POST",
+      body: JSON.stringify({ command, expectedTurn, dryRun: true, source: "interaction-lab" }),
+    });
+  }
+
   async listAgents(includeArchived = true): Promise<JsonRecord> {
     return this.request(`/v1/agents?includeArchived=${includeArchived}`);
   }

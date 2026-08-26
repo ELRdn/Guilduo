@@ -2,7 +2,7 @@
 
 Effective date: 2026-08-12
 
-QuestForge is beta task-management and game software. By using a deployed instance, you agree to use it lawfully and not to disrupt the service, access another user's data, abuse OAuth permissions, send malicious webhooks, or distribute content without the necessary rights.
+Guilduo is beta Human × AI work-management software with an RPG motivation layer. By using a deployed instance, you agree to use it lawfully and not to disrupt the service, access another user's data, abuse OAuth permissions, send malicious webhooks, or distribute content without the necessary rights.
 
 ## Accounts And Data
 
@@ -14,10 +14,10 @@ MCP and agent assignments can create or change data. Review previews and confirm
 
 ## External Services
 
-Google, Notion, Toggl Focus, Firebase, Cloudflare, and other connected services are independent providers. Their availability, limits, and terms can change. QuestForge is not responsible for third-party outages or account actions. You are responsible for revoking or rotating a third-party personal API key at its provider when needed.
+Google, Notion, Toggl Focus, Firebase, Cloudflare, and other connected services are independent providers. Their availability, limits, and terms can change. Guilduo is not responsible for third-party outages or account actions. You are responsible for revoking or rotating a third-party personal API key at its provider when needed.
 
 ## Beta Disclaimer
 
-The software is provided without warranty under the GNU AGPL. It may contain bugs, lose availability, or change data formats. Keep backups before experimental sync, plugin, webhook, or AI operations. QuestForge is not medical, legal, financial, or emergency advice.
+The software is provided without warranty under the GNU AGPL. It may contain bugs, lose availability, or change data formats. Keep backups before experimental sync, plugin, webhook, or AI operations. Guilduo is not medical, legal, financial, or emergency advice.
 
 An instance operator may suspend abusive access and should publish any additional local terms required for that deployment.

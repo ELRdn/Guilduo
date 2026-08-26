@@ -1,4 +1,4 @@
-# QuestForge Asset Manifest
+# Guilduo Asset Manifest
 
 > **English summary:** This manifest maps repository assets to their product role, allowed surfaces, display constraints, and fallback behavior. `ASSETS.md` remains the licensing and contribution policy; this file is the usage contract for humans and AI agents.
 
@@ -58,6 +58,16 @@ PWAアイコンはLucide機能アイコンと混同しない。アプリブラ�
 | `assets/equipment/equipment-*.png` | 装備調整・原本 | 開発画面のみ | 本番合成に使わない |
 
 装備はキャラクターごとの座標が未確定であるため、全員へ重ねて表示しない。タスク報酬やGemの意味は`PROJECT_SPEC.md`のドメインルールに従う。
+
+## Landing Page Product Proof
+
+| Path pattern | 役割 | 許可Surface | Source | 表示規則 |
+| --- | --- | --- | --- | --- |
+| `assets/lp/command-*.webp` | Command、Relay、EvidenceのProduct Proof | `/lp/`、`/lp/en/` | `.qa-artifacts/relay-forge/`の検証済みcapture | 縦横比を維持し、最大3点の注釈だけを重ねる |
+| `assets/lp/party-*.webp` | Human、Astra、AgentのParty表現 | `/lp/`、`/lp/en/` | `.qa-artifacts/relay-forge-screens/`の検証済みcapture | identity labelが判読できるサイズを保つ |
+| `assets/lp/battle-*.webp` | Quest報酬とBattleの体験層 | `/lp/`、`/lp/en/` | `.qa-artifacts/relay-forge-screens/`の検証済みcapture | RPGをProductの主identityとして誇張しない |
+
+LP用captureは決定的fixtureだけを使い、個人情報、認証情報、秘密情報を含めない。Product UIをLP専用HTMLで描き直さず、公開用WebPは元captureを変形・合成せず圧縮する。
 
 ## 追加Assetの受入条件
 

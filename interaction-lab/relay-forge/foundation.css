@@ -1,0 +1,411 @@
+/* Relay Forge foundation: reset, typography roles, control primitives.
+ *
+ * Every value below resolves to a token from tokens.css (NEWDESIGN.md section
+ * 27). The only literals are the 1px hairlines and the 0/100% normalisation that
+ * section 25.1 point 3 permits. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--qf-color-canvas);
+  color: var(--qf-color-fg-default);
+  font: var(--qf-text-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+#relay-forge-root {
+  height: 100%;
+}
+
+.rf-bootstrap {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: var(--qf-space-4);
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: var(--qf-space-8);
+  color: var(--qf-color-fg-default);
+}
+
+.rf-bootstrap-brand {
+  color: var(--qf-color-accent-review);
+  font: var(--qf-text-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rf-bootstrap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qf-space-3);
+  margin-top: var(--qf-space-3);
+}
+
+.rf-bootstrap button {
+  min-height: 44px;
+  padding: 0 var(--qf-space-5);
+  border: 1px solid var(--qf-color-border-strong);
+  background: var(--qf-color-surface-raised);
+  color: var(--qf-color-fg-default);
+}
+
+.rf-bootstrap .rf-bootstrap-primary {
+  border-color: var(--qf-color-accent-review);
+  background: var(--qf-color-accent-review);
+  color: var(--qf-color-canvas);
+}
+
+h1,
+h2,
+h3,
+p,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+/* Section 23: focus is always visible and never replaced by hover. */
+:where(a, button, [tabindex]):focus-visible {
+  outline: var(--qf-focus-width) solid var(--qf-color-focus);
+  outline-offset: var(--qf-focus-offset);
+}
+
+.rf-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rf-skip-link {
+  position: absolute;
+  left: var(--qf-space-2);
+  top: var(--qf-space-2);
+  z-index: var(--qf-z-tooltip);
+  padding: var(--qf-space-2) var(--qf-space-5);
+  background: var(--qf-color-raised);
+  color: var(--qf-color-fg-strong);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+  font: var(--qf-text-component);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.rf-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* ---------------------------------------------------------------- *
+ * Type roles — section 8.2
+ * ---------------------------------------------------------------- */
+
+.rf-page-title {
+  font: var(--qf-text-page);
+  letter-spacing: -0.015em;
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-pane-title {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-space-7);
+  font: var(--qf-text-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-pane-count {
+  font: var(--qf-text-operational);
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-default);
+}
+
+.rf-kbd {
+  font: var(--qf-text-micro);
+  letter-spacing: 0.02em;
+  color: var(--qf-color-fg-muted);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-xs);
+  padding: 0 var(--qf-space-2);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- *
+ * Controls — section 14.8
+ * ---------------------------------------------------------------- */
+
+.rf-primary-button,
+.rf-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--qf-control-default);
+  border-radius: var(--qf-radius-sm);
+  font: var(--qf-text-component);
+  white-space: nowrap;
+  transition: background-color var(--qf-motion-quick) var(--qf-ease-move),
+    border-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-primary-button {
+  padding-inline: var(--qf-space-5);
+  background: var(--qf-color-accent);
+  color: var(--qf-color-fg-on-accent);
+}
+
+.rf-primary-button:hover:not(:disabled) {
+  background: var(--qf-color-accent-hover);
+}
+
+.rf-secondary-button {
+  padding-inline: var(--qf-space-4);
+  background: var(--qf-color-surface);
+  color: var(--qf-color-fg-default);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+}
+
+.rf-secondary-button:hover:not(:disabled) {
+  border-color: var(--qf-color-border-strong);
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-primary-button:disabled,
+.rf-secondary-button:disabled {
+  color: var(--qf-color-fg-disabled);
+  background: var(--qf-color-surface);
+  border-color: var(--qf-color-border-subtle);
+}
+
+.rf-quiet-button {
+  display: inline-flex;
+  align-items: center;
+  height: var(--qf-control-compact);
+  padding-inline: var(--qf-space-4);
+  border-radius: var(--qf-radius-sm);
+  border: var(--qf-border-width) solid transparent;
+  font: var(--qf-text-compact);
+  color: var(--qf-color-fg-muted);
+  transition: color var(--qf-motion-quick) var(--qf-ease-move),
+    border-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-quiet-button:hover:not(:disabled) {
+  color: var(--qf-color-fg-strong);
+  border-color: var(--qf-color-border-default);
+}
+
+.rf-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--qf-control-compact);
+  height: var(--qf-control-compact);
+  border-radius: var(--qf-radius-sm);
+  color: var(--qf-color-fg-muted);
+  transition: color var(--qf-motion-quick) var(--qf-ease-move),
+    background-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-icon-button:hover {
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-selected);
+}
+
+/* Icon-button marks are drawn from borders so no icon font is required. */
+.rf-close-mark,
+.rf-pin-mark {
+  position: relative;
+  width: var(--qf-space-5);
+  height: var(--qf-space-5);
+}
+
+.rf-close-mark::before,
+.rf-close-mark::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 1px;
+  background: currentColor;
+}
+
+.rf-close-mark::before {
+  transform: rotate(45deg);
+}
+
+.rf-close-mark::after {
+  transform: rotate(-45deg);
+}
+
+.rf-pin-mark::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 1px;
+  background: currentColor;
+}
+
+.rf-pin-mark::after {
+  content: "";
+  position: absolute;
+  top: var(--qf-space-1);
+  left: 50%;
+  width: var(--qf-space-4);
+  height: var(--qf-space-4);
+  border: var(--qf-border-width) solid currentColor;
+  transform: translateX(-50%);
+}
+
+[aria-pressed="true"] > .rf-pin-mark::after {
+  background: currentColor;
+}
+
+/* Filter chip — section 14.8, only present while a filter is active. */
+.rf-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qf-space-2);
+  height: var(--qf-control-compact);
+  padding-inline: var(--qf-space-4);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-pill);
+  font: var(--qf-text-metadata);
+  color: var(--qf-color-fg-default);
+}
+
+.rf-filter-chip::after {
+  content: "×";
+  color: var(--qf-color-fg-muted);
+}
+
+/* Tabs — underline, never a pill group. */
+.rf-tab {
+  height: var(--qf-space-9);
+  padding-inline: var(--qf-space-4);
+  font: var(--qf-text-component);
+  color: var(--qf-color-fg-muted);
+  border-bottom: var(--qf-selection-width) solid transparent;
+  transition: color var(--qf-motion-quick) var(--qf-ease-move),
+    border-color var(--qf-motion-quick) var(--qf-ease-move);
+}
+
+.rf-tab[data-selected="true"] {
+  color: var(--qf-color-fg-strong);
+  border-bottom-color: var(--qf-color-accent);
+}
+
+.rf-result-count {
+  font: var(--qf-text-metadata);
+  font-variant-numeric: tabular-nums;
+  color: var(--qf-color-fg-muted);
+}
+
+/* ---------------------------------------------------------------- *
+ * States — section 14.10
+ * ---------------------------------------------------------------- */
+
+.rf-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qf-space-4);
+  padding: var(--qf-space-6);
+  max-width: 44ch;
+}
+
+.rf-state-title {
+  font: var(--qf-text-component);
+  color: var(--qf-color-fg-strong);
+}
+
+.rf-state-body {
+  font: var(--qf-text-compact);
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-state--error .rf-state-title {
+  color: var(--qf-color-danger);
+}
+
+.rf-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rf-skeleton-row {
+  height: var(--qf-relay-default);
+  background: var(--qf-color-surface);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+
+.rf-skeleton[data-variant="queue"] .rf-skeleton-row {
+  height: var(--qf-relay-default);
+}
+
+.rf-skeleton[data-variant="chronicle"] .rf-skeleton-row {
+  height: var(--qf-control-comfortable);
+}
+
+.rf-stale-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  height: var(--qf-control-comfortable);
+  padding-inline: var(--qf-space-5);
+  margin-bottom: var(--qf-space-5);
+  background: var(--qf-color-surface);
+  border-left: var(--qf-selection-width) solid var(--qf-color-warning);
+  font: var(--qf-text-compact);
+  color: var(--qf-color-fg-default);
+}
+
+.rf-stale-mark {
+  width: var(--qf-space-3);
+  height: var(--qf-space-3);
+  border-radius: var(--qf-radius-pill);
+  background: var(--qf-color-warning);
+}

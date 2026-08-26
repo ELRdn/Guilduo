@@ -1,12 +1,12 @@
-# QuestForge OpenAI Plugin / MCP App package
+# Guilduo OpenAI Plugin / MCP App package
 
-This directory is the repository-side handoff package for a QuestForge remote MCP App.
+This directory is the repository-side handoff package for a Guilduo remote MCP App. The existing directory name is retained as a compatibility-sensitive legacy identifier.
 It is intentionally prepared for registration, but it does not contain an OpenAI technical
 app ID, provider secret, Firebase token, or deployment credential.
 
 ## What is already linked
 
-- `plugin.json` declares the bundled QuestForge workflow Skill.
+ - `plugin.json` declares the bundled Guilduo workflow Skill.
 - `.mcp.json` points to the stable `/mcp` endpoint and uses OAuth.
 - `.app.json` is a local registration placeholder.
 - `openai-submission.json` is a review checklist payload, not an approval.
@@ -18,7 +18,7 @@ app ID, provider secret, Firebase token, or deployment credential.
 2. In the OpenAI developer dashboard, create a remote MCP App and copy the technical ID.
 3. Copy `.app.json.example` to `.app.json` and fill the technical ID and approved public URLs.
 4. Confirm the OAuth metadata endpoint, privacy policy, terms, account deletion path, and support contact.
-5. Submit the app for review from the dashboard. QuestForge contributors perform this human step.
+5. Submit the app for review from the dashboard. Guilduo contributors perform this human step.
 
 The official review is separate from local Plugin validation. A successful local validation means
 the package shape is valid; it is not an OpenAI approval.

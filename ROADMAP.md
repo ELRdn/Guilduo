@@ -1,4 +1,4 @@
-# QuestForge 公開βロードマップ
+# Guilduo 公開βロードマップ
 
 最終更新: 2026-08-18
 
@@ -13,7 +13,7 @@
 - [`design/ASSET_MANIFEST.md`](design/ASSET_MANIFEST.md)：画像・アイコン・役職素材の用途契約
 - [`design/reference/README.md`](design/reference/README.md)：サニタイズ済みGolden Referenceの基準
 - `DESIGN.md`が視覚設計、`PROJECT_SPEC.md`が技術仕様の正本であり、Next版は差分だけを管理する。Next版から`/`への昇格は自動化せず、実アカウント・PC・Pixel 9・9言語・MCP・アクセシビリティの明示受入を通す。
-- DeepSeek Harness、OpenClaw、Hermesなどは外部Execution Planeとして扱い、QuestForgeはRemote MCP、Skill、Agent Registry、Handoff、権限を提供する。Harnessの実接続コードやモデルAPIキーは公開βへ持ち込まない。
+- DeepSeek Harness、OpenClaw、Hermesなどは外部Execution Planeとして扱い、GuilduoはRemote MCP、Skill、Agent Registry、Handoff、権限を提供する。Harnessの実接続コードやモデルAPIキーは公開βへ持ち込まない。
 
 ## TypeScript移行
 
@@ -25,11 +25,11 @@
 
 ## 現在地
 
-QuestForgeは、**人間・AI・外部サービスが同じパーティーで動くタスクRPG**として公開βの直前まで進んでいる。
+Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman × AI Work Platform**として公開βの直前まで進んでいる。
 
 > AIを仲間に、最強のパーティーを。
 
-人間が目的と最終判断を持ち、AIが作業を支援する。QuestForgeは、その共同作戦を安全に進めるオープンな作戦盤である。
+人もAIも、依頼主。人もAIも、担当者。Guilduoは、その共同作戦を安全に進めるオープンな作戦盤である。
 
 ### 実装済み
 
@@ -41,7 +41,7 @@ QuestForgeは、**人間・AI・外部サービスが同じパーティーで動
 - Agent Registry、MCPクライアント紐付け、Handoff、Astraと本人アカウントの分離
 - REST 2.7.0、Schema 7、MCP 51ツール、OpenAPI 52パス
 - /mcp の安定レーンと /mcp-next の検証レーン
-- QuestForge Workflow Skill、ローカルCLI、Codex Plugin/MCP App登録準備パッケージ
+- Guilduo Workflow Skill（legacy technical ID: questforge-workflows）、ローカルCLI、Codex Plugin/MCP App登録準備パッケージ
 - 日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語
 - Google Calendar、Google Tasks、Toggl、Notionの状態表示。Provider OAuthは公開βではEarly Accessとして停止
 - 匿名計測の同意UI、許可イベント限定のクライアント送信、Worker `/telemetry` 受け口、D1保存、90日保持上限

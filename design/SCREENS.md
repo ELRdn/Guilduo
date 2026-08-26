@@ -1,4 +1,4 @@
-# QuestForge Screen Blueprints
+# Guilduo Screen Blueprints
 
 > **English summary:** These blueprints define screen composition, information order, scroll ownership, responsive behavior, and non-data-specific states. Golden References validate rhythm and proportions; this document defines the structure that must survive different content and languages.
 

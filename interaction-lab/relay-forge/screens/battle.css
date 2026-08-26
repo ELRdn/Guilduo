@@ -1,0 +1,389 @@
+/* ------------------------------------------------------------------ *
+ * Battle — execution theatre
+ *
+ * Objective banner, phase, command deck are fixed; the timeline scrolls. The
+ * intervention is always on screen without scrolling, because that is the one
+ * thing the screen exists to make possible.
+ * ------------------------------------------------------------------ */
+
+.rf-screen--battle {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  height: 100%;
+}
+
+/* ---------------- objective ---------------- */
+
+.rf-b-objective {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 42%);
+  gap: var(--qf-space-7);
+  align-items: center;
+  padding: var(--qf-space-5) var(--qf-space-6);
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-left: var(--qf-selection-width) solid var(--qf-color-battle);
+  border-radius: var(--qf-radius-md);
+}
+
+.rf-b-objective[data-ended="true"] { border-left-color: var(--qf-color-success); }
+
+.rf-b-objective-copy { min-width: 0; }
+
+.rf-b-objective-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+  margin: 0;
+}
+
+.rf-b-objective-title { font: var(--qf-text-section); color: var(--qf-color-fg-strong); margin: var(--qf-space-1) 0 0; }
+
+.rf-b-objective-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--qf-space-4);
+  flex-wrap: wrap;
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  margin: var(--qf-space-2) 0 0;
+}
+
+.rf-b-weak {
+  padding: 0 var(--qf-space-2);
+  border: var(--qf-border-width) dashed var(--qf-color-border-strong);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-b-objective-meters { display: flex; flex-direction: column; gap: var(--qf-space-3); min-width: 0; }
+
+.rf-b-phase { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+.rf-b-phase-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-b-phase-value { font: var(--qf-text-kpi); color: var(--qf-color-fg-strong); }
+
+/* ---------------- meters ---------------- */
+
+.rf-b-meter { display: flex; flex-direction: column; gap: var(--qf-space-2); min-width: 0; }
+
+.rf-b-meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--qf-space-3); }
+
+.rf-b-meter-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-b-meter-value { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-strong); }
+
+.rf-b-meter-track {
+  height: var(--qf-space-4);
+  background: var(--qf-color-inset);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-xs);
+  overflow: hidden;
+}
+
+.rf-b-meter-fill { display: block; height: 100%; transition: width var(--qf-motion-standard) var(--qf-ease-move); }
+
+.rf-b-meter[data-tone="boss"] .rf-b-meter-fill { background: var(--qf-color-danger); }
+.rf-b-meter[data-tone="player"] .rf-b-meter-fill { background: var(--qf-color-success); }
+/* MP also carries a hatch, so "resource" reads differently from "health". */
+.rf-b-meter[data-tone="mp"] .rf-b-meter-fill {
+  background: repeating-linear-gradient(90deg, var(--qf-color-mp) 0 4px, transparent 4px 6px), var(--qf-color-mp);
+}
+
+.rf-b-meter-detail { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+/* ---------------- workspace ---------------- */
+
+.rf-b-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 32%);
+  gap: var(--qf-pane-gap);
+  min-height: 0;
+}
+
+.rf-b-left { display: flex; flex-direction: column; gap: var(--qf-pane-gap); min-height: 0; }
+
+/* ---------------- participants ---------------- */
+
+.rf-b-actors {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--qf-space-8) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--qf-space-4);
+}
+
+.rf-b-actor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-1);
+  min-width: 0;
+  padding: var(--qf-space-4);
+  background: var(--qf-color-inset);
+  border-radius: var(--qf-radius-sm);
+}
+
+/* The player side is a circle-cornered card (Human grammar); the boss side is a
+ * bracketed card (System grammar), matching Command's actor geometry. */
+.rf-b-actor[data-side="player"] { border-left: var(--qf-selection-width) solid var(--qf-color-human); }
+.rf-b-actor[data-side="boss"] {
+  border-left: var(--qf-selection-width) solid var(--qf-color-system);
+  border-right: var(--qf-selection-width) solid var(--qf-color-system);
+}
+
+.rf-b-actor-kind {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-b-actor-name { font: var(--qf-text-component); font-size: 15px; color: var(--qf-color-fg-strong); }
+.rf-b-actor-role { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+.rf-b-actor-vs {
+  position: relative;
+  height: 1px;
+  background: var(--qf-color-border-strong);
+}
+
+.rf-b-actor-vs::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: var(--qf-space-3);
+  height: var(--qf-space-3);
+  border-top: var(--qf-border-width) solid var(--qf-color-border-strong);
+  border-right: var(--qf-border-width) solid var(--qf-color-border-strong);
+  transform: translate(0, -50%) rotate(45deg);
+}
+
+.rf-b-meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--qf-space-5); }
+
+.rf-b-statuses { display: flex; gap: var(--qf-space-3); flex-wrap: wrap; }
+.rf-b-status-empty { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+/* ---------------- command deck ---------------- */
+
+.rf-b-commands { display: flex; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+.rf-b-command {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-1);
+  align-items: flex-start;
+  min-width: 132px;
+  flex: 1 1 auto;
+  min-height: var(--qf-control-comfortable);
+  padding: var(--qf-space-3) var(--qf-space-4);
+  text-align: left;
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+}
+
+.rf-b-command[data-selected="true"] {
+  border-color: var(--qf-color-accent);
+  border-width: var(--qf-selection-width);
+  background: var(--qf-color-selected);
+}
+
+.rf-b-command:disabled { color: var(--qf-color-fg-disabled); border-style: dashed; }
+
+.rf-b-command-label { font: var(--qf-text-component); font-size: 14px; color: inherit; }
+.rf-b-command-cost { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-muted); }
+.rf-b-command-why { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-danger); }
+
+.rf-b-deck-hint { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+.rf-b-deck-actions { display: flex; gap: var(--qf-space-3); justify-content: flex-end; }
+.rf-b-held { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-warning); margin: 0; }
+
+/* ---------------- preview ---------------- */
+
+.rf-b-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-3);
+  padding: var(--qf-space-4);
+  background: var(--qf-color-inset);
+  border-left: var(--qf-selection-width) solid var(--qf-color-accent);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-b-preview[data-phase="failed"] { border-left-color: var(--qf-color-danger); }
+.rf-b-preview[data-phase="previewing"] { border-left-color: var(--qf-color-border-strong); }
+
+.rf-b-preview-title { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); margin: 0; }
+.rf-b-preview-body { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-danger); margin: 0; }
+.rf-b-preview-note { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+.rf-b-deltas { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--qf-space-3); margin: 0; padding: 0; list-style: none; }
+
+.rf-b-delta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-1);
+  padding: var(--qf-space-3);
+  background: var(--qf-color-surface);
+  border-radius: var(--qf-radius-xs);
+  border-left: var(--qf-border-width) solid var(--qf-color-border-strong);
+}
+
+/* Direction is a border plus a signed number, never colour alone. */
+.rf-b-delta[data-direction="good"] { border-left-color: var(--qf-color-success); border-left-width: var(--qf-selection-width); }
+.rf-b-delta[data-direction="bad"] { border-left-color: var(--qf-color-danger); border-left-width: var(--qf-selection-width); }
+
+.rf-b-delta-label { font: var(--qf-text-label); font-size: 12px; letter-spacing: 0.06em; color: var(--qf-color-fg-muted); }
+.rf-b-delta-value { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-strong); }
+.rf-b-delta-change { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+.rf-b-effects { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
+
+.rf-b-effect { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--qf-space-3); }
+.rf-b-effect-type { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-muted); }
+.rf-b-effect-copy { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); }
+
+/* ---------------- timeline ---------------- */
+
+.rf-b-timeline { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
+
+.rf-b-event {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: var(--qf-space-3);
+  align-items: baseline;
+  padding: var(--qf-space-3);
+  border-left: var(--qf-border-width) solid var(--qf-color-border-default);
+}
+
+/* The two channels are told apart by the tag and by the edge weight, so an
+ * execution event never reads as something a human chose to do. */
+.rf-b-event[data-channel="decision"] {
+  border-left-width: var(--qf-selection-width);
+  border-left-color: var(--qf-color-accent);
+  background: var(--qf-color-inset);
+}
+
+.rf-b-event[data-tone="danger"] { border-left-color: var(--qf-color-danger); }
+.rf-b-event[data-tone="success"] { border-left-color: var(--qf-color-success); }
+
+.rf-b-event-channel {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-b-event[data-channel="decision"] .rf-b-event-channel { color: var(--qf-color-accent); }
+
+.rf-b-event-text { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); min-width: 0; }
+.rf-b-event-at { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-muted); white-space: nowrap; }
+
+.rf-b-timeline-empty { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+.rf-b-sources-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+  margin: var(--qf-space-4) 0 0;
+}
+
+.rf-b-sources { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
+
+.rf-b-source {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--qf-space-3);
+  align-items: center;
+  width: 100%;
+  min-height: var(--qf-row-default);
+  padding: var(--qf-space-3);
+  text-align: left;
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-b-source:hover { background: var(--qf-color-inset); }
+
+.rf-b-source-title {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-b-source-gain { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-mp); white-space: nowrap; }
+
+/* ---------------- narrower desktop ---------------- */
+
+@media (max-width: 1600px) and (min-width: 901px) {
+  .rf-b-workspace { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
+  .rf-b-objective { grid-template-columns: minmax(0, 1fr) minmax(280px, 44%); }
+  .rf-b-command { min-width: 116px; }
+}
+
+/* ---------------- mobile ---------------- */
+
+@media (max-width: 900px) {
+  .rf-screen--battle { grid-template-rows: none; height: auto; }
+  .rf-b-workspace { display: contents; }
+
+  .rf-b-objective { grid-template-columns: minmax(0, 1fr); gap: var(--qf-space-4); padding: var(--qf-space-4); }
+  .rf-b-m-vitals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--qf-space-4); }
+  .rf-b-actors { grid-template-columns: minmax(0, 1fr); }
+  .rf-b-actor-vs { display: none; }
+  .rf-b-meters { grid-template-columns: minmax(0, 1fr); }
+
+  .rf-b-commands { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rf-b-command { min-width: 0; min-height: var(--qf-space-11); }
+  .rf-b-deck-actions > * { flex: 1; min-height: var(--qf-space-11); }
+
+  .rf-b-m-latest { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+  .rf-b-m-latest-title { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); margin: 0; }
+
+  .rf-b-m-toggle {
+    min-height: var(--qf-space-11);
+    font: var(--qf-text-component);
+    font-size: 13px;
+    color: var(--qf-color-fg-default);
+    border: var(--qf-border-width) solid var(--qf-color-border-default);
+    border-radius: var(--qf-radius-sm);
+  }
+
+  .rf-b-event { grid-template-columns: 48px minmax(0, 1fr); }
+  .rf-b-event-at { display: none; }
+
+  /* The sticky bar is one line before a preview and a commitment after it —
+   * the same compact / ready shapes Command's mobile Decision Bar uses. */
+  .rf-b-m-bar { display: flex; align-items: center; gap: var(--qf-space-4); }
+  .rf-b-m-bar-copy {
+    flex: 1;
+    min-width: 0;
+    font: var(--qf-text-compact);
+    font-size: 13px;
+    color: var(--qf-color-fg-muted);
+  }
+  .rf-b-m-bar[data-shape="ready"] .rf-b-m-bar-copy { color: var(--qf-color-fg-strong); }
+  .rf-b-m-bar .rf-primary-button { flex: 0 0 auto; min-height: var(--qf-space-11); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-b-meter-fill { transition: none; }
+}

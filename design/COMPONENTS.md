@@ -1,6 +1,6 @@
-# QuestForge Component Specification
+# Guilduo Component Specification
 
-> **English summary:** This document describes the reusable QuestForge components below the visual constitution. Each component has a stable information order, responsive rule, accessible name, and forbidden decoration. Shared color and motion values come from `../DESIGN.md` and `TOKENS.json`.
+> **English summary:** This document describes the reusable Guilduo components below the visual constitution. Each component has a stable information order, responsive rule, accessible name, and forbidden decoration. Shared color and motion values come from `../DESIGN.md` and `TOKENS.json`.
 
 最終更新: 2026-08-18  
 親文書: [`../DESIGN.md`](../DESIGN.md)  

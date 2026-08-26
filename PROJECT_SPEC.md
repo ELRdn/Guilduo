@@ -1,6 +1,6 @@
-# QuestForge Project Specification
+# Guilduo Project Specification
 
-> **English summary:** QuestForge is an open task RPG and AI party operating board. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).
+> **English summary:** Guilduo is a Human × AI Work Platform where humans and AI agents coordinate work in the same workspace. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).
 
 最終更新: 2026-08-17  
 対象: `0.5.0-beta.1` / REST・MCP `2.7.0` / Schema `7`  
@@ -8,7 +8,7 @@
 
 ## 1. 目的と境界
 
-QuestForgeは、現実の作業をQuestへ変換し、人間・AI・外部サービスが同じパーティーで作戦を進めるためのオープンな作戦盤である。
+Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じworkspaceで依頼、担当、実行、Handoff、Reviewを行うためのオープンな作戦盤である。
 
 この文書が定義するもの:
 
@@ -50,7 +50,7 @@ QuestForgeは、現実の作業をQuestへ変換し、人間・AI・外部サー
 | Agent | 作業を担当するAIの台帳エントリ | 表示名、Provider、許可スコープ、Handoff既定値 |
 | MCPクライアント | ChatGPT、Codex、Claude等の接続元 | OAuth接続、利用スコープ、Agentへの紐付け |
 | Party | 人間・Agentの作戦上の所属 | メンバー表示、担当Quest、レビュー関係 |
-| QuestForge | データ・権限・作戦状態の管理面 | Quest、報酬、MP、Handoff、監査、同期 |
+| Guilduo | データ・権限・作戦状態の管理面 | Quest、報酬、MP、Handoff、監査、同期 |
 | Harness | モデルをツール付きAgentとして実行する外部面 | Model、Tool、Skill、Session、Sandbox、実行ループ |
 
 ## 3. システム構成
@@ -61,6 +61,7 @@ QuestForgeは、現実の作業をQuestへ変換し、人間・AI・外部サー
 | --- | --- | --- |
 | `/` | 現行UI、Firebase同期、従来操作との互換 | 安定版の基準 |
 | `/next/` | Interaction Lab、新UI、操作検証 | 公開β・検証レーン |
+| `/lp/`・`/lp/en/` | Guilduoの説明、Product Proof、公開CTA | 日本語・英語の公式マーケティングSurface |
 | Firebase Auth | Googleログインとユーザー識別 | 認証の基準 |
 | Firebase Realtime Database | 現行UIのQuest・キャラクター状態 | ユーザー状態の保存先 |
 | Cloudflare Worker | REST、OAuth、MCP、Webhook、拡張機能境界 | APIの実行面 |
@@ -78,8 +79,8 @@ flowchart LR
   Next --> Worker[Cloudflare Worker]
   CLI[CLI] --> Worker
   MCP[MCPクライアント] --> Worker
-  Skill[QuestForge Skill] -.操作手順.-> MCP
-  Worker --> Domain[共有QuestForgeドメイン]
+    Skill[Guilduo Skill] -.操作手順.-> MCP
+    Worker --> Domain[共有Guilduoドメイン]
   Domain --> RTDB
   Worker --> D1[D1 / Agent・接続メタデータ]
   Harness[外部Harness] --> MCP
@@ -158,13 +159,13 @@ local
 
 ## 6. MCP、Skill、Harnessの境界
 
-QuestForgeは**作戦データ・権限・Handoffを管理するControl/Data Plane**、DeepSeek Harness、OpenClaw、Hermes等は**モデル・Tool・Skill・Session・Sandboxを実行するExecution Plane**として扱う。
+Guilduoは**作戦データ・権限・Handoffを管理するControl/Data Plane**、DeepSeek Harness、OpenClaw、Hermes等は**モデル・Tool・Skill・Session・Sandboxを実行するExecution Plane**として扱う。
 
-### QuestForge側
+### Guilduo側
 
 - Remote MCP `/mcp`
 - 検証用`/mcp-next`
-- QuestForge Workflow Skill
+- Guilduo Workflow Skill（technical IDは互換性のためquestforge-workflowsを維持）
 - Agent RegistryとMCPクライアント紐付け
 - Handoff状態、dry-run、競合検知
 - OAuthスコープとユーザー分離
@@ -180,7 +181,7 @@ QuestForgeは**作戦データ・権限・Handoffを管理するControl/Data Pla
 ```text
 Harness Client
   -> OAuth / Remote MCP
-  -> QuestForge Agent Context
+-> Guilduo Agent Context
   -> list quests / get brief
   -> dry-run assignment
   -> confirmed assignment
@@ -206,7 +207,7 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 - [Next版の視覚差分](interaction-lab/DESIGN.md)
 - [共有型](types/questforge.ts)
 - [共有ドメイン](server/questforge-domain.ts)
-- [QuestForge Workflow Skill](skills/questforge-workflows/SKILL.md)
+- [Guilduo Workflow Skill](skills/questforge-workflows/SKILL.md)
 - [API / MCP setup](API_MCP_SETUP.md)
 - [公開βロードマップ](ROADMAP.md)
 

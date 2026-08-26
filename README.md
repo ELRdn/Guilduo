@@ -1,10 +1,14 @@
-# QuestForge
+# Guilduo
 
 > **AIを仲間に、最強のパーティーを。**
 
-QuestForgeは、現実の作業をQuestに変え、完了でMPをため、使うタイミングを自分で決めるオープンなタスクRPGです。人間が目的と最終判断を持ち、AIが整理・実行・レビューを支援します。QuestForgeは、**人間・AI・外部サービスが同じパーティーで動く作戦盤**を目指しています。
+**人間だけが、依頼主じゃない。**
 
-QuestForgeはHabiticaとは独立したプロジェクトです。提携・承認・代替サービスではありません。各製品名と商標はそれぞれの権利者に帰属します。
+Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事を依頼し、担当し、受け渡し、レビューするための **Human × AI Work Platform** です。現実の作業をQuestとして扱い、Relay、Evidence、Decisionを共有しながら仕事を前へ進めます。
+
+ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
+
+GuilduoはHabiticaとは独立したプロジェクトです。提携・承認・代替サービスではありません。各製品名と商標はそれぞれの権利者に帰属します。
 
 ## 公開βの範囲
 
@@ -34,6 +38,7 @@ QuestForgeはHabiticaとは独立したプロジェクトです。提携・承�
 ## 画面とデータ
 
 - `/`：現行UI。ログイン前は端末保存、ログイン後はFirebaseへ同期します。
+- `/lp/`・`/lp/en/`：Guilduo公式Landing Pageの日本語版・英語版です。CTA URLはRuntime Configから供給し、未設定時は安全に無効化します。
 - `/interaction-lab/`：ローカル開発・キャプチャ用のNextソースルートです。
 - `/next/`：Firebase Hosting上の公開βルートです。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
 - 視覚設計の正本は[`DESIGN.md`](DESIGN.md)、技術仕様の正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)、Next版の差分設計は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)です。数値トークンは[`design/TOKENS.json`](design/TOKENS.json)、部品は[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面構成は[`design/SCREENS.md`](design/SCREENS.md)を参照します。
@@ -71,7 +76,7 @@ MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、�
 - GitHub Copilot CLI：`copilot mcp add --transport http questforge https://<your-worker>/mcp`
 - OpenClaw / Hermes：後続の接続レシピで同じRemote HTTP MCPを使用
 
-登録後はQuestForge設定の **AI Agent Registry** でAgentを作成し、認可済みMCPクライアントをAgentへ紐付けます。Agentから権限を増やすことはできません。
+登録後はGuilduo設定の **AI Agent Registry** でAgentを作成し、認可済みMCPクライアントをAgentへ紐付けます。Agentから権限を増やすことはできません。
 
 ## CLI
 
@@ -114,7 +119,7 @@ Skillは、読み取り、dry-run、確認、実行、レビュー返却の順�
 5. Todoist、Discord / Slack：同期・通知
 6. OpenClaw、Hermes Agent：接続レシピとSkill再利用
 
-初回同期はプレビュー必須、外部削除はQuestForgeから自動削除しません。Provider SecretはWorker Secretだけに置きます。
+初回同期はプレビュー必須、外部削除はGuilduoから自動削除しません。Provider SecretはWorker Secretだけに置きます。
 
 ## パフォーマンスと計測
 
@@ -169,4 +174,4 @@ TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自�
 
 ## ライセンス
 
-QuestForgeはGNU AGPL-3.0-onlyです。ネットワーク越しに改変版を提供する場合は、同ライセンスのソース提供条件に従ってください。
+GuilduoはGNU AGPL-3.0-onlyです。ネットワーク越しに改変版を提供する場合は、同ライセンスのソース提供条件に従ってください。

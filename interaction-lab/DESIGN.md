@@ -1,7 +1,7 @@
 ---
 version: alpha
-name: QuestForge Interaction Lab
-description: Next surface overrides for QuestForge visual and interaction experiments.
+name: Guilduo Interaction Lab
+description: Next surface overrides for Guilduo visual and interaction experiments.
 colors:
   primary: "#2E78C7"
   secondary: "#243B3B"
@@ -17,11 +17,11 @@ colors:
   accent: "#4F8A6D"
 omitted:
   - section: typography
-    reason: "Inherited from the root QuestForge DESIGN.md."
+reason: "Inherited from the root Guilduo DESIGN.md."
   - section: rounded
-    reason: "Inherited from the root QuestForge DESIGN.md."
+reason: "Inherited from the root Guilduo DESIGN.md."
   - section: spacing
-    reason: "Inherited from the root QuestForge DESIGN.md."
+reason: "Inherited from the root Guilduo DESIGN.md."
 components:
   next-page-shell:
     backgroundColor: "{colors.neutral}"
@@ -74,13 +74,13 @@ components:
     padding: "16px"
 ---
 
-# QuestForge Interaction Lab Design
+# Guilduo Interaction Lab Design
 
-> **English summary:** The Interaction Lab is QuestForge's `/next/` beta surface. It tests information architecture, responsive behavior, synchronization feedback, and detail interactions while reusing the current visual constitution and the same authenticated data contracts. It is not a second domain model and must not silently replace `/`.
+> **English summary:** The Interaction Lab is Guilduo's `/next/` beta surface. It tests information architecture, responsive behavior, synchronization feedback, and detail interactions while reusing the current visual constitution and the same authenticated data contracts. It is not a second domain model and must not silently replace `/`.
 
 最終更新: 2026-08-18  
 対象: `/next/`（開発元は`/interaction-lab/`） / `0.5.0-beta.1` / REST・MCP `2.7.0` / Schema `7`  
-親文書: [QuestForge Visual Constitution](../DESIGN.md)  
+親文書: [Guilduo Visual Constitution](../DESIGN.md)
 技術仕様: [PROJECT_SPEC.md](../PROJECT_SPEC.md)
 
 ## 1. 差分の扱い

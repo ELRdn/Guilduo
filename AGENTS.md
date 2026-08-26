@@ -1,4 +1,12 @@
-# QuestForge Agent Guidance
+# Guilduo Agent Guidance
+
+## Brand naming
+
+- Public product name: **Guilduo**
+- Japanese pronunciation: **ギルデュオ**
+- Relay Forge UI label: **Guilduo / Relay Forge**
+- QuestForge is the legacy public name. Compatibility-sensitive identifiers such as package names, CLI commands, MCP IDs, environment variables, storage keys, routes, schemas, types, events, and existing file paths must not be renamed without an explicit migration plan.
+- Brand source of truth: [BRAND.md](BRAND.md)
 
 ## Before UI changes
 

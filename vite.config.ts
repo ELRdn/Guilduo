@@ -1,9 +1,10 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-const root = new URL(".", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
+const root = dirname(fileURLToPath(import.meta.url));
 
 function copyRuntimeAssets(source: string, destination: string): void {
   for (const entry of readdirSync(source, { withFileTypes: true })) {
@@ -51,6 +52,10 @@ export default defineConfig({
       input: {
         app: resolve(root, "index.html"),
         next: resolve(root, "interaction-lab/index.html"),
+        // Relay Forge successor shell. It builds into dist/interaction-lab/
+        // relay-forge and is carried to dist/next/relay-forge by the rename in
+        // copyQuestForgeRuntime, matching NEWDESIGN.md section 29 Phase 1.
+        relayForge: resolve(root, "interaction-lab/relay-forge/index.html"),
       },
     },
   },

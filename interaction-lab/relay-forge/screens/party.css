@@ -1,0 +1,270 @@
+/* ------------------------------------------------------------------ *
+ * Party — responsibility roster
+ *
+ * The roster is the one scrolling region. Human and Agent share the workload
+ * columns; identity shape and the capability block keep them distinguishable.
+ * ------------------------------------------------------------------ */
+
+.rf-screen--party {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.rf-p-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 30%);
+  gap: var(--qf-pane-gap);
+  min-height: 0;
+}
+
+/* ---------------- roster ---------------- */
+
+.rf-p-head,
+.rf-p-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.4fr)      /* identity */
+    minmax(120px, 140px)  /* kind     */
+    minmax(220px, 1fr)    /* workload */
+    minmax(150px, 180px); /* last     */
+  gap: var(--qf-space-5);
+  align-items: center;
+}
+
+.rf-p-head {
+  padding: var(--qf-space-2) var(--qf-space-4);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-default);
+}
+
+.rf-p-head > span {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-p-roster { display: flex; flex-direction: column; }
+.rf-p-row { min-height: var(--qf-row-comfortable); }
+.rf-p-row + .rf-p-row { border-top: var(--qf-border-width) solid var(--qf-color-border-subtle); }
+
+/* Human and Agent take the same row, but the leading edge differs so the two
+ * groups separate without reading the type word. */
+.rf-p-row[data-kind="human"] { border-left-color: var(--qf-color-human); }
+.rf-p-row[data-kind="agent"] { border-left-color: var(--qf-color-agent); }
+.rf-p-row[data-kind="system"] { border-left-color: var(--qf-color-system); }
+
+.rf-p-identity { display: flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
+.rf-p-identity-copy { display: flex; flex-direction: column; min-width: 0; }
+
+.rf-p-identity-missing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--qf-space-9);
+  height: var(--qf-space-9);
+  border: var(--qf-border-width) dashed var(--qf-color-border-strong);
+  border-radius: var(--qf-radius-pill);
+  color: var(--qf-color-fg-muted);
+  font: var(--qf-font-mono);
+  font-size: 13px;
+}
+
+.rf-p-kind { display: flex; flex-direction: column; gap: var(--qf-space-1); min-width: 0; }
+
+/* The type word is a bordered tag, never a bare colour swatch. */
+.rf-p-kind-label {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  height: var(--qf-control-compact);
+  padding-inline: var(--qf-space-3);
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  border: var(--qf-border-width) solid currentColor;
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-p-kind-label[data-kind="human"] { color: var(--qf-color-human); border-radius: var(--qf-radius-pill); }
+/* An Agent tag repeats the clipped-corner geometry of an Agent avatar. */
+.rf-p-kind-label[data-kind="agent"] {
+  color: var(--qf-color-agent);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.rf-p-kind-label[data-kind="system"] { color: var(--qf-color-system); border-radius: var(--qf-radius-none); }
+.rf-p-kind-label[data-kind="companion"] { color: var(--qf-color-accent); }
+
+.rf-p-last { display: flex; flex-direction: column; gap: var(--qf-space-2); align-items: flex-start; min-width: 0; }
+
+/* ---------------- workload ---------------- */
+
+.rf-p-workload { display: flex; flex-direction: column; gap: var(--qf-space-2); min-width: 0; }
+.rf-p-workload-cell { min-width: 0; }
+
+.rf-p-bar {
+  height: var(--qf-space-4);
+  background: var(--qf-color-inset);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-xs);
+  overflow: hidden;
+}
+
+.rf-p-bar-fill { display: flex; height: 100%; min-width: 0; }
+
+/* Each segment carries a hatch pattern as well as a hue, so the split between
+ * running, waiting for review and blocked survives greyscale. */
+.rf-p-bar-seg { display: block; min-width: 3px; }
+.rf-p-bar-seg[data-kind="working"] { background: var(--qf-color-accent); }
+.rf-p-bar-seg[data-kind="review"] {
+  background: repeating-linear-gradient(45deg, var(--qf-color-review) 0 3px, transparent 3px 6px), var(--qf-color-inset);
+}
+.rf-p-bar-seg[data-kind="blocked"] {
+  background: repeating-linear-gradient(-45deg, var(--qf-color-danger) 0 2px, transparent 2px 5px), var(--qf-color-inset);
+}
+.rf-p-bar-seg[data-kind="waiting"] {
+  background: repeating-linear-gradient(90deg, var(--qf-color-waiting) 0 1px, transparent 1px 4px), var(--qf-color-inset);
+}
+
+.rf-p-counts { display: flex; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+.rf-p-count {
+  font: var(--qf-text-metadata);
+  font-size: 13px;
+  color: var(--qf-color-fg-muted);
+  white-space: nowrap;
+}
+
+.rf-p-count[data-kind="total"] { color: var(--qf-color-fg-strong); }
+.rf-p-count[data-kind="review"] { color: var(--qf-color-review); }
+.rf-p-count[data-kind="blocked"] { color: var(--qf-color-danger); }
+
+.rf-p-scale-note { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+/* ---------------- detail rail ---------------- */
+
+.rf-p-detail-identity { display: flex; align-items: flex-start; gap: var(--qf-space-5); }
+.rf-p-detail-copy { display: flex; flex-direction: column; gap: var(--qf-space-2); min-width: 0; }
+.rf-p-detail-name { font: var(--qf-text-section); color: var(--qf-color-fg-strong); margin: 0; }
+.rf-p-detail-role { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+.rf-p-detail-kind { display: flex; align-items: center; gap: var(--qf-space-3); margin: 0; font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); }
+
+.rf-p-detail-label {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qf-color-fg-muted);
+  margin: var(--qf-space-3) 0 0;
+}
+
+.rf-p-detail-empty,
+.rf-p-detail-note { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+.rf-p-detail-note { color: var(--qf-color-review); }
+
+.rf-p-detail-handoff { display: flex; flex-direction: column; gap: var(--qf-space-1); margin: 0; font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); }
+
+.rf-p-held { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
+
+.rf-p-held-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qf-space-2);
+  width: 100%;
+  padding: var(--qf-space-3);
+  text-align: left;
+  background: var(--qf-color-inset);
+  border-left: var(--qf-selection-width) solid var(--qf-color-border-strong);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-p-held-row[data-state="review"] { border-left-color: var(--qf-color-review); }
+.rf-p-held-row[data-state="blocked"] { border-left-color: var(--qf-color-danger); }
+.rf-p-held-row[data-state="working"] { border-left-color: var(--qf-color-accent); }
+.rf-p-held-row:hover { background: var(--qf-color-selected); }
+
+.rf-p-held-top { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
+
+.rf-p-held-title {
+  font: var(--qf-text-component);
+  font-size: 14px;
+  color: var(--qf-color-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-p-capabilities {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  gap: var(--qf-space-2) var(--qf-space-4);
+  margin: 0;
+}
+
+.rf-p-capabilities dt {
+  font: var(--qf-text-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--qf-color-fg-muted);
+}
+
+.rf-p-capabilities dd {
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+  margin: 0;
+  /* A long scope list wraps rather than pushing the rail wider. */
+  overflow-wrap: anywhere;
+}
+
+.rf-p-detail-actions { display: flex; gap: var(--qf-space-3); }
+
+/* ---------------- narrower desktop ---------------- */
+
+@media (max-width: 1600px) and (min-width: 901px) {
+  .rf-p-workspace { grid-template-columns: minmax(0, 1fr) minmax(330px, 32%); }
+  .rf-p-head,
+  .rf-p-row {
+    grid-template-columns: minmax(0, 1.3fr) minmax(104px, 120px) minmax(180px, 1fr) minmax(120px, 150px);
+    gap: var(--qf-space-4);
+  }
+}
+
+/* ---------------- mobile ---------------- */
+
+@media (max-width: 900px) {
+  .rf-screen--party { grid-template-rows: none; height: auto; }
+  .rf-p-workspace { display: contents; }
+
+  .rf-p-cards { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+
+  .rf-p-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--qf-space-3);
+    padding: var(--qf-space-4);
+    min-height: var(--qf-space-12);
+    text-align: left;
+    background: var(--qf-color-surface);
+    border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+    border-left-width: var(--qf-selection-width);
+    border-radius: var(--qf-radius-sm);
+  }
+
+  .rf-p-card[data-kind="human"] { border-left-color: var(--qf-color-human); }
+  .rf-p-card[data-kind="agent"] { border-left-color: var(--qf-color-agent); }
+  .rf-p-card[data-kind="system"] { border-left-color: var(--qf-color-system); }
+  .rf-p-card[data-kind="companion"] { border-left-color: var(--qf-color-accent); }
+
+  .rf-p-card-top { display: flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
+  .rf-p-card-copy { display: flex; flex-direction: column; min-width: 0; }
+
+  .rf-p-mobile-bar { display: flex; }
+  .rf-p-back { width: 100%; min-height: var(--qf-space-11); }
+
+  .rf-p-detail-identity { align-items: center; }
+  .rf-p-capabilities { grid-template-columns: minmax(0, 1fr); gap: var(--qf-space-1); }
+  .rf-p-capabilities dd { margin-bottom: var(--qf-space-3); }
+  .rf-p-held-row { min-height: var(--qf-space-11); }
+  .rf-p-detail-actions > * { flex: 1; min-height: var(--qf-space-11); }
+}
