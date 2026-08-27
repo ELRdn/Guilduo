@@ -236,7 +236,7 @@ components:
 > **English summary:** Guilduo is a Human × AI Work Platform presented as a tactical operations board. The work interface is primary, RPG language adds motivation and identity, and Relay, Evidence, and Decision make human-agent coordination explicit. The root `/` surface is the visual baseline; `/next/` documents only its intentional visual and interaction differences.
 
 最終更新: 2026-08-17  
-対象: `0.6.0-beta.3` / REST・MCP `2.7.0` / Schema `7`
+対象: `0.6.0-beta.4` / REST・MCP `2.7.0` / Schema `7`
 文書の位置づけ: 視覚設計とUI操作の正本
 
 技術仕様、ドメイン不変条件、認証、MCP、リリースの正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)である。UI変更前にはこの文書と対象Surfaceの設計書を読む。

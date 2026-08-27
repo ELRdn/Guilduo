@@ -20,7 +20,7 @@ import "./screens/battle.css";
 import "./screens/connections.css";
 import { requireElement } from "./primitives/dom.ts";
 import { mountRelayForge } from "./shell.ts";
-import { observeAuth, signIn, getIdToken } from "../auth.ts";
+import { dismissOAuthFailure, observeAuthState, signIn, getIdToken } from "../auth.ts";
 import { QuestForgeRepository } from "../repository.ts";
 import { createProductionRuntime } from "./production.ts";
 
@@ -87,49 +87,61 @@ async function mountProduction(uid: string): Promise<void> {
   }
 }
 
-if (fixtureMode) {
+function showDemo(): void {
+  demoRequested = true;
   mountRelayForge(root);
-} else {
-  bootstrap("サインインを確認しています", "Guilduo workspaceへ安全に接続しています。");
-  observeAuth((user) => {
-    if (demoRequested) return;
-    if (user !== null) {
-      void mountProduction(user.uid);
-      return;
-    }
-    bootstrap(
-      "Guilduoへサインイン",
-      "実際のQuest、Agent、Handoffを表示するにはGoogleでサインインしてください。",
-      [
-        {
-          label: "Googleでサインイン",
-          primary: true,
-          run: async () => {
-            bootstrap("サインインしています", "Googleの認証が完了するまでお待ちください。");
-            try {
-              await signIn();
-            } catch {
-              bootstrap("サインインできませんでした", "認証画面を閉じたか、接続に失敗しました。もう一度試せます。", [
-                { label: "再試行", primary: true, run: async () => { await signIn(); } },
-                {
-                  label: "デモを見る",
-                  run: () => {
-                    demoRequested = true;
-                    mountRelayForge(root);
-                  },
-                },
-              ]);
-            }
-          },
-        },
-        {
-          label: "デモを見る",
-          run: () => {
-            demoRequested = true;
-            mountRelayForge(root);
-          },
-        },
-      ],
-    );
+}
+
+function beginSignIn(): void {
+  bootstrap("サインインしています", "Googleの認証が完了するまでお待ちください。");
+  void signIn().catch(() => {
+    bootstrap("サインインを開始できませんでした", "Appwriteの設定と接続状態を確認して、もう一度試してください。", [
+      { label: "再試行", primary: true, run: beginSignIn },
+      { label: "デモを見る", run: showDemo },
+    ]);
   });
 }
+
+function showSignedOut(): void {
+  bootstrap(
+    "Guilduoへサインイン",
+    "実際のQuest、Agent、Handoffを表示するにはGoogleでサインインしてください。",
+    [
+      { label: "Googleでサインイン", primary: true, run: beginSignIn },
+      { label: "デモを見る", run: showDemo },
+    ],
+  );
+}
+
+function checkAuth(): void {
+  observeAuthState((state) => {
+    if (demoRequested) return;
+    if (state.status === "checking") {
+      bootstrap("サインインを確認しています", "Guilduo workspaceへ安全に接続しています。");
+      return;
+    }
+    if (state.status === "authenticated") {
+      void mountProduction(state.user.uid);
+      return;
+    }
+    if (state.status === "signed-out") {
+      showSignedOut();
+      return;
+    }
+    if (state.status === "oauth-failed") {
+      dismissOAuthFailure();
+      bootstrap("Googleサインインが完了しませんでした", "認証がキャンセルされたか、Googleとの接続に失敗しました。", [
+        { label: "もう一度試す", primary: true, run: beginSignIn },
+        { label: "デモを見る", run: showDemo },
+      ]);
+      return;
+    }
+    bootstrap("サインイン状態を確認できません", "Appwriteへの接続に失敗しました。ログアウト扱いにはせず、安全に再確認できます。", [
+      { label: "再接続", primary: true, run: checkAuth },
+      { label: "デモを見る", run: showDemo },
+    ]);
+  });
+}
+
+if (fixtureMode) mountRelayForge(root);
+else checkAuth();

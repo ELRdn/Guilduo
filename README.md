@@ -13,7 +13,7 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 | 公式LP | [Guilduo Landing Page](https://6a901b6db7175b486644.appwrite.network/lp/) | Guilduoの思想、機能、使い方を知る |
 | 正式UI | [Guilduo / Relay Forge](https://6a901b6db7175b486644.appwrite.network/next/relay-forge/) | 公開βのCommand・Quest運用画面を開く |
 
-現在の公開先はAppwrite Sites上の `v0.6.0-beta.3` です。
+現在の公開先はAppwrite Sites上の `v0.6.0-beta.4` です。
 
 ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 
@@ -33,7 +33,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
 | Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
 
-アプリ版は `0.6.0-beta.3`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
+アプリ版は `0.6.0-beta.4`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
 
 ## 設計原則
 

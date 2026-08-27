@@ -1,12 +1,23 @@
-import { beginGoogleSignIn, currentAccount, getAccessToken, refreshAccount, signOutAccount, type GuilduoUser } from "../appwrite-auth.ts";
+import { beginGoogleSignIn, clearOAuthFailure, currentAccount, getAccessToken, resolveAuthState, signOutAccount, type GuilduoAuthState, type GuilduoUser } from "../appwrite-auth.ts";
 
 export type Unsubscribe = () => void;
-export function observeAuth(callback: (user: GuilduoUser | null) => void): Unsubscribe {
+export type ObservedAuthState = { status: "checking" } | GuilduoAuthState;
+
+export function observeAuthState(callback: (state: ObservedAuthState) => void): Unsubscribe {
   let active = true;
-  refreshAccount().then((user) => { if (active) callback(user); }).catch(() => { if (active) callback(null); });
+  callback({ status: "checking" });
+  resolveAuthState().then((state) => { if (active) callback(state); });
   return () => { active = false; };
 }
-export async function signIn(): Promise<GuilduoUser> { return beginGoogleSignIn(); }
+
+export function observeAuth(callback: (user: GuilduoUser | null) => void): Unsubscribe {
+  return observeAuthState((state) => {
+    if (state.status === "authenticated") callback(state.user);
+    if (state.status === "signed-out" || state.status === "oauth-failed") callback(null);
+  });
+}
+export async function signIn(): Promise<void> { beginGoogleSignIn(); }
 export async function signOutUser(): Promise<void> { await signOutAccount(); }
 export const getIdToken = getAccessToken;
 export function currentUser(): GuilduoUser | null { return currentAccount(); }
+export const dismissOAuthFailure = clearOAuthFailure;

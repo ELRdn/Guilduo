@@ -15,7 +15,7 @@ import {
   writeLocalBackup,
   writeRemoteSnapshot,
 } from "./repository.ts";
-import { currentUser, getIdToken, observeAuth, signIn, signOutUser } from "./auth.ts";
+import { currentUser, dismissOAuthFailure, getIdToken, observeAuthState, signIn, signOutUser } from "./auth.ts";
 import { installQuestForgeIconObserver } from "../ui/icon-system.ts";
 import type {
   FormationMember,
@@ -3094,7 +3094,22 @@ window.addEventListener("questforge:locale-changed", () => {
 window.addEventListener("questforge:telemetry-ready", () => applySettings());
 
 try {
-  observeAuth(async (user) => {
+  observeAuthState(async (authState) => {
+    if (authState.status === "checking") return;
+    if (authState.status === "connection-error") {
+      state.remoteConnectionState = "error";
+      setSyncStatus("error", "Appwriteへ接続できません。通信状態を確認して再接続してください");
+      renderAll({ full: true });
+      return;
+    }
+    if (authState.status === "oauth-failed") {
+      dismissOAuthFailure();
+      state.remoteConnectionState = "error";
+      setSyncStatus("error", "Googleサインインが完了しませんでした。もう一度お試しください");
+      renderAll({ full: true });
+      return;
+    }
+    const user = authState.status === "authenticated" ? authState.user : null;
     const nextUser = user ? { uid: user.uid, email: user.email || "", displayName: user.displayName || "" } : null;
     if (!nextUser) {
       remoteLoadGeneration += 1;

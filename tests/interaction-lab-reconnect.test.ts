@@ -30,7 +30,9 @@ test("interaction lab restores authenticated remote data without storing tokens"
   assert.match(repository, /LAB_REMOTE_SNAPSHOT_KEY/);
   assert.match(repository, /hasAutoConnectPreference/);
   assert.match(repository, /ownerUid/);
-  assert.match(app, /observeAuth\(async \(user\) =>/);
+  assert.match(app, /observeAuthState\(async \(authState\) =>/);
+  assert.match(app, /authState\.status === "connection-error"/);
+  assert.match(app, /authState\.status === "oauth-failed"/);
   assert.match(app, /loadRemoteData\(\{ announce: false, source: "auto" \}\)/);
   assert.match(app, /remoteLoadPromise/);
   assert.match(app, /remoteLoadGeneration/);

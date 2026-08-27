@@ -1,4 +1,4 @@
-import { beginGoogleSignIn, currentAccount, getAccessToken, refreshAccount, signOutAccount, type GuilduoUser } from "./appwrite-auth.ts";
+import { beginGoogleSignIn, clearOAuthFailure, currentAccount, getAccessToken, resolveAuthState, signOutAccount, type GuilduoUser } from "./appwrite-auth.ts";
 import { trackTelemetry } from "./telemetry.ts";
 import type { QuestForgeState } from "./types/questforge.ts";
 
@@ -108,8 +108,17 @@ syncSignOutButton?.addEventListener("click", async () => { await signOutAccount(
 window.addEventListener("questforge:state-saved", (event) => { if (user) scheduleUpload(event.detail?.state); });
 window.addEventListener("questforge:locale-changed", () => setSyncUi((syncPanel?.dataset.syncState as SyncStatus) || "local", currentSyncMessageKey));
 
-void refreshAccount().then(async (nextUser) => {
-  user = nextUser;
+void resolveAuthState().then(async (authState) => {
+  if (authState.status === "oauth-failed") {
+    clearOAuthFailure();
+    setSyncUi("error", "sync.error.cancelled");
+    return;
+  }
+  if (authState.status === "connection-error") {
+    setSyncUi("error", "sync.error.connection");
+    return;
+  }
+  user = authState.status === "authenticated" ? authState.user : null;
   window.dispatchEvent(new CustomEvent("questforge:auth-changed", { detail: { user } }));
   if (!user) { setSyncUi("local", "sync.local"); return; }
   if (syncSignInButton) syncSignInButton.hidden = true;
