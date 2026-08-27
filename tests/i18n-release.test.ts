@@ -67,6 +67,15 @@ test("all locale catalogs have complete keys, placeholders, and valid ICU messag
   }
 });
 
+test("all locale catalogs use the Guilduo and Appwrite public names", async () => {
+  for (const [locale, filename] of Object.entries(localeFiles)) {
+    const catalog = (await import(`../locales/${filename}`)).default as Record<string, string>;
+    const publicCopy = Object.values(catalog).join("\n");
+    assert.doesNotMatch(publicCopy, /QuestForge|Firebase/, locale);
+    assert.match(publicCopy, /Guilduo/, locale);
+  }
+});
+
 test("locale preference is device-local and PWA fallback manifests are available", async () => {
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const app = fs.readFileSync(path.join(root, "app.ts"), "utf8");
@@ -87,12 +96,24 @@ test("locale preference is device-local and PWA fallback manifests are available
 
 test("release metadata, license, public docs, and CI are present", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.6.0-beta.1");
+  assert.equal(packageJson.version, "0.6.0-beta.2");
   assert.equal(packageJson.license, "AGPL-3.0-only");
   assert.match(fs.readFileSync(path.join(root, "LICENSE"), "utf8"), /GNU AFFERO GENERAL PUBLIC LICENSE/);
   for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", "RELEASE_SETUP.md", ".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
     assert.equal(fs.existsSync(path.join(root, file)), true, file);
   }
+});
+
+test("public API and plugin metadata use the Guilduo brand and Appwrite auth", () => {
+  const openapi = JSON.parse(fs.readFileSync(path.join(root, "api", "openapi.json"), "utf8"));
+  const mcpTools = JSON.parse(fs.readFileSync(path.join(root, "api", "mcp-tools.json"), "utf8"));
+  const plugin = JSON.parse(fs.readFileSync(path.join(root, "api", "plugin-manifest.example.json"), "utf8"));
+
+  assert.equal(openapi.info.title, "Guilduo API");
+  assert.match(openapi.info.description, /^Guilduo REST API/);
+  assert.equal(openapi.components.securitySchemes.bearerAuth.bearerFormat, "Appwrite JWT");
+  assert.doesNotMatch(JSON.stringify(mcpTools), /QuestForge/);
+  assert.equal(plugin.author, "Guilduo");
 });
 
 test("public examples omit local absolute paths and private deployment identifiers", () => {

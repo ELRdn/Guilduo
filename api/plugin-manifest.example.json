@@ -3,7 +3,7 @@
   "id": "questforge-calendar-sync",
   "name": "Calendar Sync",
   "description": "Adds calendar import, due-date sync, and a side panel for today's quests.",
-  "author": "QuestForge Prototype",
+  "author": "Guilduo",
   "permissions": [
     "quests:read",
     "quests:write",

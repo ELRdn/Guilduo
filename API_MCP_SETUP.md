@@ -1,10 +1,10 @@
-# QuestForge Gateway / MCP setup
+# Guilduo Gateway / MCP setup
 
-QuestForgeは、Firebase HostingのWeb/PWA、Cloudflare WorkerのREST/MCP、Firebase Auth/Realtime Databaseのユーザー状態を分離して運用します。
+Guilduoは、Appwrite SitesのWeb/PWA、Cloudflare WorkerのREST/MCP、Appwrite Auth/TablesDBのユーザー状態を分離して運用します。
 
 ## 現在の公開β境界
 
-- Firebase Googleログイン：利用可能
+- Appwrite Googleログイン：利用可能
 - Remote MCP `/mcp`：利用可能。OAuthを使用
 - `/mcp-next`：SDK検証用。ResourcesとPromptsを含む
 - CLI：REST/JSON操作。書き込みは`--execute`が必要
@@ -22,18 +22,17 @@ npx wrangler d1 create questforge-data
 npx wrangler d1 migrations apply questforge-data --remote
 ```
 
-`wrangler.jsonc`へKV namespaceとD1 database IDを設定します。D1にはAgent Registry、MCPクライアント、公開プロフィール、連携メタデータを保存します。Quest本文とキャラクター本体はFirebase側のユーザー領域です。
+`wrangler.jsonc`へKV namespaceとD1 database IDを設定します。D1にはAgent Registry、MCPクライアント、公開プロフィール、連携メタデータを保存します。Quest本文とキャラクター本体はAppwrite TablesDBのユーザー領域です。
 
-## 2. Firebase Worker認証
+## 2. Appwrite Worker認証
 
-Firebase ConsoleのProject settings > Service accountsから秘密鍵を生成します。JSON全文をリポジトリへ置かず、必要な値だけWorker Secretへ登録します。
+Appwrite ConsoleでWorker専用API Keyを作成し、必要最小限のTablesDB read/write scopeだけを付与します。API Keyはリポジトリや公開Variablesへ置かず、Cloudflare Worker SecretとGitHub Actions Secretへ登録します。
 
 ```bash
-npx wrangler secret put FIREBASE_CLIENT_EMAIL
-npx wrangler secret put FIREBASE_PRIVATE_KEY
+npx wrangler secret put APPWRITE_API_KEY
 ```
 
-Firebase Authentication > Settings > Authorized domainsには、公開WorkerとFirebase Hostingのホスト名を登録します。
+Google OAuth providerにはAppwriteが示すcallback URLを登録し、AppwriteのWeb platformには公開Appwrite Sitesのhostnameを登録します。
 
 ## 3. デプロイ前の外部OAuthフラグ
 
@@ -46,7 +45,7 @@ globalThis.QuestForgeConfig = {
 };
 ```
 
-この状態でもFirebaseログインとMCP OAuthは動作します。Calendar、Tasks、Notion、Togglの接続ボタンは「公開βで準備中」となり、外部データを書き換えません。
+この状態でもAppwriteログインとMCP OAuthは動作します。Calendar、Tasks、Notion、Togglの接続ボタンは「公開βで準備中」となり、外部データを書き換えません。
 
 ## 4. Remote MCP
 
@@ -98,14 +97,14 @@ Claude、OpenClaw、Hermesは、同じRemote HTTP MCPとOAuth metadataを使い�
 
 ## 5. Agent RegistryとSkill
 
-1. QuestForgeへFirebase Googleログインする
+1. GuilduoへAppwrite Googleログインする
 2. `/next/` > 設定 > AI Agent Registryを開く
 3. Agent ID、表示名、Provider、役割、作業指示を登録する
 4. ChatGPT、Codex、ClaudeなどをRemote MCPへ接続する
 5. 認可済みMCPクライアントをAgentへ紐付ける
 6. Quest担当へ割り当て、`ready → working → review_required → accepted`を確認する
 
-Agent作成、権限変更、MCPクライアント紐付けはFirebaseログインしたWeb UIだけが行います。MCPクライアントは自分の権限を拡張できません。Skillの正規版は[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)、OpenAI Plugin/MCP App準備パッケージは[`plugins/questforge/`](plugins/questforge/)です。
+Agent作成、権限変更、MCPクライアント紐付けはAppwriteログインしたWeb UIだけが行います。MCPクライアントは自分の権限を拡張できません。Skillの正規版は[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)、OpenAI Plugin/MCP App準備パッケージは[`plugins/questforge/`](plugins/questforge/)です。これらのtechnical IDは互換性のため維持します。
 
 ## 6. CLI
 
@@ -130,7 +129,7 @@ npm run cli -- mcp-config --json
 - Notion Public Connectionの審査と親ページ選択を確認
 - Provider SecretをWorker Secretへ登録し、ブラウザやGitHubへ置かない
 - 初回同期がdry-run/プレビューで止まる
-- 外部削除がQuestForgeから自動削除されない
+- 外部削除がGuilduoから自動削除されない
 - 401、429、5xx、競合、接続解除、再接続の実機テストが完了
 - PCとPixel 9でOAuth復帰・同期・失敗表示を確認
 
@@ -159,8 +158,8 @@ GitHub Actionsは`v*`タグだけで公開処理を開始します。
 2. D1の追加migration
 3. Worker deploy
 4. `/health`でWorker版数、Schema、D1を確認
-5. 成功時だけFirebase Rules/Hosting
+5. 成功時だけAppwrite Sitesをデプロイ
 6. `/`、`/next/`、MCP metadata、未認証401をSmoke test
 7. GitHub Release作成
 
-Worker確認に失敗した場合はFirebaseを更新しません。公開βのタグ候補は`v0.5.0-beta.1`です。
+Worker確認に失敗した場合はAppwrite Sitesを更新しません。公開βのタグはpackage versionと一致させます。

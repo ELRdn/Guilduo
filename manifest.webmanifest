@@ -1,7 +1,7 @@
 {
-  "name": "QuestForge Prototype",
-  "short_name": "QuestForge",
-  "description": "Task RPG companion for habits, dailies, todos, rewards, and command battles.",
+  "name": "Guilduo",
+  "short_name": "Guilduo",
+  "description": "HumanとAI AgentがQuest、Handoff、Evidence、Decisionを共有するWork Platform。",
   "lang": "ja",
   "id": "/index.html",
   "start_url": "/",

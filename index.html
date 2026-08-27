@@ -6,9 +6,9 @@
     <meta name="theme-color" content="#232b31" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="QuestForge" />
+    <meta name="apple-mobile-web-app-title" content="Guilduo" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>QuestForge Prototype</title>
+    <title>Guilduo</title>
     <script>
       (() => {
         const storageKey = "questforge-appearance-mode";
@@ -38,7 +38,7 @@
         <div class="brand">
           <div class="brand-mark">QF</div>
           <div>
-            <h1>QuestForge</h1>
+            <h1>Guilduo</h1>
             <p id="brandTagline">Soft Ops Companion</p>
           </div>
           <button class="mobile-menu-button" type="button" id="mobileMenuButton" aria-label="メニューを開く" data-i18n-aria-label="nav.openMenu" aria-expanded="false"><span data-qf-icon="menu" data-qf-icon-size="18"></span></button>
@@ -128,7 +128,7 @@
               <span class="sync-dot" aria-hidden="true"></span>
               <span id="syncStatus" aria-live="polite" data-i18n="sync.initial">初回同期中</span>
               <button type="button" id="syncSignInButton">Google同期</button>
-              <button type="button" id="syncSignOutButton" aria-label="Firebaseからログアウト" hidden>退出</button>
+              <button type="button" id="syncSignOutButton" aria-label="Appwriteからログアウト" hidden>退出</button>
               <button type="button" class="sync-integrations-button" data-view="integrations">連携設定</button>
             </div>
             <div class="theme-switcher" aria-label="Taste options">
@@ -600,7 +600,7 @@
                 <h3 data-i18n="character.rolePreview">役職プレビュー</h3>
                 <button class="secondary-button" type="button" id="randomizeCharacter" data-i18n="character.randomize">おまかせ</button>
               </div>
-              <img id="classLineupImage" class="class-lineup" src="./assets/class-lineup-48.webp" alt="Six QuestForge class pixel avatar concepts" loading="lazy" decoding="async" />
+              <img id="classLineupImage" class="class-lineup" src="./assets/class-lineup-48.webp" alt="Six Guilduo class pixel avatar concepts" loading="lazy" decoding="async" />
               <div class="class-grid" id="classGrid"></div>
             </section>
           </div>
@@ -708,10 +708,10 @@
               <div class="integration-onboarding-copy">
                 <span class="section-kicker" data-i18n="integration.setupKicker">初回セットアップ</span>
                 <h4 id="integrationOnboardingTitle" data-i18n="integration.setupTitle">外部サービスをつなぐ</h4>
-                <p id="integrationOnboardingDescription" data-i18n="integration.setupDescription">QuestForgeのログイン後、サービスを接続して対象を選び、プレビューを確認してから同期します。</p>
+                <p id="integrationOnboardingDescription" data-i18n="integration.setupDescription">Guilduoのログイン後、サービスを接続して対象を選び、プレビューを確認してから同期します。</p>
               </div>
               <ol class="integration-steps" aria-label="連携設定の手順" data-i18n-aria-label="integration.steps">
-                <li id="integrationStepLogin"><span>1</span><strong data-i18n="integration.step.login">QuestForgeにログイン</strong><small data-i18n="integration.step.loginNote">Google同期</small><button class="integration-step-action" type="button" id="integrationLoginButton" data-i18n="integration.loginGoogle">Googleでログイン</button></li>
+                <li id="integrationStepLogin"><span>1</span><strong data-i18n="integration.step.login">Guilduoにログイン</strong><small data-i18n="integration.step.loginNote">Google同期</small><button class="integration-step-action" type="button" id="integrationLoginButton" data-i18n="integration.loginGoogle">Googleでログイン</button></li>
                 <li id="integrationStepConnect"><span>2</span><strong data-i18n="integration.step.connect">サービスを接続</strong><small data-i18n="integration.step.connectNote">OAuth許可</small></li>
                 <li id="integrationStepResource"><span>3</span><strong data-i18n="integration.step.resource">対象を選択</strong><small data-i18n="integration.step.resourceNote">カレンダー・リスト・親ページ</small></li>
                 <li id="integrationStepSync"><span>4</span><strong data-i18n="integration.step.sync">プレビューして同期</strong><small data-i18n="integration.step.syncNote">確認後に実行</small></li>
@@ -719,9 +719,9 @@
             </section>
             <section class="mcp-connect-panel" aria-labelledby="mcpConnectTitle">
               <div class="mcp-connect-copy">
-                <span class="section-kicker">QuestForge MCP</span>
+                <span class="section-kicker">Guilduo MCP</span>
                 <h4 id="mcpConnectTitle" data-i18n="integration.mcpTitle">いつものAIからクエストを操作</h4>
-                <p data-i18n="integration.mcpCopy">接続先をAIのMCPまたはカスタムコネクタ設定へ登録します。初回だけQuestForgeのGoogleログインで許可すれば、以後は同じアカウントのタスクを利用できます。</p>
+                <p data-i18n="integration.mcpCopy">接続先をAIのMCPまたはカスタムコネクタ設定へ登録します。初回だけGuilduoのGoogleログインで許可すれば、以後は同じアカウントのタスクを利用できます。</p>
               </div>
               <label class="mcp-endpoint-field">
                 <span data-i18n="integration.mcpEndpoint">MCP接続先</span>
@@ -755,7 +755,7 @@
                 <div class="panel-heading">
                   <div>
                     <h4 data-i18n="integration.rules">同期ルール</h4>
-                    <p data-i18n="integration.rulesCopy">サービスごとの取り込み方とQuestForge内の変換先。</p>
+                    <p data-i18n="integration.rulesCopy">サービスごとの取り込み方とGuilduo内の変換先。</p>
                   </div>
                 </div>
                 <div class="sync-controls">
@@ -798,7 +798,7 @@
                 <div class="panel-heading">
                   <div>
                     <h4 data-i18n="integration.preview">同期プレビュー</h4>
-                    <p data-i18n="integration.previewCopy">外部データをQuestForgeのクエスト/ログへ変換した結果。</p>
+                    <p data-i18n="integration.previewCopy">外部データをGuilduoのクエスト/ログへ変換した結果。</p>
                   </div>
                 </div>
                 <div class="sync-preview-list" id="syncPreviewList"></div>
@@ -1207,7 +1207,7 @@
           <span data-i18n="focus.connect.key">Personal API key</span>
           <input id="togglFocusApiKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="toggl_sk_..." required />
         </label>
-        <p class="focus-connect-note" data-i18n="focus.connect.note">次の画面で組織IDとWorkspace IDを選びます。デスクトップのアプリ名・ウィンドウ名はQuestForgeへ保存しません。</p>
+        <p class="focus-connect-note" data-i18n="focus.connect.note">次の画面で組織IDとWorkspace IDを選びます。デスクトップのアプリ名・ウィンドウ名はGuilduoへ保存しません。</p>
         <p class="integration-setup-message" id="togglFocusConnectMessage" aria-live="polite"></p>
         <div class="dialog-actions">
           <button type="button" class="secondary-button" id="cancelTogglFocusConnectButton" data-i18n="common.close">閉じる</button>

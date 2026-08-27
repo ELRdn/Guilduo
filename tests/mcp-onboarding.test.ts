@@ -49,6 +49,14 @@ test("OAuth delegates a short-lived Appwrite JWT without exposing an API key", (
   assert.doesNotMatch(oauth, /APPWRITE_API_KEY|x-appwrite-key/);
 });
 
+test("OAuth consent presents the Guilduo public brand", () => {
+  const oauth = fs.readFileSync(path.join(root, "worker", "src", "oauth.ts"), "utf8");
+
+  assert.match(oauth, /Guilduoへ接続/);
+  assert.match(oauth, /Connect to Guilduo/);
+  assert.doesNotMatch(oauth, /QuestForgeへ接続|Connect to QuestForge|Authorize QuestForge/);
+});
+
 test("dynamic OAuth registration rejects insecure remote callbacks", () => {
   const oauth = fs.readFileSync(path.join(root, "worker", "src", "oauth.ts"), "utf8");
 

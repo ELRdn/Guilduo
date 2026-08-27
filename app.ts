@@ -309,7 +309,7 @@ type AppElement = HTMLElement & {
 
 function q<T extends Element = AppElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
-  if (!element) throw new Error(`QuestForge UI element not found: ${selector}`);
+  if (!element) throw new Error(`Guilduo UI element not found: ${selector}`);
   return element;
 }
 
@@ -333,9 +333,9 @@ const appVersion = "2026.08.14-public-beta";
 const productionGatewayUrl = String(globalThis.QuestForgeConfig?.gatewayUrl || "").replace(/\/$/, "");
 const externalOAuthEnabled = globalThis.QuestForgeConfig?.externalOAuthEnabled === true;
 const hadLocalStateAtStartup = Boolean(localStorage.getItem(storageKey));
-const core = globalThis.QuestForgeCore ?? (() => { throw new Error("QuestForge core is not ready"); })();
-const battleRules = globalThis.QuestForgeBattleRules ?? (() => { throw new Error("QuestForge battle rules are not ready"); })();
-const i18n = globalThis.QuestForgeI18n ?? (() => { throw new Error("QuestForge i18n is not ready"); })();
+const core = globalThis.QuestForgeCore ?? (() => { throw new Error("Guilduo core is not ready"); })();
+const battleRules = globalThis.QuestForgeBattleRules ?? (() => { throw new Error("Guilduo battle rules are not ready"); })();
+const i18n = globalThis.QuestForgeI18n ?? (() => { throw new Error("Guilduo i18n is not ready"); })();
 const currentSchemaVersion = core.CURRENT_SCHEMA_VERSION || 2;
 const initialTimestamp = new Date().toISOString();
 
@@ -512,13 +512,13 @@ const storageDrivers: Record<string, StorageDriver> = {
   },
   firebase: {
     id: "firebase",
-    label: "Firebase同期",
+    label: "Appwrite同期",
     enabled: false,
     load() {
       return null;
     },
     save() {
-      // Firebase project config is user-owned, so this driver is wired later.
+      // The legacy driver id is a compatibility boundary; Appwrite owns persistence now.
     },
   },
 };
@@ -969,7 +969,7 @@ const integrationAdapters: IntegrationAdapter[] = [
     rules: [
       "To Doと日課をFocusタスクへ明示的に作成・更新",
       "開始中タイマーは確認してから切り替え、実績は1件につき1つのQuestへ",
-      "アプリ名やウィンドウ名はQuestForgeへ保存しない",
+      "アプリ名やウィンドウ名はGuilduoへ保存しない",
     ],
   },
   {
@@ -984,7 +984,7 @@ const integrationAdapters: IntegrationAdapter[] = [
     description: "実作業時間をXP、Gem、ボスダメージに変換する。",
     rules: [
       "time entryのdurationを集中ログとして取り込む",
-      "Project/TagをQuestForgeタグへ対応",
+      "Project/TagをGuilduoタグへ対応",
       "MVPはmodified_since/期間指定ポーリングで同期",
     ],
   },
@@ -1015,7 +1015,7 @@ const integrationAdapters: IntegrationAdapter[] = [
     scope: "pages / databases",
     description: "実績、振り返り、戦闘ログをNotion DBへ保存する。",
     rules: [
-      "QuestForge Logs専用DBを自動作成",
+      "Guilduo Logs専用DBを自動作成",
       "同じ日付の行は更新して重複を防止",
       "日次サマリーをエクスポート",
     ],
@@ -1367,7 +1367,7 @@ async function flushFocusAutoSyncQueue() {
       await gatewayFetch(`/v1/quests/${encodeURIComponent(questId)}/toggl-focus-task`, { method: "POST", body: JSON.stringify({ dryRun: false }) });
     } catch (error) {
       remaining.push(questId);
-      console.warn("QuestForge Focus task auto-create failed:", error);
+      console.warn("Guilduo Focus task auto-create failed:", error);
     }
   }
   writeFocusAutoSyncQueue(remaining);
@@ -4414,7 +4414,7 @@ function createTaskCard(task: Quest): HTMLElement {
     const localButton = document.createElement("button");
     localButton.className = "secondary-button task-external-action";
     localButton.type = "button";
-    localButton.textContent = googleTasksLink.syncStatus === "remote_missing" ? "Googleへ再作成" : "QuestForge側を採用";
+    localButton.textContent = googleTasksLink.syncStatus === "remote_missing" ? "Googleへ再作成" : "Guilduo側を採用";
     const remoteButton = document.createElement("button");
     remoteButton.className = "secondary-button task-external-action";
     remoteButton.type = "button";
@@ -4425,7 +4425,7 @@ function createTaskCard(task: Quest): HTMLElement {
       remoteButton.disabled = true;
       try {
         await gatewayFetch(`/v1/quests/${encodeURIComponent(task.id)}/google-tasks/resolve`, { method: "POST", body: JSON.stringify({ strategy }) });
-        showToast(strategy === "local" ? "QuestForge側の内容をGoogleへ反映しました。" : "Google側の内容を反映しました。");
+        showToast(strategy === "local" ? "Guilduo側の内容をGoogleへ反映しました。" : "Google側の内容を反映しました。");
       } catch (error) {
         showToast((error as Error).message, { duration: 6000 });
       } finally {
@@ -5076,7 +5076,7 @@ function renderIntegrationResourcePanel(adapter: IntegrationAdapter): void {
     els.integrationResourceList.appendChild(automatic);
     const note = document.createElement("p");
     note.className = "focus-privacy-note";
-    note.textContent = "Focusのデスクトップ自動計測ルールやアプリ名・ウィンドウ名はQuestForgeへ保存しません。";
+    note.textContent = "Focusのデスクトップ自動計測ルールやアプリ名・ウィンドウ名はGuilduoへ保存しません。";
     els.integrationResourceList.appendChild(note);
     return;
   }
@@ -5094,7 +5094,7 @@ function renderIntegrationResourcePanel(adapter: IntegrationAdapter): void {
     return;
   }
 
-  els.integrationResourceTitle.textContent = adapter.id === "google-calendar" ? "表示するカレンダー" : adapter.id === "google-tasks" ? "同期するTasksリスト" : "QuestForge Logsを作る親ページ";
+  els.integrationResourceTitle.textContent = adapter.id === "google-calendar" ? "表示するカレンダー" : adapter.id === "google-tasks" ? "同期するTasksリスト" : "Guilduo Logsを作る親ページ";
   resources.forEach((resource) => {
     const label = document.createElement("label");
     label.className = "integration-resource-option";
@@ -5114,7 +5114,7 @@ function renderIntegrationResourcePanel(adapter: IntegrationAdapter): void {
 
 async function connectSelectedIntegration(): Promise<void> {
   if (!externalOAuthEnabled) throw new Error("外部サービス連携は公開βでは準備中です。");
-  if (!globalThis.QuestForgeFirebase?.getUser?.()) throw new Error("先にQuestForgeへGoogleログインしてください。");
+  if (!globalThis.QuestForgeFirebase?.getUser?.()) throw new Error("先にGuilduoへGoogleログインしてください。");
   const adapter = getSelectedIntegration();
   if (adapter.id === "toggl-focus") {
     openTogglFocusConnectDialog();
@@ -5177,7 +5177,7 @@ async function saveSelectedIntegrationSettings(): Promise<void> {
   }
   gatewayRuntime.integrationPreviewed[adapter.id] = false;
   renderIntegrationHub();
-  showToast(adapter.id === "notion" ? "QuestForge Logsを準備しました。" : adapter.id === "toggl-focus" ? "Toggl Focusの接続先を保存しました。" : "同期設定を保存しました。");
+  showToast(adapter.id === "notion" ? "Guilduo Logsを準備しました。" : adapter.id === "toggl-focus" ? "Toggl Focusの接続先を保存しました。" : "同期設定を保存しました。");
 }
 
 function renderSyncRuleSummary(adapter: IntegrationAdapter): void {
@@ -5253,7 +5253,7 @@ function renderTogglFocusAttributionPreview(preview: JsonRecord): void {
     apply.className = "primary-button";
     apply.textContent = "直接ひもづく実績を取り込む";
     apply.addEventListener("click", async () => {
-      if (!window.confirm(`${ready.length}件のFocus実績をQuestForgeへ取り込みますか？`)) return;
+      if (!window.confirm(`${ready.length}件のFocus実績をGuilduoへ取り込みますか？`)) return;
       apply.disabled = true;
       try {
         const result = await gatewayFetch("/v1/integrations/toggl-focus/attributions", { method: "POST", body: JSON.stringify({ dryRun: false, days: 30 }) });
@@ -5348,16 +5348,16 @@ function mergeTags(...groups: string[][]): string[] {
 }
 
 function buildPartyFormationViewModel(): PartyFormationViewModel {
-  const firebaseUser = globalThis.QuestForgeFirebase?.getUser?.() as { displayName?: string; photoURL?: string } | null;
+  const authUser = globalThis.QuestForgeFirebase?.getUser?.() as { displayName?: string; photoURL?: string } | null;
   const profile = gatewayRuntime.profile;
-  const humanName = String(profile?.displayName || firebaseUser?.displayName || "あなた");
+  const humanName = String(profile?.displayName || authUser?.displayName || "あなた");
   const humanLevel = Number(profile?.level);
   const humanMetrics = Number.isFinite(humanLevel) && humanLevel > 0
     ? [{ label: "LEVEL", value: String(humanLevel), tone: "human" as const }]
     : [];
   const astraQuest = state.tasks.find((task) => task.assignee?.type === "self" || task.assignee?.label === state.character.name);
   const astraRole = getRole(state.character.role);
-  const connected = Boolean(firebaseUser);
+  const connected = Boolean(authUser);
   return {
     title: "作戦編成",
     subtitle: "Human・Astra・登録済みAgentを、既存データから一時的に配置します。",
@@ -5369,7 +5369,7 @@ function buildPartyFormationViewModel(): PartyFormationViewModel {
         identity: "human",
         identityLabel: "HUMAN / PLAYER",
         role: "Commander",
-        avatarSrc: String(profile?.avatarUrl || firebaseUser?.photoURL || "") || undefined,
+        avatarSrc: String(profile?.avatarUrl || authUser?.photoURL || "") || undefined,
         state: connected ? "ready" : "blocked",
         stateLabel: connected ? i18n.t("task.handoffStates.ready") : i18n.t("social.loginRequired"),
         metrics: humanMetrics,
@@ -6391,7 +6391,7 @@ function registerInstallPrompt() {
   window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;
     updateInstallAppButton();
-    showToast("QuestForgeをアプリとして追加しました。", { duration: 5000 });
+    showToast("Guilduoをアプリとして追加しました。", { duration: 5000 });
   });
 
   els.installAppButton.addEventListener("click", async () => {
@@ -6402,7 +6402,7 @@ function registerInstallPrompt() {
     await installPrompt.prompt();
     const choice = await installPrompt.userChoice;
     if (choice?.outcome === "accepted") {
-      showToast("QuestForgeをアプリとして追加中です。", { duration: 5000 });
+      showToast("Guilduoをアプリとして追加中です。", { duration: 5000 });
     }
   });
 
@@ -6505,7 +6505,7 @@ els.importFileInput.addEventListener("change", async () => {
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.tasks)) {
       throw new Error("invalid_state");
     }
-    if (!window.confirm("現在のQuestForgeデータを、このバックアップで置き換えますか？")) {
+    if (!window.confirm("現在のGuilduoデータを、このバックアップで置き換えますか？")) {
       return;
     }
     state = applyScheduledRollover(normalizeState(parsed));
@@ -6516,7 +6516,7 @@ els.importFileInput.addEventListener("change", async () => {
     render();
     showToast(`${state.tasks.length}件のクエストを復元しました。`, { duration: 5000 });
   } catch {
-    showToast("QuestForgeのバックアップJSONを読み込めませんでした。");
+    showToast("GuilduoのバックアップJSONを読み込めませんでした。");
   }
 });
 
@@ -6562,7 +6562,7 @@ function registerServiceWorker() {
       }
       registration.update().catch(() => {});
     } catch (error) {
-      console.warn("QuestForge service worker registration failed:", error);
+      console.warn("Guilduo service worker registration failed:", error);
     }
   });
 }

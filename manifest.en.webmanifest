@@ -1,7 +1,7 @@
 {
-  "name": "QuestForge",
-  "short_name": "QuestForge",
-  "description": "A task RPG companion for habits, daily promises, one-time quests, rewards, and command battles.",
+  "name": "Guilduo",
+  "short_name": "Guilduo",
+  "description": "A Human × AI Work Platform for quests, handoffs, evidence, and decisions.",
   "lang": "en",
   "id": "/index.html",
   "start_url": "/",

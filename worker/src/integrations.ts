@@ -185,9 +185,9 @@ async function ensureNotionDatabase(env: WorkerEnv, uid: string, settings: Integ
     method: "POST",
     body: JSON.stringify({
       parent: { type: "page_id", page_id: settings.parentPageId },
-      title: [{ type: "text", text: { content: "QuestForge Logs" } }],
+      title: [{ type: "text", text: { content: "Guilduo Logs" } }],
       initial_data_source: {
-        title: [{ type: "text", text: { content: "QuestForge Logs" } }],
+        title: [{ type: "text", text: { content: "Guilduo Logs" } }],
         properties: {
           Title: { title: {} }, Date: { date: {} }, Completed: { number: {} }, XP: { number: {} }, Gem: { number: {} }, MP: { number: {} },
           "Focus Minutes": { number: {} }, Review: { rich_text: {} },
@@ -325,7 +325,7 @@ async function syncGoogleTasks(env: WorkerEnv, uid: string, sourceState: QuestFo
         replaceTaskLink(existing, { ...link, syncStatus: "remote_missing", syncedAt: new Date().toISOString() });
         existing.updatedAt = new Date().toISOString();
         conflicts += 1;
-        preview.push({ action: "conflict", title: existing.title, reason: "Google task was deleted; QuestForge kept it." });
+        preview.push({ action: "conflict", title: existing.title, reason: "Google task was deleted; Guilduo kept it." });
       } else skipped += 1;
       continue;
     }
@@ -378,7 +378,7 @@ function dailyLog(state: QuestForgeState, date: string): DailyLog {
   const review = String(reviews.find((item) => item.date === date)?.review || completed.map((task: Quest) => task.title).join(" / ").slice(0, 1800));
   return {
     date,
-    title: `QuestForge ${date}`,
+    title: `Guilduo ${date}`,
     completed: completed.length,
     xp: Number(state.character?.xp || 0), gem: Number(state.character?.gems || 0), mp: Number(state.battle?.mp || 0),
     focusMinutes: completed.reduce((sum: number, task: Quest) => sum + Number(task.actualMinutes || task.manualActualMinutes || 0), 0),
@@ -401,7 +401,7 @@ function notionProperties(log: DailyLog): Record<string, unknown> {
 
 async function syncNotion(env: WorkerEnv, uid: string, state: QuestForgeState, account: IntegrationAccount, dryRun: boolean): Promise<IntegrationResult> {
   const settings = settingsOf(account);
-  if (!settings.notionDataSourceId) throw integrationError(409, "integration_configuration_required", "Create the QuestForge Logs database first.");
+  if (!settings.notionDataSourceId) throw integrationError(409, "integration_configuration_required", "Create the Guilduo Logs database first.");
   const date = new Date().toISOString().slice(0, 10);
   const log = dailyLog(state, date);
   const existing = await findNotionLog(env, uid, settings.notionDataSourceId, date);
@@ -506,7 +506,7 @@ export async function resolveGoogleTaskConflict(env: WorkerEnv, identity: Identi
     replaceTaskLink(task, taskLink(remote, task.updatedAt));
   } else {
     const remote = (await googleJson(env, uid, "google-tasks", `${baseUrl}/${encodeURIComponent(link.externalId)}`)) || {};
-    if (remote.deleted) throw integrationError(409, "remote_task_missing", "The Google task no longer exists. Choose QuestForge to recreate it.");
+    if (remote.deleted) throw integrationError(409, "remote_task_missing", "The Google task no longer exists. Choose Guilduo to recreate it.");
     patchQuest(state, task.id, {
       title: remote.title || task.title,
       notes: remote.notes || "",

@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "QuestForge API",
+    "title": "Guilduo API",
     "version": "2.7.0",
-    "description": "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks."
+    "description": "Guilduo REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks."
   },
   "servers": [
     {
@@ -1601,7 +1601,7 @@
     },
     "/v1/integrations/toggl-focus/disconnect": {
       "post": {
-        "summary": "Disconnect Toggl Focus and remove the encrypted personal API key from QuestForge",
+        "summary": "Disconnect Toggl Focus and remove the encrypted personal API key from Guilduo",
         "responses": {
           "200": {
             "description": "Focus disconnection",
@@ -1771,7 +1771,7 @@
     },
     "/v1/integrations/toggl-focus/purge": {
       "post": {
-        "summary": "Preview or remove all QuestForge-side Toggl Focus links",
+        "summary": "Preview or remove all Guilduo-side Toggl Focus links",
         "requestBody": {
           "required": true,
           "content": {
@@ -2070,7 +2070,7 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "Firebase ID token"
+        "bearerFormat": "Appwrite JWT"
       }
     },
     "schemas": {

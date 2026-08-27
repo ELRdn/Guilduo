@@ -8,6 +8,8 @@ const root = path.join(__dirname, "..");
 test("manifest has a stable root-scoped PWA identity", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 
+  assert.equal(manifest.name, "Guilduo");
+  assert.equal(manifest.short_name, "Guilduo");
   assert.equal(manifest.id, "/index.html");
   assert.equal(manifest.start_url, "/");
   assert.equal(manifest.scope, "/");
@@ -16,9 +18,23 @@ test("manifest has a stable root-scoped PWA identity", () => {
 
 test("English manifest keeps the same PWA identity and localized shortcuts", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.en.webmanifest"), "utf8"));
+  assert.equal(manifest.name, "Guilduo");
+  assert.equal(manifest.short_name, "Guilduo");
   assert.equal(manifest.lang, "en");
   assert.equal(manifest.id, "/index.html");
   assert.deepEqual(manifest.shortcuts.map((shortcut: { name: string }) => shortcut.name), ["Quests", "Battle"]);
+});
+
+test("root app exposes the Guilduo public brand and Appwrite sign-out semantics", () => {
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const app = fs.readFileSync(path.join(root, "app.ts"), "utf8");
+
+  assert.match(html, /<title>Guilduo<\/title>/);
+  assert.match(html, /<h1>Guilduo<\/h1>/);
+  assert.match(html, /apple-mobile-web-app-title" content="Guilduo"/);
+  assert.match(html, /aria-label="Appwriteからログアウト"/);
+  assert.doesNotMatch(html, /QuestForge Prototype|>QuestForge<|Firebaseからログアウト/);
+  assert.doesNotMatch(app, /QuestForge(?:へ|側|タグ| Logs|を|の)|Firebase同期/);
 });
 
 test("service worker uses the root navigation fallback", () => {
