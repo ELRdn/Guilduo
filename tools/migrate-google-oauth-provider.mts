@@ -59,7 +59,6 @@ const appwriteResponse = await fetch(`${endpoint}/project/oauth2/google`, {
   method: "PATCH",
   headers: {
     "content-type": "application/json",
-    "x-appwrite-mode": "admin",
     "x-appwrite-project": String(process.env.APPWRITE_PROJECT_ID),
     "x-appwrite-key": String(process.env.APPWRITE_API_KEY),
   },
