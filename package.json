@@ -1,6 +1,6 @@
 {
   "name": "guilduo",
-  "version": "0.6.0-beta.6",
+  "version": "0.6.0-beta.7",
   "description": "Human and AI work platform for coordinating Quests, handoffs, evidence, and decisions.",
   "license": "AGPL-3.0-only",
   "private": true,

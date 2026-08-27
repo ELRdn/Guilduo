@@ -78,6 +78,7 @@ import {
 import {
   initialPartyState,
   normalizePartyModel,
+  type AgentRecord,
   type PartyState,
   renderPartyDesktop,
   renderPartyMobile,
@@ -103,8 +104,8 @@ import {
   FixtureConnectionsPort,
   REQUIRED_SCOPES,
 } from "./screens/connections-port.ts";
-import type { RelayForgeRuntime } from "./production.ts";
-import { normalizeCommandModel } from "./adapter.ts";
+import { normalizeAgentRecord, type RelayForgeRuntime } from "./production.ts";
+import { normalizeCommandModel, resolveActors } from "./adapter.ts";
 import { questActionState, type QuestActionId } from "./quest-actions.ts";
 
 /**
@@ -190,6 +191,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const initialModel = runtime?.model ?? createFixtureCommandModel();
   const initialQuestId = initialModel.interventions[0]?.questId ?? initialModel.quests[0]?.id ?? null;
   let sharedQuests = [...(runtime?.quests ?? fixtureQuestsFor(readVariant()))];
+  let sharedAgents: AgentRecord[] = [...(runtime?.agents ?? fixtureAgentsFor(readVariant()))];
   const state: ShellState = {
     model: initialModel,
     domain: "command",
@@ -286,7 +288,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const connectionsPort = runtime?.connectionsPort ?? new FixtureConnectionsPort(connectionFailure);
 
   const screenQuests = () => production ? sharedQuests : fixtureQuestsFor(state.variant);
-  const screenAgents = () => runtime?.agents ?? fixtureAgentsFor(state.variant);
+  const screenAgents = () => production ? sharedAgents : fixtureAgentsFor(state.variant);
   const screenIntegrations = () => runtime?.integrations ?? fixtureIntegrationsFor(state.variant);
   const screenMembers = () => runtime?.members ?? fixturePartyMembersFor(state.variant);
   const screenPartyName = () => runtime?.partyName ?? fixturePartyNameFor(state.variant);
@@ -362,7 +364,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   });
   const createAssignee = el("select", { class: "rf-create-input", name: "assignee" });
   createAssignee.append(el("option", { value: "self" }, runtime?.profile?.displayName || "自分"));
-  for (const agent of runtime?.agents ?? []) {
+  for (const agent of sharedAgents) {
     createAssignee.append(el("option", { value: agent.agentId }, `${agent.displayName} · Agent`));
   }
   const createError = el("p", { class: "rf-create-error", role: "alert", hidden: true });
@@ -474,7 +476,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
     const dueDate = createDue.value;
     const estimatedMinutes = Math.max(5, Math.min(1440, Number(createEstimate.value) || 30));
-    const selectedAgent = runtime.agents.find((agent) => agent.agentId === createAssignee.value);
+    const selectedAgent = sharedAgents.find((agent) => agent.agentId === createAssignee.value);
     const editing = editingQuestId !== null;
     const editedQuest = editingQuestId === null ? null : sharedQuests.find((quest) => quest.id === editingQuestId) ?? null;
     const assigneePatch = editing
@@ -531,8 +533,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       sharedQuests = [created, ...sharedQuests.filter((quest) => quest.id !== created.id)];
       rawHandoffStates.set(created.id, created.assignee.handoffState);
       const normalized = normalizeCommandModel({
-        profile: runtime.profile,
-        agents: runtime.agents,
+        profile: runtime.profile ?? { uid: runtime.selfUid, displayName: "あなた" },
+        agents: sharedAgents,
         quests: sharedQuests,
         syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
       });
@@ -548,6 +550,243 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     } finally {
       createSubmit.disabled = false;
       createSubmit.textContent = editing ? "変更を保存" : "Questを作成";
+    }
+  }
+
+  const agentIdInput = el("input", {
+    class: "rf-create-input",
+    name: "agentId",
+    type: "text",
+    maxlength: "80",
+    autocomplete: "off",
+    spellcheck: "false",
+    placeholder: "forge-runner",
+  });
+  const agentNameInput = el("input", {
+    class: "rf-create-input",
+    name: "displayName",
+    type: "text",
+    maxlength: "40",
+    autocomplete: "off",
+    placeholder: "Forge Runner",
+  });
+  const agentProviderInput = el("input", {
+    class: "rf-create-input",
+    name: "provider",
+    type: "text",
+    maxlength: "40",
+    autocomplete: "off",
+    placeholder: "generic",
+  });
+  const agentRoleInput = el("input", {
+    class: "rf-create-input",
+    name: "role",
+    type: "text",
+    maxlength: "60",
+    autocomplete: "off",
+    placeholder: "Build and test executor",
+  });
+  const agentInstructionsInput = el("textarea", {
+    class: "rf-create-input",
+    name: "instructions",
+    maxlength: "4000",
+    rows: "5",
+    placeholder: "このAgentに任せる役割と制約",
+  });
+  const agentHandoffInput = el(
+    "select",
+    { class: "rf-create-input", name: "defaultHandoffState" },
+    el("option", { value: "ready" }, "Ready"),
+    el("option", { value: "working" }, "Working"),
+    el("option", { value: "review_required" }, "Review required"),
+    el("option", { value: "blocked" }, "Blocked"),
+    el("option", { value: "none" }, "None"),
+    el("option", { value: "accepted" }, "Accepted"),
+  );
+  const agentReviewInput = el("input", { type: "checkbox", name: "reviewRequired", checked: true });
+  const agentDryRunInput = el("input", { type: "checkbox", name: "dryRunDefault", checked: true });
+  const agentError = el("p", { class: "rf-create-error", role: "alert", hidden: true });
+  const agentHeading = el("h2", { class: "rf-create-title", id: "rf-agent-title" }, "Agentを登録");
+  const agentKicker = el("p", { class: "rf-region-label" }, "NEW AGENT");
+  const agentSubmit = el("button", { type: "submit", class: "rf-primary-button rf-create-submit" }, "Agentを登録");
+  const agentCancel = el("button", { type: "button", class: "rf-secondary-button" }, "キャンセル");
+  const agentClose = el(
+    "button",
+    { type: "button", class: "rf-icon-button rf-create-close", title: "閉じる" },
+    el("span", { class: "rf-visually-hidden" }, "閉じる"),
+    el("span", { class: "rf-close-mark", "aria-hidden": "true" }),
+  );
+  const agentForm = el(
+    "form",
+    { class: "rf-create-form" },
+    el(
+      "header",
+      { class: "rf-create-header" },
+      el("div", null, agentKicker, agentHeading),
+      agentClose,
+    ),
+    el(
+      "div",
+      { class: "rf-create-body" },
+      createField("Agent ID", agentIdInput, "半角小文字・数字・ハイフン。登録後は変更できません"),
+      createField("表示名", agentNameInput),
+      el(
+        "div",
+        { class: "rf-create-pair" },
+        createField("Provider", agentProviderInput),
+        createField("Role", agentRoleInput),
+      ),
+      createField("指示", agentInstructionsInput, "秘密情報やAPIキーは入力しないでください"),
+      createField("既定の受け渡し", agentHandoffInput),
+      el(
+        "div",
+        { class: "rf-create-pair" },
+        createField("人間のレビューを必須にする", agentReviewInput),
+        createField("既定でdry-runにする", agentDryRunInput),
+      ),
+      agentError,
+    ),
+    el("footer", { class: "rf-create-actions" }, agentCancel, agentSubmit),
+  );
+  const agentDialog = el(
+    "dialog",
+    { class: "rf-create-dialog", "aria-labelledby": "rf-agent-title" },
+    agentForm,
+  );
+  let editingAgentId: string | null = null;
+
+  function closeAgentDialog(): void {
+    if (agentDialog.open) agentDialog.close();
+  }
+
+  function resetAgentDialog(): void {
+    agentForm.reset();
+    agentIdInput.disabled = false;
+    agentReviewInput.checked = true;
+    agentDryRunInput.checked = true;
+    agentHandoffInput.value = "ready";
+    agentError.hidden = true;
+    agentError.textContent = "";
+  }
+
+  function openCreateAgent(): void {
+    if (runtime === null || state.stale) return;
+    editingAgentId = null;
+    resetAgentDialog();
+    agentKicker.textContent = "NEW AGENT";
+    agentHeading.textContent = "Agentを登録";
+    agentSubmit.textContent = "Agentを登録";
+    if (!agentDialog.open) agentDialog.showModal();
+    queueMicrotask(() => agentIdInput.focus());
+  }
+
+  function openEditAgent(agentId: string): void {
+    if (runtime === null || state.stale) return;
+    const agent = sharedAgents.find((entry) => entry.agentId === agentId);
+    if (agent === undefined) return;
+    editingAgentId = agent.agentId;
+    resetAgentDialog();
+    agentKicker.textContent = "EDIT AGENT";
+    agentHeading.textContent = "Agentを編集";
+    agentSubmit.textContent = "変更を保存";
+    agentIdInput.value = agent.agentId;
+    agentIdInput.disabled = true;
+    agentNameInput.value = agent.displayName;
+    agentProviderInput.value = agent.provider ?? "";
+    agentRoleInput.value = agent.role ?? "";
+    agentInstructionsInput.value = agent.instructions ?? "";
+    agentHandoffInput.value = agent.defaultHandoffState || "ready";
+    agentReviewInput.checked = agent.reviewRequired !== false;
+    agentDryRunInput.checked = agent.dryRunDefault !== false;
+    if (!agentDialog.open) agentDialog.showModal();
+    queueMicrotask(() => agentNameInput.focus());
+  }
+
+  function syncAgentAssigneeOptions(): void {
+    const selected = createAssignee.value;
+    replaceChildren(
+      createAssignee,
+      el("option", { value: "self" }, runtime?.profile?.displayName || "自分"),
+      ...sharedAgents
+        .filter((agent) => agent.status !== "archived" && agent.status !== "disabled")
+        .map((agent) => el("option", { value: agent.agentId }, `${agent.displayName} · Agent`)),
+    );
+    createAssignee.value = [...createAssignee.options].some((option) => option.value === selected) ? selected : "self";
+  }
+
+  agentCancel.addEventListener("click", closeAgentDialog);
+  agentClose.addEventListener("click", closeAgentDialog);
+  agentDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeAgentDialog();
+  });
+  agentDialog.addEventListener("close", () => {
+    resetAgentDialog();
+    editingAgentId = null;
+    queueMicrotask(() => shell.querySelector<HTMLElement>(".rf-agent-create")?.focus());
+  });
+  agentForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void submitAgent();
+  });
+
+  async function submitAgent(): Promise<void> {
+    if (runtime === null) return;
+    const agentId = agentIdInput.value.trim().toLowerCase();
+    const displayName = agentNameInput.value.trim();
+    if (editingAgentId === null && (agentId.length > 80 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(agentId))) {
+      agentError.textContent = "Agent IDは半角小文字・数字・ハイフンのslugで入力してください。";
+      agentError.hidden = false;
+      agentIdInput.focus();
+      return;
+    }
+    if (displayName === "") {
+      agentError.textContent = "表示名を入力してください。";
+      agentError.hidden = false;
+      agentNameInput.focus();
+      return;
+    }
+    const editing = editingAgentId !== null;
+    const existing = editingAgentId === null ? null : sharedAgents.find((agent) => agent.agentId === editingAgentId) ?? null;
+    agentSubmit.disabled = true;
+    agentSubmit.textContent = editing ? "保存しています…" : "登録しています…";
+    agentError.hidden = true;
+    try {
+      const values = {
+        displayName,
+        provider: agentProviderInput.value.trim() || "generic",
+        role: agentRoleInput.value.trim() || "assistant",
+        instructions: agentInstructionsInput.value.trim(),
+        defaultHandoffState: agentHandoffInput.value,
+        reviewRequired: agentReviewInput.checked,
+        dryRunDefault: agentDryRunInput.checked,
+      };
+      const response = editingAgentId === null
+        ? await runtime.agentPort.createAgent({ agentId, ...values })
+        : await runtime.agentPort.updateAgent(editingAgentId, {
+          ...values,
+          expectedUpdatedAt: existing?.updatedAt,
+        });
+      const saved = normalizeAgentRecord(response.agent);
+      if (saved === null) throw new Error("保存結果にAgentが含まれていません。");
+      sharedAgents = [saved, ...sharedAgents.filter((agent) => agent.agentId !== saved.agentId)];
+      const profile = runtime.profile ?? { uid: runtime.selfUid, displayName: "あなた" };
+      state.model = {
+        ...state.model,
+        actors: resolveActors(profile, sharedAgents, [...state.model.actors.values()]),
+      };
+      state.screens.party.selectedActorId = saved.agentId;
+      state.screens.party.filter = "all";
+      syncAgentAssigneeOptions();
+      closeAgentDialog();
+      render();
+      announce(editing ? `${saved.displayName}を更新しました。` : `${saved.displayName}を登録しました。`);
+    } catch (error) {
+      agentError.textContent = error instanceof Error ? error.message : "Agentを保存できませんでした。もう一度お試しください。";
+      agentError.hidden = false;
+    } finally {
+      agentSubmit.disabled = false;
+      agentSubmit.textContent = editing ? "変更を保存" : "Agentを登録";
     }
   }
   const shell = el(
@@ -567,6 +806,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     screenSticky,
     sheetHost,
     createDialog,
+    agentDialog,
     liveRegion,
   );
   replaceChildren(root, shell);
@@ -595,8 +835,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     rawHandoffStates.set(quest.id, quest.assignee.handoffState);
     if (runtime === null) return;
     const normalized = normalizeCommandModel({
-      profile: runtime.profile,
-      agents: runtime.agents,
+      profile: runtime.profile ?? { uid: runtime.selfUid, displayName: "あなた" },
+      agents: sharedAgents,
       quests: sharedQuests,
       syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
     });
@@ -1436,9 +1676,14 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         }],
         now: screenNow(),
       });
+      const callbacks = {
+        canManageAgents: runtime !== null,
+        onCreateAgent: openCreateAgent,
+        onEditAgent: openEditAgent,
+      };
       return isMobile()
-        ? renderPartyMobile(model, state.screens.party, context)
-        : renderPartyDesktop(model, state.screens.party, context);
+        ? renderPartyMobile(model, state.screens.party, context, callbacks)
+        : renderPartyDesktop(model, state.screens.party, context, callbacks);
     }
     if (state.domain === "battle") {
       const model = normalizeBattleModel({

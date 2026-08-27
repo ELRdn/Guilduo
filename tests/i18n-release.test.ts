@@ -96,7 +96,7 @@ test("locale preference is device-local and PWA fallback manifests are available
 
 test("release metadata, license, public docs, and CI are present", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.6.0-beta.6");
+  assert.equal(packageJson.version, "0.6.0-beta.7");
   assert.equal(packageJson.license, "AGPL-3.0-only");
   assert.match(fs.readFileSync(path.join(root, "LICENSE"), "utf8"), /GNU AFFERO GENERAL PUBLIC LICENSE/);
   for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", "RELEASE_SETUP.md", ".github/workflows/ci.yml", ".github/workflows/release.yml"]) {

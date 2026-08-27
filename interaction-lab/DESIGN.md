@@ -183,6 +183,8 @@ stateDiagram-v2
 - MCPクライアントはAgentへ接続する手段として表示する。
 - Partyは作戦上の所属、Profileはユーザー本人の情報として分離する。
 - 固定デモAgentを実アカウントへ混入させず、登録済みAgentと実際の担当Questを表示する。
+- Partyが未作成でもサインイン中の本人をHumanとして表示し、空のAgent台帳から登録を開始できる。
+- Agentの作成・編集は公開済みAgent Registry APIへ接続し、保存成功後はPartyとQuestの担当候補へ即時反映する。
 
 ## 7. Next固有コンポーネント
 

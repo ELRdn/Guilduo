@@ -1,6 +1,6 @@
 # Guilduo tagged release setup
 
-`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。現在のAppwrite版候補は`v0.6.0-beta.6`です。
+`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。現在のAppwrite版候補は`v0.6.0-beta.7`です。
 
 ## GitHub Environment
 

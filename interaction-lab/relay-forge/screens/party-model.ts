@@ -83,6 +83,7 @@ export interface AgentRecord {
   readonly displayName: string;
   readonly provider?: string;
   readonly role?: string;
+  readonly instructions?: string;
   readonly status?: string;
   readonly allowedScopes?: readonly string[];
   readonly reviewRequired?: boolean;

@@ -115,6 +115,9 @@ Mobile
 - Partyは作戦上の所属であり、Profileの公開情報とは別に扱う。
 - メンバー、現在の担当Quest、Handoff状態、直近活動を表示する。
 - 空白が残る場合はActivity、レビュー、担当操作を優先して配置する。
+- サインイン中のユーザー本人は、Party未作成でもHumanとして表示する。
+- Agentの新規登録はParty見出しとAgent空状態から開始でき、選択中のAgentは詳細レールから編集できる。
+- Agent IDは登録後に変更せず、更新競合は`updatedAt`で検知する。
 
 ## Integrations / 連携
 

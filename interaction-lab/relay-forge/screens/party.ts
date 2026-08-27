@@ -59,6 +59,12 @@ export interface PartyState {
   mobileDetailOpen: boolean;
 }
 
+export interface PartyCallbacks {
+  readonly canManageAgents: boolean;
+  readonly onCreateAgent: () => void;
+  readonly onEditAgent: (agentId: string) => void;
+}
+
 export function initialPartyState(): PartyState {
   return { selectedActorId: null, filter: "all", mobileDetailOpen: false };
 }
@@ -195,6 +201,7 @@ function detailRail(
   state: PartyState,
   context: ScreenContext,
   onAssign: (actorId: string) => void,
+  callbacks: PartyCallbacks,
 ): HTMLElement {
   const member = model.members.find((entry) => entry.actorId === state.selectedActorId) ?? null;
   if (member === null) {
@@ -207,6 +214,14 @@ function detailRail(
   const actor = context.actors.get(member.actorId);
   const assign = el("button", { type: "button", class: "rf-primary-button" }, "このActorのQuestを開く");
   assign.addEventListener("click", () => onAssign(member.actorId));
+  const edit = member.kind === "agent" && callbacks.canManageAgents
+    ? el("button", {
+      type: "button",
+      class: "rf-secondary-button",
+      disabled: context.writeLocked,
+    }, "Agentを編集")
+    : null;
+  edit?.addEventListener("click", () => callbacks.onEditAgent(member.actorId));
 
   return screenRegion(
     "選択中のActor",
@@ -285,7 +300,7 @@ function detailRail(
     member.reviewRequired
       ? el("p", { class: "rf-p-detail-note" }, "このAgentの出力は、受け入れ前に必ず人間のレビューが必要です。")
       : null,
-    el("div", { class: "rf-p-detail-actions" }, assign),
+    el("div", { class: "rf-p-detail-actions" }, assign, edit),
     ...model.unavailable.map((entry) => unavailableAction(entry.what, entry.why)),
   );
 }
@@ -313,6 +328,7 @@ export function renderPartyDesktop(
   model: PartyModel,
   state: PartyState,
   context: ScreenContext,
+  callbacks: PartyCallbacks,
 ): ScreenRender {
   const loading = model.notices.some((notice) => notice.status === "loading");
   const members = visibleMembers(model, state);
@@ -351,6 +367,17 @@ export function renderPartyDesktop(
         { label: "在籍", value: String(model.members.length) },
       ],
       actions: [
+        ...(callbacks.canManageAgents
+          ? [(() => {
+            const button = el("button", {
+              type: "button",
+              class: "rf-primary-button rf-agent-create",
+              disabled: context.writeLocked,
+            }, "Agentを登録");
+            button.addEventListener("click", callbacks.onCreateAgent);
+            return button;
+          })()]
+          : []),
         segmentControl(
           "種別で絞り込む",
           [
@@ -386,13 +413,19 @@ export function renderPartyDesktop(
         loading
           ? screenSkeleton(5, "row")
           : members.length === 0
-            ? screenEmpty("この種別のActorはいません", "種別タブを切り替えるか、Agent を登録してください。")
+            ? screenEmpty(
+              "この種別のActorはいません",
+              "種別タブを切り替えるか、Agentを登録してください。",
+              callbacks.canManageAgents && state.filter !== "human"
+                ? { label: "Agentを登録", onAct: callbacks.onCreateAgent }
+                : undefined,
+            )
             : roster,
       ),
       detailRail(model, state, context, (actorId) => {
         context.onNavigate("quests");
         context.announce(`${context.actors.get(actorId)?.name ?? actorId} の Quest を Quests で表示します`);
-      }),
+      }, callbacks),
     ),
   );
 
@@ -407,6 +440,7 @@ export function renderPartyMobile(
   model: PartyModel,
   state: PartyState,
   context: ScreenContext,
+  callbacks: PartyCallbacks,
 ): ScreenRender {
   const loading = model.notices.some((notice) => notice.status === "loading");
   const members = visibleMembers(model, state);
@@ -426,7 +460,7 @@ export function renderPartyMobile(
         "div",
         { class: "rf-screen rf-screen--party", "data-mobile-view": "detail" },
         el("div", { class: "rf-p-mobile-bar" }, back),
-        detailRail(model, state, context, () => context.onNavigate("quests")),
+        detailRail(model, state, context, () => context.onNavigate("quests"), callbacks),
       ),
     };
   }
@@ -438,6 +472,17 @@ export function renderPartyMobile(
       title: "Party",
       question: "誰が何を担当し、どの程度の余力と信頼性があるか。",
       meta: [{ label: "在籍", value: String(model.members.length) }],
+      actions: callbacks.canManageAgents
+        ? [(() => {
+          const button = el("button", {
+            type: "button",
+            class: "rf-primary-button rf-agent-create",
+            disabled: context.writeLocked,
+          }, "Agentを登録");
+          button.addEventListener("click", callbacks.onCreateAgent);
+          return button;
+        })()]
+        : [],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     segmentControl(
@@ -456,7 +501,13 @@ export function renderPartyMobile(
     loading
       ? screenSkeleton(4, "card")
       : members.length === 0
-        ? screenEmpty("この種別のActorはいません", "種別タブを切り替えてください。")
+        ? screenEmpty(
+          "この種別のActorはいません",
+          "種別タブを切り替えるか、Agentを登録してください。",
+          callbacks.canManageAgents && state.filter !== "human"
+            ? { label: "Agentを登録", onAct: callbacks.onCreateAgent }
+            : undefined,
+        )
         : el(
           "div",
           { class: "rf-p-cards" },

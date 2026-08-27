@@ -33,7 +33,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
 | Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
 
-アプリ版は `0.6.0-beta.6`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
+アプリ版は `0.6.0-beta.7`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
 
 ## 設計原則
 

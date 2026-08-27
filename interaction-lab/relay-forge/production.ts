@@ -29,6 +29,7 @@ export interface RelayForgeRuntime {
   readonly integrations: readonly IntegrationRecord[];
   readonly partyName: string;
   readonly questPort: Pick<QuestForgeRepository, "createQuest" | "updateQuest">;
+  readonly agentPort: Pick<QuestForgeRepository, "createAgent" | "updateAgent">;
   readonly handoffPort: HandoffPort;
   readonly battlePort: BattlePort;
   readonly battleSession: BattleSession | null;
@@ -49,9 +50,13 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function normalizeMembers(party: JsonRecord): PartyMemberRecord[] {
+export function normalizePartyMembers(
+  party: JsonRecord,
+  selfUid: string,
+  profile: ProfileRecord,
+): PartyMemberRecord[] {
   const source = Array.isArray(party.members) ? party.members : [];
-  return source.map((item) => {
+  const members = source.map((item) => {
     const member = record(item);
     return {
       uid: text(member.uid),
@@ -62,16 +67,27 @@ function normalizeMembers(party: JsonRecord): PartyMemberRecord[] {
       level: typeof member.level === "number" ? member.level : 0,
     };
   }).filter((member) => member.uid !== "");
+  if (selfUid !== "" && !members.some((member) => member.uid === selfUid)) {
+    members.unshift({
+      uid: selfUid,
+      displayName: text(profile.displayName) || text(profile.handle) || "あなた",
+      handle: text(profile.handle),
+      role: "owner",
+      joinedAt: "",
+      level: 0,
+    });
+  }
+  return members;
 }
 
-function normalizeAgents(source: readonly unknown[]): AgentRecord[] {
-  return source.map((item) => {
+export function normalizeAgentRecord(item: unknown): AgentRecord | null {
     const agent = record(item);
-    return {
+    const normalized: AgentRecord = {
       agentId: text(agent.agentId),
       displayName: text(agent.displayName) || text(agent.agentId) || "Agent",
       provider: text(agent.provider),
       role: text(agent.role),
+      instructions: text(agent.instructions),
       status: text(agent.status),
       allowedScopes: strings(agent.allowedScopes),
       reviewRequired: agent.reviewRequired === true,
@@ -79,7 +95,11 @@ function normalizeAgents(source: readonly unknown[]): AgentRecord[] {
       defaultHandoffState: text(agent.defaultHandoffState),
       updatedAt: text(agent.updatedAt),
     };
-  }).filter((agent) => agent.agentId !== "");
+    return normalized.agentId === "" ? null : normalized;
+}
+
+function normalizeAgents(source: readonly unknown[]): AgentRecord[] {
+  return source.map(normalizeAgentRecord).filter((agent): agent is AgentRecord => agent !== null);
 }
 
 function normalizeIntegrations(source: readonly unknown[]): IntegrationRecord[] {
@@ -111,11 +131,12 @@ export async function createProductionRuntime(
   const snapshot = await repository.loadSnapshot();
   const quests = snapshot.quests as Quest[];
   const profile = snapshot.profile as ProfileRecord | null;
+  const effectiveProfile: ProfileRecord = profile ?? { uid: selfUid, displayName: "あなた" };
   const agents = normalizeAgents(snapshot.agents);
   const integrations = normalizeIntegrations(snapshot.integrations);
   const party = record(snapshot.party);
   const model = normalizeCommandModel({
-    profile,
+    profile: effectiveProfile,
     agents: agents as AgentRecordView[],
     quests,
     syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
@@ -127,11 +148,12 @@ export async function createProductionRuntime(
     profile,
     quests,
     selfUid,
-    members: normalizeMembers(party),
+    members: normalizePartyMembers(party, selfUid, effectiveProfile),
     agents,
     integrations,
     partyName: text(party.name) || "Guild Party",
     questPort: repository,
+    agentPort: repository,
     handoffPort: repository,
     battlePort: new RepositoryBattlePort(repository),
     battleSession: Object.keys(snapshot.battle).length === 0 ? null : snapshot.battle as unknown as BattleSession,
