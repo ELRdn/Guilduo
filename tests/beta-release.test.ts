@@ -40,9 +40,12 @@ test("Today scroll boundary is desktop-only and keeps mobile page scrolling", ()
 
 test("beta repository keeps Quest loading independent from optional panels", () => {
   const repository = read("interaction-lab/repository.ts");
+  const relayForge = read("interaction-lab/relay-forge/main.ts");
   assert.match(repository, /const questPage = await this\.request/);
   assert.match(repository, /Promise\.allSettled/);
   assert.match(repository, /panelErrors/);
+  assert.match(repository, /getToken\(true\)/);
+  assert.match(relayForge, /API \$\{error\.status\} \/ \$\{error\.code\}/);
 });
 
 test("public beta keeps external provider OAuth in preparation while Appwrite and MCP remain available", () => {
@@ -80,10 +83,11 @@ test("tagged release derives the active Appwrite deployment URL before Worker an
   const sites = workflow.indexOf("id: appwrite_site");
   const workerConfig = workflow.indexOf("Regenerate Worker configuration for active Appwrite Site");
   const worker = workflow.indexOf("wrangler-action@v3");
+  const appwriteKey = workflow.indexOf("Verify Appwrite Worker key can read the state table");
   const health = workflow.indexOf("Verify Worker after Appwrite Sites");
   const smoke = workflow.indexOf("Smoke test public routes");
   assert.match(workflow, /tags: \["v\*"\]/);
-  assert.ok(d1 > 0 && d1 < sites && sites < workerConfig && workerConfig < worker && worker < health && health < smoke);
+  assert.ok(appwriteKey > 0 && appwriteKey < d1 && d1 < sites && sites < workerConfig && workerConfig < worker && worker < health && health < smoke);
   assert.match(workflow, /steps\.appwrite_site\.outputs\.url/);
   assert.match(workflow, /project\/platforms\/web/);
   assert.match(workflow, /--request POST/);

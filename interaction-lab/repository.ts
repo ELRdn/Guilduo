@@ -11,6 +11,7 @@ type LabState = JsonRecord & {
   remoteIntegrations?: unknown[];
 };
 type RequestOptions = { method?: string; body?: string; headers?: Record<string, string> };
+type TokenProvider = (forceRefresh?: boolean) => Promise<string>;
 type Snapshot = JsonRecord & {
   quests: unknown[];
   total: number;
@@ -173,9 +174,9 @@ export class QuestForgeApiError extends Error {
 
 export class QuestForgeRepository {
   baseUrl: string;
-  getToken: () => Promise<string>;
+  getToken: TokenProvider;
 
-  constructor({ baseUrl = gatewayDefaultUrl(), getToken = async () => "" }: { baseUrl?: string; getToken?: () => Promise<string> } = {}) {
+  constructor({ baseUrl = gatewayDefaultUrl(), getToken = async () => "" }: { baseUrl?: string; getToken?: TokenProvider } = {}) {
     this.baseUrl = cleanUrl(baseUrl);
     this.getToken = getToken;
   }
@@ -186,16 +187,21 @@ export class QuestForgeRepository {
 
   async request<T = JsonRecord>(path: string, options: RequestOptions = {}): Promise<T> {
     if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
-    const token = await this.getToken();
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        accept: "application/json",
-        ...(options.body ? { "content-type": "application/json" } : {}),
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(options.headers || {}),
-      },
-    });
+    const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers: {
+          accept: "application/json",
+          ...(options.body ? { "content-type": "application/json" } : {}),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(options.headers || {}),
+        },
+      });
+    const token = await this.getToken(false);
+    let response = await send(token);
+    if (response.status === 401 && token) {
+      const refreshedToken = await this.getToken(true);
+      if (refreshedToken) response = await send(refreshedToken);
+    }
     const text = await response.text();
     let body: unknown = null;
     try { body = text ? JSON.parse(text) : null; } catch { body = { message: text }; }

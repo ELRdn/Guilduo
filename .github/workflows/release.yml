@@ -45,6 +45,25 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+      - name: Verify Appwrite Worker key can read the state table
+        shell: bash
+        run: |
+          status="$(curl --silent --show-error \
+            --output "$RUNNER_TEMP/appwrite-state-read.json" \
+            --write-out '%{http_code}' \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_API_KEY" \
+            "$APPWRITE_ENDPOINT/tablesdb/$APPWRITE_DATABASE_ID/tables/$APPWRITE_STATE_TABLE_ID/rows?total=false")"
+          if [[ "$status" != "200" ]]; then
+            echo "Appwrite Worker key state-table read failed with HTTP $status" >&2
+            exit 1
+          fi
+        env:
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
+          APPWRITE_STATE_TABLE_ID: ${{ vars.APPWRITE_STATE_TABLE_ID }}
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
       - name: Apply additive D1 migrations
         run: npx wrangler d1 migrations apply "${{ vars.D1_DATABASE_NAME }}" --remote
         env:

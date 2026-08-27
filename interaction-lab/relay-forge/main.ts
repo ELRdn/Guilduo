@@ -21,7 +21,7 @@ import "./screens/connections.css";
 import { requireElement } from "./primitives/dom.ts";
 import { mountRelayForge } from "./shell.ts";
 import { dismissOAuthFailure, observeAuthState, signIn, getIdToken } from "../auth.ts";
-import { QuestForgeRepository } from "../repository.ts";
+import { QuestForgeApiError, QuestForgeRepository } from "../repository.ts";
 import { createProductionRuntime } from "./production.ts";
 
 const root = requireElement<HTMLElement>(document, "#relay-forge-root");
@@ -68,11 +68,14 @@ async function mountProduction(uid: string): Promise<void> {
     const runtime = await createProductionRuntime(repository, uid);
     if (sequence !== loadSequence || demoRequested) return;
     mountRelayForge(root, runtime);
-  } catch {
+  } catch (error) {
     if (sequence !== loadSequence || demoRequested) return;
+    const diagnostic = error instanceof QuestForgeApiError
+      ? `API ${error.status} / ${error.code}`
+      : "接続エラー";
     bootstrap(
       "Workspaceを読み込めませんでした",
-      "接続状態と権限を確認してから再試行してください。データは変更されていません。",
+      `${diagnostic}。接続状態と権限を確認してから再試行してください。データは変更されていません。`,
       [
         { label: "再試行", primary: true, run: () => mountProduction(uid) },
         {
