@@ -54,9 +54,9 @@ if (questListPath?.get) {
 }
 
 openapi.info = {
-  title: "QuestForge API",
+  title: "Guilduo API",
   version: "2.7.0",
-  description: "QuestForge REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks.",
+  description: "Guilduo REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
   { url: "https://your-questforge-worker.example.workers.dev", description: "Cloudflare Worker" },
@@ -155,7 +155,7 @@ Object.assign(openapi.paths, {
     patch: { summary: "Save Toggl Focus organization, workspace, project, and auto-create settings", requestBody: body({ $ref: "#/components/schemas/TogglFocusConfiguration" }), responses: ok("Focus configuration") },
   },
   "/v1/integrations/toggl-focus/disconnect": {
-    post: { summary: "Disconnect Toggl Focus and remove the encrypted personal API key from QuestForge", responses: ok("Focus disconnection") },
+    post: { summary: "Disconnect Toggl Focus and remove the encrypted personal API key from Guilduo", responses: ok("Focus disconnection") },
   },
   "/v1/integrations/toggl-focus/tracking": {
     get: { summary: "Read the current Toggl Focus timer", responses: ok("Focus current tracking") },
@@ -176,11 +176,13 @@ Object.assign(openapi.paths, {
     post: { summary: "Preview or confirm one-to-one Focus entry attribution", requestBody: body({ $ref: "#/components/schemas/TogglFocusAttributionInput" }), responses: ok("Focus attribution") },
   },
   "/v1/integrations/toggl-focus/purge": {
-    post: { summary: "Preview or remove all QuestForge-side Toggl Focus links", requestBody: body({ type: "object", properties: { dryRun: { type: "boolean", default: true } } }), responses: ok("Focus link purge") },
+    post: { summary: "Preview or remove all Guilduo-side Toggl Focus links", requestBody: body({ type: "object", properties: { dryRun: { type: "boolean", default: true } } }), responses: ok("Focus link purge") },
   },
 });
 
 const oauth2 = openapi.components.securitySchemes.oauth2 as OpenApiSchema;
+const bearerAuth = openapi.components.securitySchemes.bearerAuth as OpenApiSchema;
+bearerAuth.bearerFormat = "Appwrite JWT";
 const flows = oauth2.flows as OpenApiSchema;
 const authorizationCode = flows.authorizationCode as OpenApiSchema;
 const scopes = authorizationCode.scopes as Record<string, string>;

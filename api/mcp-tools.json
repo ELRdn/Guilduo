@@ -5,7 +5,7 @@
     {
       "name": "list_today_quests",
       "title": "List Today's Quests",
-      "description": "List active scheduled QuestForge quests visible today, including overdue work.",
+      "description": "List active scheduled Guilduo quests visible today, including overdue work.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -50,7 +50,7 @@
     {
       "name": "list_quests",
       "title": "List Quests",
-      "description": "List QuestForge quests by today, week, future, backlog, completed, archive, or all views.",
+      "description": "List Guilduo quests by today, week, future, backlog, completed, archive, or all views.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -166,7 +166,7 @@
     {
       "name": "create_quest",
       "title": "Create Quest",
-      "description": "Create a QuestForge habit, daily, todo, or reward with planning and priority details.",
+      "description": "Create a Guilduo habit, daily, todo, or reward with planning and priority details.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -397,7 +397,7 @@
     {
       "name": "update_quest",
       "title": "Update Quest",
-      "description": "Edit one QuestForge quest. Moving a scheduled date later increments rolloverCount.",
+      "description": "Edit one Guilduo quest. Moving a scheduled date later increments rolloverCount.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -1252,7 +1252,7 @@
     {
       "name": "list_toggl_focus_entries",
       "title": "List Toggl Focus Entries",
-      "description": "List up to 30 days of Toggl Focus time entries and their current QuestForge attribution state.",
+      "description": "List up to 30 days of Toggl Focus time entries and their current Guilduo attribution state.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1414,7 +1414,7 @@
     {
       "name": "preview_toggl_attribution",
       "title": "Preview Toggl Focus Attribution",
-      "description": "Preview direct Focus-task time entry attribution or manual candidate attribution without changing QuestForge.",
+      "description": "Preview direct Focus-task time entry attribution or manual candidate attribution without changing Guilduo.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1691,7 +1691,7 @@
     {
       "name": "get_my_profile",
       "title": "Get My Profile",
-      "description": "Get the authenticated user's QuestForge public profile settings.",
+      "description": "Get the authenticated user's Guilduo public profile settings.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -1716,7 +1716,7 @@
     {
       "name": "find_profile_by_handle",
       "title": "Find Profile by Handle",
-      "description": "Find one QuestForge public profile by an exact @handle.",
+      "description": "Find one Guilduo public profile by an exact @handle.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -1750,7 +1750,7 @@
     {
       "name": "update_profile",
       "title": "Update Profile",
-      "description": "Create or update the authenticated user's public QuestForge profile, including the selected character icon.",
+      "description": "Create or update the authenticated user's public Guilduo profile, including the selected character icon.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1863,7 +1863,7 @@
     {
       "name": "send_friend_request",
       "title": "Send Friend Request",
-      "description": "Send a friend request to a stable QuestForge user ID after exact-handle lookup.",
+      "description": "Send a friend request to a stable Guilduo user ID after exact-handle lookup.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -2123,7 +2123,7 @@
     {
       "name": "get_battle_session",
       "title": "Get Battle Session",
-      "description": "Get the current QuestForge command battle state, available commands, and MP-generating quests.",
+      "description": "Get the current Guilduo command battle state, available commands, and MP-generating quests.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2193,7 +2193,7 @@
     {
       "name": "get_quest",
       "title": "Get One Quest",
-      "description": "Read one QuestForge quest by ID, including child progress.",
+      "description": "Read one Guilduo quest by ID, including child progress.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -2432,7 +2432,7 @@
     {
       "name": "list_agent_handoffs",
       "title": "List Agent Handoffs",
-      "description": "List agent-assigned QuestForge handoffs by lifecycle state.",
+      "description": "List agent-assigned Guilduo handoffs by lifecycle state.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2500,7 +2500,7 @@
     {
       "name": "list_registered_agents",
       "title": "List Registered Agents",
-      "description": "List the authenticated user's private QuestForge Agent Registry profiles.",
+      "description": "List the authenticated user's private Guilduo Agent Registry profiles.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2780,7 +2780,7 @@
     {
       "name": "list_activity_events",
       "title": "List Activity Events",
-      "description": "Paginate QuestForge activity events, optionally filtering by event type.",
+      "description": "Paginate Guilduo activity events, optionally filtering by event type.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2865,7 +2865,7 @@
     {
       "name": "convert_calendar_event_to_quest",
       "title": "Convert Calendar Event to Quest",
-      "description": "Create a QuestForge quest from a cached Calendar event and optional safe task-field overrides.",
+      "description": "Create a Guilduo quest from a cached Calendar event and optional safe task-field overrides.",
       "inputSchema": {
         "type": "object",
         "required": [

@@ -3,7 +3,7 @@
 > **English summary:** Guilduo is a Human × AI Work Platform where humans and AI agents coordinate work in the same workspace. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).
 
 最終更新: 2026-08-17  
-対象: `0.6.0-beta.1` / REST・MCP `2.7.0` / Schema `7`
+対象: `0.6.0-beta.2` / REST・MCP `2.7.0` / Schema `7`
 文書の位置づけ: アーキテクチャ、ドメイン、API、認証、安全性、運用の正本
 
 ## 1. 目的と境界

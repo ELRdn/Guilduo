@@ -239,8 +239,8 @@ async function focusJson(token: string, path: string, options: FocusRequestOptio
 async function focusAccount(env: WorkerEnv, identity: Identity, { requireConfiguration = true }: { requireConfiguration?: boolean } = {}): Promise<{ uid: string; account: IntegrationAccount; token: string; configuration: FocusConfiguration }> {
   const { uid } = normalizeIdentity(identity);
   const account = await getIntegrationAccount(env, uid, SERVICE, { includeTokens: true });
-  if (!account) throw integrationError(409, "integration_not_connected", "Connect Toggl Focus from the QuestForge web app first.");
-  if (account.status === "reconnect_required") throw integrationError(401, "reconnect_required", "Reconnect Toggl Focus in QuestForge.");
+  if (!account) throw integrationError(409, "integration_not_connected", "Connect Toggl Focus from the Guilduo web app first.");
+  if (account.status === "reconnect_required") throw integrationError(401, "reconnect_required", "Reconnect Toggl Focus in Guilduo.");
   if (!account.accessToken) throw integrationError(503, "integration_vault_unavailable", "The Toggl Focus key could not be loaded.");
   const settings = account.settings || {};
   const configuration: FocusConfiguration = {
@@ -476,7 +476,7 @@ export async function listTogglFocusResources(env: WorkerEnv, identity: Identity
     resources,
     configuration,
     configurationRequired: !(configuration.organizationId && configuration.workspaceId),
-    instructions: "Toggl Focus requires the numeric organization ID and workspace ID shown in its workspace URL or API context. QuestForge never stores desktop activity or window titles.",
+    instructions: "Toggl Focus requires the numeric organization ID and workspace ID shown in its workspace URL or API context. Guilduo never stores desktop activity or window titles.",
   };
 }
 

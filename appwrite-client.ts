@@ -100,7 +100,7 @@ const authApi = {
   },
 };
 globalThis.GuilduoAuth = authApi;
-// Temporary compatibility name for the existing UI call sites during the backend cutover.
+// Legacy global retained as a compatibility contract; authentication is provided by Appwrite.
 globalThis.QuestForgeFirebase = authApi;
 
 syncSignInButton?.addEventListener("click", () => { setSyncUi("syncing", "sync.connecting"); beginGoogleSignIn(); });

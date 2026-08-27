@@ -48,7 +48,7 @@ function conciseText(value: unknown): string {
 
 function safeToolError(error: unknown): string {
   const item = error && typeof error === "object" ? error as Record<string, unknown> : {};
-  const message = typeof item.message === "string" && item.message.trim() ? item.message.trim() : "QuestForge tool failed.";
+  const message = typeof item.message === "string" && item.message.trim() ? item.message.trim() : "Guilduo tool failed.";
   return message.slice(0, 500);
 }
 
@@ -84,7 +84,7 @@ function registerToolHandlers(server: McpServer, env: WorkerEnv, context: McpCon
 function resourceJson(uri: URL, value?: unknown, error?: unknown): { contents: Array<{ uri: string; mimeType: string; text: string }> } {
   const errorRecord = error && typeof error === "object" ? error as Record<string, unknown> : {};
   const text = error
-    ? JSON.stringify({ error: { code: errorRecord.code || "resource_error", message: errorRecord.message || "QuestForge resource unavailable." } }, null, 2)
+    ? JSON.stringify({ error: { code: errorRecord.code || "resource_error", message: errorRecord.message || "Guilduo resource unavailable." } }, null, 2)
     : JSON.stringify(value, null, 2);
   return { contents: [{ uri: uri.href, mimeType: "application/json", text }] };
 }
@@ -97,19 +97,19 @@ function registerResources(server: McpServer, env: WorkerEnv, context: McpContex
   server.registerResource(
     "questforge-today",
     "questforge://quests/today",
-    { title: "Today's Quests", mimeType: "application/json", description: "QuestForge quests visible today, including overdue work." },
+    { title: "Today's Quests", mimeType: "application/json", description: "Guilduo quests visible today, including overdue work." },
     (uri) => readSafe(uri, () => callMcpTool("list_today_quests", {}, env, context, identity)),
   );
   server.registerResource(
     "questforge-backlog",
     "questforge://quests/backlog",
-    { title: "Backlog Quests", mimeType: "application/json", description: "QuestForge quests in the backlog view." },
+    { title: "Backlog Quests", mimeType: "application/json", description: "Guilduo quests in the backlog view." },
     (uri) => readSafe(uri, () => callMcpTool("list_quests", { view: "backlog" }, env, context, identity)),
   );
   server.registerResource(
     "questforge-tree",
     "questforge://quests/tree",
-    { title: "Quest Tree", mimeType: "application/json", description: "QuestForge parent quests, child quests, and progress summaries." },
+    { title: "Quest Tree", mimeType: "application/json", description: "Guilduo parent quests, child quests, and progress summaries." },
     (uri) => readSafe(uri, () => callMcpTool("get_quest_tree", {}, env, context, identity)),
   );
   server.registerResource(
@@ -124,7 +124,7 @@ function registerResources(server: McpServer, env: WorkerEnv, context: McpContex
         } catch { return { resources: [] }; }
       },
     }),
-    { title: "One Quest by ID", mimeType: "application/json", description: "One QuestForge quest, addressed by questId." },
+    { title: "One Quest by ID", mimeType: "application/json", description: "One Guilduo quest, addressed by questId." },
     (uri, variables) => {
       const rawQuestId = variables.questId;
       const questId = Array.isArray(rawQuestId) ? rawQuestId[0] : rawQuestId;
@@ -134,13 +134,13 @@ function registerResources(server: McpServer, env: WorkerEnv, context: McpContex
   server.registerResource(
     "questforge-character",
     "questforge://character",
-    { title: "Character State", mimeType: "application/json", description: "Current QuestForge character, MP, equipment, and boss state." },
+    { title: "Character State", mimeType: "application/json", description: "Current Guilduo character, MP, equipment, and boss state." },
     (uri) => readSafe(uri, () => callMcpTool("get_character_state", {}, env, context, identity)),
   );
   server.registerResource(
     "questforge-activity",
     "questforge://activity",
-    { title: "Activity Events", mimeType: "application/json", description: "Recent QuestForge quest activity events." },
+    { title: "Activity Events", mimeType: "application/json", description: "Recent Guilduo quest activity events." },
     (uri) => readSafe(uri, () => callMcpTool("list_activity_events", { limit: 100 }, env, context, identity)),
   );
   server.registerResource(
@@ -152,7 +152,7 @@ function registerResources(server: McpServer, env: WorkerEnv, context: McpContex
   server.registerResource(
     "questforge-registered-agents",
     "questforge://agents/registered",
-    { title: "Registered Agents", mimeType: "application/json", description: "Private Agent Registry profiles available to the current QuestForge user." },
+    { title: "Registered Agents", mimeType: "application/json", description: "Private Agent Registry profiles available to the current Guilduo user." },
     (uri) => readSafe(uri, () => callMcpTool("list_registered_agents", {}, env, context, identity)),
   );
   server.registerResource(
@@ -186,11 +186,11 @@ const OPTIONAL_ARGUMENT = <T extends z.ZodTypeAny>(schema: T): z.ZodOptional<T> 
 function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "plan_today",
-    { title: "Plan Today", description: "Plan today's QuestForge work from the daily brief.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ date: dateString.optional() })) },
+    { title: "Plan Today", description: "Plan today's Guilduo work from the daily brief.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ date: dateString.optional() })) },
     (rawArgs) => {
       const { date } = rawArgs || {};
       return promptMessages([
-        "Help me plan today's QuestForge work.",
+        "Help me plan today's Guilduo work.",
         "",
         "Read first:",
         `1. Call get_daily_brief (date: ${date || "today"}) to load today's quests, character state, and the Calendar schedule.`,
@@ -210,11 +210,11 @@ function registerPrompts(server: McpServer): void {
   );
   server.registerPrompt(
     "review_day",
-    { title: "Review Day", description: "Review a single day of QuestForge activity.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ anchorDate: dateString.optional() })) },
+    { title: "Review Day", description: "Review a single day of Guilduo activity.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ anchorDate: dateString.optional() })) },
     (rawArgs) => {
       const { anchorDate } = rawArgs || {};
       return promptMessages([
-        "Help me review one day of QuestForge activity.",
+        "Help me review one day of Guilduo activity.",
         "",
         "Read first (read-only):",
         `1. Call get_review_summary (period: "day", anchorDate: ${anchorDate || "today"}).`,
@@ -228,11 +228,11 @@ function registerPrompts(server: McpServer): void {
   );
   server.registerPrompt(
     "review_week",
-    { title: "Review Week", description: "Review a week of QuestForge activity.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ anchorDate: dateString.optional() })) },
+    { title: "Review Week", description: "Review a week of Guilduo activity.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ anchorDate: dateString.optional() })) },
     (rawArgs) => {
       const { anchorDate } = rawArgs || {};
       return promptMessages([
-        "Help me review one week of QuestForge activity.",
+        "Help me review one week of Guilduo activity.",
         "",
         "Read first (read-only):",
         `1. Call get_review_summary (period: "week", anchorDate: ${anchorDate || "today"}).`,
@@ -240,17 +240,17 @@ function registerPrompts(server: McpServer): void {
         "3. Call get_character_state to see the current character.",
         "",
         "Summarize: completion and failure counts, rewards earned, focus minutes, top tags, and weekly trends.",
-        "Suggest improvements only as a proposal. Do not write to QuestForge without explicit confirmation.",
+        "Suggest improvements only as a proposal. Do not write to Guilduo without explicit confirmation.",
       ].join("\n"));
     },
   );
   server.registerPrompt(
     "capture_quest",
-    { title: "Capture a Quest", description: "Capture a new QuestForge quest with the user's confirmation.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ hint: z.string().max(300).optional() })) },
+    { title: "Capture a Quest", description: "Capture a new Guilduo quest with the user's confirmation.", argsSchema: OPTIONAL_ARGUMENT(z.strictObject({ hint: z.string().max(300).optional() })) },
     (rawArgs) => {
       const { hint } = rawArgs || {};
       return promptMessages([
-        "Help me capture a new QuestForge quest.",
+        "Help me capture a new Guilduo quest.",
         "",
         "First clarify what to capture" + (hint ? ` (draft: ${hint})` : "") + ":",
         "- kind: habit, daily, todo, or reward",
@@ -268,7 +268,7 @@ function registerPrompts(server: McpServer): void {
     (rawArgs) => {
       const { assigneeId } = rawArgs || {};
       return promptMessages([
-        "Help me process agent-assigned QuestForge handoffs.",
+        "Help me process agent-assigned Guilduo handoffs.",
         "",
         "Read first:",
         `1. Call list_agent_handoffs (state: "ready"${assigneeId ? `, assigneeId: "${assigneeId}"` : ""}).`,
@@ -290,7 +290,7 @@ function registerPrompts(server: McpServer): void {
     (rawArgs) => {
       const { questId } = rawArgs || {};
       return promptMessages([
-        "Help me assign a QuestForge Quest to one registered Agent.",
+        "Help me assign a Guilduo Quest to one registered Agent.",
         "",
         "Read first:",
         "1. Call list_registered_agents and use only an active Agent.",

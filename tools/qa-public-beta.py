@@ -15,6 +15,23 @@ def assert_no_page_errors(errors, label):
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
 
+    # Root app: the public brand and Appwrite auth semantics must match the release contract.
+    root = browser.new_page(viewport={"width": 1440, "height": 1000})
+    root_errors = []
+    root.on("pageerror", lambda error: root_errors.append(str(error)))
+    root.goto(f"{BASE}/", wait_until="domcontentloaded")
+    assert root.title() == "Guilduo"
+    root.get_by_role("heading", name="Guilduo", exact=True).wait_for()
+    assert root.locator('#syncSignOutButton[aria-label="Appwriteからログアウト"]').count() == 1
+    manifest = root.request.get(f"{BASE}/manifest.webmanifest")
+    assert manifest.ok
+    manifest_data = manifest.json()
+    assert manifest_data["name"] == "Guilduo"
+    assert manifest_data["short_name"] == "Guilduo"
+    root.screenshot(path=str(ARTIFACTS / "root-desktop.png"), full_page=True)
+    assert_no_page_errors(root_errors, "root desktop")
+    root.close()
+
     # Interaction Lab: the complete guest CRUD path must remain usable without cloud auth.
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     errors = []

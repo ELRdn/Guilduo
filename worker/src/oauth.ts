@@ -108,7 +108,7 @@ export async function registerClient(request: Request, env: WorkerEnv): Promise<
   const clientId = randomToken("qfc");
   await getKv(env).put(`client:${clientId}`, JSON.stringify({
     clientId,
-    clientName: String(input.client_name || "QuestForge MCP client").slice(0, 100),
+    clientName: String(input.client_name || "Guilduo MCP client").slice(0, 100),
     redirectUris,
     createdAt: Date.now(),
   }));
@@ -120,16 +120,16 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
   const requestedLanguage = url.searchParams.get("lang") || request.headers.get("accept-language") || "ja";
   const locale = requestedLanguage.toLowerCase().startsWith("ja") ? "ja" : "en";
   const copy = locale === "ja" ? {
-    title: "QuestForge 接続許可",
-    heading: "QuestForgeへ接続",
+    title: "Guilduo 接続許可",
+    heading: "Guilduoへ接続",
     request: "が次の操作を要求しています。",
     privacy: "Googleログイン後に許可します。パスワードはAIクライアントへ共有されません。",
     approve: "Googleでログインして許可",
     connecting: "Googleへ接続中...",
     failed: "接続できませんでした: ",
   } : {
-    title: "Authorize QuestForge",
-    heading: "Connect to QuestForge",
+    title: "Authorize Guilduo",
+    heading: "Connect to Guilduo",
     request: "is requesting the following permissions.",
     privacy: "You will approve after Google sign-in. Your password is never shared with the AI client.",
     approve: "Sign in with Google and approve",
@@ -190,7 +190,7 @@ async function writeClientGrantIndex(env: WorkerEnv, grant: ClientGrant, tokenHa
   await kv.put(key, JSON.stringify({
     uid: grant.uid,
     clientId: grant.clientId,
-    clientName: client?.clientName || "QuestForge MCP client",
+    clientName: client?.clientName || "Guilduo MCP client",
     scopes: grant.scopes || [],
     firstConnectedAt: existing?.firstConnectedAt || now,
     lastUsedAt: now,
