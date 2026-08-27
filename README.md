@@ -10,10 +10,10 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 
 | 入口 | リンク | 用途 |
 |---|---|---|
-| 公式LP | [Guilduo Landing Page](https://6a90aca9c4ea03ac1ff5.appwrite.network/lp/) | Guilduoの思想、機能、使い方を知る |
-| 正式UI | [Guilduo / Relay Forge](https://6a90aca9c4ea03ac1ff5.appwrite.network/next/relay-forge/) | 公開βのCommand・Quest運用画面を開く |
+| 公式LP | [Guilduo Landing Page](https://6a90b2282a65958277c2.appwrite.network/lp/) | Guilduoの思想、機能、使い方を知る |
+| 正式UI | [Guilduo / Relay Forge](https://6a90b2282a65958277c2.appwrite.network/next/relay-forge/) | 公開βのCommand・Quest運用画面を開く |
 
-現在の公開候補はAppwrite Sites上の `v0.6.0-beta.6` です。上記リンクはリリース完了後に最新Deploymentへ更新します。
+現在の公開先はAppwrite Sites上の `v0.6.0-beta.6` です。
 
 ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 
