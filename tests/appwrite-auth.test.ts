@@ -37,6 +37,53 @@ test("Appwrite OAuth return restores the authenticated Guilduo user", async () =
   assert.equal(callbackCleared, true);
 });
 
+test("OAuth callback recovers when Appwrite already created the browser session", async () => {
+  const authModule = await import("../appwrite-auth.ts");
+  const createAuth = (authModule as unknown as {
+    createGuilduoAuth: (options: unknown) => {
+      resolveAuthState: () => Promise<{ status: string; user?: { uid: string; email: string; displayName: string } }>;
+    };
+  }).createGuilduoAuth;
+
+  let callbackCleared = false;
+  const auth = createAuth({
+    account: {
+      createSession: async () => { throw { code: 401 }; },
+      get: async () => ({ $id: "user-1", email: "hironao@example.com", name: "Hironao", prefs: {} }),
+    },
+    getOAuthCallback: () => ({ userId: "user-1", secret: "already-consumed-secret" }),
+    clearOAuthCallback: () => { callbackCleared = true; },
+  });
+
+  assert.deepEqual(await auth.resolveAuthState(), {
+    status: "authenticated",
+    user: { uid: "user-1", email: "hironao@example.com", displayName: "Hironao" },
+  });
+  assert.equal(callbackCleared, true);
+});
+
+test("OAuth callback reports an OAuth failure when session exchange and recovery are unauthorized", async () => {
+  const authModule = await import("../appwrite-auth.ts");
+  const createAuth = (authModule as unknown as {
+    createGuilduoAuth: (options: unknown) => {
+      resolveAuthState: () => Promise<{ status: string }>;
+    };
+  }).createGuilduoAuth;
+
+  let callbackCleared = false;
+  const auth = createAuth({
+    account: {
+      createSession: async () => { throw { code: 401 }; },
+      get: async () => { throw { code: 401 }; },
+    },
+    getOAuthCallback: () => ({ userId: "user-1", secret: "invalid-secret" }),
+    clearOAuthCallback: () => { callbackCleared = true; },
+  });
+
+  assert.deepEqual(await auth.resolveAuthState(), { status: "oauth-failed" });
+  assert.equal(callbackCleared, true);
+});
+
 test("auth state distinguishes a missing session from an Appwrite connection failure", async () => {
   const authModule = await import("../appwrite-auth.ts");
   const createAuth = (authModule as unknown as {

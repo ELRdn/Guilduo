@@ -67,18 +67,32 @@ jobs:
         shell: bash
         run: |
           hostname="${SITE_URL#https://}"
-          curl --silent --show-error --fail \
-            --request PUT \
+          host_prefix="${hostname%%.*}"
+          platform_id="guilduo-site-${host_prefix}"
+          response_file="$RUNNER_TEMP/appwrite-platform.json"
+          status="$(curl --silent --show-error \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --request POST \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
             --header "Content-Type: application/json" \
-            --data "$(jq -cn --arg name 'Guilduo Appwrite Site' --arg hostname "$hostname" '{name:$name,hostname:$hostname}')" \
-            "$APPWRITE_ENDPOINT/project/platforms/web/$APPWRITE_WEB_PLATFORM_ID" >/dev/null
+            --data "$(jq -cn --arg platformId "$platform_id" --arg name "Guilduo ${host_prefix}" --arg hostname "$hostname" '{platformId:$platformId,name:$name,hostname:$hostname}')" \
+            "$APPWRITE_ENDPOINT/project/platforms/web")"
+          if [[ "$status" == "409" ]]; then
+            curl --silent --show-error --fail \
+              --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+              --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
+              "$APPWRITE_ENDPOINT/project/platforms/web/$platform_id" \
+              | jq -e --arg hostname "$hostname" '.hostname == $hostname' >/dev/null
+          elif [[ "$status" != "200" && "$status" != "201" ]]; then
+            echo "Appwrite web platform registration failed with HTTP $status" >&2
+            exit 1
+          fi
         env:
           SITE_URL: ${{ steps.appwrite_site.outputs.url }}
           APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_WEB_PLATFORM_ID: ${{ vars.APPWRITE_WEB_PLATFORM_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
       - name: Regenerate Worker configuration for active Appwrite Site
         run: npm run generate-release-config

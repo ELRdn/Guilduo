@@ -85,6 +85,10 @@ test("tagged release derives the active Appwrite deployment URL before Worker an
   assert.match(workflow, /tags: \["v\*"\]/);
   assert.ok(d1 > 0 && d1 < sites && sites < workerConfig && workerConfig < worker && worker < health && health < smoke);
   assert.match(workflow, /steps\.appwrite_site\.outputs\.url/);
+  assert.match(workflow, /project\/platforms\/web/);
+  assert.match(workflow, /--request POST/);
+  assert.match(workflow, /guilduo-site-/);
+  assert.doesNotMatch(workflow, /project\/platforms\/web\/\$APPWRITE_WEB_PLATFORM_ID/);
   assert.match(workflow, /<title>Guilduo<\/title>/);
   assert.match(deployScript, /sites\/\$APPWRITE_SITE_ID\/logs/);
   assert.match(deployScript, /deploymentId/);

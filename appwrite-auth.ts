@@ -90,20 +90,28 @@ export function createGuilduoAuth(options: AuthOptions) {
   }
 
   async function resolveAuthState(): Promise<GuilduoAuthState> {
-    try {
-      const callback = getOAuthCallback();
-      if (callback) {
-        try {
-          await options.account.createSession(callback);
-        } finally {
-          clearOAuthCallback();
-        }
+    const callback = getOAuthCallback();
+    let callbackError: unknown = null;
+    if (callback) {
+      try {
+        await options.account.createSession(callback);
+      } catch (error) {
+        callbackError = error;
+      } finally {
+        clearOAuthCallback();
       }
+    }
+
+    try {
       return { status: "authenticated", user: await refreshAccount() };
     } catch (error) {
       cachedUser = null;
       cachedJwt = "";
       jwtExpiresAt = 0;
+      if (callback) {
+        if (callbackError && !isUnauthorized(callbackError)) return { status: "connection-error", error: callbackError };
+        if (isUnauthorized(error)) return { status: "oauth-failed" };
+      }
       if (isUnauthorized(error)) return { status: "signed-out" };
       return { status: "connection-error", error };
     }
