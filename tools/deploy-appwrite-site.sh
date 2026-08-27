@@ -78,8 +78,7 @@ for attempt in $(seq 1 90); do
     "$endpoint/$deployment_id" > "$current"
   status="$(jq -r '.status // empty' "$current")"
   if [[ "$status" == "ready" ]]; then
-    jq '{id: .["$id"], status, sourceSize, buildSize, totalSize, createdAt: .["$createdAt"]}' "$current"
-    exit 0
+    break
   fi
   if [[ "$status" == "failed" ]]; then
     jq '{id: .["$id"], status, buildLogs}' "$current"
@@ -88,6 +87,39 @@ for attempt in $(seq 1 90); do
   sleep 5
 done
 
-jq '{id: .["$id"], status}' "$current"
-echo "Timed out waiting for Appwrite deployment" >&2
-exit 1
+if [[ "$(jq -r '.status // empty' "$current")" != "ready" ]]; then
+  jq '{id: .["$id"], status}' "$current"
+  echo "Timed out waiting for Appwrite deployment" >&2
+  exit 1
+fi
+
+logs_endpoint="${APPWRITE_ENDPOINT%/}/sites/$APPWRITE_SITE_ID/logs"
+deployment_query="$(jq -cn --arg id "$deployment_id" '{method:"equal",attribute:"deploymentId",values:[$id]}')"
+site_host=""
+for attempt in $(seq 1 12); do
+  logs="$work_dir/site-logs-$attempt.json"
+  curl --silent --show-error --fail --get \
+    --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+    --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
+    --data-urlencode "queries[]=$deployment_query" \
+    "$logs_endpoint" > "$logs"
+  site_host="$(jq -r '[.executions[]? | .requestHeaders[]? | select(.name == "host") | .value[]? | select(endswith(".appwrite.network"))][0] // empty' "$logs")"
+  if [[ "$site_host" =~ ^[a-z0-9-]+\.appwrite\.network$ ]]; then
+    break
+  fi
+  site_host=""
+  sleep 5
+done
+
+if [[ -z "$site_host" ]]; then
+  echo "Could not resolve the active Appwrite deployment URL from site logs" >&2
+  exit 1
+fi
+
+jq -n \
+  --arg id "$deployment_id" \
+  --arg status "ready" \
+  --arg url "https://$site_host" \
+  --argjson sourceSize "$(jq '.sourceSize' "$current")" \
+  --argjson buildSize "$(jq '.buildSize' "$current")" \
+  '{id:$id,status:$status,url:$url,sourceSize:$sourceSize,buildSize:$buildSize}'

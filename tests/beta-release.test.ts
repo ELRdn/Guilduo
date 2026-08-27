@@ -73,14 +73,22 @@ test("CLI, Skill bundle, and MCP App handoff package are present without credent
   assert.doesNotMatch([mcp, submission].join("\n"), /AIzaSy|client_secret|private_key|Bearer\s+[A-Za-z0-9]/i);
 });
 
-test("tagged release gates Appwrite Sites behind D1, Worker, and health verification", () => {
+test("tagged release derives the active Appwrite deployment URL before Worker and semantic smoke checks", () => {
   const workflow = read(".github/workflows/release.yml");
+  const deployScript = read("tools/deploy-appwrite-site.sh");
   const d1 = workflow.indexOf("d1 migrations apply");
+  const sites = workflow.indexOf("id: appwrite_site");
+  const workerConfig = workflow.indexOf("Regenerate Worker configuration for active Appwrite Site");
   const worker = workflow.indexOf("wrangler-action@v3");
-  const health = workflow.indexOf("Verify Worker before Appwrite Sites");
-  const sites = workflow.indexOf("Smoke test public routes");
+  const health = workflow.indexOf("Verify Worker after Appwrite Sites");
+  const smoke = workflow.indexOf("Smoke test public routes");
   assert.match(workflow, /tags: \["v\*"\]/);
-  assert.ok(d1 > 0 && d1 < worker && worker < health && health < sites);
+  assert.ok(d1 > 0 && d1 < sites && sites < workerConfig && workerConfig < worker && worker < health && health < smoke);
+  assert.match(workflow, /steps\.appwrite_site\.outputs\.url/);
+  assert.match(workflow, /<title>Guilduo<\/title>/);
+  assert.match(deployScript, /sites\/\$APPWRITE_SITE_ID\/logs/);
+  assert.match(deployScript, /deploymentId/);
+  assert.match(deployScript, /appwrite\.network/);
   assert.match(workflow, /agentStorage!=="d1"/);
   assert.doesNotMatch(workflow, /firebase deploy/);
 });
