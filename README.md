@@ -6,6 +6,15 @@
 
 Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事を依頼し、担当し、受け渡し、レビューするための **Human × AI Work Platform** です。現実の作業をQuestとして扱い、Relay、Evidence、Decisionを共有しながら仕事を前へ進めます。
 
+## 公開リンク
+
+| 入口 | リンク | 用途 |
+|---|---|---|
+| 公式LP | [Guilduo Landing Page](https://6a901b6db7175b486644.appwrite.network/lp/) | Guilduoの思想、機能、使い方を知る |
+| 正式UI | [Guilduo / Relay Forge](https://6a901b6db7175b486644.appwrite.network/next/relay-forge/) | 公開βのCommand・Quest運用画面を開く |
+
+現在の公開先はAppwrite Sites上の `v0.6.0-beta.3` です。
+
 ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 
 GuilduoはHabiticaとは独立したプロジェクトです。提携・承認・代替サービスではありません。各製品名と商標はそれぞれの権利者に帰属します。
@@ -19,12 +28,12 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | Quest CRUD、保管、Quest Tree、MPバトル | 利用可能 |
 | Agent Registry、MCPクライアント紐付け、Handoff | 利用可能 |
 | REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
-| `/next/` Interaction Lab | 新UIの公開β・検証レーン |
+| `/next/relay-forge/` Guilduo / Relay Forge | 正式UIの公開β（Desktop / Mobile） |
 | 9言語 | ルートUIで利用可能。βUIも主要ナビを対応 |
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
 | Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
 
-アプリ版は `0.6.0-beta.1`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
+アプリ版は `0.6.0-beta.3`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
 
 ## 設計原則
 
