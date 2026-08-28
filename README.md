@@ -77,15 +77,83 @@ https://<your-worker>/mcp
 
 MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、プロフィール、パーティー、バトル、Toggl Focus契約を含む51 toolsを公開します。`/mcp-next`は新SDK向けの検証レーンで、ResourcesとWorkflow Promptsを追加します。既存クライアントの互換性のため、通常利用は `/mcp` を維持します。
 
+### 新しいMCP接続はOAuthで登録する
+
+この手順は、ChatGPT、Codex、Claude、OpenClawなど、Remote HTTP MCPとOAuthに対応したクライアント向けです。初回接続では手順1〜6を順に実施してください。接続後の確認だけなら手順7から読めます。
+
+1. 移行前のGuilduo／QuestForge接続がクライアントに残っている場合は、いったん切断または削除します。旧OAuth GrantとTokenは再利用できません。
+2. クライアントのMCPまたはConnector設定を開き、接続名を`Guilduo`、種類をRemote HTTP MCPとして登録します。
+3. URLには、安定版の`https://<your-worker>/mcp`を指定します。`<your-worker>`はCloudflare Workerの公開hostnameへ置き換えてください。通常の接続テストでは`/mcp-next`を使いません。
+4. 認証方式を選べるクライアントでは`OAuth`を選びます。API Key、Bearer Token、Client Secretは入力しません。
+5. ブラウザに「Guilduoへ接続」が表示されたら、Web版Guilduoと同じAppwriteアカウントでログインし、要求された権限を確認して許可します。
+6. MCPクライアントへ戻り、接続済みまたは利用可能と表示されることを確認します。この時点ではOAuth接続だけが完了しており、Agentはまだ未リンクの場合があります。
+7. [Guilduo / Relay Forge](https://6a90bb258248d43363a2.appwrite.network/next/relay-forge/)のConnectionsを開き、接続したClientを希望するAgentへリンクします。Agentがなければ、Partyの「Agentを登録」から先に作成します。
+8. MCPクライアントを再起動または再読込し、下記の接続テストを実行します。
+
+設定ファイルでRemote MCPを追加するクライアントでは、次の例を使えます。
+
+```json
+{
+  "mcpServers": {
+    "guilduo": {
+      "type": "http",
+      "url": "https://<your-worker>/mcp",
+      "authentication": "oauth"
+    }
+  }
+}
+```
+
+OAuth metadataはMCPクライアントが自動検出します。手動確認が必要な場合だけ、次のURLを使います。
+
+```text
+Authorization Server Metadata
+https://<your-worker>/.well-known/oauth-authorization-server
+
+Protected Resource Metadata
+https://<your-worker>/.well-known/oauth-protected-resource/mcp
+```
+
+### 接続テストはAgent Contextまで確認する
+
+クライアントから次の順に確認します。
+
+1. MCPの初期化が成功する。
+2. `tools/list`で51 toolsを取得できる。
+3. `list_registered_agents`で自分のAgentだけが返る。
+4. `get_current_agent_context`を呼び出す。
+
+Agentリンク前の正常な応答は`linked: false`かつ`agent: null`です。Connectionsでリンクした後は`linked: true`になり、`agent`と`effectiveScopes`が返ります。ここまで確認できれば、OAuth認証、UID分離、Agentリンクが同じ接続で機能しています。
+
+テスト用の依頼例：
+
+```text
+Guilduo MCPのtools/listを確認し、get_current_agent_contextを実行してください。
+Agentがリンク済みか、Agent ID、Role、effectiveScopesだけを報告してください。
+Token、Client ID、UIDは表示しないでください。
+```
+
+### 401やAgent未リンクを切り分ける
+
+| 状態 | 対応 |
+|---|---|
+| 接続直後から401になる | 古いOAuth情報が残っています。接続を削除し、同じ`/mcp` URLを新規登録して認可し直します。 |
+| OAuth画面から戻れない | Web版Guilduoと同じAppwriteアカウントでログインしているか確認します。Clientへ戻るcallbackを遮断する拡張機能も一時的に確認します。 |
+| `linked: false`になる | OAuthは成功しています。Relay ForgeのConnectionsでClientをAgentへリンクします。 |
+| `agents:read`の権限エラーになる | 接続を認可し直し、認可画面でAgent読み取り権限を確認します。Agent側ではOAuth権限を追加できません。 |
+| Agentをリンクしたのに反映されない | MCPクライアントを再読込し、`get_current_agent_context`を再実行します。 |
+
+接続設定やログへToken、API Key、完全なUIDを貼らないでください。OAuth認可後のTokenはMCPクライアントとCloudflare KVが管理します。
+
 ### AIクライアント
 
-- ChatGPT / Codex：リモートMCP Appまたは開発者モードへ `/mcp` を登録
+- ChatGPT / Codex：リモートMCP Appまたは開発者モードへ上記の本番`/mcp` URLを登録
 - Claude：Settings > ConnectorsからOAuth Remote MCPを追加
-- Gemini CLI：`gemini mcp add --transport http questforge https://<your-worker>/mcp`
-- GitHub Copilot CLI：`copilot mcp add --transport http questforge https://<your-worker>/mcp`
+- Gemini CLI：`gemini mcp add --transport http guilduo https://<your-worker>/mcp`
+- GitHub Copilot CLI：`copilot mcp add --transport http guilduo https://<your-worker>/mcp`
 - OpenClaw / Hermes：後続の接続レシピで同じRemote HTTP MCPを使用
 
-登録後はGuilduo設定の **AI Agent Registry** でAgentを作成し、認可済みMCPクライアントをAgentへ紐付けます。Agentから権限を増やすことはできません。
+登録後はGuilduo設定の **AI Agent Registry** でAgentを作成し、認可済みMCPクライアントをAgentへ紐付けます。AgentからMCPクライアントの権限は増やせません。
 
 ## CLI
 
