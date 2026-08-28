@@ -29,6 +29,8 @@
     "cli": "tsx cli/questforge.ts",
     "generate-release-config": "tsx tools/generate-release-config.mts",
     "migrate:appwrite": "tsx tools/migrate-firebase-to-appwrite.mts",
+    "migrate:agent-owners": "tsx tools/migrate-agent-owners.mts",
+    "revoke:legacy-mcp": "tsx tools/revoke-legacy-mcp-grants.mts",
     "typecheck": "npm run generate-types && wrangler types --check && npm run check:typescript-policy && tsc -b && npm run typecheck:battle",
     "check:typescript-policy": "tsx tools/check-typescript-policy.mts",
     "typecheck:battle": "tsc -p tsconfig.battle.json --noEmit",

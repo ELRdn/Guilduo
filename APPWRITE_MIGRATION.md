@@ -45,3 +45,31 @@ npm run migrate:appwrite -- --state-export ./private/firebase-rtdb.json --users-
 - 監視中にFirebaseへの新規書き込みがない
 
 切替後24時間はFirebaseを読み取り可能なロールバック元として保持します。Appwrite側でデータ欠損が見つかった場合はWeb URLを旧版へ戻し、Firebaseを再度書き込み可能にして原因を修正します。
+
+## Agent Registry owner recovery
+
+`legacy_states`へ移したのはユーザー状態だけです。D1のAgent RegistryがFirebase UID所有のまま残った場合は、次の順序で復旧します。
+
+1. D1をexportし、復元可能なバックアップを保管する。
+2. Appwrite `legacy_states`由来の`firebaseUid`/`emailHash`と、Appwrite Users API由来の本人確認済みemail/UIDをidentity proof JSONにする。初回移管で`legacy_states`が削除済みの場合だけ、Firebase Auth exportのUID/emailを代替根拠にできる。
+3. D1のAgent/Connection棚卸しをsnapshot JSONにし、dry-runする。
+
+```bash
+npm run migrate:agent-owners -- --identity-proof ./private/agent-owner-proof.json --d1-snapshot ./private/agent-registry-snapshot.json
+```
+
+`legacySource`が`firebase:auth-export`の場合、execute時にも同じAuth exportを再検証する。
+
+```bash
+npm run migrate:agent-owners -- --identity-proof ./private/agent-owner-proof.json --d1-snapshot ./private/agent-registry-snapshot.json --firebase-auth-export ./private/firebase-auth-users.json --backup ./backups/agent-registry.sql --execute
+```
+
+dry-runの`conflicts`が0で、件数とchecksumを確認し、本番実行の明示承認を得た後だけ`--execute`を追加します。実行時は空でない`--backup`とCloudflare D1用の環境変数が必須です。Agent本体だけをコピーし、旧UID行とConnectionは残します。
+
+旧OAuth TokenはUIDを書き換えず、KV棚卸しとバックアップ後に別工程で失効します。
+
+```bash
+npm run revoke:legacy-mcp -- --identity-proof ./private/agent-owner-proof.json --inventory ./private/legacy-mcp-inventory.json
+```
+
+承認後の`--execute`はAccess/Refresh Tokenを削除し、旧Grantをrevokedにします。Client registrationは保持し、Appwrite認証で再接続した新ClientをGuilduoのConnectionsから復旧Agentへ再リンクします。

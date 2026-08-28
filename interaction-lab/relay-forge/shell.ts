@@ -603,6 +603,18 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     el("option", { value: "none" }, "None"),
     el("option", { value: "accepted" }, "Accepted"),
   );
+  const agentStatusInput = el("select", { class: "rf-create-input", name: "status" },
+    el("option", { value: "active" }, "Active"),
+    el("option", { value: "disabled" }, "Disabled"));
+  const agentScopeValues = [
+    "quests:read", "quests:write", "character:read", "rewards:write", "integrations:read",
+    "integrations:sync", "events:read", "profiles:read", "friends:read", "friends:write",
+    "parties:read", "parties:write", "battle:read", "battle:write", "agents:read",
+    "profiles:write", "webhooks:manage", "plugins:manage",
+  ] as const;
+  const agentScopesInput = el("select", {
+    class: "rf-create-input", name: "allowedScopes", multiple: true, size: "6",
+  }, ...agentScopeValues.map((scope) => el("option", { value: scope }, scope)));
   const agentReviewInput = el("input", { type: "checkbox", name: "reviewRequired", checked: true });
   const agentDryRunInput = el("input", { type: "checkbox", name: "dryRunDefault", checked: true });
   const agentError = el("p", { class: "rf-create-error", role: "alert", hidden: true });
@@ -638,6 +650,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       ),
       createField("指示", agentInstructionsInput, "秘密情報やAPIキーは入力しないでください"),
       createField("既定の受け渡し", agentHandoffInput),
+      createField("Allowed Scopes", agentScopesInput, "Ctrl / Commandを押しながら複数選択できます"),
+      createField("状態", agentStatusInput, "Disabledにすると既存のMCP接続は失効します"),
       el(
         "div",
         { class: "rf-create-pair" },
@@ -654,6 +668,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     agentForm,
   );
   let editingAgentId: string | null = null;
+  let agentDialogReturnFocus: HTMLElement | null = null;
 
   function closeAgentDialog(): void {
     if (agentDialog.open) agentDialog.close();
@@ -665,12 +680,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     agentReviewInput.checked = true;
     agentDryRunInput.checked = true;
     agentHandoffInput.value = "ready";
+    agentStatusInput.value = "active";
+    for (const option of agentScopesInput.options) option.selected = option.value === "quests:read";
     agentError.hidden = true;
     agentError.textContent = "";
   }
 
   function openCreateAgent(): void {
     if (runtime === null || state.stale) return;
+    agentDialogReturnFocus = document.activeElement as HTMLElement | null;
     editingAgentId = null;
     resetAgentDialog();
     agentKicker.textContent = "NEW AGENT";
@@ -684,6 +702,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     if (runtime === null || state.stale) return;
     const agent = sharedAgents.find((entry) => entry.agentId === agentId);
     if (agent === undefined) return;
+    agentDialogReturnFocus = document.activeElement as HTMLElement | null;
     editingAgentId = agent.agentId;
     resetAgentDialog();
     agentKicker.textContent = "EDIT AGENT";
@@ -696,6 +715,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     agentRoleInput.value = agent.role ?? "";
     agentInstructionsInput.value = agent.instructions ?? "";
     agentHandoffInput.value = agent.defaultHandoffState || "ready";
+    agentStatusInput.value = agent.status === "disabled" ? "disabled" : "active";
+    const selectedScopes = new Set(agent.allowedScopes ?? []);
+    for (const option of agentScopesInput.options) option.selected = selectedScopes.has(option.value);
     agentReviewInput.checked = agent.reviewRequired !== false;
     agentDryRunInput.checked = agent.dryRunDefault !== false;
     if (!agentDialog.open) agentDialog.showModal();
@@ -721,9 +743,13 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     closeAgentDialog();
   });
   agentDialog.addEventListener("close", () => {
+    const returnFocus = agentDialogReturnFocus;
     resetAgentDialog();
     editingAgentId = null;
-    queueMicrotask(() => shell.querySelector<HTMLElement>(".rf-agent-create")?.focus());
+    agentDialogReturnFocus = null;
+    queueMicrotask(() => returnFocus?.isConnected
+      ? returnFocus.focus()
+      : shell.querySelector<HTMLElement>(".rf-agent-create")?.focus());
   });
   agentForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -758,6 +784,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         role: agentRoleInput.value.trim() || "assistant",
         instructions: agentInstructionsInput.value.trim(),
         defaultHandoffState: agentHandoffInput.value,
+        allowedScopes: [...agentScopesInput.selectedOptions].map((option) => option.value),
         reviewRequired: agentReviewInput.checked,
         dryRunDefault: agentDryRunInput.checked,
       };
@@ -765,6 +792,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         ? await runtime.agentPort.createAgent({ agentId, ...values })
         : await runtime.agentPort.updateAgent(editingAgentId, {
           ...values,
+          status: agentStatusInput.value,
           expectedUpdatedAt: existing?.updatedAt,
         });
       const saved = normalizeAgentRecord(response.agent);
@@ -782,7 +810,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       render();
       announce(editing ? `${saved.displayName}を更新しました。` : `${saved.displayName}を登録しました。`);
     } catch (error) {
-      agentError.textContent = error instanceof Error ? error.message : "Agentを保存できませんでした。もう一度お試しください。";
+      const apiError = error as { status?: number; code?: string };
+      agentError.textContent = apiError.status === 409 || apiError.code === "agent_conflict"
+        ? "ほかの場所でAgentが更新されました。最新の状態を読み込み直してから、もう一度編集してください。"
+        : error instanceof Error ? error.message : "Agentを保存できませんでした。もう一度お試しください。";
       agentError.hidden = false;
     } finally {
       agentSubmit.disabled = false;
