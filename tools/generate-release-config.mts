@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { OFFICIAL_SITE_ORIGIN } from "../site-routing.ts";
 
 const required = [
   "APPWRITE_ENDPOINT", "APPWRITE_PROJECT_ID", "APPWRITE_DATABASE_ID", "APPWRITE_STATE_TABLE_ID", "APPWRITE_LEGACY_TABLE_ID",
@@ -9,18 +10,35 @@ for (const name of required) {
 }
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2);
+const normalizeBaseUrl = (value: string, name: string): string => {
+  const normalized = String(value || "").trim().replace(/\/+$/, "");
+  try {
+    const url = new URL(normalized);
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("invalid URL");
+    return url.origin;
+  } catch {
+    throw new Error(`Invalid release URL: ${name}`);
+  }
+};
+const workerBaseUrl = normalizeBaseUrl(process.env.WORKER_BASE_URL || "", "WORKER_BASE_URL");
+const mcpBaseUrl = normalizeBaseUrl(process.env.MCP_BASE_URL || "https://mcp.guilduo.com", "MCP_BASE_URL");
+const providerOAuthBaseUrl = normalizeBaseUrl(process.env.PROVIDER_OAUTH_BASE_URL || workerBaseUrl, "PROVIDER_OAUTH_BASE_URL");
+const webAppUrl = normalizeBaseUrl(process.env.WEB_APP_URL || "", "WEB_APP_URL");
+const publicSiteUrl = normalizeBaseUrl(process.env.PUBLIC_SITE_URL || OFFICIAL_SITE_ORIGIN, "PUBLIC_SITE_URL");
+const mcpAllowedOrigins = String(process.env.MCP_ALLOWED_ORIGINS || `${workerBaseUrl},${mcpBaseUrl}`).trim();
+const allowedWebOrigins = [...new Set([webAppUrl, publicSiteUrl, "http://localhost:5173", "http://127.0.0.1:5173"])].join(",");
 const appwrite = {
   endpoint: process.env.APPWRITE_ENDPOINT,
   projectId: process.env.APPWRITE_PROJECT_ID,
 };
 const runtime = {
-  gatewayUrl: process.env.WORKER_BASE_URL,
+  gatewayUrl: mcpBaseUrl,
   sourceUrl: process.env.SOURCE_URL || "",
   externalOAuthEnabled: String(process.env.EXTERNAL_OAUTH_ENABLED || "false").toLowerCase() === "true",
-  telemetryEndpoint: process.env.TELEMETRY_ENDPOINT || `${process.env.WORKER_BASE_URL}/telemetry`,
+  telemetryEndpoint: process.env.TELEMETRY_ENDPOINT || `${mcpBaseUrl}/telemetry`,
   appwriteEndpoint: process.env.APPWRITE_ENDPOINT,
   appwriteProjectId: process.env.APPWRITE_PROJECT_ID,
-  joinGuildUrl: process.env.JOIN_GUILD_URL || "/next/",
+  joinGuildUrl: process.env.JOIN_GUILD_URL || `${webAppUrl}/`,
 };
 const wrangler = {
   $schema: "node_modules/wrangler/config-schema.json",
@@ -29,15 +47,18 @@ const wrangler = {
   compatibility_date: "2026-07-31",
   compatibility_flags: ["nodejs_compat"],
   workers_dev: true,
+  routes: [{ pattern: new URL(mcpBaseUrl).hostname, custom_domain: true }],
   vars: {
     APPWRITE_ENDPOINT: process.env.APPWRITE_ENDPOINT,
     APPWRITE_PROJECT_ID: process.env.APPWRITE_PROJECT_ID,
     APPWRITE_DATABASE_ID: process.env.APPWRITE_DATABASE_ID,
     APPWRITE_STATE_TABLE_ID: process.env.APPWRITE_STATE_TABLE_ID,
     APPWRITE_LEGACY_TABLE_ID: process.env.APPWRITE_LEGACY_TABLE_ID,
-    PUBLIC_BASE_URL: process.env.WORKER_BASE_URL,
-    WEB_APP_URL: process.env.WEB_APP_URL,
-    ALLOWED_ORIGINS: `${process.env.WEB_APP_URL},http://localhost:5173,http://127.0.0.1:5173`,
+    PUBLIC_BASE_URL: workerBaseUrl,
+    PROVIDER_OAUTH_BASE_URL: providerOAuthBaseUrl,
+    MCP_ALLOWED_ORIGINS: mcpAllowedOrigins,
+    WEB_APP_URL: webAppUrl,
+    ALLOWED_ORIGINS: allowedWebOrigins,
   },
   triggers: { crons: ["*/15 * * * *"] },
   d1_databases: [{ binding: "QUESTFORGE_DB", database_name: process.env.D1_DATABASE_NAME, database_id: process.env.D1_DATABASE_ID }],

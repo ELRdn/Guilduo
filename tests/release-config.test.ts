@@ -54,11 +54,45 @@ test("release config generation wires the AGENT_AVATARS R2 binding from R2_BUCKE
     runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "guilduo-agent-avatars-prod" });
     const wrangler = JSON.parse(readFileSync(path.join(dir, "wrangler.jsonc"), "utf8")) as {
       r2_buckets?: Array<{ binding: string; bucket_name: string }>;
+      routes?: Array<{ pattern: string; custom_domain?: boolean }>;
+      vars?: { PUBLIC_BASE_URL?: string; PROVIDER_OAUTH_BASE_URL?: string; MCP_ALLOWED_ORIGINS?: string; WEB_APP_URL?: string; ALLOWED_ORIGINS?: string };
     };
+    const runtime = JSON.parse(readFileSync(path.join(dir, "runtime-config.js"), "utf8").replace(/^const runtimeConfig = /, "").replace(/;\nglobalThis[\s\S]+$/, "")) as { gatewayUrl?: string; joinGuildUrl?: string };
     assert.deepEqual(wrangler.r2_buckets, [{ binding: "AGENT_AVATARS", bucket_name: "guilduo-agent-avatars-prod" }]);
+    assert.equal(runtime.gatewayUrl, "https://mcp.guilduo.com");
+    assert.equal(runtime.joinGuildUrl, `${BASE_ENV.WEB_APP_URL}/`);
+    assert.equal(wrangler.vars?.PUBLIC_BASE_URL, BASE_ENV.WORKER_BASE_URL);
+    assert.equal(wrangler.vars?.PROVIDER_OAUTH_BASE_URL, BASE_ENV.WORKER_BASE_URL);
+    assert.equal(wrangler.vars?.MCP_ALLOWED_ORIGINS, `${BASE_ENV.WORKER_BASE_URL},https://mcp.guilduo.com`);
+    assert.equal(wrangler.vars?.WEB_APP_URL, BASE_ENV.WEB_APP_URL);
+    assert.equal(wrangler.vars?.ALLOWED_ORIGINS, `${BASE_ENV.WEB_APP_URL},https://guilduo.com,http://localhost:5173,http://127.0.0.1:5173`);
+    assert.deepEqual(wrangler.routes, [{ pattern: "mcp.guilduo.com", custom_domain: true }]);
     // The bucket name is a public-ish identifier, not a secret — but nothing
     // else about the R2 config should leak beyond this one binding entry.
     assert.equal(wrangler.r2_buckets?.length, 1);
+  });
+});
+
+test("release config allows an explicit MCP origin without moving Provider OAuth callbacks", () => {
+  withTempDir((dir) => {
+    const env = {
+      ...process.env,
+      ...BASE_ENV,
+      R2_BUCKET_NAME: "guilduo-agent-avatars-prod",
+      MCP_BASE_URL: "https://mcp.example.com",
+      PROVIDER_OAUTH_BASE_URL: BASE_ENV.WORKER_BASE_URL,
+      MCP_ALLOWED_ORIGINS: `${BASE_ENV.WORKER_BASE_URL},https://mcp.example.com`,
+      PUBLIC_SITE_URL: "https://site.example.com",
+    };
+    runGenerator(dir, env);
+    const wrangler = JSON.parse(readFileSync(path.join(dir, "wrangler.jsonc"), "utf8")) as {
+      vars?: { PROVIDER_OAUTH_BASE_URL?: string; MCP_ALLOWED_ORIGINS?: string; ALLOWED_ORIGINS?: string };
+      routes?: Array<{ pattern: string; custom_domain?: boolean }>;
+    };
+    assert.equal(wrangler.vars?.PROVIDER_OAUTH_BASE_URL, BASE_ENV.WORKER_BASE_URL);
+    assert.equal(wrangler.vars?.MCP_ALLOWED_ORIGINS, `${BASE_ENV.WORKER_BASE_URL},https://mcp.example.com`);
+    assert.equal(wrangler.vars?.ALLOWED_ORIGINS, `${BASE_ENV.WEB_APP_URL},https://site.example.com,http://localhost:5173,http://127.0.0.1:5173`);
+    assert.deepEqual(wrangler.routes, [{ pattern: "mcp.example.com", custom_domain: true }]);
   });
 });
 
@@ -68,6 +102,14 @@ test("release config generation fails closed — not silently — when R2_BUCKET
     delete env.R2_BUCKET_NAME;
     assert.throws(() => runGenerator(dir, env));
     assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false, "no half-generated config should be left behind");
+  });
+});
+
+test("release config rejects a path-bearing public origin instead of silently changing URL roles", () => {
+  withTempDir((dir) => {
+    const env: NodeJS.ProcessEnv = { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "guilduo-agent-avatars-prod", PUBLIC_SITE_URL: "https://guilduo.com/lp/" };
+    assert.throws(() => runGenerator(dir, env), /Invalid release URL: PUBLIC_SITE_URL/);
+    assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
   });
 });
 

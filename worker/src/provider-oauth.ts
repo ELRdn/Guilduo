@@ -46,7 +46,8 @@ function integrationError(status: number, code: string, message: string): Worker
 }
 
 function callbackUrl(env: WorkerEnv, service: string): string {
-  return `${String(env.PUBLIC_BASE_URL || "").replace(/\/$/, "")}/oauth/callback/${service}`;
+  const base = env.PROVIDER_OAUTH_BASE_URL || env.PUBLIC_BASE_URL || "";
+  return `${String(base).replace(/\/$/, "")}/oauth/callback/${service}`;
 }
 
 function appReturnUrl(env: WorkerEnv, service: string, result: string, message = ""): string {

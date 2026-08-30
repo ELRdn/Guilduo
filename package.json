@@ -29,6 +29,7 @@
     "lp:capture": "tsx tools/capture-lp.mts",
     "cli": "tsx cli/questforge.ts",
     "generate-release-config": "tsx tools/generate-release-config.mts",
+    "site:routing:check": "tsx --test tests/site-routing.test.ts",
     "migrate:appwrite": "tsx tools/migrate-firebase-to-appwrite.mts",
     "migrate:agent-owners": "tsx tools/migrate-agent-owners.mts",
     "revoke:legacy-mcp": "tsx tools/revoke-legacy-mcp-grants.mts",

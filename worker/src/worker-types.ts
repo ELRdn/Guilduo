@@ -71,6 +71,10 @@ export interface WorkerEnv {
   APPWRITE_LEGACY_TABLE_ID?: string;
   APPWRITE_API_KEY?: string;
   PUBLIC_BASE_URL?: string;
+  /** Provider OAuth callback origin; falls back to PUBLIC_BASE_URL for compatibility. */
+  PROVIDER_OAUTH_BASE_URL?: string;
+  /** Comma/space separated exact origins allowed to identify the MCP server. */
+  MCP_ALLOWED_ORIGINS?: string;
   WEB_APP_URL?: string;
   ALLOWED_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;

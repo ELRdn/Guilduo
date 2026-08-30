@@ -2,28 +2,49 @@ import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, r
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { OFFICIAL_SITE_ORIGIN, WEB_APP_ORIGIN } from "./site-routing.ts";
 
 // The checkout is exposed through a Windows path alias while Node resolves the
 // files on another drive. Give Vite the same real root it sees for HTML inputs
 // so emitted page names remain relative.
 const root = realpathSync(process.cwd());
-const PUBLIC_ORIGIN_FALLBACK = "https://6a90bb258248d43363a2.appwrite.network";
+// SEO/share metadata belongs to the official site, not to the currently active
+// Appwrite Sites deployment. Keep the deployment origin in WEB_APP_URL for
+// runtime/auth purposes and use PUBLIC_SITE_URL for the canonical public host.
+const PUBLIC_SITE_ORIGIN_FALLBACK = OFFICIAL_SITE_ORIGIN;
+const WEB_APP_ORIGIN_FALLBACK = WEB_APP_ORIGIN;
 
-function getPublicOrigin(): string {
-  const configured = String(process.env.WEB_APP_URL || "").trim();
-  if (!configured) return PUBLIC_ORIGIN_FALLBACK;
-  const url = new URL(configured);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`WEB_APP_URL must use http or https: ${configured}`);
+function getPublicSiteOrigin(): string {
+  const configured = String(process.env.PUBLIC_SITE_URL || "").trim();
+  if (!configured) return PUBLIC_SITE_ORIGIN_FALLBACK;
+  try {
+    const url = new URL(configured);
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("invalid URL");
+    return url.origin;
+  } catch {
+    throw new Error(`PUBLIC_SITE_URL must be an http or https origin: ${configured}`);
   }
-  return url.origin;
+}
+
+function getWebAppOrigin(): string {
+  const configured = String(process.env.WEB_APP_URL || "").trim();
+  if (!configured) return WEB_APP_ORIGIN_FALLBACK;
+  try {
+    const url = new URL(configured);
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("invalid URL");
+    return url.origin;
+  } catch {
+    throw new Error(`WEB_APP_URL must be an http or https origin: ${configured}`);
+  }
 }
 
 function injectPublicBrandMetadata(): Plugin {
   return {
     name: "inject-guilduo-public-brand-metadata",
     transformIndexHtml(html) {
-      return html.replaceAll("__GUILDUO_PUBLIC_ORIGIN__", getPublicOrigin());
+      return html
+        .replaceAll("__GUILDUO_PUBLIC_ORIGIN__", getPublicSiteOrigin())
+        .replaceAll("__GUILDUO_WEB_APP_ORIGIN__", getWebAppOrigin());
     },
   };
 }
@@ -70,6 +91,7 @@ const copyQuestForgeRuntime = {
 
 export default defineConfig({
   root,
+  appType: "mpa",
   base: "./",
   publicDir: false,
   plugins: [react(), injectPublicBrandMetadata(), copyQuestForgeRuntime],

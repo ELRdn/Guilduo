@@ -82,6 +82,7 @@ import {
 import { listDueIntegrationAccounts } from "./integration-store.ts";
 import { beginIntegrationConnect, disconnectIntegration, handleProviderCallback } from "./provider-oauth.ts";
 import { handleMcpNext } from "./mcp-server.ts";
+import { mcpOriginForRequest, primaryMcpOrigin, providerOAuthOriginForRequest } from "./mcp-origin.ts";
 import {
   createWebhook,
   deleteWebhook,
@@ -1374,8 +1375,12 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.7.0", schemaVersion: 7, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
-  if (path === "/.well-known/oauth-authorization-server") return json(oauthMetadata(request, env));
-  if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return json(protectedResourceMetadata(request, env));
+  const mcpOrigin = mcpOriginForRequest(request, env);
+  const rejectUntrustedMcpHost = () => json({ error: { code: "mcp_host_not_allowed", message: "MCP host is not configured." } }, 421, { "cache-control": "no-store" });
+  if (path === "/.well-known/oauth-authorization-server") return mcpOrigin ? json(oauthMetadata(request, env)) : rejectUntrustedMcpHost();
+  if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return mcpOrigin ? json(protectedResourceMetadata(request, env)) : rejectUntrustedMcpHost();
+  const isMcpOAuthEndpoint = path === "/oauth/register" || path === "/oauth/authorize" || path === "/oauth/approve" || path === "/oauth/token" || path === "/oauth/revoke";
+  if (isMcpOAuthEndpoint && !mcpOrigin) return rejectUntrustedMcpHost();
   if (path === "/oauth/register" && request.method === "POST") return registerClient(request, env);
   if (path === "/oauth/authorize" && request.method === "GET") return authorizePage(request, env);
   if (path === "/oauth/approve" && request.method === "POST") return approveAuthorization(request, env);
@@ -1383,11 +1388,12 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
   if (path === "/oauth/revoke" && request.method === "POST") return revokeToken(request, env);
   if (path === "/telemetry") return acceptTelemetry(request, env);
   const providerCallbackMatch = path.match(/^\/oauth\/callback\/(google|notion)$/);
-  if (providerCallbackMatch && request.method === "GET") return handleProviderCallback(request, env, providerCallbackMatch[1]);
+  if (providerCallbackMatch && request.method === "GET") return providerOAuthOriginForRequest(request, env) ? handleProviderCallback(request, env, providerCallbackMatch[1]) : rejectUntrustedMcpHost();
   if (path === "/openapi.json") return fetch(new URL("/api/openapi.json", env.WEB_APP_URL || "http://localhost:5173"));
 
+  if ((path === "/mcp" || path === "/mcp-next") && !mcpOrigin) return rejectUntrustedMcpHost();
   const authenticated = await authenticateRequest(request, env);
-  if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` });
+  if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${mcpOrigin || primaryMcpOrigin(env)}/.well-known/oauth-protected-resource/mcp"` });
   const identity = await identityWithAgentContext(env, authenticated);
   if (path === "/mcp") return handleMcp(request, env, context, identity);
   if (path === "/mcp-next") return handleMcpNext(request, env, context, identity);

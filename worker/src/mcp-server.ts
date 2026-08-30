@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate, fromJsonSchema } from "@modelcontextprotoc
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { callMcpTool, MCP_TOOLS } from "./index.ts";
+import { mcpHostRules } from "./mcp-origin.ts";
 import type { AuthIdentity } from "./security.ts";
 import type { WorkerEnv } from "./worker-types.ts";
 import type { AuthInfo, CallToolResult, JsonSchemaType, McpRequestContext, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
@@ -27,16 +28,7 @@ type McpFactoryContext = {
 };
 
 function hostRules(env: WorkerEnv): { allowedHostnames: string[]; allowedOriginHostnames: string[] } {
-  const hosts = new Set(["localhost", "127.0.0.1", "[::1]", "worker.test"]);
-  const origins = new Set(["localhost", "127.0.0.1", "[::1]"]);
-  const configured = String(env?.PUBLIC_BASE_URL || "").trim();
-  if (configured) {
-    try {
-      const hostname = new URL(configured).hostname;
-      if (hostname) { hosts.add(hostname); origins.add(hostname); }
-    } catch { /* ignore malformed configuration */ }
-  }
-  return { allowedHostnames: [...hosts], allowedOriginHostnames: [...origins] };
+  return mcpHostRules(env);
 }
 
 function conciseText(value: unknown): string {

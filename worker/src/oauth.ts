@@ -1,5 +1,6 @@
 import { ALL_SCOPES, getKv, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
 import type { AuthIdentity } from "./security.ts";
+import { mcpOriginForRequest, primaryMcpOrigin } from "./mcp-origin.ts";
 import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
 
 type ClientRecord = { clientId: string; clientName: string; redirectUris: string[]; createdAt: number };
@@ -56,7 +57,7 @@ function json(value: unknown, status = 200, headers: Record<string, string> = {}
 }
 
 function oauthBase(request: Request, env: WorkerEnv): string {
-  return env.PUBLIC_BASE_URL || new URL(request.url).origin;
+  return mcpOriginForRequest(request, env) || primaryMcpOrigin(env);
 }
 
 function allowedScopes(value: unknown): string[] {

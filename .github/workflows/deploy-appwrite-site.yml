@@ -30,19 +30,25 @@ jobs:
           APPWRITE_STATE_TABLE_ID: ${{ vars.APPWRITE_STATE_TABLE_ID }}
           APPWRITE_LEGACY_TABLE_ID: ${{ vars.APPWRITE_LEGACY_TABLE_ID }}
           WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          PROVIDER_OAUTH_BASE_URL: ${{ vars.PROVIDER_OAUTH_BASE_URL || vars.WORKER_BASE_URL }}
+          MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
           SOURCE_URL: ${{ vars.SOURCE_URL }}
           EXTERNAL_OAUTH_ENABLED: ${{ vars.EXTERNAL_OAUTH_ENABLED || 'false' }}
-          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || '/next/' }}
+          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || 'https://app.guilduo.com/' }}
           D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
       - run: npm run check
       - run: npm run brand:assets -- --check
       - run: npm test
       - run: npm run build
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
       - name: Upload and activate Appwrite Site
         shell: bash
         env:

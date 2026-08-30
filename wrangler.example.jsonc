@@ -12,9 +12,12 @@
     "APPWRITE_STATE_TABLE_ID": "user_states",
     "APPWRITE_LEGACY_TABLE_ID": "legacy_states",
     "PUBLIC_BASE_URL": "https://your-questforge-worker.example.workers.dev",
-    "WEB_APP_URL": "https://your-guilduo-site.appwrite.network",
-    "ALLOWED_ORIGINS": "https://your-guilduo-site.appwrite.network,http://localhost:5173,http://127.0.0.1:5173"
+    "PROVIDER_OAUTH_BASE_URL": "https://your-questforge-worker.example.workers.dev",
+    "MCP_ALLOWED_ORIGINS": "https://your-questforge-worker.example.workers.dev,https://mcp.guilduo.com",
+		"WEB_APP_URL": "https://app.guilduo.com",
+		"ALLOWED_ORIGINS": "https://app.guilduo.com,https://guilduo.com,http://localhost:5173,http://127.0.0.1:5173"
   },
+  "routes": [{ "pattern": "mcp.guilduo.com", "custom_domain": true }],
   // APPWRITE_API_KEY is a secret, not a var — set it with
   // `wrangler secret put APPWRITE_API_KEY`, never here in plaintext.
   "triggers": { "crons": ["*/15 * * * *"] },
