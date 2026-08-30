@@ -89,6 +89,7 @@ test("tagged release derives the active Appwrite deployment URL before Worker an
   assert.match(workflow, /tags: \["v\*"\]/);
   assert.ok(appwriteKey > 0 && appwriteKey < d1 && d1 < sites && sites < workerConfig && workerConfig < worker && worker < health && health < smoke);
   assert.match(workflow, /steps\.appwrite_site\.outputs\.url/);
+  assert.match(workflow, /APPWRITE_SITE_ENDPOINT:\s*\$\{\{ vars\.APPWRITE_SITE_ENDPOINT \}\}/);
   assert.match(workflow, /project\/platforms\/web/);
   assert.match(workflow, /--request POST/);
   assert.match(workflow, /guilduo-site-/);
@@ -97,6 +98,8 @@ test("tagged release derives the active Appwrite deployment URL before Worker an
   assert.match(workflow, /rel="canonical" href="https:\/\/app\.guilduo\.com\/"/);
   assert.match(workflow, /rel="canonical" href="https:\/\/guilduo\.com\/"/);
   assert.match(deployScript, /sites\/\$APPWRITE_SITE_ID\/logs/);
+  assert.match(deployScript, /APPWRITE_SITE_ENDPOINT/);
+  assert.match(deployScript, /site_endpoint=/);
   assert.match(deployScript, /deploymentId/);
   assert.match(deployScript, /appwrite\.network/);
   assert.match(workflow, /agentStorage!=="d1"/);

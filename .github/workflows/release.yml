@@ -87,7 +87,7 @@ jobs:
           echo "$deployment"
           echo "url=$(jq -er '.url' <<<"$deployment")" >> "$GITHUB_OUTPUT"
         env:
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
@@ -109,12 +109,12 @@ jobs:
               --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
               --header "Content-Type: application/json" \
               --data "$(jq -cn --arg platformId "$platform_id" --arg name "$platform_name" --arg hostname "$hostname" '{platformId:$platformId,name:$name,hostname:$hostname}')" \
-              "$APPWRITE_ENDPOINT/project/platforms/web")"
+              "$APPWRITE_SITE_ENDPOINT/project/platforms/web")"
             if [[ "$status" == "409" ]]; then
               curl --silent --show-error --fail \
                 --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
                 --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-                "$APPWRITE_ENDPOINT/project/platforms/web/$platform_id" \
+                "$APPWRITE_SITE_ENDPOINT/project/platforms/web/$platform_id" \
                 | jq -e --arg hostname "$hostname" '.hostname == $hostname' >/dev/null
             elif [[ "$status" != "200" && "$status" != "201" ]]; then
               echo "Appwrite web platform registration failed for $hostname with HTTP $status" >&2
@@ -135,7 +135,7 @@ jobs:
         env:
           SITE_URL: ${{ steps.appwrite_site.outputs.url }}
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
       - name: Regenerate Worker configuration for active Appwrite Site

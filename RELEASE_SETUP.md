@@ -23,6 +23,7 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 - `JOIN_GUILD_URL`（任意）: LPのCTA先。未設定時は`WEB_APP_URL/`を使い、`/next/`のcompatibility pathを新規導線にしません
 - `PUBLIC_SITE_URL`（任意）: 公式サイト/LPのcanonical・OG・共有画像origin。既定値は`https://guilduo.com`です。`WEB_APP_URL`とは分離して指定します
 - `APPWRITE_ENDPOINT`: `https://api.guilduo.com/v1`（Appwrite API Custom Domainの疎通確認済み。generated endpointはrollback用に保持）
+- `APPWRITE_SITE_ENDPOINT`: Appwrite Sitesのdeployment・Web Platform管理API用のリージョナルendpoint。`APPWRITE_ENDPOINT`とは分け、Site管理APIがCustom Domainでリージョン解決できない構成でも公開を継続できるようにする
 - `APPWRITE_PROJECT_ID`、`APPWRITE_DATABASE_ID`、`APPWRITE_STATE_TABLE_ID`、`APPWRITE_LEGACY_TABLE_ID`、`APPWRITE_SITE_ID`
 - `D1_DATABASE_NAME`、`D1_DATABASE_ID`、`KV_NAMESPACE_ID`
 - `R2_BUCKET_NAME`: Agent Avatar画像用R2バケット名。事前に`wrangler r2 bucket create <name>`で作成しておくこと。未設定の場合、Release設定生成は`AGENT_AVATARS` bindingを欠いたまま成功させず失敗する
@@ -36,7 +37,7 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 
 1. API契約差分、型、テスト、ビルド、LPを検証
 2. D1の追加migrationを適用
-3. Appwrite Sitesを公開し、Deploymentの実URLをリクエストログから取得。`/lp/`、`/lp/en/`、`/next/relay-forge/`のcompatibility pathを確認
+3. `APPWRITE_SITE_ENDPOINT`でAppwrite Sitesを公開し、Deploymentの実URLをリクエストログから取得。`/lp/`、`/lp/en/`、`/next/relay-forge/`のcompatibility pathを確認
 4. Appwrite Web Platformへ`app.guilduo.com`を登録し、Workerの`WEB_APP_URL`と`ALLOWED_ORIGINS`を正式originへ再生成。公式LPのoriginは`PUBLIC_SITE_URL`として許可する
 5. Worker Secretを設定してWorkerを公開
 6. `/health`、OAuth metadata、MCP認証拒否、公開ルートのGuilduo表記を確認

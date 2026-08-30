@@ -7,14 +7,20 @@ if [[ -z "$archive" || ! -f "$archive" ]]; then
   exit 2
 fi
 
-for name in APPWRITE_ENDPOINT APPWRITE_PROJECT_ID APPWRITE_SITE_ID APPWRITE_DEPLOY_KEY; do
+site_endpoint="${APPWRITE_SITE_ENDPOINT:-${APPWRITE_ENDPOINT:-}}"
+if [[ -z "$site_endpoint" ]]; then
+  echo "Missing required environment variable: APPWRITE_SITE_ENDPOINT" >&2
+  exit 2
+fi
+
+for name in APPWRITE_PROJECT_ID APPWRITE_SITE_ID APPWRITE_DEPLOY_KEY; do
   if [[ -z "${!name:-}" ]]; then
     echo "Missing required environment variable: $name" >&2
     exit 2
   fi
 done
 
-endpoint="${APPWRITE_ENDPOINT%/}/sites/$APPWRITE_SITE_ID/deployments"
+endpoint="${site_endpoint%/}/sites/$APPWRITE_SITE_ID/deployments"
 chunk_size=$((5 * 1024 * 1024))
 total_size="$(stat -c '%s' "$archive")"
 work_dir="$(mktemp -d)"
@@ -104,7 +110,7 @@ else
   # Older callers may not know the configured custom domain. Keep the
   # request-log lookup as a compatibility fallback for generated domains, but
   # do not make a successful deployment depend on request logging being on.
-  logs_endpoint="${APPWRITE_ENDPOINT%/}/sites/$APPWRITE_SITE_ID/logs"
+  logs_endpoint="${site_endpoint%/}/sites/$APPWRITE_SITE_ID/logs"
   deployment_query="$(jq -cn --arg id "$deployment_id" '{method:"equal",attribute:"deploymentId",values:[$id]}')"
   site_host=""
   for attempt in $(seq 1 12); do
