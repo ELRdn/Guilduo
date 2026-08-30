@@ -305,7 +305,7 @@ interaction-lab/           = explicit Next-only overrides
 
 `design/tokens.generated.css`は`design/TOKENS.json`から`npm run tokens:generate`（`tools/generate-tokens.mts`）で生成する。**このファイルを直接編集してはならない**。トークン値を変更する場合は`design/TOKENS.json`を編集してから再生成し、`npm run tokens:check`でドリフトがないことを確認する。
 
-`/interaction-lab/`は開発用ルート、ビルド後に公開される`/next/`は公開βルートであり、別のデザインシステムではない。
+`/interaction-lab/`は開発・キャプチャ用のsource routeである。Relay Forgeの公開Web Appは`https://app.guilduo.com/`で、同じAppwrite Siteの`/next/relay-forge/`へhost-based rewriteされる。`/next/relay-forge/`は内部デプロイ・互換pathであり、別のデザインシステムでも、新規ユーザー向けのcanonical URLでもない。LPと正式URLの対応は[`docs/public-urls.md`](docs/public-urls.md)を参照する。
 
 ## 2. Colors
 

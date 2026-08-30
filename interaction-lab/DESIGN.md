@@ -76,10 +76,10 @@ components:
 
 # Guilduo Interaction Lab Design
 
-> **English summary:** The Interaction Lab is Guilduo's `/next/` beta surface. It tests information architecture, responsive behavior, synchronization feedback, and detail interactions while reusing the current visual constitution and the same authenticated data contracts. It is not a second domain model and must not silently replace `/`.
+> **English summary:** The Interaction Lab is the local source for the Guilduo Relay Forge beta surface. It tests information architecture, responsive behavior, synchronization feedback, and detail interactions while reusing the current visual constitution and the same authenticated data contracts. The official Web App is `https://app.guilduo.com/`; `/next/relay-forge/` is its deployment and compatibility path. It is not a second domain model and must not silently replace `/`.
 
-最終更新: 2026-08-29
-対象: `/next/`（開発元は`/interaction-lab/`） / `0.6.0-beta.8`候補 / REST・MCP `2.7.0` / Schema `7`
+最終更新: 2026-08-30
+対象: `/next/relay-forge/`（開発元は`/interaction-lab/`、正式入口は`https://app.guilduo.com/`） / `0.6.0-beta.8`候補 / REST・MCP `2.7.0` / Schema `7`
 親文書: [Guilduo Visual Constitution](../DESIGN.md)
 技術仕様: [PROJECT_SPEC.md](../PROJECT_SPEC.md)
 
@@ -99,14 +99,14 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 
 ### 2.1 Relay Forgeのブランド例外
 
-`/next/relay-forge/`（開発元は`interaction-lab/relay-forge/`）だけは、Guilduo E2のForge系パレットを使う。対象はNight Surface `#0F1418`、Forge Teal `#13352F`、Antique Gold `#B89A5E`、Ivory Text `#E7E3DA`と、それらから導く面・境界の補助色である。実装の正本は同ディレクトリの`tokens.css`とする。
+`/next/relay-forge/`（開発元は`interaction-lab/relay-forge/`、正式入口は`https://app.guilduo.com/`）だけは、Guilduo E2のForge系パレットを使う。対象はNight Surface `#0F1418`、Forge Teal `#13352F`、Antique Gold `#B89A5E`、Ivory Text `#E7E3DA`と、それらから導く面・境界の補助色である。実装の正本は同ディレクトリの`tokens.css`とする。
 
 - Human、Agent、RPG、Dangerの意味色は維持し、ブランド色で上書きしない。
 - root `/`、旧`/next/`、`/interaction-lab/`のGolden Reference、LP、Battle/Unity関連Surfaceへこの例外を波及させない。
 - RelayのRailには背景なしAntique Gold単色マークを使い、通常のPWA・共有画像とは役割を分ける。
-- AI生成画像を起点にした暫定トレース版だが、権利・第三者類似性確認とひろなおの公開β採用承認を2026-08-29に記録済みである。公開正式版としての外部リリースは、技術検証と外部表示更新の全ゲート完了後に行う。承認は商標登録や法務意見を意味しない。
+- AI生成画像を起点にした暫定トレース版だが、権利・第三者類似性確認とひろなおの公開β採用承認を2026-08-29に記録済みである。公開Web Appへの反映後も、正式リリースタグや外部表示の追加判断は別ゲートで行う。承認は商標登録や法務意見を意味しない。
 
-`/interaction-lab/`はローカル開発・キャプチャ用のソースルートで、Viteのビルド後に同じSurfaceが`/next/`へ出力される。データモデル、認証、API、MCPはrootの[`PROJECT_SPEC.md`](../PROJECT_SPEC.md)から差分を作らない。
+`/interaction-lab/`はローカル開発・キャプチャ用のソースルートで、Viteのビルド後に同じSurfaceが`/next/relay-forge/`へ出力される。データモデル、認証、API、MCPはrootの[`PROJECT_SPEC.md`](../PROJECT_SPEC.md)から差分を作らない。正式URL・互換pathの対応は[`docs/public-urls.md`](../docs/public-urls.md)を参照する。
 
 ## 3. 画面マップ
 

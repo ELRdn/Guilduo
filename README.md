@@ -8,12 +8,18 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 
 ## 公開リンク
 
+### 新規ユーザーはここから
+
+- Guilduoを知る: [公式サイト](https://guilduo.com/)
+- Guilduoで作業する: [Guilduo / Relay Forge](https://app.guilduo.com/)
+- AIクライアントを接続する: `https://mcp.guilduo.com/mcp`
+
 | 入口 | リンク | 用途 |
 |---|---|---|
 | 公式LP | [Guilduo Landing Page](https://guilduo.com/) | Guilduoの思想、機能、使い方を知る |
-| 正式UI | [Guilduo / Relay Forge](https://app.guilduo.com/) | 公開βのCommand・Quest運用画面を開く |
+| 正式Web App | [Guilduo / Relay Forge](https://app.guilduo.com/) | 公開βのCommand・Quest運用画面を開く |
 
-Appwrite Sitesのgenerated Deployment URLは、検証・rollback用の互換入口として保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。次回ブランド導入候補は`0.6.0-beta.8`ですが、権利・類似性確認と外部表示の整合が完了するまで公開しません。
+`/next/relay-forge/`はAppwrite Site内のデプロイpathであり、正式Web App URLではありません。Appwrite Sitesのgenerated Deployment URLと旧`workers.dev` URLは、検証・互換・rollback用に保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。公開デプロイ済みの候補版は`0.6.0-beta.8`で、タグ付きリリースとは別に管理します。
 
 ### 公開URLの役割
 
@@ -22,7 +28,7 @@ Appwrite Sitesのgenerated Deployment URLは、検証・rollback用の互換入�
 | 公式サイト / LP | `https://guilduo.com` | canonical root |
 | Web App | `https://app.guilduo.com` | Appwrite SiteのCustom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Remote HTTP MCPの正規接続先 |
-| Appwrite API | `https://api.guilduo.com` | Appwrite APIの正式origin。endpointは`https://api.guilduo.com/v1` |
+| Appwrite API | `https://api.guilduo.com/v1` | Appwrite APIの正式endpoint（originは`https://api.guilduo.com`） |
 | Documentation | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com`は`https://guilduo.com`へのredirect専用です。旧`workers.dev` URLは互換接続・rollback用に残します。`api.guilduo.com`はAppwrite API用で、ブラウザのAppwrite clientとWorkerの`APPWRITE_ENDPOINT`が利用します。Worker REST/MCPの`/v1`や`/mcp`の公開originではありません。
@@ -36,16 +42,16 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | 項目 | 状態 |
 |---|---|
 | Web / PWA | 公開βの中心機能 |
-| Appwrite Googleログイン・端末ゲスト保存 | 移行中（Google OAuth設定後に公開） |
+| Appwrite Googleログイン・端末ゲスト保存 | 利用可能（認証設定済み） |
 | Quest CRUD、保管、Quest Tree、MPバトル | 利用可能 |
 | Agent Registry、MCPクライアント紐付け、Handoff | 利用可能 |
 | REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
-| `app.guilduo.com/` Guilduo / Relay Forge | 正式UIの公開β（Desktop / Mobile）。内部の`/next/relay-forge/`は移行期間の互換path |
+| `app.guilduo.com/` Guilduo / Relay Forge | 正式Web Appの公開β（Desktop / Mobile）。内部の`/next/relay-forge/`はデプロイ・互換path |
 | 9言語 | ルートUIで利用可能。βUIも主要ナビを対応 |
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
 | Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
 
-アプリ版は `0.6.0-beta.7`、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
+アプリ版は `0.6.0-beta.8`候補、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
 
 ## 設計原則
 
@@ -61,7 +67,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 - `/`：現行UI。ログイン前は端末保存、ログイン後はWorker経由でAppwriteへ同期します。
 - `/lp/`・`/lp/en/`：Guilduo公式Landing Pageの日本語版・英語版です。CTA URLはRuntime Configから供給し、未設定時は安全に無効化します。
 - `/interaction-lab/`：ローカル開発・キャプチャ用のNextソースルートです。
-- `/next/`・`/next/relay-forge/`：Appwrite Sites上の公開β互換ルートです。新規ユーザーの正式入口は`https://app.guilduo.com/`で、Cloudflareのhost-based rewriteがRelay Forge entryへ内部転送します。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
+- `/next/`・`/next/relay-forge/`：Appwrite Sites上の実装・互換ルートです。新規ユーザーの正式入口は`https://app.guilduo.com/`で、host-based rewriteがRelay Forge entryへ内部転送します。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
 - `https://guilduo.com/`は同じAppwrite Siteの`/lp/`へ、`https://app.guilduo.com/`は`/next/relay-forge/`へroutingします。実際のDNS・Rewrite設定は[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)を参照してください。
 - 視覚設計の正本は[`DESIGN.md`](DESIGN.md)、技術仕様の正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)、Next版の差分設計は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)です。数値トークンは[`design/TOKENS.json`](design/TOKENS.json)、部品は[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面構成は[`design/SCREENS.md`](design/SCREENS.md)を参照します。
 - 更新時はAppwrite Auth状態を復元し、前回同期データがあれば読み取り専用で残します。再接続中はQuest一覧を消さず、スケルトン・再接続ボタン・書き込みロックを表示します。
@@ -168,7 +174,7 @@ Token、Client ID、UIDは表示しないでください。
 - GitHub Copilot CLI：`copilot mcp add --transport http questforge https://mcp.guilduo.com/mcp`
 - OpenClaw / Hermes：後続の接続レシピで同じRemote HTTP MCPを使用
 
-登録後はGuilduo設定の **AI Agent Registry** でAgentを作成し、認可済みMCPクライアントをAgentへ紐付けます。AgentからMCPクライアントの権限は増やせません。
+登録後はRelay Forgeの **Party** でAgentを作成・編集し、**Connections** で認可済みMCPクライアントをAgentへ紐付けます。AgentからMCPクライアントの権限は増やせません。
 
 ## CLI
 
@@ -254,6 +260,7 @@ TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自�
 - [Asset manifest](design/ASSET_MANIFEST.md)
 - [Golden references](design/reference/README.md)
 - [公開βロードマップ](ROADMAP.md)
+- [公開URLガイド](docs/public-urls.md)
 - [API / MCP / OAuth setup](API_MCP_SETUP.md)
 - [Tagged release setup](RELEASE_SETUP.md)
 - [Guilduo E2 brand rollout](docs/brand-rollout.md)

@@ -2,17 +2,21 @@
 
 Guilduoは、Appwrite SitesのWeb/PWA、Cloudflare WorkerのREST/MCP、Appwrite Auth/TablesDBのユーザー状態を分離して運用します。
 
+公開URLの役割を一覧で確認する場合は[`docs/public-urls.md`](docs/public-urls.md)を参照してください。新規ユーザー向けのWeb Appは [Guilduo / Relay Forge](https://app.guilduo.com/) です。
+
 ## 正式URLの役割
 
 | 役割 | URL | 用途 |
 |---|---|---|
 | 公式サイト / LP | `https://guilduo.com` | 公開サイトとcanonical root |
 | Web App | `https://app.guilduo.com` | Guilduo / Relay Forgeの正式入口 |
-| MCP | `https://mcp.guilduo.com` | Remote HTTP MCPのorigin |
-| Appwrite API | `https://api.guilduo.com` | Appwrite API origin。SDK/Worker endpointは`https://api.guilduo.com/v1` |
+| MCP | `https://mcp.guilduo.com/mcp` | Remote HTTP MCPの正式endpoint。originは`https://mcp.guilduo.com` |
+| Appwrite API | `https://api.guilduo.com/v1` | Appwrite API endpoint（originは`https://api.guilduo.com`） |
 | Documentation | `https://docs.guilduo.com` | Reserved / Future |
 
 `api.guilduo.com`はAppwrite API専用です。Appwrite SDKとWorkerの`APPWRITE_ENDPOINT`は`https://api.guilduo.com/v1`を使います。Worker自身のREST `/v1`とMCP `/mcp`は、引き続きWorkerの公開origin（新規接続は`https://mcp.guilduo.com`）を使い、Appwrite API originへ置き換えません。
+
+したがって、ブラウザで使う入口は`https://app.guilduo.com/`、AIクライアントの接続先は`https://mcp.guilduo.com/mcp`、Appwrite SDKのAPI endpointは`https://api.guilduo.com/v1`である。3つを同じURLとして扱わない。
 
 ## 現在の公開β境界
 
@@ -44,7 +48,7 @@ Appwrite ConsoleでWorker専用API Keyを作成し、必要最小限のTablesDB 
 npx wrangler secret put APPWRITE_API_KEY
 ```
 
-Google OAuth providerにはAppwriteが示すcallback URLを登録し、AppwriteのWeb platformには現在有効なAppwrite Sites hostnameと、Custom Domain有効化後の`app.guilduo.com`を登録します。未接続のhostnameを先にOAuth success URLへ設定しないでください。
+Google OAuth providerにはAppwriteが示すcallback URLを登録し、AppwriteのWeb platformには`app.guilduo.com`を登録します。Appwrite Siteのgenerated domainは検証・rollback用に残します。未接続のhostnameをOAuth success URLや新規ユーザー向けリンクへ設定しないでください。
 
 ## 3. デプロイ前の外部OAuthフラグ
 
@@ -112,13 +116,13 @@ Claude、OpenClaw、Hermesは、同じRemote HTTP MCPとOAuth metadataを使い�
 ## 5. Agent RegistryとSkill
 
 1. GuilduoへAppwrite Googleログインする
-2. Web Appの`https://app.guilduo.com/` > 設定 > AI Agent Registryを開く
+2. Web Appの`https://app.guilduo.com/` > Partyを開き、「Agentを登録」からAgentを作成する
 3. Agent ID、表示名、Provider、役割、作業指示を登録する
 4. ChatGPT、Codex、ClaudeなどをRemote MCPへ接続する
 5. 認可済みMCPクライアントをAgentへ紐付ける
 6. Quest担当へ割り当て、`ready → working → review_required → accepted`を確認する
 
-Agent作成、権限変更、MCPクライアント紐付けはAppwriteログインしたWeb UIだけが行います。MCPクライアントは自分の権限を拡張できません。Skillの正規版は[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)、OpenAI Plugin/MCP App準備パッケージは[`plugins/questforge/`](plugins/questforge/)です。これらのtechnical IDは互換性のため維持します。
+Agent作成、編集、権限変更、MCPクライアント紐付けはAppwriteログインしたWeb UIだけが行います。AgentはPartyで管理し、接続済みClientはConnectionsでリンクします。MCPクライアントは自分の権限を拡張できません。Skillの正規版は[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)、OpenAI Plugin/MCP App準備パッケージは[`plugins/questforge/`](plugins/questforge/)です。これらのtechnical IDは互換性のため維持します。
 
 ## 6. CLI
 

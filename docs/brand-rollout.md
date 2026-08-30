@@ -1,6 +1,6 @@
 # Guilduo E2 brand rollout
 
-最終更新: 2026-08-29 21:37 JST
+最終更新: 2026-08-30 JST
 対象: `0.6.0-beta.8`候補
 
 ## Status
@@ -11,7 +11,9 @@ Guilduo E2エンブレムは、ユーザー提供のAI生成カラー探索シ�
 
 OGとGitHub画像は、ひろなお承認済みの無文字・アイコン主体版である。公開ワードマークやコピーを実装担当者が独断で追加しない。
 
-現在の判定は、コードとローカル公開前検証に合格した状態（`LOCAL_PREFLIGHT_PASS_EXTERNAL_RELEASE_BLOCKED`）である。GitHub、Appwrite、公開タグ、外部告知は今回の作業では実行しない。
+現在の判定は、コードとローカル公開前検証に加えて、Appwrite Site、Cloudflare Worker、Appwrite API Custom Domainのproduction反映と主要URL smoke testまで完了した状態である。正式なタグ付きリリース、`www` redirectのDNS、Documentation公開、認証を含む実クライアントE2Eは別ゲートとして残している。
+
+公開Web Appの正式入口は`https://app.guilduo.com/`（Guilduo / Relay Forge）、公式サイトは`https://guilduo.com/`、MCPは`https://mcp.guilduo.com/mcp`、Appwrite APIは`https://api.guilduo.com/v1`である。`/next/relay-forge/`、generated domain、旧workers.dev URLは互換・検証・rollback用に限定する。
 
 ## Approval and provenance record
 
@@ -65,7 +67,8 @@ Node 26のローカル環境で`uv_os_get_passwd returned ENOMEM`が発生する
 - [ ] GitHubリポジトリのアバターを更新した
 - [ ] GitHub組織アバターを更新した（対象の場合）
 - [ ] GitHub Social Previewを更新した
-- [ ] README、Docs、スクリーンショット、配布資料のブランド表示を更新した
+- [x] README、Docsのブランド表示と正式URLを更新した
+- [ ] スクリーンショット、配布資料のブランド表示を確認した
 - [ ] OG画像を公開Originから取得できることを確認した
 - [ ] プラグイン、CLI、配布アーカイブに含めるブランド素材を確認した
 - [ ] 旧キャラクター＋QFアイコンがブランド識別として残っていないことを確認した
@@ -75,10 +78,10 @@ Node 26のローカル環境で`uv_os_get_passwd returned ENOMEM`が発生する
 `0.6.0-beta.8`は、次の全条件を満たすまで正式公開しない。
 
 1. [x] 権利・第三者類似性レビューと人間承認が完了している。
-2. [ ] コード、PWA、公開サイト、OG、GitHub表示、README・Docsが同じ採用版で揃っている（外部更新待ち）。
+2. [ ] コード、PWA、公開サイト、OG、GitHub表示、README・Docsが同じ採用版で揃っている（GitHub表示・OGの追加確認待ち）。
 3. [x] `npm run brand:assets -- --check`、`npm run design:check`、`npm run check`、`npm test`、`npm run build`、`npm run lp:verify`が成功している。
 4. [x] Relay Forgeのlight／dark、1920／1440／1024／390px、キーボード、ARIA、Reduced Motionを確認している。
 5. [x] マークを16／24／32／48／64／180／192／512pxで通常色、グレースケール、明暗背景に表示して確認している。
 6. [x] 既存Golden captureを直接上書きせず、`.qa-artifacts/`へ候補を出力した。
 
-外部更新が1つでも未完了の場合、公開タグを作成せず、今回の差分は公開前候補として保留する。既存の`QuestForge` technical identifier、API、MCP、schema、認証、storage key、CLIはこのロールアウトで変更しない。
+`www` DNS、Documentation、GitHub表示、OG確認、認証E2Eのいずれかが未完了の場合、公開タグを作成せず、`0.6.0-beta.8`候補として保留する。既存の`QuestForge` technical identifier、API、MCP、schema、認証、storage key、CLIはこのロールアウトで変更しない。

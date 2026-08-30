@@ -1,6 +1,6 @@
 # Guilduo 並行エージェント向け現状報告
 
-最終更新: 2026-08-29 21:45 JST
+最終更新: 2026-08-30 JST
 対象リポジトリ: `D:\VibeCoding\questforge-relay-forge`
 現在ブランチ: `codex/fix-agent-registry-recovery`
 
@@ -8,11 +8,23 @@
 
 ## 現在の結論
 
-Guilduo E2アイコンのコード導入とローカル公開前検証は完了している。現在の状態は、ひろなお承認済みの**暫定トレース版**を`0.6.0-beta.8`候補として保持した`LOCAL_PREFLIGHT_PASS_EXTERNAL_RELEASE_BLOCKED`である。権利・類似性レビューとOG／GitHub無文字方針は承認済みとして記録した。外部表示更新、公開Origin確認、タグ公開はまだ実行しない。
+Guilduo E2アイコンのコード導入、公開URL正規化、Appwrite Site、Cloudflare Worker、Appwrite API Custom Domainの反映とproduction smoke testは完了している。現在の状態は、ひろなお承認済みの**暫定トレース版**を`0.6.0-beta.8`候補として公開環境へ反映した状態である。正式なタグ付きリリース、`www` redirectのDNS、Documentation公開、認証を含む実クライアントE2Eは別ゲートとして残している。
 
 正式な公開ワードマークは常に`Guilduo`。添付カラー探索シートの`GUILDUO E2 COLOR EXPLORATION`や`FORGE TEAL & ANTIQUE GOLD`はデザイン資料上の見出しであり、公開表記の指示ではない。
 
-今回の更新では、SVG正本・ブランド設計書・資産台帳・ロールアウト記録の承認状態を同期した。無文字のOG／GitHub共有画像は実物確認済みで、ローカル検証用の一時スクリプトとNodeフォールバックは削除済み。既存の未コミットAgent Registry／Agent avatar／Settings関連変更は保持している。
+今回の更新では、SVG正本・ブランド設計書・資産台帳・公開URLガイド・README・Roadmap・引き継ぎ記録を同期した。無文字のOG／GitHub共有画像は実物確認済みで、ローカル検証用の一時スクリプトとNodeフォールバックは削除済み。既存の未コミットAgent Registry／Agent avatar／Settings関連変更は保持し、OAuth Grant・Access Token・Refresh TokenのUID移植や失効は行っていない。
+
+## 正式URLの要点
+
+- 公式サイト / LP: `https://guilduo.com/`
+- 英語LP: `https://guilduo.com/lp/en/`
+- 正式Web App: `https://app.guilduo.com/`（Guilduo / Relay Forge）
+- 正式MCP: `https://mcp.guilduo.com/mcp`
+- Appwrite API: `https://api.guilduo.com/v1`
+- `/next/relay-forge/`は内部デプロイ・互換pathで、新規ユーザー向けに案内しない
+- 旧workers.devとAppwrite generated domainは互換・rollback用に残す
+- `www.guilduo.com`はapex redirect用だが、DNS反映待ち
+- 詳細は[`docs/public-urls.md`](public-urls.md)と[`docs/appwrite-site-routing.md`](appwrite-site-routing.md)を参照する
 
 ## 実装済みの範囲
 
@@ -49,14 +61,14 @@ Guilduo E2アイコンのコード導入とローカル公開前検証は完了�
 
 API、MCP、schema、認証、storage key、CLI、既存の`QuestForge`系technical identifier、既存ルートはこのブランド導入で変更していない。`QF-184`のようなQuest運用IDはブランド表示ではなく、既存の技術・業務識別子として扱う。
 
-## 直近の検証結果
+## 直近の技術・本番検証結果
 
-以下は2026-08-29 21:45 JST時点で実行済み。
+以下は2026-08-30時点で実行済み。
 
 - `npm run brand:assets -- --check`: PASS
 - `npm run design:check`: PASS
 - `npm run check`: PASS（Wranglerのユーザー領域ログ書き込み`EPERM`警告は出たが、コマンド終了コードは0）
-- `npm test`: PASS、223 tests / 223 pass / 0 fail
+- `npm test`: PASS、283 tests / 283 pass / 0 fail
 - `WEB_APP_URL=https://brand-check.example npm run build`: PASS
 - ビルド後の`dist/assets/brand`、`dist/assets/icons`、主要HTMLのOG絶対URL: PASS
 - `npm run lp:verify -- http://127.0.0.1:4192`: PASS（日本語6幅、英語、テーマ、Reduced Motion、キーボード、遅延画像、overflow）
@@ -64,6 +76,14 @@ API、MCP、schema、認証、storage key、CLI、既存の`QuestForge`系techni
 - OG／GitHub共有画像確認: PASS（無文字、1200×630／1280×640、アイコン主体）
 - API／Worker／server／migrations／CLIのブランド差分: PASS（ブランド導入による変更なし。既存Agent avatar差分は保持）
 - `git diff --check`: PASS
+- `https://guilduo.com/`: LPとcanonical root: PASS
+- `https://guilduo.com/lp/en/`: 英語LP: PASS
+- `https://app.guilduo.com/`: Relay Forgeとcanonical root: PASS
+- `https://app.guilduo.com/next/relay-forge/`: compatibility path: PASS
+- `https://mcp.guilduo.com/mcp`: 未認証`401`、OAuth metadata、CORS: PASS
+- 旧workers.dev URL: metadata、未認証`401`、CORS互換: PASS
+- `https://api.guilduo.com/v1`: Appwrite Custom Domainへの到達と未認証`401`: PASS
+- Workerの`APPWRITE_ENDPOINT`: `https://api.guilduo.com/v1`を使用: PASS
 
 ### 検証時の既知の注意
 
@@ -73,11 +93,12 @@ Node 26のローカル環境では`uv_os_get_passwd returned ENOMEM`が発生す
 
 ## 公開を止めているゲート
 
-ローカル公開前検証は合格している。次の外部項目が未完了のため、`v0.6.0-beta.8`のタグ作成・正式公開・外部告知は行わない。
+公開URLのデプロイと主要な未認証production smokeは合格している。次の項目が未完了のため、`v0.6.0-beta.8`のタグ作成・正式リリース判断は保留する。
 
-- GitHubリポジトリ／組織アバター、Social Preview、README・Docs・配布物の外部更新。
-- 公開OriginからのOG画像、PWA、favicon、GitHub表示の一致確認。
-- 外部更新後の公開サイト・Worker・認証境界のスモークテスト。
+- `www.guilduo.com`のDNSとapex redirect。
+- `docs.guilduo.com`のDocumentation公開。
+- OpenClaw等でGoogleログイン、MCP approve、localhost callback、Agent再リンク、`get_current_agent_context`まで行う認証E2E。
+- GitHubリポジトリ／組織アバター、Social Preview、公開OriginのOG表示の追加確認。
 
 上記のチェックリストと公開条件は`docs/brand-rollout.md`が正本。OG/GitHub画像は無文字アイコン主体版で承認済みであり、公開ワードマークは`Guilduo`に固定する。
 
@@ -97,14 +118,14 @@ Node 26のローカル環境では`uv_os_get_passwd returned ENOMEM`が発生す
 
 - ブランド担当: `assets/brand/`、`assets/icons/`、`tools/generate-brand-assets.mts`、ブランド文書、HTML/manifest/service worker/Viteのブランド導線、Relay Forge配色。
 - Agent担当: Agent Registry、Agent avatar、Party/Settingsの既存変更。ブランド担当はこれらを無関係な差分として保持する。
-- 外部公開担当: GitHub、Appwrite Sites、OG検証、README・Docs・配布物。今回の作業では実行せず、明示的な公開指示後に扱う。
+- 外部公開担当: GitHub表示、Appwrite Sites、OG検証、README・Docs、配布物。公開環境の変更は明示的な承認とproduction smokeをセットで扱う。
 
 同じファイルを編集する場合は、この文書または作業コメントへ変更意図と対象行を追記してから作業すること。完了後は検証結果と未解決リスクをこの文書へ反映する。
 
 ## 次に行う作業
 
-1. [完了] ローカルの最終技術検証と共有画像の表示確認。
-2. [保留] 明示的な公開指示後に、公開OriginからOG画像、PWA、faviconの取得と表示を確認する。
-3. [保留] 明示的な公開指示後に、外部GitHub表示、README・Docs、配布物を更新する。
-4. [保留] 外部更新後の公開サイト・Worker・認証境界をスモークテストする。
-5. [保留] `docs/brand-rollout.md`の全ゲートが完了した後だけ、`v0.6.0-beta.8`の公開判断を行う。
+1. [完了] ローカルの技術検証、共有画像の表示確認、公開URL文書の同期。
+2. [完了] Appwrite Site、Worker、MCP、Appwrite API Custom Domainのproduction smoke。
+3. [保留] `www` DNSとapex redirectを有効化して確認する。
+4. [保留] 実クライアントでOAuthからAgent再リンクまで受入する。
+5. [保留] `docs/brand-rollout.md`の残存ゲート完了後だけ、`v0.6.0-beta.8`のタグ付き正式リリースを判断する。

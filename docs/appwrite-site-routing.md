@@ -1,6 +1,8 @@
 # Appwrite Siteの公開host routing
 
-このリポジトリは、LPとRelay Forgeを1つのAppwrite Siteの同じactive deploymentへ梱包します。hostごとに異なるHTMLを返す処理はAppwrite Siteの静的ファイルツリーへ埋め込まず、CloudflareのURL Rewriteで入口だけを切り替えます。
+このリポジトリは、LPとRelay Forgeを1つのAppwrite Siteの同じactive deploymentへ梱包します。hostごとに異なるHTMLを返す処理はAppwrite Siteの静的ファイルツリーへ埋め込まず、CloudflareのURL Rewriteで入口だけを切り替えます。正式URLの利用ルールは[`public-urls.md`](public-urls.md)を参照してください。
+
+この方式は本番へ反映済みです。`https://guilduo.com/`は公式LP、`https://app.guilduo.com/`はGuilduo / Relay Forgeの正式Web Appとして案内します。
 
 ## 採用方式
 
@@ -16,16 +18,16 @@
 
 Appwrite Sitesのdomain-level redirectはpath/queryを保持しないため、rootのLP・Web App切替には使いません。`www`のapex redirectだけは、Cloudflare Redirect Ruleでpath/queryを保持する構成にします。
 
-## Appwrite Consoleで行う作業
+## Appwrite Siteの設定状態
 
-1. 既存のAppwrite Siteで、`app.guilduo.com`を**Active deployment**のCustom Domainとして維持する。
-2. 同じSiteへ`guilduo.com`を追加し、**Active deployment**を選ぶ。Redirect設定にはしない。
-3. Appwriteが提示するapex向けのNSまたはCNAME flattening/ALIAS/ANAMEとCAAを、Cloudflare DNSへ登録する。
-4. generated domainは削除しない。deployment確認とrollbackの入口として残す。
+- [x] 既存のAppwrite Siteで、`app.guilduo.com`を**Active deployment**のCustom Domainとして維持する。
+- [x] 同じSiteへ`guilduo.com`を追加し、**Active deployment**を使用する。Redirect設定にはしない。
+- [x] Appwriteが提示するapex向けのDNS設定をCloudflareへ反映する。
+- [x] generated domainは削除せず、deployment確認とrollbackの入口として残す。
 
-`app.guilduo.com`がすでにverification済みでも、`guilduo.com`は別hostnameとしてverificationが必要です。Appwrite SiteのCustom Domainを追加するまでは、apexのrewriteを有効にしません。
+`app.guilduo.com`と`guilduo.com`は別hostnameとしてverificationが必要です。どちらも確認済みで、apexのrewriteを有効化しています。
 
-## Cloudflareで行う作業
+## CloudflareのRule契約
 
 URL Rewrite Ruleを2つ、記載順を変えずに作成します。Dashboardでは「Rewrite to > Static」で設定し、query stringはPreserveにします。ホスト条件でrewriteを評価するため、対象hostnameのDNSレコードはCloudflareでプロキシ（orange cloud）を有効にしてください。DNS onlyのままではCloudflare Ruleは実行されません。
 
@@ -92,4 +94,4 @@ npm test
 - `app.guilduo.com/`がRelay Forgeを返し、アドレスバーが`/next/relay-forge/`へ変わらない
 - `app.guilduo.com/next/relay-forge/`がcompatibility pathとして引き続き開ける
 
-確認後にだけ、Appwrite Siteのactive deploymentを正式公開へ切り替えます。今回の実装ではDNS、Custom Domain、Cloudflare Rule、Appwrite Platform設定への書き込みは行いません。
+上記のroutingとactive deploymentは本番で確認済みです。今後Siteを更新するときも、同じactive deploymentへdist全体を公開し、host ruleを変更せずに`guilduo.com/`、`app.guilduo.com/`、英語LP、compatibility path、assetsの相対解決を確認します。`www`のapex redirectは別Ruleであり、DNSが有効になるまで`WAITING FOR DNS`として扱います。

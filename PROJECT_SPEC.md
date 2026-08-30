@@ -2,8 +2,8 @@
 
 > **English summary:** Guilduo is a Human × AI Work Platform where humans and AI agents coordinate work in the same workspace. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).
 
-最終更新: 2026-08-17  
-対象: `0.6.0-beta.7` / REST・MCP `2.7.0` / Schema `7`
+最終更新: 2026-08-30
+対象: `0.6.0-beta.8`候補 / REST・MCP `2.7.0` / Schema `7`
 文書の位置づけ: アーキテクチャ、ドメイン、API、認証、安全性、運用の正本
 
 ## 1. 目的と境界
@@ -13,7 +13,7 @@ Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じwork
 この文書が定義するもの:
 
 - プロダクトの思想、用語、責務境界
-- `/`、`/next/`、REST、MCP、CLI、Skillの関係
+- 正式公開URL、`/`、`/next/`、REST、MCP、CLI、Skillの関係
 - Quest、報酬、MP、Battle、Quest Tree、Handoffの不変条件
 - 認証、同期、公開情報、秘密情報の扱い
 - UI変更、AI連携、リリース時に守る互換性ルール
@@ -26,7 +26,7 @@ Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じwork
 - Agentの自動起動、モデル呼び出し、Sandboxの実行
 - API契約ファイルと同じ内容の重複定義
 
-視覚設計は[`DESIGN.md`](DESIGN.md)、Next版の視覚差分は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)を参照する。
+正式URLの早見表は[`docs/public-urls.md`](docs/public-urls.md)、host-based routingの契約は[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)を参照する。視覚設計は[`DESIGN.md`](DESIGN.md)、Next版の視覚差分は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)を参照する。
 
 視覚設計の成果物は、数値トークン[`design/TOKENS.json`](design/TOKENS.json)、部品[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面[`design/SCREENS.md`](design/SCREENS.md)、アセット[`design/ASSET_MANIFEST.md`](design/ASSET_MANIFEST.md)を参照する。これらはQuestデータやAPI契約を変更しない。
 
@@ -59,9 +59,16 @@ Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じwork
 
 | サーフェス | 役割 | 正式な位置づけ |
 | --- | --- | --- |
-| `/` | 現行UI、Appwrite同期、従来操作との互換 | 安定版の基準 |
-| `/next/` | Interaction Lab、新UI、操作検証 | 公開β・検証レーン |
+| `https://app.guilduo.com/` | Guilduo / Relay ForgeのWeb App | 新規ユーザー向け正式入口・公開β |
+| `/next/relay-forge/` | Relay Forgeのビルド後実装path | Appwrite Site内部path・互換入口。canonicalではない |
+| `/interaction-lab/` | Interaction Labの開発・キャプチャ用source route | ローカル開発専用 |
+| `/` | 現行UI、Appwrite同期、従来操作との互換 | 既存surface。公開導線はWeb Appへ集約 |
+| `/next/` | Nextの互換・検証path | 新規ユーザー向けの正式入口ではない |
+| `https://guilduo.com/` | Guilduo公式サイト / LP | canonical root |
+| `https://guilduo.com/lp/en/` | 英語LP | 公式言語別入口 |
 | `/lp/`・`/lp/en/` | Guilduoの説明、Product Proof、公開CTA | 日本語・英語の公式マーケティングSurface |
+| `https://mcp.guilduo.com/mcp` | OAuth対応Remote HTTP MCP | AIクライアント向け正式endpoint |
+| `https://api.guilduo.com/v1` | Appwrite API | SDK・WorkerのAPI endpoint |
 | Appwrite Auth | Googleログインとユーザー識別 | 認証の基準 |
 | Appwrite TablesDB | Quest・キャラクター・Battle状態 | ユーザー状態の保存先 |
 | Appwrite Sites | Web/PWAとLPの静的配信 | 公開Webの配信面 |
@@ -69,6 +76,8 @@ Guilduoは、現実の作業をQuestへ変換し、HumanとAI Agentが同じwork
 | Cloudflare D1/KV | Agent、接続、プロフィール、短期OAuth状態 | Worker側メタデータ保存 |
 | CLI | 人間・CI向けのREST/JSON操作 | MCPとは別の操作面 |
 | Skill | AIに安全な操作順序を教える手順書 | MCPの利用ガイド |
+
+`https://app.guilduo.com/`のrootは、同じAppwrite Siteの`/next/relay-forge/`へhost-based rewriteされる。ブラウザへ表示するcanonical URLはrootのままにし、内部pathを新規リンクへ露出させない。旧workers.dev URLとAppwrite generated domainは互換・検証・rollback用途に限定する。
 
 ```mermaid
 flowchart LR
