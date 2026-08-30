@@ -75,7 +75,7 @@ WEB_APP_URL=https://app.guilduo.com
 JOIN_GUILD_URL=https://app.guilduo.com/
 ```
 
-`WEB_APP_URL`はAppwrite API endpointではありません。`APPWRITE_ENDPOINT`はAppwrite Custom Domainを実際に有効化して疎通確認するまで、既存の`https://<region>.cloud.appwrite.io/v1`を維持します。MCPは別hostの`https://mcp.guilduo.com/mcp`です。
+`WEB_APP_URL`はAppwrite API endpointではありません。Appwrite API Custom Domainの`api.guilduo.com`は有効化・疎通確認済みのため、productionの`APPWRITE_ENDPOINT`は`https://api.guilduo.com/v1`を使います。generated endpointはrollback用に保持します。MCPは別hostの`https://mcp.guilduo.com/mcp`です。
 
 ## ローカル検証
 

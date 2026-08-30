@@ -141,7 +141,7 @@ test("public URL references keep site, app, MCP, and Appwrite API roles separate
   assert.match(content, /https:\/\/app\.guilduo\.com/);
   assert.match(content, /https:\/\/mcp\.guilduo\.com/);
   assert.match(content, /https:\/\/api\.guilduo\.com/);
-  assert.match(content, /sgp\.cloud\.appwrite\.io\/v1/);
+  assert.match(content, /https:\/\/api\.guilduo\.com\/v1/);
   assert.match(content, /PUBLIC_SITE_URL/);
 });
 

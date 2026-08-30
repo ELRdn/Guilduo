@@ -22,7 +22,7 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 - `WEB_APP_URL`: Web Appの正式origin。現在は`https://app.guilduo.com`を指定します。Appwrite Siteのgenerated domainは検証・rollback用に保持し、正式なユーザー導線には使いません
 - `JOIN_GUILD_URL`（任意）: LPのCTA先。未設定時は`WEB_APP_URL/`を使い、`/next/`のcompatibility pathを新規導線にしません
 - `PUBLIC_SITE_URL`（任意）: 公式サイト/LPのcanonical・OG・共有画像origin。既定値は`https://guilduo.com`です。`WEB_APP_URL`とは分離して指定します
-- `APPWRITE_ENDPOINT`: 例 `https://sgp.cloud.appwrite.io/v1`
+- `APPWRITE_ENDPOINT`: `https://api.guilduo.com/v1`（Appwrite API Custom Domainの疎通確認済み。generated endpointはrollback用に保持）
 - `APPWRITE_PROJECT_ID`、`APPWRITE_DATABASE_ID`、`APPWRITE_STATE_TABLE_ID`、`APPWRITE_LEGACY_TABLE_ID`、`APPWRITE_SITE_ID`
 - `D1_DATABASE_NAME`、`D1_DATABASE_ID`、`KV_NAMESPACE_ID`
 - `R2_BUCKET_NAME`: Agent Avatar画像用R2バケット名。事前に`wrangler r2 bucket create <name>`で作成しておくこと。未設定の場合、Release設定生成は`AGENT_AVATARS` bindingを欠いたまま成功させず失敗する
@@ -46,7 +46,7 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 
 - Cloudflareで`guilduo.com`と`app.guilduo.com`を同じAppwrite Siteのactive deploymentへ向け、[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)の2つのhost-based URL Rewriteを設定する。`www`はapex redirect、`mcp`はWorkerのCustom Domainへ向け、DNS反映を確認してから正式URLを有効化する
 - Appwrite Consoleで`guilduo.com`を同じSiteのactive deployment domainとして追加し、既存の`app.guilduo.com`は維持する。両方をWeb Platformへ登録し、Google OAuthのsuccess/failure戻り先を`https://app.guilduo.com/`へ確認する
-- AppwriteのAPI Custom Domainを利用する場合だけ`api.guilduo.com`を設定し、疎通確認後に`APPWRITE_ENDPOINT`を変更する。現状は`sgp.cloud.appwrite.io/v1`を維持する
+- Appwrite API Custom Domainは`api.guilduo.com`で有効化・疎通確認済み。productionの`APPWRITE_ENDPOINT`は`https://api.guilduo.com/v1`を正本にし、generated endpointはrollback用に保持する
 - `docs.guilduo.com`はDocumentation公開時まで予約扱いにし、未構築のDNSやコード導線を追加しない
 
 どのゲートでも失敗した場合はタグ公開を進めません。詳細は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)を参照してください。

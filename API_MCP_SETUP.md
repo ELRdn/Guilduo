@@ -9,10 +9,10 @@ Guilduoは、Appwrite SitesのWeb/PWA、Cloudflare WorkerのREST/MCP、Appwrite 
 | 公式サイト / LP | `https://guilduo.com` | 公開サイトとcanonical root |
 | Web App | `https://app.guilduo.com` | Guilduo / Relay Forgeの正式入口 |
 | MCP | `https://mcp.guilduo.com` | Remote HTTP MCPのorigin |
-| Appwrite API | `https://api.guilduo.com` | Appwrite Custom Domainの予約先 |
+| Appwrite API | `https://api.guilduo.com` | Appwrite API origin。SDK/Worker endpointは`https://api.guilduo.com/v1` |
 | Documentation | `https://docs.guilduo.com` | Reserved / Future |
 
-`api.guilduo.com`はAppwrite API専用です。WorkerのREST `/v1`とMCP `/mcp`の接続先をこのURLへ置き換えません。Appwrite Custom Domainを実際に有効化するまでは、`APPWRITE_ENDPOINT`の現在値を維持します。
+`api.guilduo.com`はAppwrite API専用です。Appwrite SDKとWorkerの`APPWRITE_ENDPOINT`は`https://api.guilduo.com/v1`を使います。Worker自身のREST `/v1`とMCP `/mcp`は、引き続きWorkerの公開origin（新規接続は`https://mcp.guilduo.com`）を使い、Appwrite API originへ置き換えません。
 
 ## 現在の公開β境界
 

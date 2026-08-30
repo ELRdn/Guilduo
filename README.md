@@ -13,19 +13,19 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 | 公式LP | [Guilduo Landing Page](https://guilduo.com/) | Guilduoの思想、機能、使い方を知る |
 | 正式UI | [Guilduo / Relay Forge](https://app.guilduo.com/) | 公開βのCommand・Quest運用画面を開く |
 
-正式URLのDNS・Custom Domain反映前は、Appwrite Sitesの現行Deployment URLを互換確認用に保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。次回ブランド導入候補は`0.6.0-beta.8`ですが、権利・類似性確認と外部表示の整合が完了するまで公開しません。
+Appwrite Sitesのgenerated Deployment URLは、検証・rollback用の互換入口として保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。次回ブランド導入候補は`0.6.0-beta.8`ですが、権利・類似性確認と外部表示の整合が完了するまで公開しません。
 
 ### 公開URLの役割
 
 | 役割 | 正式URL | 状態 |
 |---|---|---|
 | 公式サイト / LP | `https://guilduo.com` | canonical root |
-| Web App | `https://app.guilduo.com` | Appwrite SiteのCustom Domain反映後に有効化 |
+| Web App | `https://app.guilduo.com` | Appwrite SiteのCustom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Remote HTTP MCPの正規接続先 |
-| Appwrite API | `https://api.guilduo.com` | Appwrite Custom Domain設定後の予約先。現行サービスendpointは変更しない |
+| Appwrite API | `https://api.guilduo.com` | Appwrite APIの正式origin。endpointは`https://api.guilduo.com/v1` |
 | Documentation | `https://docs.guilduo.com` | Reserved / Future |
 
-`https://www.guilduo.com`は`https://guilduo.com`へのredirect専用です。旧`workers.dev` URLは互換接続・rollback用に残します。`api.guilduo.com`はAppwrite API用であり、現在のWorker REST/MCPの`/v1`や`/mcp`を置き換えるURLではありません。
+`https://www.guilduo.com`は`https://guilduo.com`へのredirect専用です。旧`workers.dev` URLは互換接続・rollback用に残します。`api.guilduo.com`はAppwrite API用で、ブラウザのAppwrite clientとWorkerの`APPWRITE_ENDPOINT`が利用します。Worker REST/MCPの`/v1`や`/mcp`の公開originではありません。
 
 ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 

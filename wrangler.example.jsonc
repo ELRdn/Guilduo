@@ -6,7 +6,7 @@
 	"compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "vars": {
-    "APPWRITE_ENDPOINT": "https://sgp.cloud.appwrite.io/v1",
+    "APPWRITE_ENDPOINT": "https://api.guilduo.com/v1",
     "APPWRITE_PROJECT_ID": "your-appwrite-project-id",
     "APPWRITE_DATABASE_ID": "guilduo",
     "APPWRITE_STATE_TABLE_ID": "user_states",

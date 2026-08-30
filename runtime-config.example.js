@@ -4,7 +4,7 @@ const runtimeConfig = {
   sourceUrl: "https://github.com/your-account/QuestForge",
   externalOAuthEnabled: false,
   telemetryEndpoint: "",
-  appwriteEndpoint: "https://sgp.cloud.appwrite.io/v1",
+  appwriteEndpoint: "https://api.guilduo.com/v1",
   appwriteProjectId: "YOUR_APPWRITE_PROJECT_ID",
 };
 

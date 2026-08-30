@@ -25,7 +25,7 @@ npm run migrate:appwrite -- --state-export ./private/firebase-rtdb.json --users-
 ## Execute
 
 ```bash
-APPWRITE_ENDPOINT=https://sgp.cloud.appwrite.io/v1 \
+APPWRITE_ENDPOINT=https://api.guilduo.com/v1 \
 APPWRITE_PROJECT_ID=... \
 APPWRITE_DATABASE_ID=guilduo \
 APPWRITE_LEGACY_TABLE_ID=legacy_states \
