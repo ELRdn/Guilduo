@@ -87,6 +87,7 @@ test("static OG metadata uses the build-time public-origin marker", () => {
   for (const path of ["index.html", "lp/index.html", "lp/en/index.html", "interaction-lab/relay-forge/index.html"]) {
     assert.match(read(path), /property="og:image" content="__GUILDUO_PUBLIC_ORIGIN__\/assets\/brand\/og-guilduo\.png"/);
   }
-  assert.match(read("vite.config.ts"), /WEB_APP_URL/);
+  assert.match(read("vite.config.ts"), /PUBLIC_SITE_URL/);
   assert.match(read("vite.config.ts"), /replaceAll\("__GUILDUO_PUBLIC_ORIGIN__"/);
+  assert.match(read("vite.config.ts"), /__GUILDUO_WEB_APP_ORIGIN__/);
 });

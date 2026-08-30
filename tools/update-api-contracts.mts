@@ -59,7 +59,7 @@ openapi.info = {
   description: "Guilduo REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
-  { url: "https://your-questforge-worker.example.workers.dev", description: "Cloudflare Worker" },
+  { url: "https://mcp.guilduo.com", description: "Guilduo Worker REST / MCP gateway" },
   { url: "http://127.0.0.1:8787", description: "Local Wrangler" },
 ];
 
@@ -190,8 +190,8 @@ bearerAuth.bearerFormat = "Appwrite JWT";
 const flows = oauth2.flows as OpenApiSchema;
 const authorizationCode = flows.authorizationCode as OpenApiSchema;
 const scopes = authorizationCode.scopes as Record<string, string>;
-authorizationCode.authorizationUrl = "https://your-questforge-worker.example.workers.dev/oauth/authorize";
-authorizationCode.tokenUrl = "https://your-questforge-worker.example.workers.dev/oauth/token";
+authorizationCode.authorizationUrl = "https://mcp.guilduo.com/oauth/authorize";
+authorizationCode.tokenUrl = "https://mcp.guilduo.com/oauth/token";
 Object.assign(scopes, {
   "agents:read": "Read registered Agent profiles and the current Agent context",
   "profiles:read": "Read public profile data",

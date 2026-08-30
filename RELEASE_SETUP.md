@@ -16,7 +16,12 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 ### Variables
 
 - `WORKER_BASE_URL`: 例 `https://guilduo-gateway.example.workers.dev`
-- `WEB_APP_URL`: 初回生成用の既知のAppwrite Sites URL。リリース中は新Deploymentの実URLで上書きされます
+- `MCP_BASE_URL`（任意）: MCPの新しい公開origin。既定値は`https://mcp.guilduo.com`。接続先はこのoriginに`/mcp`を付けたURLです
+- `MCP_ALLOWED_ORIGINS`（任意）: 新旧MCP originの明示allowlist。未設定時は`WORKER_BASE_URL`と`MCP_BASE_URL`から生成されます
+- `PROVIDER_OAUTH_BASE_URL`（任意）: Google/Notion callback用origin。未設定時は`WORKER_BASE_URL`を使い、MCP URL変更でProvider callbackを変えません
+- `WEB_APP_URL`: Web Appの正式origin。現在は`https://app.guilduo.com`を指定します。Appwrite Siteのgenerated domainは検証・rollback用に保持し、正式なユーザー導線には使いません
+- `JOIN_GUILD_URL`（任意）: LPのCTA先。未設定時は`WEB_APP_URL/`を使い、`/next/`のcompatibility pathを新規導線にしません
+- `PUBLIC_SITE_URL`（任意）: 公式サイト/LPのcanonical・OG・共有画像origin。既定値は`https://guilduo.com`です。`WEB_APP_URL`とは分離して指定します
 - `APPWRITE_ENDPOINT`: 例 `https://sgp.cloud.appwrite.io/v1`
 - `APPWRITE_PROJECT_ID`、`APPWRITE_DATABASE_ID`、`APPWRITE_STATE_TABLE_ID`、`APPWRITE_LEGACY_TABLE_ID`、`APPWRITE_SITE_ID`
 - `D1_DATABASE_NAME`、`D1_DATABASE_ID`、`KV_NAMESPACE_ID`
@@ -31,10 +36,17 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 
 1. API契約差分、型、テスト、ビルド、LPを検証
 2. D1の追加migrationを適用
-3. Appwrite Sitesを公開し、Deploymentの実URLをリクエストログから取得
-4. 実URLごとに一意なAppwrite Web Platformを追加し、過去の公開URLを壊さずにWorkerの`WEB_APP_URL`と`ALLOWED_ORIGINS`を再生成
+3. Appwrite Sitesを公開し、Deploymentの実URLをリクエストログから取得。`/lp/`、`/lp/en/`、`/next/relay-forge/`のcompatibility pathを確認
+4. Appwrite Web Platformへ`app.guilduo.com`を登録し、Workerの`WEB_APP_URL`と`ALLOWED_ORIGINS`を正式originへ再生成。公式LPのoriginは`PUBLIC_SITE_URL`として許可する
 5. Worker Secretを設定してWorkerを公開
 6. `/health`、OAuth metadata、MCP認証拒否、公開ルートのGuilduo表記を確認
 7. GitHub Releaseを作成
+
+## Custom Domain切替の外部作業
+
+- Cloudflareで`guilduo.com`と`app.guilduo.com`を同じAppwrite Siteのactive deploymentへ向け、[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)の2つのhost-based URL Rewriteを設定する。`www`はapex redirect、`mcp`はWorkerのCustom Domainへ向け、DNS反映を確認してから正式URLを有効化する
+- Appwrite Consoleで`guilduo.com`を同じSiteのactive deployment domainとして追加し、既存の`app.guilduo.com`は維持する。両方をWeb Platformへ登録し、Google OAuthのsuccess/failure戻り先を`https://app.guilduo.com/`へ確認する
+- AppwriteのAPI Custom Domainを利用する場合だけ`api.guilduo.com`を設定し、疎通確認後に`APPWRITE_ENDPOINT`を変更する。現状は`sgp.cloud.appwrite.io/v1`を維持する
+- `docs.guilduo.com`はDocumentation公開時まで予約扱いにし、未構築のDNSやコード導線を追加しない
 
 どのゲートでも失敗した場合はタグ公開を進めません。詳細は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)を参照してください。

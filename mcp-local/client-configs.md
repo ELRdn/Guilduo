@@ -14,11 +14,11 @@ env_vars = ["QUESTFORGE_MCP_URL", "QUESTFORGE_TOKEN"]
 default_tools_approval_mode = "writes"
 ```
 
-Remote configuration:
+Remote configuration（正規MCP URL）:
 
 ```toml
 [mcp_servers.questforge]
-url = "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp"
+url = "https://mcp.guilduo.com/mcp"
 auth = "oauth"
 default_tools_approval_mode = "writes"
 ```
@@ -32,7 +32,7 @@ default_tools_approval_mode = "writes"
       "command": "npx",
       "args": ["tsx", "<absolute-path-to-questforge>/mcp-local/questforge-mcp.ts"],
       "env": {
-        "QUESTFORGE_MCP_URL": "https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp",
+        "QUESTFORGE_MCP_URL": "https://mcp.guilduo.com/mcp",
         "QUESTFORGE_TOKEN": "development-token-only"
       }
     }
@@ -45,13 +45,13 @@ Claude web/mobile uses the deployed `/mcp` URL from Settings > Connectors with O
 ## Gemini CLI
 
 ```bash
-gemini mcp add --transport http questforge https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp
+gemini mcp add --transport http questforge https://mcp.guilduo.com/mcp
 ```
 
 ## GitHub Copilot CLI
 
 ```bash
-copilot mcp add --transport http questforge https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp
+copilot mcp add --transport http questforge https://mcp.guilduo.com/mcp
 ```
 
 ## QuestForge CLI
@@ -59,19 +59,20 @@ copilot mcp add --transport http questforge https://questforge-gateway.YOUR-SUBD
 The REST CLI is separate from the stdio MCP bridge. Use it for human or CI workflows:
 
 ```bash
-QUESTFORGE_API_URL=https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev \
+QUESTFORGE_API_URL=https://mcp.guilduo.com \
   QUESTFORGE_TOKEN=development-token-only \
   npm run cli -- quests list --view today --json
 ```
 
 For writes, add `--execute`. For a safer token handoff, use `--token-stdin` instead of putting the token in shell history.
+The current Worker exposes REST `/v1` and MCP `/mcp` on the same `mcp.guilduo.com` origin. Do not use `api.guilduo.com` for these routes; that hostname is reserved for the Appwrite API.
 
 ## OpenClaw / Hermes handoff
 
 Both clients should use the same OAuth Remote HTTP endpoint and the same least-privilege scopes. Register:
 
 ```text
-https://questforge-gateway.YOUR-SUBDOMAIN.workers.dev/mcp
+https://mcp.guilduo.com/mcp
 ```
 
 Recommended first tools: `get_daily_brief`, `list_quests`, `get_quest_tree`, `list_registered_agents`, `get_current_agent_context`, `list_agent_handoffs`. Keep batch writes, scoring, archives, and Agent assignments behind dry-run and explicit confirmation. Dedicated recipes are kept on the public roadmap until the external OAuth release gate is complete.

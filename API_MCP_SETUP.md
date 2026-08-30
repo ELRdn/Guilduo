@@ -2,6 +2,18 @@
 
 Guilduoは、Appwrite SitesのWeb/PWA、Cloudflare WorkerのREST/MCP、Appwrite Auth/TablesDBのユーザー状態を分離して運用します。
 
+## 正式URLの役割
+
+| 役割 | URL | 用途 |
+|---|---|---|
+| 公式サイト / LP | `https://guilduo.com` | 公開サイトとcanonical root |
+| Web App | `https://app.guilduo.com` | Guilduo / Relay Forgeの正式入口 |
+| MCP | `https://mcp.guilduo.com` | Remote HTTP MCPのorigin |
+| Appwrite API | `https://api.guilduo.com` | Appwrite Custom Domainの予約先 |
+| Documentation | `https://docs.guilduo.com` | Reserved / Future |
+
+`api.guilduo.com`はAppwrite API専用です。WorkerのREST `/v1`とMCP `/mcp`の接続先をこのURLへ置き換えません。Appwrite Custom Domainを実際に有効化するまでは、`APPWRITE_ENDPOINT`の現在値を維持します。
+
 ## 現在の公開β境界
 
 - Appwrite Googleログイン：利用可能
@@ -32,7 +44,7 @@ Appwrite ConsoleでWorker専用API Keyを作成し、必要最小限のTablesDB 
 npx wrangler secret put APPWRITE_API_KEY
 ```
 
-Google OAuth providerにはAppwriteが示すcallback URLを登録し、AppwriteのWeb platformには公開Appwrite Sitesのhostnameを登録します。
+Google OAuth providerにはAppwriteが示すcallback URLを登録し、AppwriteのWeb platformには現在有効なAppwrite Sites hostnameと、Custom Domain有効化後の`app.guilduo.com`を登録します。未接続のhostnameを先にOAuth success URLへ設定しないでください。
 
 ## 3. デプロイ前の外部OAuthフラグ
 
@@ -40,7 +52,7 @@ Google OAuth providerにはAppwriteが示すcallback URLを登録し、Appwrite�
 
 ```js
 globalThis.QuestForgeConfig = {
-  gatewayUrl: "https://your-worker.example.workers.dev",
+  gatewayUrl: "https://mcp.guilduo.com",
   externalOAuthEnabled: false,
 };
 ```
@@ -52,13 +64,15 @@ globalThis.QuestForgeConfig = {
 安定エンドポイント：
 
 ```text
-https://your-worker.example.workers.dev/mcp
+https://mcp.guilduo.com/mcp
 ```
+
+旧workers.devの`/mcp`は移行期間中の互換接続として残ります。新規クライアントは新しいURLへ接続してください。
 
 検証レーン：
 
 ```text
-https://your-worker.example.workers.dev/mcp-next
+https://mcp.guilduo.com/mcp-next
 ```
 
 Workerの`/health`は次を返します。
@@ -76,7 +90,7 @@ Workerの`/health`は次を返します。
 
 ```toml
 [mcp_servers.questforge]
-url = "https://your-worker.example.workers.dev/mcp"
+url = "https://mcp.guilduo.com/mcp"
 auth = "oauth"
 default_tools_approval_mode = "writes"
 ```
@@ -84,13 +98,13 @@ default_tools_approval_mode = "writes"
 Gemini CLI：
 
 ```bash
-gemini mcp add --transport http questforge https://your-worker.example.workers.dev/mcp
+gemini mcp add --transport http questforge https://mcp.guilduo.com/mcp
 ```
 
 GitHub Copilot CLI：
 
 ```bash
-copilot mcp add --transport http questforge https://your-worker.example.workers.dev/mcp
+copilot mcp add --transport http questforge https://mcp.guilduo.com/mcp
 ```
 
 Claude、OpenClaw、Hermesは、同じRemote HTTP MCPとOAuth metadataを使います。OpenClaw/Hermes向けの専用レシピは外部サービス公開後のロードマップに残しています。
@@ -98,7 +112,7 @@ Claude、OpenClaw、Hermesは、同じRemote HTTP MCPとOAuth metadataを使い�
 ## 5. Agent RegistryとSkill
 
 1. GuilduoへAppwrite Googleログインする
-2. `/next/` > 設定 > AI Agent Registryを開く
+2. Web Appの`https://app.guilduo.com/` > 設定 > AI Agent Registryを開く
 3. Agent ID、表示名、Provider、役割、作業指示を登録する
 4. ChatGPT、Codex、ClaudeなどをRemote MCPへ接続する
 5. 認可済みMCPクライアントをAgentへ紐付ける
@@ -159,7 +173,7 @@ GitHub Actionsは`v*`タグだけで公開処理を開始します。
 3. Worker deploy
 4. `/health`でWorker版数、Schema、D1を確認
 5. 成功時だけAppwrite Sitesをデプロイ
-6. `/`、`/next/`、MCP metadata、未認証401をSmoke test
+6. `guilduo.com/`（LP）、`app.guilduo.com/`（Web App）、互換path、MCP metadata、未認証401をSmoke test
 7. GitHub Release作成
 
 Worker確認に失敗した場合はAppwrite Sitesを更新しません。公開βのタグはpackage versionと一致させます。

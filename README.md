@@ -10,10 +10,22 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 
 | 入口 | リンク | 用途 |
 |---|---|---|
-| 公式LP | [Guilduo Landing Page](https://6a90bb258248d43363a2.appwrite.network/lp/) | Guilduoの思想、機能、使い方を知る |
-| 正式UI | [Guilduo / Relay Forge](https://6a90bb258248d43363a2.appwrite.network/next/relay-forge/) | 公開βのCommand・Quest運用画面を開く |
+| 公式LP | [Guilduo Landing Page](https://guilduo.com/) | Guilduoの思想、機能、使い方を知る |
+| 正式UI | [Guilduo / Relay Forge](https://app.guilduo.com/) | 公開βのCommand・Quest運用画面を開く |
 
-現在の公開先はAppwrite Sites上の `v0.6.0-beta.7` です。次回ブランド導入候補は`0.6.0-beta.8`ですが、権利・類似性確認と外部表示の整合が完了するまで公開しません。
+正式URLのDNS・Custom Domain反映前は、Appwrite Sitesの現行Deployment URLを互換確認用に保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。次回ブランド導入候補は`0.6.0-beta.8`ですが、権利・類似性確認と外部表示の整合が完了するまで公開しません。
+
+### 公開URLの役割
+
+| 役割 | 正式URL | 状態 |
+|---|---|---|
+| 公式サイト / LP | `https://guilduo.com` | canonical root |
+| Web App | `https://app.guilduo.com` | Appwrite SiteのCustom Domain反映後に有効化 |
+| MCP | `https://mcp.guilduo.com/mcp` | Remote HTTP MCPの正規接続先 |
+| Appwrite API | `https://api.guilduo.com` | Appwrite Custom Domain設定後の予約先。現行サービスendpointは変更しない |
+| Documentation | `https://docs.guilduo.com` | Reserved / Future |
+
+`https://www.guilduo.com`は`https://guilduo.com`へのredirect専用です。旧`workers.dev` URLは互換接続・rollback用に残します。`api.guilduo.com`はAppwrite API用であり、現在のWorker REST/MCPの`/v1`や`/mcp`を置き換えるURLではありません。
 
 ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 
@@ -28,7 +40,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | Quest CRUD、保管、Quest Tree、MPバトル | 利用可能 |
 | Agent Registry、MCPクライアント紐付け、Handoff | 利用可能 |
 | REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
-| `/next/relay-forge/` Guilduo / Relay Forge | 正式UIの公開β（Desktop / Mobile） |
+| `app.guilduo.com/` Guilduo / Relay Forge | 正式UIの公開β（Desktop / Mobile）。内部の`/next/relay-forge/`は移行期間の互換path |
 | 9言語 | ルートUIで利用可能。βUIも主要ナビを対応 |
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
 | Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
@@ -49,7 +61,8 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 - `/`：現行UI。ログイン前は端末保存、ログイン後はWorker経由でAppwriteへ同期します。
 - `/lp/`・`/lp/en/`：Guilduo公式Landing Pageの日本語版・英語版です。CTA URLはRuntime Configから供給し、未設定時は安全に無効化します。
 - `/interaction-lab/`：ローカル開発・キャプチャ用のNextソースルートです。
-- `/next/`：Appwrite Sites上の公開βルートです。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
+- `/next/`・`/next/relay-forge/`：Appwrite Sites上の公開β互換ルートです。新規ユーザーの正式入口は`https://app.guilduo.com/`で、Cloudflareのhost-based rewriteがRelay Forge entryへ内部転送します。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
+- `https://guilduo.com/`は同じAppwrite Siteの`/lp/`へ、`https://app.guilduo.com/`は`/next/relay-forge/`へroutingします。実際のDNS・Rewrite設定は[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)を参照してください。
 - 視覚設計の正本は[`DESIGN.md`](DESIGN.md)、技術仕様の正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)、Next版の差分設計は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)です。数値トークンは[`design/TOKENS.json`](design/TOKENS.json)、部品は[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面構成は[`design/SCREENS.md`](design/SCREENS.md)を参照します。
 - 更新時はAppwrite Auth状態を復元し、前回同期データがあれば読み取り専用で残します。再接続中はQuest一覧を消さず、スケルトン・再接続ボタン・書き込みロックを表示します。
 - Questの完了状態とAgent Handoff状態は別管理です。単発To Doは完了時に保管、日課・習慣・繰り返しTo Doは次回へ復帰します。
@@ -72,10 +85,12 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 安定接続先は次です。
 
 ```text
-https://<your-worker>/mcp
+https://mcp.guilduo.com/mcp
 ```
 
 MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、プロフィール、パーティー、バトル、Toggl Focus契約を含む51 toolsを公開します。`/mcp-next`は新SDK向けの検証レーンで、ResourcesとWorkflow Promptsを追加します。既存クライアントの互換性のため、通常利用は `/mcp` を維持します。
+
+移行期間中は旧workers.devの`/mcp`も互換用に残しますが、新規登録と再接続には上記の`mcp.guilduo.com/mcp`を使います。
 
 ### 新しいMCP接続はOAuthで登録する
 
@@ -83,11 +98,11 @@ MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、�
 
 1. 移行前のGuilduo／QuestForge接続がクライアントに残っている場合は、いったん切断または削除します。旧OAuth GrantとTokenは再利用できません。
 2. クライアントのMCPまたはConnector設定を開き、接続名を`Guilduo`、種類をRemote HTTP MCPとして登録します。
-3. URLには、安定版の`https://<your-worker>/mcp`を指定します。`<your-worker>`はCloudflare Workerの公開hostnameへ置き換えてください。通常の接続テストでは`/mcp-next`を使いません。
+3. URLには、安定版の`https://mcp.guilduo.com/mcp`を指定します。通常の接続テストでは`/mcp-next`を使いません。
 4. 認証方式を選べるクライアントでは`OAuth`を選びます。API Key、Bearer Token、Client Secretは入力しません。
 5. ブラウザに「Guilduoへ接続」が表示されたら、Web版Guilduoと同じAppwriteアカウントでログインし、要求された権限を確認して許可します。
 6. MCPクライアントへ戻り、接続済みまたは利用可能と表示されることを確認します。この時点ではOAuth接続だけが完了しており、Agentはまだ未リンクの場合があります。
-7. [Guilduo / Relay Forge](https://6a90bb258248d43363a2.appwrite.network/next/relay-forge/)のConnectionsを開き、接続したClientを希望するAgentへリンクします。Agentがなければ、Partyの「Agentを登録」から先に作成します。
+7. [Guilduo / Relay Forge](https://app.guilduo.com/)のConnectionsを開き、接続したClientを希望するAgentへリンクします。Agentがなければ、Partyの「Agentを登録」から先に作成します。
 8. MCPクライアントを再起動または再読込し、下記の接続テストを実行します。
 
 設定ファイルでRemote MCPを追加するクライアントでは、次の例を使えます。
@@ -95,9 +110,9 @@ MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、�
 ```json
 {
   "mcpServers": {
-    "guilduo": {
+    "questforge": {
       "type": "http",
-      "url": "https://<your-worker>/mcp",
+      "url": "https://mcp.guilduo.com/mcp",
       "authentication": "oauth"
     }
   }
@@ -108,10 +123,10 @@ OAuth metadataはMCPクライアントが自動検出します。手動確認が
 
 ```text
 Authorization Server Metadata
-https://<your-worker>/.well-known/oauth-authorization-server
+https://mcp.guilduo.com/.well-known/oauth-authorization-server
 
 Protected Resource Metadata
-https://<your-worker>/.well-known/oauth-protected-resource/mcp
+https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 ```
 
 ### 接続テストはAgent Contextまで確認する
@@ -149,8 +164,8 @@ Token、Client ID、UIDは表示しないでください。
 
 - ChatGPT / Codex：リモートMCP Appまたは開発者モードへ上記の本番`/mcp` URLを登録
 - Claude：Settings > ConnectorsからOAuth Remote MCPを追加
-- Gemini CLI：`gemini mcp add --transport http guilduo https://<your-worker>/mcp`
-- GitHub Copilot CLI：`copilot mcp add --transport http guilduo https://<your-worker>/mcp`
+- Gemini CLI：`gemini mcp add --transport http questforge https://mcp.guilduo.com/mcp`
+- GitHub Copilot CLI：`copilot mcp add --transport http questforge https://mcp.guilduo.com/mcp`
 - OpenClaw / Hermes：後続の接続レシピで同じRemote HTTP MCPを使用
 
 登録後はGuilduo設定の **AI Agent Registry** でAgentを作成し、認可済みMCPクライアントをAgentへ紐付けます。AgentからMCPクライアントの権限は増やせません。

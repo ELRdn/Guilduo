@@ -10,10 +10,41 @@ const en = read("lp/en/index.html");
 test("LP publishes first-class Japanese and English documents", () => {
   assert.match(ja, /<html lang="ja"/);
   assert.match(en, /<html lang="en"/);
-  assert.match(ja, /name="guilduo:canonical-path" content="\/lp\/"/);
+  assert.match(ja, /name="guilduo:canonical-path" content="\/"/);
   assert.match(en, /name="guilduo:canonical-path" content="\/lp\/en\/"/);
+  assert.match(ja, /<link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__\/" \/>/);
+  assert.match(en, /<link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__\/lp\/en\/" \/>/);
+  assert.match(ja, /property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__\/"/);
+  assert.match(en, /property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__\/lp\/en\/"/);
+  assert.match(ja + en, /name="twitter:url" content="__GUILDUO_PUBLIC_ORIGIN__\/lp\//);
   assert.match(read("lp/main.ts"), /hydrateSeoLinks/);
   assert.match(read("lp/main.ts"), /hreflang: "x-default"/);
+  assert.match(read("lp/main.ts"), /document\.head\.querySelector\(selector\)/);
+  assert.match(read("lp/main.ts"), /\{ rel: "alternate", href: "\/", hreflang: "ja" \}/);
+  assert.match(ja, /class="wordmark" href="\.\/"/);
+  assert.match(ja, /class="language-link" href="\/lp\/en\/"/);
+  assert.match(ja, /lang="en">English<\/a>/);
+  assert.match(en, /class="wordmark" href="\.\/"/);
+  assert.match(en, /class="language-link" href="\/"/);
+  assert.match(en, /lang="ja">日本語<\/a>/);
+});
+
+test("public page metadata uses the official site role, not the Web App deployment origin", () => {
+  const rootHtml = read("index.html");
+  const vite = read("vite.config.ts");
+  assert.match(rootHtml, /<link rel="canonical" href="__GUILDUO_WEB_APP_ORIGIN__\/" \/>/);
+  assert.match(rootHtml, /property="og:url" content="__GUILDUO_WEB_APP_ORIGIN__\/"/);
+  assert.match(vite, /PUBLIC_SITE_URL/);
+  assert.doesNotMatch(vite, /getPublicOrigin\(\)/);
+});
+
+test("beta app documents use the Web App root as canonical while keeping compatibility paths", () => {
+  for (const [file, compatibilityPath] of [["interaction-lab/index.html", "/next/"], ["interaction-lab/relay-forge/index.html", "/next/relay-forge/"]] as const) {
+    const html = read(file);
+    assert.match(html, /__GUILDUO_WEB_APP_ORIGIN__\//);
+    assert.doesNotMatch(html, new RegExp(`__GUILDUO_WEB_APP_ORIGIN__${compatibilityPath.replaceAll("/", "\\/")}`));
+    assert.match(html, /__GUILDUO_PUBLIC_ORIGIN__\/assets\/brand\/og-guilduo\.png/);
+  }
 });
 
 test("LP narrative keeps the required section order", () => {
@@ -75,6 +106,7 @@ test("build and Appwrite Sites output include isolated LP routes", () => {
   assert.match(vite, /landingEn: resolve\(root, "lp\/en\/index\.html"\)/);
   assert.match(read(".github/workflows/release.yml"), /Deploy Appwrite Site/);
   assert.match(read("RELEASE_SETUP.md"), /APPWRITE_SITE_ID/);
+  assert.match(read("docs/appwrite-site-routing.md"), /URL Rewrite/);
 });
 
 test("LP visual language avoids prohibited AI-template effects", () => {

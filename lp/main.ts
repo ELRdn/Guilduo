@@ -93,14 +93,18 @@ function hydrateFacts(): void {
 
 function hydrateSeoLinks(): void {
   const canonicalPath = document.querySelector<HTMLMetaElement>('meta[name="guilduo:canonical-path"]')?.content
-    ?? (document.documentElement.lang === "en" ? "/lp/en/" : "/lp/");
+    ?? (document.documentElement.lang === "en" ? "/lp/en/" : "/");
   const links = [
     { rel: "canonical", href: canonicalPath },
-    { rel: "alternate", href: "/lp/", hreflang: "ja" },
+    { rel: "alternate", href: "/", hreflang: "ja" },
     { rel: "alternate", href: "/lp/en/", hreflang: "en" },
-    { rel: "alternate", href: "/lp/", hreflang: "x-default" },
+    { rel: "alternate", href: "/", hreflang: "x-default" },
   ];
   for (const definition of links) {
+    const selector = definition.hreflang
+      ? `link[rel="${definition.rel}"][hreflang="${definition.hreflang}"]`
+      : `link[rel="${definition.rel}"]`;
+    if (document.head.querySelector(selector)) continue;
     const link = document.createElement("link");
     link.rel = definition.rel;
     link.href = new URL(definition.href, window.location.origin).href;

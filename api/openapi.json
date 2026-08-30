@@ -7,8 +7,8 @@
   },
   "servers": [
     {
-      "url": "https://your-questforge-worker.example.workers.dev",
-      "description": "Cloudflare Worker"
+      "url": "https://mcp.guilduo.com",
+      "description": "Guilduo Worker REST / MCP gateway"
     },
     {
       "url": "http://127.0.0.1:8787",
@@ -2142,8 +2142,8 @@
         "type": "oauth2",
         "flows": {
           "authorizationCode": {
-            "authorizationUrl": "https://your-questforge-worker.example.workers.dev/oauth/authorize",
-            "tokenUrl": "https://your-questforge-worker.example.workers.dev/oauth/token",
+            "authorizationUrl": "https://mcp.guilduo.com/oauth/authorize",
+            "tokenUrl": "https://mcp.guilduo.com/oauth/token",
             "scopes": {
               "quests:read": "Read quests",
               "quests:write": "Create, edit, and score quests",

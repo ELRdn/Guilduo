@@ -1,4 +1,4 @@
-const defaultGatewayUrl = "https://questforge-gateway.guangchuannaito.workers.dev";
+const defaultGatewayUrl = "https://mcp.guilduo.com";
 
 type JsonRecord = Record<string, unknown>;
 type LabState = JsonRecord & {

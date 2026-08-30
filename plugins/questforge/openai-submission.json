@@ -3,8 +3,8 @@
   "appVersion": "0.5.0-beta.1",
   "integrationType": "remote-mcp-app",
   "technicalAppId": "",
-  "mcpEndpoint": "https://your-questforge-worker.example.workers.dev/mcp",
-  "oauthMetadata": "https://your-questforge-worker.example.workers.dev/.well-known/oauth-authorization-server",
+  "mcpEndpoint": "https://mcp.guilduo.com/mcp",
+  "oauthMetadata": "https://mcp.guilduo.com/.well-known/oauth-authorization-server",
   "scopes": ["quests:read", "quests:write", "character:read", "events:read"],
   "destructiveOperations": false,
   "dataPolicy": {
