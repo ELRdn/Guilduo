@@ -10,6 +10,7 @@ type StateMutation = (state: QuestForgeState) => unknown | Promise<unknown>;
 type AppwriteRow = JsonRecord & { $id?: string; stateJson?: string; revision?: number; clientUpdatedAt?: string; schemaVersion?: number; deviceId?: string };
 
 const localStates = new Map<string, LocalState>();
+const APPWRITE_TRANSACTION_TTL_SECONDS = 60;
 const uidOf = (identity: Identity): string => typeof identity === "string" ? identity : identity.uid;
 const asState = (value: unknown): QuestForgeState | null => {
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
@@ -41,6 +42,41 @@ function tableRowUrl(env: WorkerEnv, tableId: string, rowId: string): string {
 
 function appwriteHeaders(env: WorkerEnv): Record<string, string> {
   return { "content-type": "application/json", "x-appwrite-project": String(env.APPWRITE_PROJECT_ID), "x-appwrite-key": String(env.APPWRITE_API_KEY) };
+}
+
+function safeAppwriteIdentifier(value: unknown): string {
+  const text = String(value ?? "").trim();
+  return /^[a-z0-9._-]{1,80}$/i.test(text) ? text : "unknown";
+}
+
+function sanitizedAppwriteMessage(value: unknown): string {
+  const text = typeof value === "string" ? value : "Appwrite returned a non-JSON error response.";
+  return text
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/(?:x-appwrite-key|authorization|api[-_ ]?key|bearer|token|secret|password)\s*[:=]\s*[^,;\s]+/gi, "$1=[redacted]")
+    .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+}
+
+async function throwAppwritePersistenceFailure(response: Response, operation: string): Promise<never> {
+  let body: JsonRecord = {};
+  try {
+    const parsed = await response.json();
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = parsed as JsonRecord;
+  } catch {
+    // Keep the log useful without retaining or emitting an arbitrary response body.
+  }
+  console.error("appwrite_state_persistence_failed", {
+    operation,
+    downstreamStatus: response.status,
+    appwriteCode: safeAppwriteIdentifier(body.code),
+    appwriteType: safeAppwriteIdentifier(body.type),
+    message: sanitizedAppwriteMessage(body.message),
+  });
+  throw Object.assign(new Error("Appwrite state persistence failed."), { status: 500, code: "state_persistence_failed" });
 }
 
 function transactionsUrl(env: WorkerEnv, transactionId = ""): string {
@@ -135,9 +171,9 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
     const transactionResponse = await fetch(transactionsUrl(env), {
       method: "POST",
       headers: appwriteHeaders(env),
-      body: JSON.stringify({ ttl: 30 }),
+      body: JSON.stringify({ ttl: APPWRITE_TRANSACTION_TTL_SECONDS }),
     });
-    if (!transactionResponse.ok) throw new Error(`Appwrite transaction create failed: ${transactionResponse.status}`);
+    if (!transactionResponse.ok) return throwAppwritePersistenceFailure(transactionResponse, "create_state_transaction");
     const transaction = await transactionResponse.json() as JsonRecord;
     const transactionId = String(transaction.$id || "");
     if (!transactionId) throw new Error("Appwrite transaction did not return an ID.");
@@ -148,7 +184,7 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
       await fetch(transactionsUrl(env, transactionId), { method: "DELETE", headers: appwriteHeaders(env) });
       return false;
     }
-    if (!current.ok) throw new Error(`Appwrite state revision check failed: ${current.status}`);
+    if (!current.ok) return throwAppwritePersistenceFailure(current, "read_state_transaction_row");
     const currentRow = await current.json() as AppwriteRow;
     if (String(Number(currentRow.revision || 0)) !== String(etag)) {
       await fetch(transactionsUrl(env, transactionId), { method: "DELETE", headers: appwriteHeaders(env) });
@@ -159,14 +195,14 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
       headers: appwriteHeaders(env),
       body: JSON.stringify({ data, transactionId }),
     });
-    if (!staged.ok) throw new Error(`Appwrite state stage failed: ${staged.status}`);
+    if (!staged.ok) return throwAppwritePersistenceFailure(staged, "stage_state_update");
     const committed = await fetch(transactionsUrl(env, transactionId), {
       method: "PATCH",
       headers: appwriteHeaders(env),
       body: JSON.stringify({ commit: true }),
     });
     if (committed.status === 409) return false;
-    if (!committed.ok) throw new Error(`Appwrite transaction commit failed: ${committed.status}`);
+    if (!committed.ok) return throwAppwritePersistenceFailure(committed, "commit_state_transaction");
     return true;
   }
   const response = await fetch(create ? rowsUrl(env) : rowUrl(env, uid), {
@@ -175,7 +211,7 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
     body: JSON.stringify({ rowId: uid, data }),
   });
   if (response.status === 409) return false;
-  if (!response.ok) throw new Error(`Appwrite state write failed: ${response.status}`);
+  if (!response.ok) return throwAppwritePersistenceFailure(response, create ? "create_state_row" : "upsert_state_row");
   return true;
 }
 
