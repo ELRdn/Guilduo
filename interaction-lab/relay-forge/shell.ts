@@ -106,7 +106,7 @@ import {
   FixtureConnectionsPort,
   REQUIRED_SCOPES,
 } from "./screens/connections-port.ts";
-import { normalizeAgentRecord, type RelayForgeRuntime } from "./production.ts";
+import { normalizeAgentRecord, normalizeProfileRecord, type RelayForgeRuntime } from "./production.ts";
 import { initialsFor, normalizeCommandModel, type ProfileRecord, resolveActors } from "./adapter.ts";
 import { questActionState, type QuestActionId } from "./quest-actions.ts";
 import {
@@ -115,6 +115,8 @@ import {
   normalizeSettingsModel,
   renderSettingsDesktop,
   renderSettingsMobile,
+  type ProfileDraft,
+  type ProfileDraftField,
   type SettingsSection,
   type SettingsState,
 } from "./screens/settings.ts";
@@ -226,15 +228,18 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   let sharedAgents: AgentRecord[] = [...(runtime?.agents ?? fixtureAgentsFor(readVariant()))];
   /** Mutable so a saved Account avatar is reflected everywhere the profile is read. */
   let sharedProfile: ProfileRecord | null = runtime?.profile ?? null;
+  let profileLoadError = runtime?.profileLoadError ?? null;
 
   /*
    * Agent avatar images. The server never hands out a usable URL — every
    * fetch is a Bearer-authenticated GET — so the shell owns a small cache of
-   * Blob object URLs, keyed by `${agentId}:${avatarVersion}` so a new upload
-   * (a version bump) never serves the stale image out of cache.
+   * Blob object URLs, keyed by namespace plus identity and version, so a new
+   * upload (a version bump) never serves the stale image out of cache.
    */
   const avatarBlobUrls = new Map<string, string>();
   const avatarFetchInFlight = new Set<string>();
+  const profileAvatarFetchInFlight = new Set<string>();
+  let profilePreviewUrl: string | null = null;
   /**
    * Guards every avatar fetch this mount starts: `fetchAgentAvatar` is a
    * plain Bearer-authenticated network call with no way to cancel it, so a
@@ -246,7 +251,26 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const lifecycle = createLifecycleGuard();
 
   function avatarCacheKey(agentId: string, version: number): string {
-    return `${agentId}:${version}`;
+    return `agent:${agentId}:${version}`;
+  }
+
+  function profileAvatarCacheKey(version: number): string {
+    return `profile:${runtime?.selfUid ?? "self"}:${version}`;
+  }
+
+  function clearProfileAvatarCache(keepKey: string | null = null): void {
+    for (const [key, url] of avatarBlobUrls) {
+      if (!key.startsWith("profile:") || key === keepKey) continue;
+      URL.revokeObjectURL(url);
+      avatarBlobUrls.delete(key);
+    }
+  }
+
+  function syncProfileActors(): void {
+    state.model = {
+      ...state.model,
+      actors: resolveActors(sharedProfile, sharedAgents, [...state.model.actors.values()]),
+    };
   }
 
   /** Reattaches a cached Blob URL when one already exists for the Agent's current version. */
@@ -301,6 +325,41 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           avatarFetchInFlight.delete(key);
         });
     }
+  }
+
+  /** Fetches the signed-in user's private profile image using the same
+   * Bearer + exact-version contract as Agent avatars. */
+  function refreshProfileAvatar(): void {
+    if (runtime === null || sharedProfile === null || sharedProfile.hasCustomAvatar !== true) return;
+    const version = sharedProfile.avatarVersion ?? 0;
+    if (version < 1) return;
+    const key = profileAvatarCacheKey(version);
+    if (avatarBlobUrls.has(key) || profileAvatarFetchInFlight.has(key)) return;
+    profileAvatarFetchInFlight.add(key);
+    void runtime.profileAvatarPort.fetchProfileAvatar(version)
+      .then((blob) => {
+        profileAvatarFetchInFlight.delete(key);
+        if (lifecycle.disposed) return;
+        const current = sharedProfile;
+        if (current === null || current.hasCustomAvatar !== true || (current.avatarVersion ?? 0) !== version) return;
+        const url = URL.createObjectURL(blob);
+        if (lifecycle.disposed) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        clearProfileAvatarCache(key);
+        avatarBlobUrls.set(key, url);
+        if (profilePreviewUrl !== null) {
+          URL.revokeObjectURL(profilePreviewUrl);
+          profilePreviewUrl = null;
+        }
+        sharedProfile = { ...current, avatarUrl: url };
+        syncProfileActors();
+        render();
+      })
+      .catch(() => {
+        profileAvatarFetchInFlight.delete(key);
+      });
   }
 
   const state: ShellState = {
@@ -1520,6 +1579,113 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     render();
   }
 
+  function currentProfileDraft(): ProfileDraft {
+    const profile = sharedProfile;
+    return state.screens.settings.profileDraft ?? {
+      displayName: profile?.displayName ?? "",
+      handle: profile?.handle ?? "",
+      bio: profile?.bio ?? "",
+    };
+  }
+
+  function profileFromResponse(value: unknown): ProfileRecord | null {
+    const normalized = normalizeProfileRecord(value);
+    if (normalized === null || normalized.hasCustomAvatar !== true || normalized.avatarVersion === undefined) return normalized;
+    const cached = avatarBlobUrls.get(profileAvatarCacheKey(normalized.avatarVersion));
+    return cached === undefined ? normalized : { ...normalized, avatarUrl: cached };
+  }
+
+  function profileErrorMessage(error: unknown, fallback: string): string {
+    const apiError = error as { status?: number };
+    if (apiError.status === 401) return "認証の有効期限が切れました。ページを再読み込みしてサインインし直してください。";
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  function updateProfileDraft(field: ProfileDraftField, value: string): void {
+    const draft = currentProfileDraft();
+    state.screens.settings.profileDraft = { ...draft, [field]: value };
+  }
+
+  async function retryProfile(): Promise<void> {
+    if (runtime === null || state.screens.settings.profileSaving) return;
+    state.screens.settings.profileMessage = "";
+    state.screens.settings.profileTone = null;
+    render();
+    try {
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profilePort.getProfile());
+      if (response.status === "disposed") return;
+      profileLoadError = null;
+      sharedProfile = profileFromResponse(response.value.profile);
+      state.screens.settings.profileDraft = null;
+      syncProfileActors();
+      render();
+      refreshProfileAvatar();
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      profileLoadError = profileErrorMessage(error, "プロフィールを読み込めませんでした。再試行してください。");
+      render();
+    }
+  }
+
+  async function saveProfile(): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null) {
+      settings.profileTone = "error";
+      settings.profileMessage = "デモでは保存できません。Googleでサインインしてから設定してください。";
+      render();
+      return;
+    }
+    const draft = currentProfileDraft();
+    const displayName = draft.displayName.trim();
+    const handle = draft.handle.trim().replace(/^@+/, "").toLowerCase();
+    const bio = draft.bio.trim();
+    if (displayName.length < 1 || displayName.length > 60) {
+      settings.profileTone = "error";
+      settings.profileMessage = "Display Nameは1〜60文字で入力してください。";
+      render();
+      return;
+    }
+    if (!/^[a-z0-9_]{3,20}$/.test(handle)) {
+      settings.profileTone = "error";
+      settings.profileMessage = "Username / Handleは英数字と _ の3〜20文字で入力してください。";
+      render();
+      return;
+    }
+    if (bio.length > 160) {
+      settings.profileTone = "error";
+      settings.profileMessage = "Bioは160文字以内で入力してください。";
+      render();
+      return;
+    }
+    settings.profileSaving = true;
+    settings.profileMessage = "";
+    settings.profileTone = null;
+    render();
+    try {
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profilePort.updateProfile({ displayName, handle, bio }));
+      if (response.status === "disposed") return;
+      const updated = profileFromResponse(response.value.profile);
+      if (updated === null) throw new Error("保存結果にプロフィールが含まれていません。");
+      profileLoadError = null;
+      sharedProfile = updated;
+      settings.profileDraft = null;
+      syncProfileActors();
+      settings.profileTone = "success";
+      settings.profileMessage = "プロフィールを保存しました。";
+      announce("プロフィールを保存しました。");
+      render();
+      refreshProfileAvatar();
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.profileTone = "error";
+      settings.profileMessage = profileErrorMessage(error, "プロフィールを保存できませんでした。もう一度お試しください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.profileSaving = false;
+      render();
+    }
+  }
+
   /** Reused by the Account section and the account menu's own avatar. */
   async function saveProfileAvatar(file: File): Promise<void> {
     const settings = state.screens.settings;
@@ -1529,36 +1695,120 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       render();
       return;
     }
-    if (sharedProfile === null || !sharedProfile.handle) {
+    if (sharedProfile === null) {
       settings.avatarTone = "error";
-      settings.avatarMessage = "プロフィールが未作成です。表示名とhandleを設定してから変更してください。";
+      settings.avatarMessage = "先にプロフィールを保存してから、Avatarを追加してください。";
       render();
       return;
     }
     settings.avatarSaving = true;
+    settings.avatarProgress = 0;
+    settings.avatarMessage = "";
+    settings.avatarTone = null;
+    render();
+    const previousProfile = sharedProfile;
+    let previewUrl: string | null = null;
+    let committed = false;
+    try {
+      const resized = await runLifecycleStep(lifecycle, () => resizeAvatarImage(file));
+      if (resized.status === "disposed") return;
+      previewUrl = URL.createObjectURL(resized.value.blob);
+      profilePreviewUrl = previewUrl;
+      sharedProfile = { ...previousProfile, avatarUrl: previewUrl, hasCustomAvatar: true };
+      syncProfileActors();
+      render();
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profileAvatarPort.uploadProfileAvatar(
+        resized.value.blob,
+        (loaded, total) => {
+          if (lifecycle.disposed) return;
+          settings.avatarProgress = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+          render();
+        },
+      ));
+      if (response.status === "disposed") return;
+      const updated = normalizeProfileRecord(response.value.profile);
+      if (updated === null || updated.hasCustomAvatar !== true || updated.avatarVersion === undefined || updated.avatarVersion < 1) {
+        throw new Error("保存結果にAvatar情報が含まれていません。");
+      }
+      committed = true;
+      profileLoadError = null;
+      const newKey = profileAvatarCacheKey(updated.avatarVersion);
+      clearProfileAvatarCache(newKey);
+      sharedProfile = { ...updated, avatarUrl: previewUrl };
+      syncProfileActors();
+      settings.avatarProgress = 100;
+      render();
+      try {
+        const image = await runLifecycleStep(lifecycle, () => runtime!.profileAvatarPort.fetchProfileAvatar(updated.avatarVersion!));
+        if (image.status === "disposed") return;
+        const finalUrl = URL.createObjectURL(image.value);
+        if (lifecycle.disposed) {
+          URL.revokeObjectURL(finalUrl);
+          return;
+        }
+        avatarBlobUrls.set(newKey, finalUrl);
+        if (profilePreviewUrl === previewUrl && previewUrl !== null) {
+          URL.revokeObjectURL(previewUrl);
+          profilePreviewUrl = null;
+        }
+        sharedProfile = { ...updated, avatarUrl: finalUrl };
+        syncProfileActors();
+        settings.avatarTone = "success";
+        settings.avatarMessage = "Avatarを更新しました。";
+        announce("Avatarを更新しました。");
+      } catch {
+        settings.avatarTone = "success";
+        settings.avatarMessage = "Avatarを保存しました。表示の更新は再読み込み後に反映されます。";
+      }
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.avatarTone = "error";
+      settings.avatarMessage = committed
+        ? "Avatarは保存されましたが、表示の更新に失敗しました。再読み込みしてください。"
+        : profileErrorMessage(error, "Avatarを保存できませんでした。もう一度お試しください。");
+      if (!committed) {
+        sharedProfile = previousProfile;
+        syncProfileActors();
+        if (previewUrl !== null && profilePreviewUrl === previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+          profilePreviewUrl = null;
+        }
+      }
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.avatarProgress = null;
+      settings.avatarSaving = false;
+      render();
+    }
+  }
+
+  async function removeProfileAvatar(): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null || sharedProfile === null || sharedProfile.hasCustomAvatar !== true || settings.avatarSaving) return;
+    settings.avatarSaving = true;
+    settings.avatarProgress = null;
     settings.avatarMessage = "";
     settings.avatarTone = null;
     render();
     try {
-      const resized = await runLifecycleStep(lifecycle, () => resizeAvatarImage(file));
-      if (resized.status === "disposed") return;
-      const response = await runLifecycleStep(lifecycle, () => runtime.profilePort.updateProfile({ avatarUrl: resized.value.dataUrl }));
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profileAvatarPort.deleteProfileAvatar());
       if (response.status === "disposed") return;
-      const updated = response.value.profile;
-      if (updated !== null && typeof updated === "object" && !Array.isArray(updated)) {
-        sharedProfile = updated as ProfileRecord;
-        state.model = {
-          ...state.model,
-          actors: resolveActors(sharedProfile, sharedAgents, [...state.model.actors.values()]),
-        };
+      const updated = normalizeProfileRecord(response.value.profile);
+      if (updated === null) throw new Error("保存結果にプロフィールが含まれていません。");
+      clearProfileAvatarCache();
+      if (profilePreviewUrl !== null) {
+        URL.revokeObjectURL(profilePreviewUrl);
+        profilePreviewUrl = null;
       }
+      sharedProfile = updated;
+      syncProfileActors();
       settings.avatarTone = "success";
-      settings.avatarMessage = "アイコンを更新しました。";
-      announce("アイコンを更新しました。");
+      settings.avatarMessage = "Avatarを削除しました。";
+      announce("Avatarを削除しました。");
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.avatarTone = "error";
-      settings.avatarMessage = error instanceof Error ? error.message : "アイコンを保存できませんでした。";
+      settings.avatarMessage = profileErrorMessage(error, "Avatarを削除できませんでした。もう一度お試しください。");
     } finally {
       if (lifecycle.disposed) return;
       settings.avatarSaving = false;
@@ -2266,6 +2516,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       const model = normalizeSettingsModel({
         isDemo: runtime === null,
         profile: sharedProfile,
+        email: runtime?.email ?? "",
+        profileLoadError,
         theme: state.theme,
         effectiveTheme: currentEffectiveTheme(state.theme),
         gatewayUrl: runtime?.gatewayUrl ?? gatewayDefaultUrl(),
@@ -2280,6 +2532,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       const callbacks = {
         onThemeSelect: selectTheme,
         onAvatarFileSelected: (file: File) => { void saveProfileAvatar(file); },
+        onRemoveAvatar: () => { void removeProfileAvatar(); },
+        onProfileDraftChange: updateProfileDraft,
+        onSaveProfile: () => { void saveProfile(); },
+        onRetryProfile: () => { void retryProfile(); },
         onCopyMcpUrl: () => { void copyMcpUrl(model.mcpUrl); },
         canManageAgents: runtime !== null,
         onCreateAgent: openCreateAgent,
@@ -2364,6 +2620,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   render();
   refreshAgentAvatars();
+  refreshProfileAvatar();
 
   return function unmountRelayForge(): void {
     // First, so every in-flight avatar fetch's continuation (however many
@@ -2377,6 +2634,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     document.removeEventListener("keydown", handleLensKeydown);
     for (const url of avatarBlobUrls.values()) URL.revokeObjectURL(url);
     avatarBlobUrls.clear();
+    if (profilePreviewUrl !== null) URL.revokeObjectURL(profilePreviewUrl);
+    profilePreviewUrl = null;
   };
 }
 

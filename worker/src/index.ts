@@ -52,6 +52,7 @@ import {
   updateAgent,
 } from "./agent-store.ts";
 import { deleteAgentAvatarAsset, getAgentAvatarObject, MAX_AVATAR_BYTES, putAgentAvatar } from "./agent-avatar-store.ts";
+import { deleteProfileAvatarAsset, getProfileAvatarObject, putProfileAvatar } from "./profile-avatar-store.ts";
 import { planAgentAvatarCleanup } from "./agent-avatar-cleanup.ts";
 import {
   calendarSchedule,
@@ -101,6 +102,7 @@ import {
   declineFriendRequest,
   findProfileByHandle,
   getOwnProfile,
+  getOwnProfileAvatarState,
   getParty,
   inviteToParty,
   leaveParty,
@@ -108,13 +110,15 @@ import {
   listFriends,
   removeFriend,
   removePartyMember,
+  removeProfileAvatar,
   sendFriendRequest,
   upsertProfile,
+  activateProfileAvatar,
 } from "./social-store.ts";
 import type { FocusInput } from "./toggl-focus.ts";
 import type { AuthIdentity } from "./security.ts";
 import type { AgentRecord } from "./agent-store.ts";
-import type { JsonRecord, WorkerEnv, WorkerError } from "./worker-types.ts";
+import type { JsonRecord, R2ObjectLike, WorkerEnv, WorkerError } from "./worker-types.ts";
 import { isQuest } from "../../types/questforge.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 
@@ -411,7 +415,7 @@ const MCP_TOOLS = [
   { name: "sync_external_service", title: "Sync External Service", description: "Run a configured external sync. dryRun defaults to true and provider writes require explicit execution.", inputSchema: { type: "object", required: ["service", "direction"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: SYNC_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
   { name: "get_my_profile", title: "Get My Profile", description: "Get the authenticated user's Guilduo public profile settings.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "find_profile_by_handle", title: "Find Profile by Handle", description: "Find one Guilduo public profile by an exact @handle.", inputSchema: { type: "object", required: ["handle"], properties: { handle: { type: "string", minLength: 3, maxLength: 21 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
-  { name: "update_profile", title: "Update Profile", description: "Create or update the authenticated user's public Guilduo profile, including the selected character icon.", inputSchema: { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 40 }, handle: { type: "string", minLength: 3, maxLength: 21 }, bio: { type: "string", maxLength: 160 }, avatarRole: { type: "string", maxLength: 40 }, avatarVariant: { type: "string", maxLength: 40 }, avatarUrl: { type: "string", maxLength: 700000, pattern: "^data:image/(png|jpeg|webp);base64," }, level: { type: "integer", minimum: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "update_profile", title: "Update Profile", description: "Create or update the authenticated user's public Guilduo profile metadata. Profile images are managed by the authenticated web avatar endpoint, not embedded in MCP JSON.", inputSchema: { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 60 }, handle: { type: "string", minLength: 3, maxLength: 20 }, bio: { type: "string", maxLength: 160 }, avatarRole: { type: "string", maxLength: 40 }, avatarVariant: { type: "string", maxLength: 40 }, level: { type: "integer", minimum: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_friends", title: "List Friends", description: "List accepted friends using minimal public profile fields.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { friends: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "list_friend_requests", title: "List Friend Requests", description: "List pending incoming and outgoing friend requests.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { requests: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "send_friend_request", title: "Send Friend Request", description: "Send a friend request to a stable Guilduo user ID after exact-handle lookup.", inputSchema: { type: "object", required: ["receiverUid"], properties: { receiverUid: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { request: QUEST_OBJECT }, additionalProperties: false }, annotations: WRITE_ANNOTATIONS },
@@ -517,6 +521,15 @@ function assertAgentRegistryWebMutation(request: Request, env: WorkerEnv, identi
   }
 }
 
+function assertProfileAvatarWebMutation(request: Request, env: WorkerEnv, identity: AuthIdentity): void {
+  if (!identity || !["appwrite", "dev"].includes(identity.authType)) {
+    throw new DomainError(403, "profile_avatar_web_required", "Profile avatars can only be changed from the Guilduo web app.");
+  }
+  if (identity.authType === "appwrite" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+    throw new DomainError(403, "profile_avatar_origin_required", "Open Guilduo in an approved browser origin to change your profile avatar.");
+  }
+}
+
 /**
  * Serves one Agent avatar image over the normal Bearer-authenticated path —
  * there is no pre-auth special case for this route. The client fetches this
@@ -549,6 +562,10 @@ async function serveAgentAvatar(request: Request, env: WorkerEnv, identity: Work
   const object = await getAgentAvatarObject(env, agent.avatarAssetId);
   if (object === null) return json({ error: { code: "avatar_not_found", message: "No avatar is stored for this Agent." } }, 404);
 
+  return responseForAvatarObject(request, object);
+}
+
+function responseForAvatarObject(request: Request, object: R2ObjectLike): Response {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag ?? "");
@@ -559,6 +576,22 @@ async function serveAgentAvatar(request: Request, env: WorkerEnv, identity: Work
     return new Response(null, { status: 304, headers });
   }
   return new Response(object.body, { status: 200, headers });
+}
+
+async function serveProfileAvatar(request: Request, env: WorkerEnv, identity: WorkerIdentity): Promise<Response> {
+  const state = await getOwnProfileAvatarState(env, identity.uid);
+  if (!state?.assetId || state.version < 1) return json({ error: { code: "avatar_not_found", message: "No avatar is stored for this profile." } }, 404);
+  const rawVersion = new URL(request.url).searchParams.get("v");
+  if (rawVersion === null || !POSITIVE_INTEGER_PATTERN.test(rawVersion)) {
+    return json({ error: { code: "avatar_version_required", message: "A positive integer v (avatarVersion) query parameter is required." } }, 400);
+  }
+  const requestedVersion = Number(rawVersion);
+  if (!Number.isSafeInteger(requestedVersion) || requestedVersion !== state.version) {
+    return json({ error: { code: "avatar_version_stale", message: "This image link points at an older version." } }, 404);
+  }
+  const object = await getProfileAvatarObject(env, state.assetId);
+  if (object === null) return json({ error: { code: "avatar_not_found", message: "No avatar is stored for this profile." } }, 404);
+  return responseForAvatarObject(request, object);
 }
 
 /** Strips internal-only fields (the R2 asset key, the CAS revision counter) from an Agent record before it reaches any API response. */
@@ -580,7 +613,11 @@ function toPublicAgents(agents: AgentRecord[]): Array<Omit<AgentRecord, "avatarA
  */
 async function readBoundedBody(request: Request, maxBytes: number): Promise<Uint8Array> {
   const reader = request.body?.getReader();
-  if (!reader) return new Uint8Array(await request.arrayBuffer());
+  if (!reader) {
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.byteLength > maxBytes) throw new DomainError(413, "avatar_too_large", "Avatar must be 300 KB or smaller.");
+    return bytes;
+  }
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
@@ -796,6 +833,71 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const connection = await unlinkAgentConnection(env, identity.uid, clientId);
     await revokeAuthorizedClient(env, identity.uid, clientId);
     return json({ connection });
+  }
+  if (path === "/v1/profile/avatar" && method === "GET") {
+    assertScope(identity.scopes, "profiles:read");
+    return serveProfileAvatar(request, env, identity);
+  }
+  if (path === "/v1/profile/avatar" && method === "PUT") {
+    assertProfileAvatarWebMutation(request, env, identity);
+    if (!env.AGENT_AVATARS) {
+      throw new DomainError(503, "avatar_storage_unavailable", "Avatar storage is not configured. The image was not saved.");
+    }
+    const declaredLength = Number(request.headers.get("content-length") || "0");
+    if (declaredLength > MAX_AVATAR_BYTES) throw new DomainError(413, "avatar_too_large", "Avatar must be 300 KB or smaller.");
+    const bytes = await readBoundedBody(request, MAX_AVATAR_BYTES);
+    const { assetId } = await putProfileAvatar(env, bytes);
+    try {
+      const mutation = await activateProfileAvatar(env, identity.uid, assetId);
+      if (mutation.previousAssetId) {
+        await deleteProfileAvatarAsset(env, mutation.previousAssetId).catch((error: unknown) => {
+          console.error("profile_avatar_previous_asset_cleanup_failed", {
+            operation: "delete_previous_profile_avatar",
+            assetId: mutation.previousAssetId,
+            uid: identity.uid,
+            errorCode: errorCode(error),
+          });
+        });
+      }
+      return json({ profile: mutation.profile, avatarVersion: mutation.profile.avatarVersion });
+    } catch (error) {
+      // If there is no profile to activate, the freshly-written object can
+      // never be current. For an ambiguous storage/database failure, retain it
+      // so a later operator cleanup cannot delete an object D1 may reference.
+      if (errorCode(error) === "profile_not_found" || errorCode(error) === "profile_avatar_conflict" || errorCode(error) === "avatar_version_exhausted") {
+        await deleteProfileAvatarAsset(env, assetId).catch((cleanupError: unknown) => {
+          console.error("profile_avatar_orphan_cleanup_failed", {
+            operation: "delete_orphaned_profile_avatar",
+            assetId,
+            uid: identity.uid,
+            errorCode: errorCode(cleanupError),
+          });
+        });
+      } else {
+        console.error("profile_avatar_activation_outcome_unknown", {
+          operation: "activate_profile_avatar",
+          assetId,
+          uid: identity.uid,
+          errorCode: errorCode(error),
+        });
+      }
+      throw error;
+    }
+  }
+  if (path === "/v1/profile/avatar" && method === "DELETE") {
+    assertProfileAvatarWebMutation(request, env, identity);
+    const mutation = await removeProfileAvatar(env, identity.uid);
+    if (mutation.previousAssetId) {
+      await deleteProfileAvatarAsset(env, mutation.previousAssetId).catch((error: unknown) => {
+        console.error("profile_avatar_previous_asset_cleanup_failed", {
+          operation: "delete_removed_profile_avatar",
+          assetId: mutation.previousAssetId,
+          uid: identity.uid,
+          errorCode: errorCode(error),
+        });
+      });
+    }
+    return json({ profile: mutation.profile, avatarVersion: mutation.profile.avatarVersion });
   }
   if (path === "/v1/profile" && method === "GET") {
     assertScope(identity.scopes, "profiles:read");

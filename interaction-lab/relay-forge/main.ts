@@ -97,12 +97,12 @@ function bootstrap(
   if (kind !== "loading") heading.focus({ preventScroll: true });
 }
 
-async function mountProduction(uid: string): Promise<void> {
+async function mountProduction(uid: string, email: string): Promise<void> {
   const sequence = ++loadSequence;
   bootstrap("Workspaceを読み込んでいます", "Quest、Actor、Relay、Connectionを安全に同期しています。");
   try {
     const repository = new QuestForgeRepository({ getToken: () => getIdToken() });
-    const runtime = await createProductionRuntime(repository, uid);
+    const runtime = await createProductionRuntime(repository, uid, email);
     if (sequence !== loadSequence || demoRequested) return;
     // Injected here, not imported by the shell: Appwrite Auth stays a
     // swappable port rather than a hard dependency of the Relay Forge UI.
@@ -125,7 +125,7 @@ async function mountProduction(uid: string): Promise<void> {
       "Workspaceを読み込めませんでした",
       `${diagnostic}。接続状態と権限を確認してから再試行してください。データは変更されていません。`,
       [
-        { label: "再試行", primary: true, run: () => mountProduction(uid) },
+        { label: "再試行", primary: true, run: () => mountProduction(uid, email) },
         {
           label: "デモを見る",
           run: () => {
@@ -173,7 +173,7 @@ function checkAuth(): void {
       return;
     }
     if (state.status === "authenticated") {
-      void mountProduction(state.user.uid);
+      void mountProduction(state.user.uid, state.user.email);
       return;
     }
     if (state.status === "signed-out") {

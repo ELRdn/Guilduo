@@ -22,6 +22,8 @@ export interface RelayForgeRuntime {
   readonly mode: "production";
   readonly model: CommandModel;
   readonly profile: ProfileRecord | null;
+  readonly email: string;
+  readonly profileLoadError: string | null;
   readonly quests: readonly Quest[];
   readonly selfUid: string;
   readonly members: readonly PartyMemberRecord[];
@@ -36,7 +38,8 @@ export interface RelayForgeRuntime {
   readonly connectionsPort: ConnectionsPort;
   /** The Gateway base URL actually in use — Settings derives the MCP URL from this. */
   readonly gatewayUrl: string;
-  readonly profilePort: Pick<QuestForgeRepository, "updateProfile">;
+  readonly profilePort: Pick<QuestForgeRepository, "getProfile" | "updateProfile">;
+  readonly profileAvatarPort: Pick<QuestForgeRepository, "uploadProfileAvatar" | "fetchProfileAvatar" | "deleteProfileAvatar">;
   readonly agentAvatarPort: Pick<QuestForgeRepository, "uploadAgentAvatar" | "fetchAgentAvatar">;
   /**
    * Injected by the composition root (`main.ts`), never imported by the shell
@@ -58,6 +61,23 @@ function text(value: unknown): string {
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+export function normalizeProfileRecord(item: unknown): ProfileRecord | null {
+  const profile = record(item);
+  if (Object.keys(profile).length === 0) return null;
+  const avatarVersion = Number(profile.avatarVersion);
+  return {
+    uid: text(profile.uid),
+    displayName: text(profile.displayName),
+    handle: text(profile.handle).trim().replace(/^@+/, ""),
+    bio: text(profile.bio),
+    avatarUrl: text(profile.avatarUrl),
+    avatarRole: text(profile.avatarRole),
+    avatarVariant: text(profile.avatarVariant),
+    hasCustomAvatar: profile.hasCustomAvatar === true && Number.isSafeInteger(avatarVersion) && avatarVersion > 0,
+    avatarVersion: Number.isSafeInteger(avatarVersion) && avatarVersion > 0 ? avatarVersion : 0,
+  };
 }
 
 export function normalizePartyMembers(
@@ -150,10 +170,11 @@ function normalizeIntegrations(source: readonly unknown[]): IntegrationRecord[] 
 export async function createProductionRuntime(
   repository: QuestForgeRepository,
   selfUid: string,
+  email = "",
 ): Promise<RelayForgeRuntime> {
   const snapshot = await repository.loadSnapshot();
   const quests = snapshot.quests as Quest[];
-  const profile = snapshot.profile as ProfileRecord | null;
+  const profile = normalizeProfileRecord(snapshot.profile);
   const effectiveProfile: ProfileRecord = profile ?? { uid: selfUid, displayName: "あなた" };
   const agents = normalizeAgents(snapshot.agents);
   const integrations = normalizeIntegrations(snapshot.integrations);
@@ -169,6 +190,8 @@ export async function createProductionRuntime(
     mode: "production",
     model,
     profile,
+    email: email.trim(),
+    profileLoadError: snapshot.panelErrors.find((entry) => entry.index === 3)?.message ?? null,
     quests,
     selfUid,
     members: normalizePartyMembers(party, selfUid, effectiveProfile),
@@ -183,6 +206,7 @@ export async function createProductionRuntime(
     connectionsPort: new RepositoryConnectionsPort(repository),
     gatewayUrl: repository.baseUrl,
     profilePort: repository,
+    profileAvatarPort: repository,
     agentAvatarPort: repository,
   };
 }

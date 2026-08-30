@@ -62,7 +62,7 @@ export interface R2BucketLike {
 export interface WorkerEnv {
   QUESTFORGE_KV?: KvNamespaceLike;
   QUESTFORGE_DB?: D1DatabaseLike;
-  /** Agent avatar image bytes, keyed by a random asset ID D1 alone maps to an Agent. Release config binds this as `AGENT_AVATARS`. */
+  /** Private Agent and profile avatar image bytes. Namespace prefixes and D1 metadata keep ownership separate. */
   AGENT_AVATARS?: R2BucketLike;
   APPWRITE_ENDPOINT?: string;
   APPWRITE_PROJECT_ID?: string;

@@ -13,7 +13,7 @@
  * Identity is resolved from the existing domain contract, not from anything
  * invented here:
  *
- *   1. `avatarUrl`        user-set image (social-store, PNG/JPEG/WebP data URL)
+ *   1. `avatarUrl`        authenticated, short-lived Blob object URL
  *   2. provider preset    AgentRecord.provider, when a preset asset exists
  *   3. role crest         assets/avatar-role-{femme-}{role}.webp
  *   4. initials           two characters from the display name

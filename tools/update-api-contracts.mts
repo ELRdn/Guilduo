@@ -87,6 +87,16 @@ Object.assign(openapi.paths, {
     get: { summary: "Get the authenticated user's profile", responses: ok("Own profile", { type: "object", properties: { profile: { anyOf: [{ $ref: "#/components/schemas/OwnProfile" }, { type: "null" }] } } }) },
     patch: { summary: "Create or update the authenticated user's profile", requestBody: body({ $ref: "#/components/schemas/ProfileInput" }), responses: ok("Updated profile", { type: "object", properties: { profile: { $ref: "#/components/schemas/OwnProfile" } } }) },
   },
+  "/v1/profile/avatar": {
+    put: { summary: "Upload the authenticated user's private profile avatar", description: "Body is the raw image (PNG/JPEG/WebP, max 300 KB). The server validates the real image signature and size, stores the bytes in private R2 storage, and advances avatarVersion. This route is for the authenticated Guilduo web app.", requestBody: { required: true, content: {
+      "image/png": { schema: { type: "string", format: "binary" } },
+      "image/jpeg": { schema: { type: "string", format: "binary" } },
+      "image/webp": { schema: { type: "string", format: "binary" } },
+      "application/octet-stream": { schema: { type: "string", format: "binary" } },
+    } }, responses: { ...ok("Profile avatar stored", { type: "object", properties: { profile: { $ref: "#/components/schemas/OwnProfile" }, avatarVersion: { type: "integer" } } }), "401": { description: "Missing or invalid Bearer token" }, "413": { description: "Image exceeds 300 KB (avatar_too_large)" }, "415": { description: "Body is not a real PNG/JPEG/WebP image (avatar_format_invalid)" }, "503": { description: "Avatar storage is not configured; nothing was saved (avatar_storage_unavailable)" } } },
+    get: { summary: "Fetch the authenticated user's private profile avatar", description: "Bearer-authenticated image response. Clients fetch with Authorization and convert the response into a Blob URL. The required v query must exactly match the current avatarVersion; stale or missing versions are not served.", parameters: [{ name: "v", in: "query", required: true, schema: { type: "integer", minimum: 1 } }], responses: { "200": { description: "Private image bytes with a version-safe immutable cache header" }, "304": { description: "Not modified" }, "400": { description: "v is missing or malformed (avatar_version_required)" }, "401": { description: "Missing or invalid Bearer token" }, "404": { description: "No avatar exists or v is stale (avatar_not_found / avatar_version_stale)" } } },
+    delete: { summary: "Remove the authenticated user's profile avatar", description: "Removes the current profile avatar, advances avatarVersion to invalidate stale image links, and returns the updated profile.", responses: ok("Profile avatar removed", { type: "object", properties: { profile: { $ref: "#/components/schemas/OwnProfile" }, avatarVersion: { type: "integer" } } }) },
+  },
   "/v1/profiles/{handle}": {
     get: { summary: "Find a public profile by exact @handle", parameters: [parameter("handle")], responses: ok("Public profile", { type: "object", properties: { profile: { anyOf: [{ $ref: "#/components/schemas/PublicProfile" }, { type: "null" }] } } }) },
   },
@@ -250,21 +260,21 @@ schemas.ProfileInput = {
   type: "object",
   required: ["displayName", "handle"],
   properties: {
-    displayName: { type: "string", minLength: 1, maxLength: 40 },
+    displayName: { type: "string", minLength: 1, maxLength: 60 },
     handle: { type: "string", pattern: "^@?[A-Za-z0-9_]{3,20}$" },
     bio: { type: "string", maxLength: 160 },
     avatarRole: { type: "string", maxLength: 40 },
     avatarVariant: { type: "string", maxLength: 40 },
-    avatarUrl: { type: "string", maxLength: 700000, pattern: "^data:image/(png|jpeg|webp);base64," },
     level: { type: "integer", minimum: 1 },
   },
 };
 schemas.PublicProfile = {
   type: "object",
-  required: ["uid", "displayName", "handle", "bio", "avatarRole", "avatarVariant", "avatarUrl", "level"],
+  required: ["uid", "displayName", "handle", "bio", "avatarRole", "avatarVariant", "avatarUrl", "hasCustomAvatar", "avatarVersion", "level"],
   properties: {
     uid: { type: "string" }, displayName: { type: "string" }, handle: { type: "string" }, bio: { type: "string" },
-    avatarRole: { type: "string" }, avatarVariant: { type: "string" }, avatarUrl: { type: "string", maxLength: 700000 }, level: { type: "integer" },
+    avatarRole: { type: "string" }, avatarVariant: { type: "string" }, avatarUrl: { type: "string", maxLength: 0, description: "Compatibility field; always empty because image bytes are private." },
+    hasCustomAvatar: { type: "boolean" }, avatarVersion: { type: "integer", minimum: 0 }, level: { type: "integer" },
   },
 };
 schemas.OwnProfile = { allOf: [{ $ref: "#/components/schemas/PublicProfile" }, { type: "object", properties: { handleChangedAt: { type: "string", format: "date-time" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } }] };

@@ -12,7 +12,10 @@ export interface PublicProfile {
   bio: string;
   avatarRole: string;
   avatarVariant: string;
+  /** Kept as an empty compatibility field; image bytes are never embedded in profile JSON. */
   avatarUrl: string;
+  hasCustomAvatar: boolean;
+  avatarVersion: number;
   level: number;
 }
 
@@ -20,6 +23,16 @@ export interface OwnProfile extends PublicProfile {
   handleChangedAt: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProfileAvatarState {
+  readonly assetId: string | null;
+  readonly version: number;
+}
+
+export interface ProfileAvatarMutation {
+  readonly profile: OwnProfile;
+  readonly previousAssetId: string | null;
 }
 
 type FriendRequest = { id: string; senderUid: string; receiverUid: string; status: string; createdAt: string; updatedAt: string };
@@ -89,17 +102,6 @@ function cleanString(value: unknown, maxLength: number, field: string, { require
   return result;
 }
 
-function cleanAvatarUrl(value: unknown, previous = ""): string {
-  if (value === undefined) return previous;
-  const result = String(value ?? "").trim();
-  if (!result) return "";
-  if (!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(result)) {
-    throw socialError(400, "avatar_url_invalid", "Avatar must be a PNG, JPEG, or WebP data URL.");
-  }
-  if (result.length > 700000) throw socialError(400, "avatar_url_too_large", "Avatar must be 512 KB or smaller.");
-  return result;
-}
-
 function asRow(value: unknown): SocialRow {
   return value && typeof value === "object" && !Array.isArray(value) ? value as SocialRow : {};
 }
@@ -108,6 +110,9 @@ function publicProfile(row: unknown): PublicProfile | null {
   if (!row || typeof row !== "object") return null;
   const item = asRow(row);
   const handle = String(item.handle || "");
+  const assetId = String(item.avatar_asset_id ?? item.avatarAssetId ?? "").trim();
+  const rawVersion = Number(item.avatar_version ?? item.avatarVersion ?? 0);
+  const avatarVersion = Number.isSafeInteger(rawVersion) && rawVersion > 0 ? rawVersion : 0;
   return {
     uid: String(item.uid || ""),
     displayName: String(item.display_name ?? item.displayName ?? ""),
@@ -115,7 +120,12 @@ function publicProfile(row: unknown): PublicProfile | null {
     bio: String(item.bio || ""),
     avatarRole: String(item.avatar_role ?? item.avatarRole ?? "sentinel"),
     avatarVariant: String(item.avatar_variant ?? item.avatarVariant ?? "femme"),
-    avatarUrl: String(item.avatar_url ?? item.avatarUrl ?? ""),
+    // Legacy data URLs may still exist in old rows, but are intentionally not
+    // emitted. Image bytes are fetched only through the authenticated avatar
+    // route using the version and the private R2 asset reference.
+    avatarUrl: "",
+    hasCustomAvatar: Boolean(assetId && avatarVersion > 0),
+    avatarVersion,
     level: Number(item.level || 1),
   };
 }
@@ -196,18 +206,30 @@ export function validateHandle(value: unknown): string {
   return handle;
 }
 
-export async function getOwnProfile(env: WorkerEnv, uid: string): Promise<OwnProfile | null> {
+async function storedProfileRow(env: WorkerEnv, uid: string): Promise<SocialRow | null> {
   if (env.QUESTFORGE_DB) {
-    return ownProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE uid = ?").bind(uid).first());
+    return env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE uid = ?").bind(uid).first<SocialRow>();
   }
-  return ownProfile(memory(env).profiles.get(uid));
+  const row = memory(env).profiles.get(uid);
+  return row ? { ...row } : null;
+}
+
+function profileAvatarState(row: SocialRow | null): ProfileAvatarState | null {
+  if (!row) return null;
+  const assetId = String(row.avatar_asset_id ?? row.avatarAssetId ?? "").trim();
+  const rawVersion = Number(row.avatar_version ?? row.avatarVersion ?? 0);
+  return {
+    assetId: assetId || null,
+    version: Number.isSafeInteger(rawVersion) && rawVersion > 0 ? rawVersion : 0,
+  };
+}
+
+export async function getOwnProfile(env: WorkerEnv, uid: string): Promise<OwnProfile | null> {
+  return ownProfile(await storedProfileRow(env, uid));
 }
 
 export async function getPublicProfile(env: WorkerEnv, uid: string): Promise<PublicProfile | null> {
-  if (env.QUESTFORGE_DB) {
-    return publicProfile(await env.QUESTFORGE_DB.prepare("SELECT * FROM social_profiles WHERE uid = ?").bind(uid).first());
-  }
-  return publicProfile(memory(env).profiles.get(uid));
+  return publicProfile(await storedProfileRow(env, uid));
 }
 
 export async function findProfileByHandle(env: WorkerEnv, value: unknown): Promise<PublicProfile | null> {
@@ -218,16 +240,72 @@ export async function findProfileByHandle(env: WorkerEnv, value: unknown): Promi
   return publicProfile([...memory(env).profiles.values()].find((profile) => String(profile.handle || "").toLowerCase() === handle));
 }
 
+export async function getOwnProfileAvatarState(env: WorkerEnv, uid: string): Promise<ProfileAvatarState | null> {
+  return profileAvatarState(await storedProfileRow(env, uid));
+}
+
+async function mutateProfileAvatar(env: WorkerEnv, uid: string, assetId: string | null): Promise<ProfileAvatarMutation> {
+  const before = await storedProfileRow(env, uid);
+  const previousState = profileAvatarState(before);
+  if (!previousState) throw socialError(404, "profile_not_found", "Profile was not found. Save your profile before adding an avatar.");
+  if (previousState.version >= Number.MAX_SAFE_INTEGER) {
+    throw socialError(409, "avatar_version_exhausted", "Avatar version could not be advanced safely.");
+  }
+  const updatedAt = nowIso(env);
+
+  if (env.QUESTFORGE_DB) {
+    const result = await env.QUESTFORGE_DB.prepare(`UPDATE social_profiles
+      SET avatar_asset_id = ?, avatar_version = avatar_version + 1, avatar_url = '', updated_at = ?
+      WHERE uid = ? AND avatar_version = ?`).bind(assetId, updatedAt, uid, previousState.version).run();
+    if (Number(result.meta?.changes || 0) !== 1) throw socialError(409, "profile_avatar_conflict", "Profile Avatar changed elsewhere. Reload and try again.");
+  } else {
+    const row = memory(env).profiles.get(uid);
+    if (!row) throw socialError(404, "profile_not_found", "Profile was not found.");
+    const currentVersion = Number(row.avatarVersion ?? row.avatar_version ?? 0);
+    if (!Number.isSafeInteger(currentVersion) || currentVersion >= Number.MAX_SAFE_INTEGER) {
+      throw socialError(409, "avatar_version_exhausted", "Avatar version could not be advanced safely.");
+    }
+    if (currentVersion !== previousState.version) throw socialError(409, "profile_avatar_conflict", "Profile Avatar changed elsewhere. Reload and try again.");
+    row.avatarAssetId = assetId;
+    row.avatar_asset_id = assetId;
+    row.avatarVersion = currentVersion + 1;
+    row.avatar_version = currentVersion + 1;
+    row.avatarUrl = "";
+    row.avatar_url = "";
+    row.updatedAt = updatedAt;
+    row.updated_at = updatedAt;
+  }
+  const profile = await getOwnProfile(env, uid);
+  if (!profile) throw socialError(404, "profile_not_found", "Profile was not found.");
+  return { profile, previousAssetId: previousState.assetId };
+}
+
+export function activateProfileAvatar(env: WorkerEnv, uid: string, assetId: string): Promise<ProfileAvatarMutation> {
+  const normalizedAssetId = String(assetId || "").trim();
+  if (!normalizedAssetId || normalizedAssetId.length > 120 || /[\\/]/.test(normalizedAssetId)) {
+    return Promise.reject(socialError(400, "avatar_asset_invalid", "Avatar asset is invalid."));
+  }
+  return mutateProfileAvatar(env, uid, normalizedAssetId);
+}
+
+export function removeProfileAvatar(env: WorkerEnv, uid: string): Promise<ProfileAvatarMutation> {
+  return mutateProfileAvatar(env, uid, null);
+}
+
 export async function upsertProfile(env: WorkerEnv, uid: string, patch: SocialInput = {}): Promise<OwnProfile | null> {
+  const allowedFields = new Set(["displayName", "handle", "bio", "avatarRole", "avatarVariant", "level"]);
+  for (const key of Object.keys(patch)) {
+    if (key === "avatarUrl") throw socialError(400, "avatar_url_unsupported", "Avatar images must be uploaded through /v1/profile/avatar.");
+    if (!allowedFields.has(key)) throw socialError(400, "profile_field_invalid", `Unsupported profile field: ${key}.`);
+  }
   const previous = await getOwnProfile(env, uid);
   const handle = patch.handle === undefined && previous ? normalizeHandle(previous.handle) : validateHandle(patch.handle);
   const displayName = patch.displayName === undefined && previous
     ? previous.displayName
-    : cleanString(patch.displayName, 40, "display_name", { required: true });
+    : cleanString(patch.displayName, 60, "display_name", { required: true });
   const bio = patch.bio === undefined ? previous?.bio || "" : cleanString(patch.bio, 160, "bio");
   const avatarRole = patch.avatarRole === undefined ? previous?.avatarRole || "sentinel" : cleanString(patch.avatarRole, 40, "avatar_role", { required: true });
   const avatarVariant = patch.avatarVariant === undefined ? previous?.avatarVariant || "femme" : cleanString(patch.avatarVariant, 40, "avatar_variant", { required: true });
-  const avatarUrl = cleanAvatarUrl(patch.avatarUrl, previous?.avatarUrl || "");
   const level = patch.level === undefined ? previous?.level || 1 : Number(patch.level);
   if (!Number.isInteger(level) || level < 1) throw socialError(400, "level_invalid", "Level must be a positive integer.");
 
@@ -245,12 +323,12 @@ export async function upsertProfile(env: WorkerEnv, uid: string, patch: SocialIn
     if (owner) throw socialError(409, "handle_taken", "This handle is already in use.");
     try {
       await env.QUESTFORGE_DB.prepare(`INSERT INTO social_profiles
-        (uid, display_name, handle, bio, avatar_role, avatar_variant, avatar_url, level, handle_changed_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (uid, display_name, handle, bio, avatar_role, avatar_variant, avatar_url, avatar_version, avatar_asset_id, level, handle_changed_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, '', 0, NULL, ?, ?, ?, ?)
         ON CONFLICT(uid) DO UPDATE SET display_name=excluded.display_name, handle=excluded.handle, bio=excluded.bio,
-          avatar_role=excluded.avatar_role, avatar_variant=excluded.avatar_variant, avatar_url=excluded.avatar_url, level=excluded.level,
+          avatar_role=excluded.avatar_role, avatar_variant=excluded.avatar_variant, level=excluded.level,
           handle_changed_at=excluded.handle_changed_at, updated_at=excluded.updated_at`)
-        .bind(uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt).run();
+        .bind(uid, displayName, handle, bio, avatarRole, avatarVariant, level, handleChangedAt, createdAt, updatedAt).run();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error ?? "");
       if (/unique/i.test(message)) throw socialError(409, "handle_taken", "This handle is already in use.");
@@ -260,7 +338,14 @@ export async function upsertProfile(env: WorkerEnv, uid: string, patch: SocialIn
     const store = memory(env);
     const owner = [...store.profiles.values()].find((profile) => profile.uid !== uid && String(profile.handle || "").toLowerCase() === handle);
     if (owner) throw socialError(409, "handle_taken", "This handle is already in use.");
-    store.profiles.set(uid, { uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl, level, handleChangedAt, createdAt, updatedAt });
+    const current = store.profiles.get(uid);
+    store.profiles.set(uid, {
+      ...(current || {}),
+      uid, displayName, handle, bio, avatarRole, avatarVariant, avatarUrl: "",
+      avatarAssetId: current?.avatarAssetId ?? null,
+      avatarVersion: current?.avatarVersion ?? 0,
+      handleChangedAt, createdAt, updatedAt,
+    });
   }
   return getOwnProfile(env, uid);
 }
@@ -298,12 +383,14 @@ export async function sendFriendRequest(env: WorkerEnv, senderUid: string, recei
 export async function listFriendRequests(env: WorkerEnv, uid: string): Promise<FriendRequestSummary[]> {
   if (env.QUESTFORGE_DB) {
     const rows = (await env.QUESTFORGE_DB.prepare(`SELECT r.*, p.uid AS p_uid, p.display_name AS p_display_name, p.handle AS p_handle,
-      p.bio AS p_bio, p.avatar_role AS p_avatar_role, p.avatar_variant AS p_avatar_variant, p.avatar_url AS p_avatar_url, p.level AS p_level
+      p.bio AS p_bio, p.avatar_role AS p_avatar_role, p.avatar_variant AS p_avatar_variant, p.avatar_url AS p_avatar_url,
+      p.avatar_version AS p_avatar_version, p.avatar_asset_id AS p_avatar_asset_id, p.level AS p_level
       FROM friend_requests r JOIN social_profiles p ON p.uid = CASE WHEN r.sender_uid = ? THEN r.receiver_uid ELSE r.sender_uid END
       WHERE (r.sender_uid = ? OR r.receiver_uid = ?) AND r.status = 'pending' ORDER BY r.created_at DESC`).bind(uid, uid, uid).all<SocialRow>()).results || [];
     return rows.map((row: SocialRow) => normalizeRequest(row, uid, publicProfile({
       uid: row.p_uid, display_name: row.p_display_name, handle: row.p_handle, bio: row.p_bio,
-      avatar_role: row.p_avatar_role, avatar_variant: row.p_avatar_variant, avatar_url: row.p_avatar_url, level: row.p_level,
+      avatar_role: row.p_avatar_role, avatar_variant: row.p_avatar_variant, avatar_url: row.p_avatar_url,
+      avatar_version: row.p_avatar_version, avatar_asset_id: row.p_avatar_asset_id, level: row.p_level,
     })));
   }
   const store = memory(env);

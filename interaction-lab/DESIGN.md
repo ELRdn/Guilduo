@@ -199,6 +199,8 @@ stateDiagram-v2
 - AgentはAI作業担当の台帳エントリとして表示する。
 - MCPクライアントはAgentへ接続する手段として表示する。
 - Partyは作戦上の所属、Profileはユーザー本人の情報として分離する。
+- SettingsのAccountはprofile=nullを初回empty stateとしてフォーム表示し、保存時に既存のprofile upsertを呼ぶ。読み込み通信エラーとの表示を混同しない。
+- 本人AvatarはAgent Avatarと同じ認証済みBlob fetch、MIME/サイズ検証、version付きstale invalidationの境界を使う。公開`img src`やdata URLの永続保存は行わない。
 - 固定デモAgentを実アカウントへ混入させず、登録済みAgentと実際の担当Questを表示する。
 - Partyが未作成でもサインイン中の本人をHumanとして表示し、空のAgent台帳から登録を開始できる。
 - Agentの作成・編集は公開済みAgent Registry APIへ接続し、保存成功後はPartyとQuestの担当候補へ即時反映する。

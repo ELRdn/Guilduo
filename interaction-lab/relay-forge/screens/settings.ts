@@ -24,6 +24,7 @@ import {
   type SettingsModel,
   type SettingsSection,
   type SettingsState,
+  type ProfileDraft,
 } from "./settings-model.ts";
 import {
   type Metric,
@@ -48,13 +49,21 @@ function accountRegion(
   callbacks: SettingsCallbacks,
 ): HTMLElement {
   const selfActor = [...context.actors.values()].find((actor) => actor.kind === "human") ?? null;
+  const profile = model.profile;
+  const draft: ProfileDraft = state.profileDraft ?? {
+    displayName: profile === null ? "" : profile.displayName === "あなた" ? "" : profile.displayName,
+    handle: profile?.handle ?? "",
+    bio: profile?.bio ?? "",
+  };
+  const profileBusy = state.profileSaving || model.profileLoadError !== null;
+  const controlsDisabled = model.isDemo || profileBusy;
   const fileInput = el("input", {
     type: "file",
     class: "rf-visually-hidden",
     accept: "image/png,image/jpeg,image/webp",
     id: "rf-set-avatar-input",
   }) as HTMLInputElement;
-  const canUpload = model.profile !== null && model.profile.hasHandle && !model.isDemo;
+  const canUpload = model.profile !== null && !model.isDemo && !state.avatarSaving && model.profileLoadError === null;
   fileInput.disabled = !canUpload || state.avatarSaving;
   fileInput.addEventListener("change", () => {
     const file = fileInput.files?.[0];
@@ -65,16 +74,103 @@ function accountRegion(
   const uploadButton = el(
     "label",
     { for: "rf-set-avatar-input", class: `rf-secondary-button rf-set-avatar-trigger${canUpload ? "" : " rf-set-disabled"}` },
-    state.avatarSaving ? "保存しています…" : "画像を変更",
+    state.avatarSaving ? "保存しています…" : profile?.hasCustomAvatar ? "画像を変更" : "画像をアップロード",
   );
 
-  const guidance = model.profile === null
-    ? "プロフィールを読み込めませんでした。"
+  const removeButton = el("button", {
+    type: "button",
+    class: "rf-secondary-button rf-set-avatar-remove",
+    disabled: !canUpload || !profile?.hasCustomAvatar,
+  }, "画像を削除");
+  removeButton.addEventListener("click", () => callbacks.onRemoveAvatar());
+
+  const progress = state.avatarProgress === null
+    ? null
+    : el(
+      "div",
+      { class: "rf-set-avatar-progress", role: "status", "aria-live": "polite" },
+      el("progress", { max: 100, value: state.avatarProgress, "aria-label": "Avatarのアップロード進捗" }),
+      el("span", {}, `${state.avatarProgress}%`),
+    );
+
+  const guidance = model.profileLoadError !== null
+    ? "プロフィールの通信に失敗しました。再試行してください。"
     : model.isDemo
       ? "デモ表示です。Googleでサインインすると本人アイコンを変更できます。"
-      : !model.profile.hasHandle
-        ? "表示名とhandleが未設定です。プロフィールを先に作成すると、アイコンを変更できます。"
+      : model.profile === null
+        ? "プロフィールを設定して、Guilduoでの表示名を決めましょう。保存後にAvatarを追加できます。"
         : "PNG、JPEG、WebPから選択できます。256×256のWebPに自動で縮小されます。";
+
+  const email = el("dd", { class: "rf-set-account-value" }, model.email || "未取得");
+  const profileForm = el("form", { class: "rf-set-profile-form" });
+  const displayNameInput = el("input", {
+    class: "rf-set-input",
+    type: "text",
+    name: "displayName",
+    value: draft.displayName,
+    maxlength: 60,
+    autocomplete: "name",
+    required: true,
+    disabled: controlsDisabled,
+  }) as HTMLInputElement;
+  const handleInput = el("input", {
+    class: "rf-set-input rf-set-input-handle",
+    type: "text",
+    name: "handle",
+    value: draft.handle,
+    maxlength: 20,
+    minlength: 3,
+    pattern: "[A-Za-z0-9_]{3,20}",
+    autocomplete: "username",
+    spellcheck: false,
+    required: true,
+    disabled: controlsDisabled,
+  }) as HTMLInputElement;
+  const bioInput = el("textarea", {
+    class: "rf-set-input rf-set-bio",
+    name: "bio",
+    maxlength: 160,
+    rows: 3,
+    autocomplete: "off",
+    disabled: controlsDisabled,
+  }) as HTMLTextAreaElement;
+  bioInput.value = draft.bio;
+  displayNameInput.addEventListener("input", () => callbacks.onProfileDraftChange("displayName", displayNameInput.value));
+  handleInput.addEventListener("input", () => callbacks.onProfileDraftChange("handle", handleInput.value));
+  bioInput.addEventListener("input", () => callbacks.onProfileDraftChange("bio", bioInput.value));
+  profileForm.append(
+    el("p", { class: "rf-set-form-title" }, "プロフィール情報"),
+    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, "Display Name"), displayNameInput, el("small", { class: "rf-set-field-hint" }, "1〜60文字")),
+    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, "Username / Handle"), el("span", { class: "rf-set-handle-input-wrap" }, el("span", { class: "rf-set-handle-prefix", "aria-hidden": "true" }, "@"), handleInput), el("small", { class: "rf-set-field-hint" }, "英数字と _、3〜20文字")),
+    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, "Bio"), bioInput, el("small", { class: "rf-set-field-hint" }, "160文字以内")),
+  );
+  const saveProfileButton = el("button", {
+    type: "submit",
+    class: "rf-primary-button rf-set-profile-submit",
+    disabled: controlsDisabled,
+  }, state.profileSaving ? "保存しています…" : "保存");
+  profileForm.append(saveProfileButton);
+  if (state.profileMessage !== "") {
+    profileForm.append(el(
+      "p",
+      { class: "rf-set-profile-status", "data-tone": state.profileTone, role: state.profileTone === "error" ? "alert" : "status" },
+      state.profileMessage,
+    ));
+  }
+  profileForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    callbacks.onSaveProfile();
+  });
+
+  const profileError = model.profileLoadError === null
+    ? null
+    : el(
+      "div",
+      { class: "rf-set-profile-error", role: "alert" },
+      el("p", {}, "プロフィールを読み込めませんでした。通信状態を確認してください。"),
+      el("button", { type: "button", class: "rf-secondary-button" }, "再試行"),
+    );
+  profileError?.querySelector("button")?.addEventListener("click", () => callbacks.onRetryProfile());
 
   return screenRegion(
     "Account",
@@ -88,13 +184,14 @@ function accountRegion(
         selfActor === null
           ? el("span", { class: "rf-set-avatar-placeholder", "aria-hidden": "true" }, "?")
           : actorAvatar(selfActor, { size: "profile" }),
-        el("div", { class: "rf-set-avatar-controls" }, uploadButton, fileInput),
+        el("div", { class: "rf-set-avatar-controls" }, uploadButton, removeButton, progress, fileInput),
       ),
       el(
         "div",
         { class: "rf-set-identity" },
-        el("p", { class: "rf-set-name" }, model.profile?.displayName ?? "あなた"),
-        el("p", { class: "rf-set-handle" }, model.profile !== null && model.profile.hasHandle ? `@${model.profile.handle}` : "@未設定"),
+        el("p", { class: "rf-set-name" }, profile?.displayName ?? "あなた"),
+        el("p", { class: "rf-set-handle" }, profile !== null && profile.hasHandle ? `@${profile.handle}` : "@未設定"),
+        el("dl", { class: "rf-set-account-info" }, el("dt", {}, "Email"), email),
         el("p", { class: "rf-set-guidance" }, guidance),
         state.avatarMessage === ""
           ? null
@@ -104,6 +201,8 @@ function accountRegion(
             state.avatarMessage,
           ),
       ),
+      profileError,
+      model.profileLoadError === null ? profileForm : null,
     ),
   );
 }

@@ -19,7 +19,7 @@ export class AvatarImageError extends Error {}
 export interface ResizedAvatar {
   /** WebP bytes, for a binary upload (Agent avatar → R2). */
   readonly blob: Blob;
-  /** The same bytes as a data URL, for the existing `/v1/profile` contract. */
+  /** Local-only preview; profile avatars are uploaded as binary bytes too. */
   readonly dataUrl: string;
 }
 

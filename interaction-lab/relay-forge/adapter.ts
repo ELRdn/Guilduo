@@ -40,9 +40,12 @@ export interface ProfileRecord {
   readonly uid?: string;
   readonly displayName?: string;
   readonly handle?: string;
+  readonly bio?: string;
   readonly avatarUrl?: string;
   readonly avatarRole?: string;
   readonly avatarVariant?: string;
+  readonly hasCustomAvatar?: boolean;
+  readonly avatarVersion?: number;
 }
 
 /** The subset of `/v1/agents` this screen reads. */
@@ -71,18 +74,19 @@ export function initialsFor(name: string): string {
 }
 
 /**
- * `avatarUrl` is a data URL owned by the signed-in profile. It is only ever
- * attached to that profile's own actor, so one viewer can never end up showing
- * another account's cached portrait.
+ * `avatarUrl` is a short-lived Blob object URL owned by the signed-in profile.
+ * It is only ever attached to that profile's own actor, so one viewer can
+ * never end up showing another account's cached portrait.
  */
 function humanActorFromProfile(profile: ProfileRecord): Actor {
   const name = String(profile.displayName ?? profile.handle ?? "You").trim() || "You";
+  const handle = String(profile.handle ?? "").trim().replace(/^@+/, "");
   const variant = profile.avatarVariant === "masc" ? "masc" : "femme";
   return {
-    id: `u-${String(profile.uid ?? profile.handle ?? "self")}`,
+    id: `u-${String(profile.uid ?? handle ?? "self")}`,
     kind: "human",
     name,
-    role: profile.handle === undefined || profile.handle === "" ? "Operator" : `@${profile.handle}`,
+    role: handle === "" ? "Operator" : `@${handle}`,
     // This actor is always the signed-in account owner. A stable self marker
     // avoids clipping Japanese display names into awkward fragments such as
     // "あな", while the visible/accessibility name remains the real profile.

@@ -107,6 +107,14 @@ flowchart LR
 - Next版のローカル保存はゲスト利用、表示設定、前回スナップショットのためだけに使う。ログイン済みユーザーの本体データを別ユーザーへ表示しない。
 - API、MCP、外部連携から受け取るJSONは未検証の外部入力として扱い、ドメイン境界で正規化する。
 
+### 3.3 プロフィール画像の正本と境界
+
+- プロフィールの表示名、handle、bio、既定のキャラクター表示、現在の画像asset参照、`avatarVersion`はCloudflare D1の`social_profiles`を正本にする。Web UIとMCPの`get_my_profile` / `update_profile`は同じ行を読む・更新する。
+- Appwrite Authのemailはアカウント情報として読み取り専用で表示する。プロフィールの公開情報やMCP出力へemailを混在させない。
+- 画像バイトは既存の`AGENT_AVATARS` R2バインディング内でも`profiles/avatars/` prefixへ分離して保存する。R2 object keyはランダムasset IDとし、D1が現在のassetだけを参照する。
+- `/v1/profile/avatar`のGETは認証済み本人に限定し、`v`が現在の`avatarVersion`と完全一致した場合だけ画像を返す。ブラウザはBearer付きfetchからBlob URLを作り、unmountまたはstale化時にrevokeする。永続公開URL、署名URLの無期限化、data URLのprofile保存は行わない。
+- AvatarのPUT/DELETEはAppwrite Authまたは開発用認証のWeb mutationに限定し、PNG/JPEG/WebPの実バイト判定、300KB上限、ストリーミング上限をWorkerで再検証する。クライアントのリサイズはUX最適化であり、セキュリティ境界ではない。
+
 ## 4. ドメイン不変条件
 
 ### 4.1 Quest

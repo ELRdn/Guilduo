@@ -1750,19 +1750,19 @@
     {
       "name": "update_profile",
       "title": "Update Profile",
-      "description": "Create or update the authenticated user's public Guilduo profile, including the selected character icon.",
+      "description": "Create or update the authenticated user's public Guilduo profile metadata. Profile images are managed by the authenticated web avatar endpoint, not embedded in MCP JSON.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "displayName": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 40
+            "maxLength": 60
           },
           "handle": {
             "type": "string",
             "minLength": 3,
-            "maxLength": 21
+            "maxLength": 20
           },
           "bio": {
             "type": "string",
@@ -1775,11 +1775,6 @@
           "avatarVariant": {
             "type": "string",
             "maxLength": 40
-          },
-          "avatarUrl": {
-            "type": "string",
-            "maxLength": 700000,
-            "pattern": "^data:image/(png|jpeg|webp);base64,"
           },
           "level": {
             "type": "integer",

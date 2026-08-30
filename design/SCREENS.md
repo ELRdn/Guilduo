@@ -169,6 +169,8 @@ Mobile
 
 - テーマ、表示密度、文字サイズ、音、モーション、言語を分離する。
 - Agent登録、MCPクライアント紐付け、権限、最終利用を表示する。
+- Accountは本人のAvatar、表示名、`@handle`、Appwrite Auth由来のemail（読み取り専用）、bioを表示し、プロフィール未作成時は保存フォームを初期状態にする。
+- AvatarはUpload / Change / Remove、保存中の進捗、成功・通信エラーを表示する。プロフィール画像はprivateな認証済み取得とversion付きcacheで扱う。
 - 変更中は保存状態と同期状態を明示する。
 - Reduced Motion、キーボード、9言語の最長ラベルを基準にする。
 
