@@ -93,7 +93,9 @@ test("tagged release derives the active Appwrite deployment URL before Worker an
   assert.match(workflow, /--request POST/);
   assert.match(workflow, /guilduo-site-/);
   assert.doesNotMatch(workflow, /project\/platforms\/web\/\$APPWRITE_WEB_PLATFORM_ID/);
-  assert.match(workflow, /<title>Guilduo<\/title>/);
+  assert.match(workflow, /<title>Guilduo/);
+  assert.match(workflow, /rel="canonical" href="https:\/\/app\.guilduo\.com\/"/);
+  assert.match(workflow, /rel="canonical" href="https:\/\/guilduo\.com\/"/);
   assert.match(deployScript, /sites\/\$APPWRITE_SITE_ID\/logs/);
   assert.match(deployScript, /deploymentId/);
   assert.match(deployScript, /appwrite\.network/);
