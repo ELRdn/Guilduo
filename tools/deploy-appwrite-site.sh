@@ -93,33 +93,46 @@ if [[ "$(jq -r '.status // empty' "$current")" != "ready" ]]; then
   exit 1
 fi
 
-logs_endpoint="${APPWRITE_ENDPOINT%/}/sites/$APPWRITE_SITE_ID/logs"
-deployment_query="$(jq -cn --arg id "$deployment_id" '{method:"equal",attribute:"deploymentId",values:[$id]}')"
-site_host=""
-for attempt in $(seq 1 12); do
-  logs="$work_dir/site-logs-$attempt.json"
-  curl --silent --show-error --fail --get \
-    --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-    --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-    --data-urlencode "queries[]=$deployment_query" \
-    "$logs_endpoint" > "$logs"
-  site_host="$(jq -r '[.executions[]? | .requestHeaders[]? | select(.name == "host") | .value[]? | select(endswith(".appwrite.network"))][0] // empty' "$logs")"
-  if [[ "$site_host" =~ ^[a-z0-9-]+\.appwrite\.network$ ]]; then
-    break
+site_url="${APPWRITE_SITE_URL:-}"
+if [[ -n "$site_url" ]]; then
+  if [[ ! "$site_url" =~ ^https?://[^/?#]+/?$ ]]; then
+    echo "APPWRITE_SITE_URL must be an HTTP(S) origin" >&2
+    exit 2
   fi
+  site_url="${site_url%/}"
+else
+  # Older callers may not know the configured custom domain. Keep the
+  # request-log lookup as a compatibility fallback for generated domains, but
+  # do not make a successful deployment depend on request logging being on.
+  logs_endpoint="${APPWRITE_ENDPOINT%/}/sites/$APPWRITE_SITE_ID/logs"
+  deployment_query="$(jq -cn --arg id "$deployment_id" '{method:"equal",attribute:"deploymentId",values:[$id]}')"
   site_host=""
-  sleep 5
-done
+  for attempt in $(seq 1 12); do
+    logs="$work_dir/site-logs-$attempt.json"
+    curl --silent --show-error --fail --get \
+      --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+      --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
+      --data-urlencode "queries[]=$deployment_query" \
+      "$logs_endpoint" > "$logs"
+    site_host="$(jq -r '[.executions[]? | .requestHeaders[]? | select(.name == "host") | .value[]? | select(endswith(".appwrite.network"))][0] // empty' "$logs")"
+    if [[ "$site_host" =~ ^[a-z0-9-]+\.appwrite\.network$ ]]; then
+      break
+    fi
+    site_host=""
+    sleep 5
+  done
 
-if [[ -z "$site_host" ]]; then
-  echo "Could not resolve the active Appwrite deployment URL from site logs" >&2
-  exit 1
+  if [[ -z "$site_host" ]]; then
+    echo "Could not resolve the active Appwrite deployment URL from site logs; set APPWRITE_SITE_URL for custom-domain deployments" >&2
+    exit 1
+  fi
+  site_url="https://$site_host"
 fi
 
 jq -n \
   --arg id "$deployment_id" \
   --arg status "ready" \
-  --arg url "https://$site_host" \
+  --arg url "$site_url" \
   --argjson sourceSize "$(jq '.sourceSize' "$current")" \
   --argjson buildSize "$(jq '.buildSize' "$current")" \
   '{id:$id,status:$status,url:$url,sourceSize:$sourceSize,buildSize:$buildSize}'

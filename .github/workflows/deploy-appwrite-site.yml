@@ -56,6 +56,7 @@ jobs:
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
+          APPWRITE_SITE_URL: ${{ vars.WEB_APP_URL || 'https://app.guilduo.com' }}
         run: |
           archive="$RUNNER_TEMP/guilduo-site.tar.gz"
           tar -czf "$archive" -C dist .

@@ -91,6 +91,7 @@ jobs:
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
+          APPWRITE_SITE_URL: ${{ vars.WEB_APP_URL || 'https://app.guilduo.com' }}
       - name: Register active Appwrite Site as the web platform
         shell: bash
         run: |
@@ -191,14 +192,19 @@ jobs:
       - name: Smoke test public routes
         shell: bash
         run: |
-          root_html="$(curl --fail --retry 5 --retry-delay 3 "$SITE_URL/")"
-          grep -q '<title>Guilduo</title>' <<<"$root_html"
-          grep -q '<h1>Guilduo</h1>' <<<"$root_html"
+          app_html="$(curl --fail --retry 5 --retry-delay 3 "$SITE_URL/")"
+          grep -q '<title>Guilduo' <<<"$app_html"
+          grep -q 'rel="canonical" href="https://app.guilduo.com/"' <<<"$app_html"
           curl --fail --retry 5 --retry-delay 3 "$SITE_URL/next/" >/dev/null
+          official_html="$(curl --fail --retry 5 --retry-delay 3 "${PUBLIC_SITE_URL%/}/")"
+          grep -q '<title>Guilduo' <<<"$official_html"
+          grep -q 'rel="canonical" href="https://guilduo.com/"' <<<"$official_html"
+          curl --fail --retry 5 --retry-delay 3 "${PUBLIC_SITE_URL%/}/lp/en/" >/dev/null
           curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-protected-resource/mcp' >/dev/null
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST '${{ vars.WORKER_BASE_URL }}/mcp')" = "401"
         env:
           SITE_URL: ${{ steps.appwrite_site.outputs.url }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
