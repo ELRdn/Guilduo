@@ -14,12 +14,56 @@ export interface D1StatementLike {
 
 export interface D1DatabaseLike {
   prepare(query: string): D1StatementLike;
-  batch(statements: D1StatementLike[]): Promise<unknown>;
+  batch(statements: D1StatementLike[]): Promise<Array<{ meta?: { changes?: number } }>>;
+}
+
+export interface R2ObjectLike {
+  readonly httpEtag?: string;
+  readonly etag?: string;
+  readonly size?: number;
+  /** `null` only for a HEAD-style response; a real `get()` result always has a body. */
+  readonly body: ReadableStream<Uint8Array> | null;
+  arrayBuffer(): Promise<ArrayBuffer>;
+  writeHttpMetadata(headers: Headers): void;
+}
+
+export interface R2ListedObjectLike {
+  readonly key: string;
+  readonly size: number;
+  readonly uploaded: Date;
+  readonly httpEtag?: string;
+  readonly etag?: string;
+}
+
+export interface R2ListResultLike {
+  readonly objects: R2ListedObjectLike[];
+  readonly truncated: boolean;
+  readonly cursor?: string;
+}
+
+export interface R2BucketLike {
+  /**
+   * Every caller in this codebase writes to a freshly generated key
+   * (`crypto.randomUUID()` — see `agent-avatar-store.ts`), so this is always
+   * an insert in practice. Nothing here enforces overwrite-refusal at the
+   * storage layer; uniqueness comes from the caller never reusing a key.
+   */
+  put(
+    key: string,
+    value: ArrayBuffer | Uint8Array,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<{ httpEtag?: string; etag?: string } | null>;
+  get(key: string): Promise<R2ObjectLike | null>;
+  delete(key: string): Promise<void>;
+  /** Used only by the orphan inventory/cleanup pass (`agent-avatar-cleanup.ts`) — never on the request-serving path. */
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<R2ListResultLike>;
 }
 
 export interface WorkerEnv {
   QUESTFORGE_KV?: KvNamespaceLike;
   QUESTFORGE_DB?: D1DatabaseLike;
+  /** Agent avatar image bytes, keyed by a random asset ID D1 alone maps to an Agent. Release config binds this as `AGENT_AVATARS`. */
+  AGENT_AVATARS?: R2BucketLike;
   APPWRITE_ENDPOINT?: string;
   APPWRITE_PROJECT_ID?: string;
   APPWRITE_DATABASE_ID?: string;
@@ -39,6 +83,8 @@ export interface WorkerEnv {
   DEV_USER_ID?: string;
   AGENT_NOW?: string;
   SOCIAL_NOW?: string;
+  /** Opt-in switch for the scheduled orphan avatar cleanup (agent-avatar-cleanup.ts): unset or anything other than exactly "true" stays report-only. */
+  AGENT_AVATAR_CLEANUP_EXECUTE?: string;
 }
 
 export type WorkerError = Error & {

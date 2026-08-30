@@ -1,12 +1,32 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync } from "node:fs";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 // The checkout is exposed through a Windows path alias while Node resolves the
 // files on another drive. Give Vite the same real root it sees for HTML inputs
 // so emitted page names remain relative.
 const root = realpathSync(process.cwd());
+const PUBLIC_ORIGIN_FALLBACK = "https://6a90bb258248d43363a2.appwrite.network";
+
+function getPublicOrigin(): string {
+  const configured = String(process.env.WEB_APP_URL || "").trim();
+  if (!configured) return PUBLIC_ORIGIN_FALLBACK;
+  const url = new URL(configured);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`WEB_APP_URL must use http or https: ${configured}`);
+  }
+  return url.origin;
+}
+
+function injectPublicBrandMetadata(): Plugin {
+  return {
+    name: "inject-guilduo-public-brand-metadata",
+    transformIndexHtml(html) {
+      return html.replaceAll("__GUILDUO_PUBLIC_ORIGIN__", getPublicOrigin());
+    },
+  };
+}
 
 function copyRuntimeAssets(source: string, destination: string): void {
   for (const entry of readdirSync(source, { withFileTypes: true })) {
@@ -19,7 +39,12 @@ function copyRuntimeAssets(source: string, destination: string): void {
     const extension = extname(entry.name).toLowerCase();
     const relativeToIcons = relative(join(root, "assets", "icons"), sourcePath);
     const isPwaIcon = !relativeToIcons.startsWith("..") && !relativeToIcons.startsWith("/");
-    if (extension !== ".webp" && !(isPwaIcon && extension === ".png")) continue;
+    const relativeToBrand = relative(join(root, "assets", "brand"), sourcePath);
+    const isBrandAsset = relativeToBrand !== ""
+      && !relativeToBrand.startsWith("..")
+      && !isAbsolute(relativeToBrand);
+    const isBrandAssetFile = isBrandAsset && [".png", ".svg"].includes(extension);
+    if (extension !== ".webp" && !(isPwaIcon && extension === ".png") && !isBrandAssetFile) continue;
     mkdirSync(dirname(destinationPath), { recursive: true });
     cpSync(sourcePath, destinationPath);
   }
@@ -47,7 +72,7 @@ export default defineConfig({
   root,
   base: "./",
   publicDir: false,
-  plugins: [react(), copyQuestForgeRuntime],
+  plugins: [react(), injectPublicBrandMetadata(), copyQuestForgeRuntime],
   build: {
     outDir: "dist",
     emptyOutDir: true,

@@ -13,7 +13,7 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 | 公式LP | [Guilduo Landing Page](https://6a90bb258248d43363a2.appwrite.network/lp/) | Guilduoの思想、機能、使い方を知る |
 | 正式UI | [Guilduo / Relay Forge](https://6a90bb258248d43363a2.appwrite.network/next/relay-forge/) | 公開βのCommand・Quest運用画面を開く |
 
-現在の公開先はAppwrite Sites上の `v0.6.0-beta.7` です。
+現在の公開先はAppwrite Sites上の `v0.6.0-beta.7` です。次回ブランド導入候補は`0.6.0-beta.8`ですが、権利・類似性確認と外部表示の整合が完了するまで公開しません。
 
 ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 
@@ -241,6 +241,7 @@ TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自�
 - [公開βロードマップ](ROADMAP.md)
 - [API / MCP / OAuth setup](API_MCP_SETUP.md)
 - [Tagged release setup](RELEASE_SETUP.md)
+- [Guilduo E2 brand rollout](docs/brand-rollout.md)
 - [Privacy](PRIVACY.md)
 - [Terms](TERMS.md)
 - [Security](SECURITY.md)

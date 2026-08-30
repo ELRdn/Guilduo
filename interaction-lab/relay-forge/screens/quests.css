@@ -52,6 +52,7 @@
 
 /* ---------------- table ---------------- */
 
+.rf-screen-region[data-variant="portfolio"] { container-type: inline-size; }
 .rf-q-table { display: flex; flex-direction: column; min-width: 0; }
 
 /* The table is the tab stop; the focus ring belongs on it, not on 60 rows. */
@@ -100,10 +101,19 @@
 
 .rf-q-row + .rf-q-row { border-top: var(--qf-border-width) solid var(--qf-color-border-subtle); }
 
-.rf-q-cell { min-width: 0; display: flex; align-items: center; }
+.rf-q-cell { min-width: 0; display: flex; align-items: center; overflow: hidden; }
 
 .rf-q-cell-title { flex-direction: column; align-items: flex-start; gap: var(--qf-space-1); }
-.rf-q-row .rf-srow-id { overflow: hidden; text-overflow: ellipsis; }
+.rf-q-row .rf-srow-id,
+.rf-q-title,
+.rf-q-next,
+.rf-q-owner-copy > *,
+.rf-q-impact > * {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Blocked rows carry a second, non-colour signal on the leading edge so a dense
  * table still separates "stuck" from "needs me" at a glance. */
@@ -209,23 +219,40 @@
 /* ---------------- 1440 and narrower desktop ---------------- */
 
 @media (max-width: 1600px) and (min-width: 901px) {
-  /* Evidence is the first column to go: its content is a yes/no already carried
-   * in the detail rail. */
+  .rf-q-workspace { grid-template-columns: minmax(0, 1fr) minmax(300px, 24%); }
+}
+
+/* Respond to the table's real width, not the browser viewport: the detail rail
+ * can make this region narrow even on a 1920px display. */
+@container (max-width: 1080px) {
   .rf-q-head > span:nth-child(7),
   .rf-q-cell-evidence { display: none; }
 
   .rf-q-head,
   .rf-q-row {
     grid-template-columns:
-      minmax(96px, 108px)
-      minmax(72px, 84px)
+      minmax(88px, 100px)
+      minmax(68px, 80px)
       minmax(0, 1fr)
-      minmax(150px, 180px)
-      minmax(96px, 116px)
-      minmax(72px, 84px);
+      minmax(140px, 172px)
+      minmax(92px, 108px)
+      minmax(68px, 80px);
   }
+}
 
-  .rf-q-workspace { grid-template-columns: minmax(0, 1fr) minmax(300px, 24%); }
+@container (max-width: 860px) {
+  .rf-q-owner-copy .rf-srow-sub { display: none; }
+  .rf-q-head,
+  .rf-q-row {
+    grid-template-columns:
+      minmax(84px, 96px)
+      minmax(64px, 76px)
+      minmax(0, 1fr)
+      minmax(112px, 136px)
+      minmax(88px, 104px)
+      minmax(64px, 76px);
+    gap: var(--qf-space-3);
+  }
 }
 
 /* ---------------- mobile ---------------- */

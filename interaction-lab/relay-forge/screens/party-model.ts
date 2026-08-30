@@ -90,6 +90,16 @@ export interface AgentRecord {
   readonly dryRunDefault?: boolean;
   readonly defaultHandoffState?: string;
   readonly updatedAt?: string;
+  /** True when the server has an R2 image for this Agent (`avatar_asset_id` set). */
+  readonly hasCustomAvatar?: boolean;
+  readonly avatarVersion?: number;
+  /**
+   * Blob object URL, set client-side once the shell has fetched the image
+   * bytes over the authenticated avatar route — never present on the server
+   * response itself. Absent until the background fetch lands, even when
+   * `hasCustomAvatar` is true.
+   */
+  readonly avatarUrl?: string;
 }
 
 export interface NormalizePartyOptions {

@@ -154,6 +154,48 @@ RPGはCore Product Definitionではなく、motivation、identity、retention、
 - permanent animation
 - 密度のためだけの小さすぎる文字
 
+## Guilduo E2 mark and palette
+
+Guilduo E2のエンブレムを、Guilduo公開βの正式アイコン v1として採用する。現時点のファイルは、ユーザーが提供したAI生成のカラー探索シートとE2 SVG参考素材をもとにした**暫定トレース版**である。2026-08-29、ひろなおがこの暫定トレース版を公開前検証へ進めることを承認した。これはプロダクトオーナーによる採用承認であり、商標登録や第三者の法的見解を意味しない。
+
+正本と派生物は次の構成で管理する。
+
+| Asset | 用途 | 状態 |
+| --- | --- | --- |
+| `assets/brand/guilduo-mark-master.svg` | トレース済みの縦長エンブレム正本 | 暫定トレース・公開β承認済み |
+| `assets/brand/guilduo-mark-gold.svg` | 透明背景のAntique Gold単色 | 暫定派生・公開β承認済み |
+| `assets/brand/guilduo-mark-ink.svg` | 透明背景のNight Surface単色 | 暫定派生・公開β承認済み |
+| `assets/brand/guilduo-mark-ivory.svg` | 透明背景のIvory Text単色 | 暫定派生・公開β承認済み |
+| `tools/generate-brand-assets.mts` | SVG派生物とPNGの再現可能な生成 | 管理スクリプト |
+
+### Core colors
+
+| 名称 | HEX | 役割 |
+| --- | --- | --- |
+| Night Surface | `#0F1418` | 深い背景、Ink、PWA chrome |
+| Forge Teal | `#13352F` | ブランド面、フルカラーアイコン背景 |
+| Antique Gold | `#B89A5E` | Gの前景、ブランドアクセント |
+| Ivory Text | `#E7E3DA` | 明るい背景、明るい文字 |
+
+公開ワードマークの表記は常に `Guilduo` とする。探索シート内の `GUILDUO E2 COLOR EXPLORATION` や `FORGE TEAL & ANTIQUE GOLD` は資料上の見出しであり、公開ワードマークの指示ではない。
+
+### Mark usage
+
+- PWA、favicon、Apple touch icon、OG、GitHub Social PreviewはForge Teal背景＋Antique Goldのフルカラー版を使う。通常のPNGには角丸背景を焼き込む。
+- Web UIとLPは背景なしの単色シンボル版を使い、面の色に応じてGold、Ink、Ivoryを選ぶ。LP全体の配色はRelay Forgeの配色へ変更しない。
+- UI上のハード最小表示高は16px、推奨は24px以上とする。faviconとPWAは専用の生成サイズを使い、SVGを無理に縮小しない。
+- clear spaceはマーク表示高の25%以上を四辺に確保する。ワードマークや状態表示をマークへ密着させない。
+- Android maskableは512×512の背景を端まで敷き、前景のGを中央66%の安全領域内へ収める。OSマスクとの二重角丸を避けるため、maskableだけ角丸を焼き込まない。
+- 旧キャラクター＋QFアイコンはブランド識別から退役させる。キャラクター素材はAstraなどの人格表現・プロフィール用途として残す。
+
+### Provenance and review status
+
+入力はユーザー提供のAI生成カラー探索シートとE2 SVG参考素材（`Guilduo_E2_Official_Emblem.svg`、`Guilduo_E2_Official_AppIcon.svg`）。2026-08-29に作業担当のCodexが輪郭を単一のインラインSVG pathへトレースし、単色派生とPNGを `generate-brand-assets.mts` で生成した。トレース時の変更は、輪郭の自己完結化、ブランド色の適用、単色派生、通常アイコンの角丸背景、maskableの安全領域への縮小である。
+
+生成履歴について、元のカラー探索シートがAI生成であることは記録するが、使用サービス、生成日、入力プロンプトは提供資料およびリポジトリ内に記載されていない。実装工程では追加の画像生成を行っていない。SVGは外部画像、外部フォント、埋め込み第三者素材、第三者ロゴに依存しない。`sharp@0.35.2`はPNG生成にのみ使う開発依存である。
+
+権利・第三者類似性の公開前レビューは、2026-08-29のひろなお承認により確認済みとして記録する。この承認は公開βの採用判断であり、商標登録、法務意見、第三者の権利状態を保証するものではない。`0.6.0-beta.8`の公開は、外部表示更新と技術検証の全ゲート完了後に行う。
+
 ## Product naming rules
 
 - Product brandは **Guilduo**
@@ -196,12 +238,10 @@ QuestForgeは旧Public Brandです。ただし、既存ユーザーと外部連�
 - ブランド変更を理由にtechnical identifierを一括置換する
 - 既存Goldenや歴史資料を書き換える
 
-## Undecided
+## Other undecided brand items
 
-次の項目は正式決定までTBDです。
+次の項目はGuilduo E2 mark v1とは別テーマとしてTBDです。
 
-- Logo
-- final brand colors
 - mascot
 - official Agent character
 - custom typeface

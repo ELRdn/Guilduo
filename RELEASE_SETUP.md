@@ -1,6 +1,6 @@
 # Guilduo tagged release setup
 
-`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。現在のAppwrite版候補は`v0.6.0-beta.7`です。
+`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。次のブランド導入候補は`v0.6.0-beta.8`ですが、[`docs/brand-rollout.md`](docs/brand-rollout.md)の権利・外部表示ゲート完了後に限ります。
 
 ## GitHub Environment
 
@@ -20,7 +20,9 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 - `APPWRITE_ENDPOINT`: 例 `https://sgp.cloud.appwrite.io/v1`
 - `APPWRITE_PROJECT_ID`、`APPWRITE_DATABASE_ID`、`APPWRITE_STATE_TABLE_ID`、`APPWRITE_LEGACY_TABLE_ID`、`APPWRITE_SITE_ID`
 - `D1_DATABASE_NAME`、`D1_DATABASE_ID`、`KV_NAMESPACE_ID`
+- `R2_BUCKET_NAME`: Agent Avatar画像用R2バケット名。事前に`wrangler r2 bucket create <name>`で作成しておくこと。未設定の場合、Release設定生成は`AGENT_AVATARS` bindingを欠いたまま成功させず失敗する
 - `EXTERNAL_OAUTH_ENABLED`: 公開βでは`false`
+- `AGENT_AVATAR_CLEANUP_EXECUTE`（任意、Workerの`vars`へ手動追加）: 孤立したAgent Avatar R2オブジェクトの自動削除を有効にする。未設定または`"true"`以外は常にレポートのみ（15分ごとのscheduled実行でログ出力）。Release生成には含まれないため、明示的に設定しない限り本番は常にdry-run
 - `SOURCE_URL`: リポジトリURL
 
 公開識別子はVariablesへ置き、Appwrite API KeyとCloudflare API TokenはSecretsへ保存します。ブラウザ向け設定へAPI Keyを混ぜてはいけません。

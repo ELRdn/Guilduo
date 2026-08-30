@@ -1,8 +1,7 @@
 /* Relay Forge design tokens.
  *
- * Source of truth: NEWDESIGN.md section 27 "Implementation Tokens".
- * Values here are transcribed from that section and must not be edited without
- * following the section 25.3 token governance process.
+ * Source of truth: NEWDESIGN.md section 27 "Implementation Tokens" plus the
+ * Guilduo E2 brand palette. Values here are scoped to Relay Forge only.
  *
  * This sheet is intentionally NOT loaded by the legacy `/` or `/next/` surfaces:
  * design/tokens.generated.css already binds --qf-radius-md and --qf-motion-panel
@@ -10,25 +9,34 @@
  * until the section 29 Phase 5 promotion.
  */
 
+/* Formal brand colors. Supporting surface values below are derived tints so
+ * the four approved anchors remain legible in both modes. */
+:root {
+  --qf-brand-night-surface: #0F1418;
+  --qf-brand-forge-teal: #13352F;
+  --qf-brand-antique-gold: #B89A5E;
+  --qf-brand-ivory-text: #E7E3DA;
+}
+
 :root,
 [data-theme="light"] {
   color-scheme: light;
-  --qf-color-canvas: #e9ece8;
-  --qf-color-field: #f1f3ef;
-  --qf-color-surface: #fafbf8;
+  --qf-color-canvas: var(--qf-brand-ivory-text);
+  --qf-color-field: #f2f0ea;
+  --qf-color-surface: #faf9f5;
   --qf-color-raised: #ffffff;
-  --qf-color-inset: #e4e8e3;
+  --qf-color-inset: #dedbd1;
   --qf-color-selected: #dce9e1;
-  --qf-color-fg-strong: #17201e;
-  --qf-color-fg-default: #40504b;
-  --qf-color-fg-muted: #66756f;
-  --qf-color-fg-disabled: #919b96;
-  --qf-color-border-subtle: #d3d9d4;
-  --qf-color-border-default: #b9c2bc;
-  --qf-color-border-strong: #7c8b84;
-  --qf-color-accent: #23312d;
-  --qf-color-accent-hover: #17221f;
-  --qf-color-fg-on-accent: #f7faf8;
+  --qf-color-fg-strong: var(--qf-brand-night-surface);
+  --qf-color-fg-default: #344640;
+  --qf-color-fg-muted: #5c6c65;
+  --qf-color-fg-disabled: #89958f;
+  --qf-color-border-subtle: #c9cec8;
+  --qf-color-border-default: #aeb9b2;
+  --qf-color-border-strong: #708079;
+  --qf-color-accent: var(--qf-brand-forge-teal);
+  --qf-color-accent-hover: var(--qf-brand-night-surface);
+  --qf-color-fg-on-accent: var(--qf-brand-ivory-text);
   --qf-color-human: #1d6d4d;
   --qf-color-agent: #2d65a7;
   --qf-color-system: #596863;
@@ -45,22 +53,22 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --qf-color-canvas: #0b0f10;
-  --qf-color-field: #101617;
-  --qf-color-surface: #151d1f;
-  --qf-color-raised: #1c2729;
-  --qf-color-inset: #0d1213;
-  --qf-color-selected: #20302c;
-  --qf-color-fg-strong: #edf2ef;
-  --qf-color-fg-default: #c4ceca;
-  --qf-color-fg-muted: #8e9b97;
-  --qf-color-fg-disabled: #5e6966;
-  --qf-color-border-subtle: #253032;
-  --qf-color-border-default: #344244;
-  --qf-color-border-strong: #536365;
-  --qf-color-accent: #d7e2de;
-  --qf-color-accent-hover: #ebf2ef;
-  --qf-color-fg-on-accent: #111816;
+  --qf-color-canvas: var(--qf-brand-night-surface);
+  --qf-color-field: #111c1a;
+  --qf-color-surface: #142522;
+  --qf-color-raised: #1b312c;
+  --qf-color-inset: #0a1112;
+  --qf-color-selected: #1f3b34;
+  --qf-color-fg-strong: var(--qf-brand-ivory-text);
+  --qf-color-fg-default: #c7d0ca;
+  --qf-color-fg-muted: #91a19a;
+  --qf-color-fg-disabled: #61736b;
+  --qf-color-border-subtle: #28403a;
+  --qf-color-border-default: #3a554c;
+  --qf-color-border-strong: #648176;
+  --qf-color-accent: var(--qf-brand-antique-gold);
+  --qf-color-accent-hover: #cfb879;
+  --qf-color-fg-on-accent: var(--qf-brand-night-surface);
   --qf-color-human: #67c194;
   --qf-color-agent: #75a7e8;
   --qf-color-system: #9aa7a3;
@@ -81,22 +89,22 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --qf-color-canvas: #0b0f10;
-    --qf-color-field: #101617;
-    --qf-color-surface: #151d1f;
-    --qf-color-raised: #1c2729;
-    --qf-color-inset: #0d1213;
-    --qf-color-selected: #20302c;
-    --qf-color-fg-strong: #edf2ef;
-    --qf-color-fg-default: #c4ceca;
-    --qf-color-fg-muted: #8e9b97;
-    --qf-color-fg-disabled: #5e6966;
-    --qf-color-border-subtle: #253032;
-    --qf-color-border-default: #344244;
-    --qf-color-border-strong: #536365;
-    --qf-color-accent: #d7e2de;
-    --qf-color-accent-hover: #ebf2ef;
-    --qf-color-fg-on-accent: #111816;
+    --qf-color-canvas: var(--qf-brand-night-surface);
+    --qf-color-field: #111c1a;
+    --qf-color-surface: #142522;
+    --qf-color-raised: #1b312c;
+    --qf-color-inset: #0a1112;
+    --qf-color-selected: #1f3b34;
+    --qf-color-fg-strong: var(--qf-brand-ivory-text);
+    --qf-color-fg-default: #c7d0ca;
+    --qf-color-fg-muted: #91a19a;
+    --qf-color-fg-disabled: #61736b;
+    --qf-color-border-subtle: #28403a;
+    --qf-color-border-default: #3a554c;
+    --qf-color-border-strong: #648176;
+    --qf-color-accent: var(--qf-brand-antique-gold);
+    --qf-color-accent-hover: #cfb879;
+    --qf-color-fg-on-accent: var(--qf-brand-night-surface);
     --qf-color-human: #67c194;
     --qf-color-agent: #75a7e8;
     --qf-color-system: #9aa7a3;

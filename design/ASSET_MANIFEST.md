@@ -2,7 +2,7 @@
 
 > **English summary:** This manifest maps repository assets to their product role, allowed surfaces, display constraints, and fallback behavior. `ASSETS.md` remains the licensing and contribution policy; this file is the usage contract for humans and AI agents.
 
-最終更新: 2026-08-18  
+最終更新: 2026-08-29
 ライセンス方針: [`../ASSETS.md`](../ASSETS.md)
 
 ## 共通ルール
@@ -13,6 +13,26 @@
 - 画像生成素材は公開前に由来、ライセンス、第三者類似性を確認する。
 - Assetは装飾として増やさず、担当者、相棒、敵、Battle状態の理解に使う。
 - 装備画像は現時点でレイヤー合成に使わない。ショップ・所持品のプレビュー用途に限定する。
+
+## Guilduo E2 brand assets
+
+| Path | 役割 | 許可Surface | 表示・生成条件 | 状態 |
+| --- | --- | --- | --- | --- |
+| `assets/brand/guilduo-mark-master.svg` | トレース済みのブランド正本 | 開発・レビュー、派生生成 | 透過、単一inline path、フォント依存なし | 暫定トレース・公開β承認済み |
+| `assets/brand/guilduo-mark-gold.svg` | Antique Gold単色マーク | Relay Forge UI、LP、暗色面 | 透明背景、最小16px高・推奨24px以上 | 暫定派生・公開β承認済み |
+| `assets/brand/guilduo-mark-ink.svg` | Night Surface単色マーク | 明色面のUI、資料 | 透明背景、背景とのコントラストを確認 | 暫定派生・公開β承認済み |
+| `assets/brand/guilduo-mark-ivory.svg` | Ivory Text単色マーク | 暗色面、資料 | 透明背景、背景とのコントラストを確認 | 暫定派生・公開β承認済み |
+| `assets/brand/og-guilduo.png` | OG共有画像 | `/`、`/lp/`、SNS | 1200×630、Forge Teal＋Gold、無文字アイコン主体 | 公開β承認済み |
+| `assets/brand/github-social-preview.png` | GitHub Social Preview | GitHub | 1280×640、Forge Teal＋Gold、無文字アイコン主体 | 公開β承認済み |
+
+ブランド色のアンカーはNight Surface `#0F1418`、Forge Teal `#13352F`、Antique Gold `#B89A5E`、Ivory Text `#E7E3DA`。生成手順は[`../tools/generate-brand-assets.mts`](../tools/generate-brand-assets.mts)で再現する。
+
+### Surface rules
+
+- PWA、favicon、Apple touch icon、OG、GitHubは角丸を焼き込んだフルカラー版を使う。Android `maskable`だけはOSマスク用に背景を端まで敷き、中央66%安全領域へ前景を縮小する。
+- Web UIとLPは背景なし単色版を使う。LPの既存カラーパレットとGolden Referenceはブランドマーク差し替え以外に変更しない。
+- 旧キャラクターアイコンはブランド識別へ戻さず、Astra等の人格表現に限定する。
+- AI生成画像を起点にしたトレース、使用フォントなし、第三者素材なし、第三者類似性レビュー済みという由来を記録する。元画像の生成サービス・生成日・プロンプトは提供資料に含まれないため、不明として扱い推測しない。2026-08-29のひろなお承認は公開βの採用判断であり、商標登録や法的保証ではない。
 
 ## キャラクター・役職スキン
 
@@ -47,6 +67,9 @@
 | `assets/icons/icon-192.png` | PWA標準アイコン | Manifest、Install UI | 192×192 |
 | `assets/icons/icon-512.png` | PWA大型アイコン | Manifest、Store preview | 512×512 |
 | `assets/icons/icon-maskable-512.png` | Maskable icon | Android PWA | 512×512 |
+| `assets/icons/favicon-32.png` | Browser favicon | root、Next、Relay Forge、LP | 32×32 |
+| `assets/icons/favicon-48.png` | Browser favicon | root、Next、Relay Forge、LP | 48×48 |
+| `assets/icons/apple-touch-icon-180.png` | Apple touch icon | iOS/iPadOS install UI | 180×180 |
 
 PWAアイコンはLucide機能アイコンと混同しない。アプリブランド用のbitmapとして管理する。
 

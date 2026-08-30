@@ -361,6 +361,74 @@ export class QuestForgeRepository {
     return this.request("/v1/profile", { method: "PATCH", body: JSON.stringify(input) });
   }
 
+  /**
+   * Uploads the raw image bytes for one Agent's avatar. This bypasses
+   * `request()` because the body is binary, not JSON — everything else
+   * (auth header, 401 retry, error shape) mirrors it exactly.
+   */
+  async uploadAgentAvatar(agentId: string, blob: Blob, expectedUpdatedAt?: string): Promise<JsonRecord> {
+    if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
+    const path = `/v1/agents/${encodeURIComponent(agentId)}/avatar`;
+    const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
+      method: "PUT",
+      body: blob,
+      headers: {
+        accept: "application/json",
+        "content-type": blob.type || "application/octet-stream",
+        ...(expectedUpdatedAt ? { "x-expected-updated-at": expectedUpdatedAt } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const token = await this.getToken(false);
+    let response = await send(token);
+    if (response.status === 401 && token) {
+      const refreshedToken = await this.getToken(true);
+      if (refreshedToken) response = await send(refreshedToken);
+    }
+    const text = await response.text();
+    let body: unknown = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = { message: text }; }
+    if (!response.ok) {
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as JsonRecord : {};
+      const error = bodyRecord.error && typeof bodyRecord.error === "object" && !Array.isArray(bodyRecord.error) ? bodyRecord.error as JsonRecord : {};
+      throw new QuestForgeApiError(response.status, String(error.code || bodyRecord.code || `http_${response.status}`), String(error.message || bodyRecord.message || `QuestForge API error (${response.status})`), error.details || null);
+    }
+    return body as JsonRecord;
+  }
+
+  /**
+   * Fetches the raw image bytes for one Agent's avatar as a Blob, for the
+   * caller to turn into an object URL. This bypasses `request()` because the
+   * response is binary, not JSON — everything else (auth header, 401 retry,
+   * error shape) mirrors it exactly. `version` is `avatarVersion` from the
+   * Agent record; the server 404s `avatar_version_stale` on a mismatch.
+   */
+  async fetchAgentAvatar(agentId: string, version: number): Promise<Blob> {
+    if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
+    const path = `/v1/agents/${encodeURIComponent(agentId)}/avatar?v=${encodeURIComponent(String(version))}`;
+    const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
+      headers: {
+        accept: "image/*",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const token = await this.getToken(false);
+    let response = await send(token);
+    if (response.status === 401 && token) {
+      const refreshedToken = await this.getToken(true);
+      if (refreshedToken) response = await send(refreshedToken);
+    }
+    if (!response.ok) {
+      const text = await response.text();
+      let body: unknown = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = { message: text }; }
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as JsonRecord : {};
+      const error = bodyRecord.error && typeof bodyRecord.error === "object" && !Array.isArray(bodyRecord.error) ? bodyRecord.error as JsonRecord : {};
+      throw new QuestForgeApiError(response.status, String(error.code || bodyRecord.code || `http_${response.status}`), String(error.message || bodyRecord.message || `QuestForge API error (${response.status})`), error.details || null);
+    }
+    return response.blob();
+  }
+
   async linkAgentConnection(agentId: string, clientId: string): Promise<JsonRecord> {
     return this.request(`/v1/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(clientId)}`, { method: "PUT" });
   }

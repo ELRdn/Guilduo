@@ -78,8 +78,8 @@ components:
 
 > **English summary:** The Interaction Lab is Guilduo's `/next/` beta surface. It tests information architecture, responsive behavior, synchronization feedback, and detail interactions while reusing the current visual constitution and the same authenticated data contracts. It is not a second domain model and must not silently replace `/`.
 
-最終更新: 2026-08-18  
-対象: `/next/`（開発元は`/interaction-lab/`） / `0.5.0-beta.1` / REST・MCP `2.7.0` / Schema `7`  
+最終更新: 2026-08-29
+対象: `/next/`（開発元は`/interaction-lab/`） / `0.6.0-beta.8`候補 / REST・MCP `2.7.0` / Schema `7`
 親文書: [Guilduo Visual Constitution](../DESIGN.md)
 技術仕様: [PROJECT_SPEC.md](../PROJECT_SPEC.md)
 
@@ -96,6 +96,15 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 - Next固有のBlueは装飾ではなく、AI・連携・選択状態を表す。
 - Battle・MP・報酬はroot版と同じOrange／Goldの意味を使う。
 - パネルは白い面、細い境界線、控えめな影を基本とし、空白だけが残らないよう概要・現在状態・次の操作を同じ視線内へ置く。
+
+### 2.1 Relay Forgeのブランド例外
+
+`/next/relay-forge/`（開発元は`interaction-lab/relay-forge/`）だけは、Guilduo E2のForge系パレットを使う。対象はNight Surface `#0F1418`、Forge Teal `#13352F`、Antique Gold `#B89A5E`、Ivory Text `#E7E3DA`と、それらから導く面・境界の補助色である。実装の正本は同ディレクトリの`tokens.css`とする。
+
+- Human、Agent、RPG、Dangerの意味色は維持し、ブランド色で上書きしない。
+- root `/`、旧`/next/`、`/interaction-lab/`のGolden Reference、LP、Battle/Unity関連Surfaceへこの例外を波及させない。
+- RelayのRailには背景なしAntique Gold単色マークを使い、通常のPWA・共有画像とは役割を分ける。
+- AI生成画像を起点にした暫定トレース版だが、権利・第三者類似性確認とひろなおの公開β採用承認を2026-08-29に記録済みである。公開正式版としての外部リリースは、技術検証と外部表示更新の全ゲート完了後に行う。承認は商標登録や法務意見を意味しない。
 
 `/interaction-lab/`はローカル開発・キャプチャ用のソースルートで、Viteのビルド後に同じSurfaceが`/next/`へ出力される。データモデル、認証、API、MCPはrootの[`PROJECT_SPEC.md`](../PROJECT_SPEC.md)から差分を作らない。
 
@@ -167,6 +176,14 @@ stateDiagram-v2
 - Ctrl／⌘クリックは個別追加・解除する。
 - 選択行はBlueの背景または境界線、件数表示、`aria-selected`で示す。
 - 最大100件。非表示の保管済みQuestや折りたたみ中の子Questは対象外にする。
+
+### Relay Forgeの選択安定性とNetwork Canvas
+
+- CommandのQuest Loomは選択によって行順を組み替えない。選択、上流、下流の関係だけを更新し、クリックした行の画面内位置とスクロール位置を維持する。
+- Quests Portfolioも選択だけでは一覧スクロールを動かさない。フィルター、ソート、画面遷移は新しい一覧条件として先頭から表示する。
+- Networkの関係図は固定Viewportへノードを圧縮せず、最大4列の固定間隔World Gridへ配置する。選択対象を読みやすい倍率で中央表示し、パン、ホイール／ピンチズーム、中心復帰、全体表示を提供する。
+- Networkのカメラ操作はWorldレイヤーのtransformだけを更新し、画面全体の再描画やページスクロールを発生させない。
+- Mobileは関係図を縮小せず、同じ関係データを上流・中心・下流のOutlineとして表示する。
 
 ### 詳細表示
 

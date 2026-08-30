@@ -1,6 +1,6 @@
-const APP_VERSION = "2026.08.14-public-beta";
+const APP_VERSION = "2026.08.29-brand-beta";
 const CACHE_PREFIX = "questforge-pwa-";
-const CACHE_VERSION = `${CACHE_PREFIX}v21`;
+const CACHE_VERSION = `${CACHE_PREFIX}v22`;
 const NAVIGATION_FALLBACK = "/index.html";
 const BETA_NAVIGATION_PATH = "/next/index.html";
 
@@ -10,6 +10,11 @@ const APP_SHELL = [
   "/assets/icons/icon-192.png",
   "/assets/icons/icon-512.png",
   "/assets/icons/icon-maskable-512.png",
+  "/assets/icons/favicon-32.png",
+  "/assets/icons/favicon-48.png",
+  "/assets/icons/apple-touch-icon-180.png",
+  "/assets/brand/guilduo-mark-gold.svg",
+  "/assets/brand/og-guilduo.png",
   "/assets/avatar-role-sentinel.webp",
   "/assets/avatar-role-femme-sentinel.webp",
   "/assets/boss-h3-transparent.webp",

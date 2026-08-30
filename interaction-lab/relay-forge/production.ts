@@ -34,6 +34,16 @@ export interface RelayForgeRuntime {
   readonly battlePort: BattlePort;
   readonly battleSession: BattleSession | null;
   readonly connectionsPort: ConnectionsPort;
+  /** The Gateway base URL actually in use — Settings derives the MCP URL from this. */
+  readonly gatewayUrl: string;
+  readonly profilePort: Pick<QuestForgeRepository, "updateProfile">;
+  readonly agentAvatarPort: Pick<QuestForgeRepository, "uploadAgentAvatar" | "fetchAgentAvatar">;
+  /**
+   * Injected by the composition root (`main.ts`), never imported by the shell
+   * directly, so Appwrite Auth stays a swappable port rather than a hard
+   * dependency of the Relay Forge UI.
+   */
+  readonly signOut?: () => Promise<void>;
 }
 
 function record(value: unknown): JsonRecord {
@@ -80,11 +90,22 @@ export function normalizePartyMembers(
   return members;
 }
 
+/**
+ * The image bytes never pass through this function or through `/v1/agents` —
+ * `hasCustomAvatar` and `avatarVersion` only tell the caller whether one
+ * exists and which version it is. Resolving that into a displayable
+ * `avatarUrl` (a Blob object URL, fetched over the authenticated avatar
+ * route) is the shell's job, not this normalizer's — see
+ * `withCachedAvatar`/`refreshAgentAvatars` in `shell.ts`.
+ */
 export function normalizeAgentRecord(item: unknown): AgentRecord | null {
     const agent = record(item);
+    const agentId = text(agent.agentId);
+    const avatarVersion = typeof agent.avatarVersion === "number" && agent.avatarVersion > 0 ? agent.avatarVersion : 0;
+    const hasCustomAvatar = agent.hasCustomAvatar === true && avatarVersion > 0;
     const normalized: AgentRecord = {
-      agentId: text(agent.agentId),
-      displayName: text(agent.displayName) || text(agent.agentId) || "Agent",
+      agentId,
+      displayName: text(agent.displayName) || agentId || "Agent",
       provider: text(agent.provider),
       role: text(agent.role),
       instructions: text(agent.instructions),
@@ -94,12 +115,14 @@ export function normalizeAgentRecord(item: unknown): AgentRecord | null {
       dryRunDefault: agent.dryRunDefault !== false,
       defaultHandoffState: text(agent.defaultHandoffState),
       updatedAt: text(agent.updatedAt),
+      avatarVersion,
+      hasCustomAvatar,
     };
     return normalized.agentId === "" ? null : normalized;
 }
 
 function normalizeAgents(source: readonly unknown[]): AgentRecord[] {
-  return source.map(normalizeAgentRecord).filter((agent): agent is AgentRecord => agent !== null);
+  return source.map((item) => normalizeAgentRecord(item)).filter((agent): agent is AgentRecord => agent !== null);
 }
 
 function normalizeIntegrations(source: readonly unknown[]): IntegrationRecord[] {
@@ -158,5 +181,8 @@ export async function createProductionRuntime(
     battlePort: new RepositoryBattlePort(repository),
     battleSession: Object.keys(snapshot.battle).length === 0 ? null : snapshot.battle as unknown as BattleSession,
     connectionsPort: new RepositoryConnectionsPort(repository),
+    gatewayUrl: repository.baseUrl,
+    profilePort: repository,
+    agentAvatarPort: repository,
   };
 }

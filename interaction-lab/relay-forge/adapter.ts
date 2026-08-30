@@ -52,9 +52,17 @@ export interface AgentRecordView {
   readonly provider?: string;
   readonly role?: string;
   readonly status?: string;
+  /**
+   * Blob object URL, attached by the shell once it has fetched the image
+   * bytes over the authenticated avatar route — never present in the raw
+   * `/v1/agents` response. Absent until that fetch lands, even when the
+   * Agent has a custom avatar, in which case the avatar chain falls through
+   * to the provider preset, then the role crest, then initials until it does.
+   */
+  readonly avatarUrl?: string;
 }
 
-function initialsFor(name: string): string {
+export function initialsFor(name: string): string {
   const trimmed = name.trim();
   if (trimmed === "") return "";
   const parts = trimmed.split(/\s+/);
@@ -75,7 +83,10 @@ function humanActorFromProfile(profile: ProfileRecord): Actor {
     kind: "human",
     name,
     role: profile.handle === undefined || profile.handle === "" ? "Operator" : `@${profile.handle}`,
-    initials: initialsFor(name),
+    // This actor is always the signed-in account owner. A stable self marker
+    // avoids clipping Japanese display names into awkward fragments such as
+    // "あな", while the visible/accessibility name remains the real profile.
+    initials: "ME",
     ...(profile.avatarUrl !== undefined && profile.avatarUrl !== "" ? { avatarUrl: profile.avatarUrl } : {}),
     ...(profile.avatarRole !== undefined && profile.avatarRole !== "" ? { avatarRole: profile.avatarRole } : {}),
     avatarVariant: variant,
@@ -91,6 +102,7 @@ function agentActorFromRecord(record: AgentRecordView): Actor {
     role: String(record.role ?? record.provider ?? "Agent"),
     initials: initialsFor(name),
     ...(record.provider === undefined || record.provider === "" ? {} : { provider: record.provider }),
+    ...(record.avatarUrl === undefined || record.avatarUrl === "" ? {} : { avatarUrl: record.avatarUrl }),
   };
 }
 

@@ -47,6 +47,11 @@ body {
   text-transform: uppercase;
 }
 
+/* Bootstrap headings receive programmatic focus only to place the virtual
+ * cursor on an actionable/error state. They are not controls; drawing the
+ * global control outline around the text looks like a broken card. */
+.rf-bootstrap h1:focus { outline: none; }
+
 .rf-bootstrap-actions {
   display: flex;
   flex-wrap: wrap;

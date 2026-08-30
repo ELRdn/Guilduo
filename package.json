@@ -1,12 +1,13 @@
 {
   "name": "guilduo",
-  "version": "0.6.0-beta.7",
+  "version": "0.6.0-beta.8",
   "description": "Human and AI work platform for coordinating Quests, handoffs, evidence, and decisions.",
   "license": "AGPL-3.0-only",
   "private": true,
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
+    "brand:assets": "tsx tools/generate-brand-assets.mts",
     "preview": "vite preview --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck",
@@ -60,6 +61,7 @@
     "pixelmatch": "^7.2.0",
     "playwright-core": "^1.62.1",
     "pngjs": "^7.0.0",
+    "sharp": "0.35.2",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vite": "^8.1.4",

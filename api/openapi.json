@@ -2034,6 +2034,106 @@
           }
         }
       }
+    },
+    "/v1/agents/{agentId}/avatar": {
+      "put": {
+        "summary": "Upload one Agent's avatar image from the Appwrite-authenticated web app",
+        "description": "Body is the raw image (PNG/JPEG/WebP, max 300 KB); the server independently validates format and size regardless of Content-Type, streaming the body and rejecting mid-transfer once the cap is exceeded. Bumps avatarVersion and, optionally, checks X-Expected-Updated-At against the Agent's current updatedAt, returning 409 agent_conflict on a mismatch.",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Avatar stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "$ref": "#/components/schemas/RegisteredAgent"
+                    },
+                    "avatarVersion": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Agent changed since it was last read (agent_conflict)"
+          },
+          "413": {
+            "description": "Image exceeds 300 KB (avatar_too_large)"
+          },
+          "415": {
+            "description": "Body is not a real PNG/JPEG/WebP image (avatar_format_invalid)"
+          },
+          "503": {
+            "description": "Avatar storage is not configured; nothing was saved (avatar_storage_unavailable)"
+          }
+        }
+      },
+      "get": {
+        "summary": "Fetch one Agent's avatar image",
+        "description": "Bearer-authenticated like every other Agent route. Clients fetch this with `fetch()` and an Authorization header and convert the response into a Blob URL, since a plain <img src> cannot carry the header. Supports conditional GET via If-None-Match / ETag. `v` is required and must be a positive integer matching the Agent's current avatarVersion exactly — only that exact match gets the year-long `immutable` Cache-Control; anything else (missing, zero, negative, decimal, or a non-matching version) never does.",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "The exact current avatarVersion. Required; a missing or malformed value is 400, a non-matching one is 404 — neither is ever served with an immutable cache header."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image bytes, with a one-year immutable Cache-Control"
+          },
+          "304": {
+            "description": "Not modified"
+          },
+          "400": {
+            "description": "v is missing or not a positive integer (avatar_version_required)"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          },
+          "404": {
+            "description": "No avatar stored for this Agent, foreign agentId, or v does not match the current version (avatar_version_stale)"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3161,6 +3261,15 @@
               "updatedAt": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "avatarVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Bumped on every avatar upload. The image itself is never embedded here or in the list response."
+              },
+              "hasCustomAvatar": {
+                "type": "boolean",
+                "description": "Derived from whether an avatar asset is currently active. Fetch the image with GET .../agents/{agentId}/avatar?v={avatarVersion} using a Bearer header."
               }
             }
           }

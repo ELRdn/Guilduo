@@ -176,15 +176,11 @@ html[lang="ja"] h2 {
 }
 
 .wordmark-mark {
-  display: grid;
+  display: block;
   width: 2rem;
   height: 2rem;
-  place-items: center;
-  border: var(--rule-hair) solid var(--color-review);
-  border-radius: var(--radius-sm);
-  color: var(--color-review);
-  font-family: var(--font-utility);
-  font-size: var(--text-sm);
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .nav-tools,

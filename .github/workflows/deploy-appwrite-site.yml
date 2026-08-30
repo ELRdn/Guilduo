@@ -38,8 +38,11 @@ jobs:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
       - run: npm run check
+      - run: npm run brand:assets -- --check
       - run: npm test
       - run: npm run build
+        env:
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
       - name: Upload and activate Appwrite Site
         shell: bash
         env:
