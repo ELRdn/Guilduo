@@ -1,6 +1,6 @@
 # Guilduo 並行エージェント向け現状報告
 
-最終更新: 2026-08-30 JST
+最終更新: 2026-08-31 JST
 対象リポジトリ: `D:\VibeCoding\questforge-relay-forge`
 現在ブランチ: `codex/fix-agent-registry-recovery`
 
@@ -8,11 +8,22 @@
 
 ## 現在の結論
 
-Guilduo E2アイコンのコード導入、公開URL正規化、Appwrite Site、Cloudflare Worker、Appwrite API Custom Domainの反映とproduction smoke testは完了している。現在の状態は、ひろなお承認済みの**暫定トレース版**を`0.6.0-beta.8`候補として公開環境へ反映した状態である。正式なタグ付きリリース、`www` redirectのDNS、Documentation公開、認証を含む実クライアントE2Eは別ゲートとして残している。
+Guilduo E2アイコンのコード導入、公開URL正規化、Appwrite Site、Cloudflare Worker、Appwrite API Custom Domainの反映とproduction smoke testは完了している。2026-08-31にはSettings > Accountのプロフィール作成・編集とprivate R2 Avatar管理も同じproduction環境へ反映した。現在の状態は、ひろなお承認済みの**暫定トレース版**を`0.6.0-beta.8`候補として公開環境へ反映した状態である。正式なタグ付きリリース、`www` redirectのDNS、Documentation公開、認証を含む実クライアントE2Eは別ゲートとして残している。
 
 正式な公開ワードマークは常に`Guilduo`。添付カラー探索シートの`GUILDUO E2 COLOR EXPLORATION`や`FORGE TEAL & ANTIQUE GOLD`はデザイン資料上の見出しであり、公開表記の指示ではない。
 
-今回の更新では、SVG正本・ブランド設計書・資産台帳・公開URLガイド・README・Roadmap・引き継ぎ記録を同期した。無文字のOG／GitHub共有画像は実物確認済みで、ローカル検証用の一時スクリプトとNodeフォールバックは削除済み。既存の未コミットAgent Registry／Agent avatar／Settings関連変更は保持し、OAuth Grant・Access Token・Refresh TokenのUID移植や失効は行っていない。
+今回の更新では、SVG正本・ブランド設計書・資産台帳・公開URLガイド・README・Roadmap・引き継ぎ記録を同期した。無文字のOG／GitHub共有画像は実物確認済みで、ローカル検証用の一時スクリプトとNodeフォールバックは削除済み。Agent Registry／Agent avatar／Settings関連変更はcommit済みで、OAuth Grant・Access Token・Refresh TokenのUID移植や失効は行っていない。
+
+## 2026-08-31 Settings Account production deployment
+
+- Runtime commit: `14ba2ae` (`feat(profile): complete account profile and avatar management`)
+- Worker workflow: `33336867474`、SUCCESS。API契約、型、290 tests、build、D1 migration、Worker deploy、health、CORS、MCP custom domain smokeが合格。
+- Site workflow: `33336940959`、SUCCESS。型、ブランド資産、290 tests、build、Appwrite Site upload／activateが合格。
+- D1 `0009_profile_avatar_r2.sql`をproductionへ適用し、`social_profiles.avatar_version`と`social_profiles.avatar_asset_id`を追加。適用後のpending migrationは0件。
+- 既存R2 `AGENT_AVATARS` binding（bucket `guilduo-agent-avatars`）を再利用し、Profile Avatarは`profiles/avatars/` prefixへprivate保存する。
+- `https://app.guilduo.com/`、compatibility path、公式site、Worker healthはHTTP 200。`/v1/profile`、`/v1/profile/avatar`、MCP、Appwrite Accountの未認証境界はHTTP 401。
+- 公開Relay Forge bundleでprofile-null empty state文言と`/v1/profile/avatar`参照を確認した。
+- 正式タグとGitHub Releaseは作成していない。productionでのGoogleログイン後のProfile作成、Avatar upload/change/remove、MCP相互反映は実ユーザー受入として残す。
 
 ## 正式URLの要点
 
