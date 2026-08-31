@@ -1,117 +1,119 @@
+[English](README.md) · [日本語](README.jp.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [한국어](README.ko.md) · [简体中文](README.zh-Hans.md) · [Русский](README.ru.md)
+
 # Guilduo
 
-> **AIを仲間に、最強のパーティーを。**
+> **Build the strongest party with AI by your side.**
 
-**人間だけが、依頼主じゃない。**
+**Humans are not the only ones who can commission work.**
 
-Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事を依頼し、担当し、受け渡し、レビューするための **Human × AI Work Platform** です。現実の作業をQuestとして扱い、Relay、Evidence、Decisionを共有しながら仕事を前へ進めます。
+Guilduo is a **Human × AI Work Platform** where people and AI Agents can commission, own, hand off, and review work in the same workspace. It treats real-world work as Quests and moves it forward through shared Relays, Evidence, and Decisions.
 
-## 公開リンク
+## Public Links
 
-### 新規ユーザーはここから
+### New users start here
 
-- Guilduoを知る: [公式サイト](https://guilduo.com/)
-- Guilduoで作業する: [Guilduo / Relay Forge](https://app.guilduo.com/)
-- AIクライアントを接続する: `https://mcp.guilduo.com/mcp`
+- Learn about Guilduo: [Official site](https://guilduo.com/)
+- Work in Guilduo: [Guilduo / Relay Forge](https://app.guilduo.com/)
+- Connect an AI client: `https://mcp.guilduo.com/mcp`
 
-| 入口 | リンク | 用途 |
+| Entry point | Link | Purpose |
 |---|---|---|
-| 公式LP | [Guilduo Landing Page](https://guilduo.com/) | Guilduoの思想、機能、使い方を知る |
-| 正式Web App | [Guilduo / Relay Forge](https://app.guilduo.com/) | 公開βのCommand・Quest運用画面を開く |
+| Official LP | [Guilduo Landing Page](https://guilduo.com/) | Learn about Guilduo's principles, features, and workflow |
+| Official Web App | [Guilduo / Relay Forge](https://app.guilduo.com/) | Open the public beta Command and Quest workspace |
 
-`/next/relay-forge/`はAppwrite Site内のデプロイpathであり、正式Web App URLではありません。Appwrite Sitesのgenerated Deployment URLと旧`workers.dev` URLは、検証・互換・rollback用に保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。公開デプロイ済みの候補版は`0.6.0-beta.8`で、タグ付きリリースとは別に管理します。
+`/next/relay-forge/` is a deployment path inside an Appwrite Site, not the official Web App URL. Appwrite Sites generated deployment URLs and the old `workers.dev` URL are retained for validation, compatibility, and rollback. The canonical path for new users is the Guilduo domain above. The currently deployed candidate is `0.6.0-beta.8`, managed separately from tagged releases.
 
-### 公開URLの役割
+### What each public URL is for
 
-| 役割 | 正式URL | 状態 |
+| Role | Canonical URL | Status |
 |---|---|---|
-| 公式サイト / LP | `https://guilduo.com` | canonical root |
-| Web App | `https://app.guilduo.com` | Appwrite SiteのCustom Domain |
-| MCP | `https://mcp.guilduo.com/mcp` | Remote HTTP MCPの正規接続先 |
-| Appwrite API | `https://api.guilduo.com/v1` | Appwrite APIの正式endpoint（originは`https://api.guilduo.com`） |
+| Official site / LP | `https://guilduo.com` | canonical root |
+| Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
+| MCP | `https://mcp.guilduo.com/mcp` | Canonical Remote HTTP MCP endpoint |
+| Appwrite API | `https://api.guilduo.com/v1` | Official Appwrite API endpoint (origin: `https://api.guilduo.com`) |
 | Documentation | `https://docs.guilduo.com` | Reserved / Future |
 
-`https://www.guilduo.com`は`https://guilduo.com`へのredirect専用です。旧`workers.dev` URLは互換接続・rollback用に残します。`api.guilduo.com`はAppwrite API用で、ブラウザのAppwrite clientとWorkerの`APPWRITE_ENDPOINT`が利用します。Worker REST/MCPの`/v1`や`/mcp`の公開originではありません。
+`https://www.guilduo.com` is reserved for redirects to `https://guilduo.com`. The old `workers.dev` URL remains for compatibility connections and rollback. `api.guilduo.com` is for the Appwrite API and is used by the browser Appwrite client and the Worker's `APPWRITE_ENDPOINT`; it is not the public origin for the Worker's REST `/v1` or MCP `/mcp` routes.
 
-ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
+See [BRAND.md](BRAND.md) for approved brand language and expression.
 
-GuilduoはHabiticaとは独立したプロジェクトです。提携・承認・代替サービスではありません。各製品名と商標はそれぞれの権利者に帰属します。
+Guilduo is an independent project and is not affiliated with, endorsed by, or an alternative service to Habitica. Product names and trademarks belong to their respective owners.
 
-## 公開βの範囲
+## Public Beta Scope
 
-| 項目 | 状態 |
+| Area | Status |
 |---|---|
-| Web / PWA | 公開βの中心機能 |
-| Appwrite Googleログイン・端末ゲスト保存 | 利用可能（認証設定済み） |
-| Quest CRUD、保管、Quest Tree、MPバトル | 利用可能 |
-| Agent Registry、MCPクライアント紐付け、Handoff | 利用可能 |
+| Web / PWA | Core of the public beta |
+| Appwrite Google sign-in and device guest storage | Available (authentication configured) |
+| Quest CRUD, archiving, Quest Tree, and MP battle | Available |
+| Agent Registry, MCP client linking, and Handoff | Available |
 | REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
-| `app.guilduo.com/` Guilduo / Relay Forge | 正式Web Appの公開β（Desktop / Mobile）。内部の`/next/relay-forge/`はデプロイ・互換path |
-| 9言語 | ルートUIで利用可能。βUIも主要ナビを対応 |
-| Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
-| Unity Battle Lab、Android/iOSネイティブ、Agent自動実行 | ペンディング |
+| `app.guilduo.com/` Guilduo / Relay Forge | Public beta of the official Web App (Desktop / Mobile). Internal `/next/relay-forge/` is a deployment and compatibility path |
+| 9 languages | Available in the root UI; the beta UI covers the primary navigation |
+| Google Calendar, Google Tasks, Notion, and Toggl | **Early Access / OAuth preparation** |
+| Unity Battle Lab, native Android/iOS, and autonomous Agent execution | Pending |
 
-アプリ版は `0.6.0-beta.8`候補、REST/MCPは `2.7.0`、データSchemaは `7`です。外部Provider OAuthは、公開βの安全性と審査準備を優先して既定停止しています。アカウントとユーザー状態はAppwriteへ移行します。
+The app version is the `0.6.0-beta.8` candidate, REST/MCP is `2.7.0`, and the data Schema is `7`. External Provider OAuth is disabled by default while public beta safety and review preparation are prioritized. Accounts and user state are being migrated to Appwrite.
 
-## 設計原則
+## Design Principles
 
-1. **人間が目的と最終判断を持つ**：AIの提案は確認可能にし、勝手に完了・公開しない。
-2. **作業と報酬を分離する**：QuestでMPを得て、戦うタイミングとコマンドは自分で選ぶ。
-3. **読む、プレビューする、実行する**：書き込み・一括更新・Handoffはdry-runを標準にする。
-4. **削除より保管**：履歴・報酬・外部リンクを残し、不要Questは保管する。
-5. **人間とAIを同じパーティーに置く**：Astraは相棒キャラクター、Agentは担当役割、ユーザーはアカウントとして分離する。
-6. **データを閉じ込めない**：REST、MCP、CLI、Web UIが同じWorkerとドメイン処理を使う。
+1. **People own the goal and final decision**: AI suggestions remain reviewable and are never completed or published without approval.
+2. **Separate work from rewards**: Earn MP through Quests, then choose when to battle and which command to use.
+3. **Read, preview, execute**: Make dry-run the default for writes, bulk updates, and Handoffs.
+4. **Archive before deleting**: Keep history, rewards, and external links; archive Quests that are no longer needed.
+5. **Put humans and AI in the same party**: Astra is a companion character, Agents represent roles, and users remain separate as accounts.
+6. **Do not lock data in**: REST, MCP, CLI, and Web UI use the same Worker and domain logic.
 
-## 画面とデータ
+## Screens and Data
 
-- `/`：現行UI。ログイン前は端末保存、ログイン後はWorker経由でAppwriteへ同期します。
-- `/lp/`・`/lp/en/`：Guilduo公式Landing Pageの日本語版・英語版です。CTA URLはRuntime Configから供給し、未設定時は安全に無効化します。
-- `/interaction-lab/`：ローカル開発・キャプチャ用のNextソースルートです。
-- `/next/`・`/next/relay-forge/`：Appwrite Sites上の実装・互換ルートです。新規ユーザーの正式入口は`https://app.guilduo.com/`で、host-based rewriteがRelay Forge entryへ内部転送します。PCではToday/Treeの中央リストだけをスクロールし、スマホではページ全体をスクロールします。
-- `https://guilduo.com/`は同じAppwrite Siteの`/lp/`へ、`https://app.guilduo.com/`は`/next/relay-forge/`へroutingします。実際のDNS・Rewrite設定は[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)を参照してください。
-- 視覚設計の正本は[`DESIGN.md`](DESIGN.md)、技術仕様の正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)、Next版の差分設計は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)です。数値トークンは[`design/TOKENS.json`](design/TOKENS.json)、部品は[`design/COMPONENTS.md`](design/COMPONENTS.md)、画面構成は[`design/SCREENS.md`](design/SCREENS.md)を参照します。
-- 更新時はAppwrite Auth状態を復元し、前回同期データがあれば読み取り専用で残します。再接続中はQuest一覧を消さず、スケルトン・再接続ボタン・書き込みロックを表示します。
-- Questの完了状態とAgent Handoff状態は別管理です。単発To Doは完了時に保管、日課・習慣・繰り返しTo Doは次回へ復帰します。
-- 公開プロフィールは表示名、`@handle`、紹介文、アバター、レベルだけです。Quest本文、メモ、UID、OAuth情報は公開しません。
+- `/`: The current UI. Before login, data is stored on the device; after login, it syncs to Appwrite through the Worker.
+- `/lp/` and `/lp/en/`: The official Guilduo Landing Page in Japanese and English. CTA URLs come from Runtime Config and are safely disabled when unset.
+- `/interaction-lab/`: The Next source route for local development and captures.
+- `/next/` and `/next/relay-forge/`: Implementation and compatibility routes on Appwrite Sites. The official entry for new users is `https://app.guilduo.com/`, which internally forwards to the Relay Forge entry through a host-based rewrite. On desktop, only the central Today/Tree list scrolls; on mobile, the whole page scrolls.
+- `https://guilduo.com/` routes to `/lp/` on the same Appwrite Site, while `https://app.guilduo.com/` routes to `/next/relay-forge/`. See [`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md) for the actual DNS and rewrite configuration.
+- The visual source of truth is [`DESIGN.md`](DESIGN.md), the technical source of truth is [`PROJECT_SPEC.md`](PROJECT_SPEC.md), and the Next-specific delta design is [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md). See [`design/TOKENS.json`](design/TOKENS.json) for numeric tokens, [`design/COMPONENTS.md`](design/COMPONENTS.md) for components, and [`design/SCREENS.md`](design/SCREENS.md) for screen composition.
+- On reconnect, Appwrite Auth state is restored and previously synced data remains available read-only when present. Quest lists are not cleared during reconnection; the UI shows a skeleton, reconnect button, and write lock.
+- Quest completion state and Agent Handoff state are managed separately. One-off To Dos are archived when completed; dailies, habits, and recurring To Dos return for their next occurrence.
+- Public profiles expose only the display name, `@handle`, bio, avatar, and level. Quest content, notes, UID, and OAuth information remain private.
 
-## Appwrite / Worker構成
+## Appwrite / Worker Architecture
 
-| 層 | 役割 |
+| Layer | Responsibility |
 |---|---|
-| Appwrite Sites | Web/PWA配信 |
-| Appwrite Auth / TablesDB | Googleログイン、ユーザー単位のQuest・キャラクター状態 |
-| Cloudflare Worker | REST、OAuth、MCP、Webhook、拡張機能境界 |
-| Cloudflare D1 | Agent Registry、MCP接続、プロフィール、連携メタデータ |
-| Cloudflare KV | OAuth state、短期状態、MCPクライアント |
+| Appwrite Sites | Web/PWA delivery |
+| Appwrite Auth / TablesDB | Google sign-in and per-user Quest and character state |
+| Cloudflare Worker | REST, OAuth, MCP, Webhooks, and extension boundary |
+| Cloudflare D1 | Agent Registry, MCP connections, profiles, and integration metadata |
+| Cloudflare KV | OAuth state, short-lived state, and MCP clients |
 
-トークン、APIキー、秘密情報はAppwriteの公開行やブラウザのLocal Storageに保存しません。Appwrite API KeyはWorker Secretだけに置きます。Agent RegistryにもモデルAPIキー、パスワード、実行URLは保存しません。
+Tokens, API keys, and secrets are never stored in public Appwrite rows or browser Local Storage. Appwrite API Keys live only in Worker Secrets. Agent Registry also never stores model API keys, passwords, or execution URLs.
 
 ## MCP
 
-安定接続先は次です。
+The stable connection endpoint is:
 
 ```text
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、プロフィール、パーティー、バトル、Toggl Focus契約を含む51 toolsを公開します。`/mcp-next`は新SDK向けの検証レーンで、ResourcesとWorkflow Promptsを追加します。既存クライアントの互換性のため、通常利用は `/mcp` を維持します。
+MCP `2.7.0` exposes 51 tools covering Quests, archiving, Quest Tree, Agent Handoff, Agent Registry, profiles, parties, battle, and the Toggl Focus contract. `/mcp-next` is a validation lane for the new SDK and adds Resources and Workflow Prompts. Keep using `/mcp` for normal use to preserve compatibility with existing clients.
 
-移行期間中は旧workers.devの`/mcp`も互換用に残しますが、新規登録と再接続には上記の`mcp.guilduo.com/mcp`を使います。
+During the migration, the old `workers.dev` `/mcp` remains available for compatibility, but new registrations and reconnections should use `mcp.guilduo.com/mcp` above.
 
-### 新しいMCP接続はOAuthで登録する
+### Register a new MCP connection with OAuth
 
-この手順は、ChatGPT、Codex、Claude、OpenClawなど、Remote HTTP MCPとOAuthに対応したクライアント向けです。初回接続では手順1〜6を順に実施してください。接続後の確認だけなら手順7から読めます。
+This procedure is for clients such as ChatGPT, Codex, Claude, and OpenClaw that support Remote HTTP MCP and OAuth. For a first connection, follow steps 1–6 in order. If you only need to verify an existing connection, start at step 7.
 
-1. 移行前のGuilduo／QuestForge接続がクライアントに残っている場合は、いったん切断または削除します。旧OAuth GrantとTokenは再利用できません。
-2. クライアントのMCPまたはConnector設定を開き、接続名を`Guilduo`、種類をRemote HTTP MCPとして登録します。
-3. URLには、安定版の`https://mcp.guilduo.com/mcp`を指定します。通常の接続テストでは`/mcp-next`を使いません。
-4. 認証方式を選べるクライアントでは`OAuth`を選びます。API Key、Bearer Token、Client Secretは入力しません。
-5. ブラウザに「Guilduoへ接続」が表示されたら、Web版Guilduoと同じAppwriteアカウントでログインし、要求された権限を確認して許可します。
-6. MCPクライアントへ戻り、接続済みまたは利用可能と表示されることを確認します。この時点ではOAuth接続だけが完了しており、Agentはまだ未リンクの場合があります。
-7. [Guilduo / Relay Forge](https://app.guilduo.com/)のConnectionsを開き、接続したClientを希望するAgentへリンクします。Agentがなければ、Partyの「Agentを登録」から先に作成します。
-8. MCPクライアントを再起動または再読込し、下記の接続テストを実行します。
+1. If a pre-migration Guilduo / QuestForge connection remains in the client, disconnect or remove it first. Old OAuth Grants and Tokens cannot be reused.
+2. Open the client's MCP or Connector settings and register a connection named `Guilduo` with type Remote HTTP MCP.
+3. Set the URL to the stable `https://mcp.guilduo.com/mcp`. Do not use `/mcp-next` for ordinary connection tests.
+4. When the client offers an authentication choice, select `OAuth`. Do not enter an API Key, Bearer Token, or Client Secret.
+5. When the browser shows “Connect to Guilduo,” sign in with the same Appwrite account used for the Web version of Guilduo, review the requested permissions, and approve them.
+6. Return to the MCP client and confirm that it reports the connection as connected or available. At this point OAuth is complete, but an Agent may not be linked yet.
+7. Open Connections in [Guilduo / Relay Forge](https://app.guilduo.com/) and link the connected Client to the desired Agent. If no Agent exists, create one first from Party > “Register Agent.”
+8. Restart or reload the MCP client and run the connection test below.
 
-設定ファイルでRemote MCPを追加するクライアントでは、次の例を使えます。
+For clients that add Remote MCP through a configuration file, use this example:
 
 ```json
 {
@@ -125,7 +127,7 @@ MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、�
 }
 ```
 
-OAuth metadataはMCPクライアントが自動検出します。手動確認が必要な場合だけ、次のURLを使います。
+MCP clients discover OAuth metadata automatically. Use the following URLs only when manual verification is necessary.
 
 ```text
 Authorization Server Metadata
@@ -135,18 +137,18 @@ Protected Resource Metadata
 https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 ```
 
-### 接続テストはAgent Contextまで確認する
+### Verify the Agent Context in the connection test
 
-クライアントから次の順に確認します。
+Check the following sequence from the client:
 
-1. MCPの初期化が成功する。
-2. `tools/list`で51 toolsを取得できる。
-3. `list_registered_agents`で自分のAgentだけが返る。
-4. `get_current_agent_context`を呼び出す。
+1. MCP initialization succeeds.
+2. `tools/list` returns 51 tools.
+3. `list_registered_agents` returns only your own Agent.
+4. Call `get_current_agent_context`.
 
-Agentリンク前の正常な応答は`linked: false`かつ`agent: null`です。Connectionsでリンクした後は`linked: true`になり、`agent`と`effectiveScopes`が返ります。ここまで確認できれば、OAuth認証、UID分離、Agentリンクが同じ接続で機能しています。
+Before an Agent is linked, the normal response is `linked: false` with `agent: null`. After linking in Connections, it becomes `linked: true` and returns `agent` and `effectiveScopes`. This confirms that OAuth authentication, UID separation, and Agent linking work through the same connection.
 
-テスト用の依頼例：
+Example test request:
 
 ```text
 Guilduo MCPのtools/listを確認し、get_current_agent_contextを実行してください。
@@ -154,31 +156,31 @@ Agentがリンク済みか、Agent ID、Role、effectiveScopesだけを報告し
 Token、Client ID、UIDは表示しないでください。
 ```
 
-### 401やAgent未リンクを切り分ける
+### Troubleshoot 401 errors and unlinked Agents
 
-| 状態 | 対応 |
+| State | Response |
 |---|---|
-| 接続直後から401になる | 古いOAuth情報が残っています。接続を削除し、同じ`/mcp` URLを新規登録して認可し直します。 |
-| OAuth画面から戻れない | Web版Guilduoと同じAppwriteアカウントでログインしているか確認します。Clientへ戻るcallbackを遮断する拡張機能も一時的に確認します。 |
-| `linked: false`になる | OAuthは成功しています。Relay ForgeのConnectionsでClientをAgentへリンクします。 |
-| `agents:read`の権限エラーになる | 接続を認可し直し、認可画面でAgent読み取り権限を確認します。Agent側ではOAuth権限を追加できません。 |
-| Agentをリンクしたのに反映されない | MCPクライアントを再読込し、`get_current_agent_context`を再実行します。 |
+| 401 immediately after connecting | Old OAuth information remains. Delete the connection, register the same `/mcp` URL again, and re-authorize it. |
+| Cannot return from the OAuth screen | Confirm that you are signed in with the same Appwrite account as the Web version of Guilduo. Also check extensions that may block the callback back to the client. |
+| `linked: false` | OAuth succeeded. Link the Client to an Agent in Relay Forge Connections. |
+| `agents:read` permission error | Re-authorize the connection and confirm Agent read permission on the consent screen. Agent-side settings cannot add OAuth permissions. |
+| Agent link does not appear | Reload the MCP client and run `get_current_agent_context` again. |
 
-接続設定やログへToken、API Key、完全なUIDを貼らないでください。OAuth認可後のTokenはMCPクライアントとCloudflare KVが管理します。
+Do not paste Tokens, API Keys, or complete UIDs into connection settings or logs. After OAuth authorization, Tokens are managed by the MCP client and Cloudflare KV.
 
-### AIクライアント
+### AI clients
 
-- ChatGPT / Codex：リモートMCP Appまたは開発者モードへ上記の本番`/mcp` URLを登録
-- Claude：Settings > ConnectorsからOAuth Remote MCPを追加
-- Gemini CLI：`gemini mcp add --transport http questforge https://mcp.guilduo.com/mcp`
-- GitHub Copilot CLI：`copilot mcp add --transport http questforge https://mcp.guilduo.com/mcp`
-- OpenClaw / Hermes：後続の接続レシピで同じRemote HTTP MCPを使用
+- ChatGPT / Codex: Register the production `/mcp` URL above in the Remote MCP App or developer mode.
+- Claude: Add OAuth Remote MCP from Settings > Connectors.
+- Gemini CLI: `gemini mcp add --transport http questforge https://mcp.guilduo.com/mcp`
+- GitHub Copilot CLI: `copilot mcp add --transport http questforge https://mcp.guilduo.com/mcp`
+- OpenClaw / Hermes: Use the same Remote HTTP MCP in the upcoming connection recipe.
 
-登録後はRelay Forgeの **Party** でAgentを作成・編集し、**Connections** で認可済みMCPクライアントをAgentへ紐付けます。AgentからMCPクライアントの権限は増やせません。
+After registration, create or edit Agents in **Party** in Relay Forge and link authorized MCP clients to an Agent in **Connections**. An Agent cannot increase an MCP client's permissions.
 
 ## CLI
 
-CLIはMCPとは役割を分けています。MCPはAIのツール発見・承認用、CLIは人間とCIのREST/JSON操作用です。
+The CLI has a separate role from MCP. MCP is for AI tool discovery and approval; the CLI is for REST/JSON operations by people and CI.
 
 ```bash
 npm run cli -- doctor --json
@@ -191,41 +193,41 @@ npm run cli -- handoff quest-id review_required --expected-state working --execu
 npm run cli -- mcp-config --json
 ```
 
-書き込みは `--execute` がない限りdry-runまたは実行計画だけを返します。認証は `QUESTFORGE_TOKEN` または `--token-stdin` を使用し、トークンをログへ出しません。本番の一般ユーザーは固定APIキーではなくOAuthを使います。
+Writes return only a dry-run or execution plan unless `--execute` is supplied. Authentication uses `QUESTFORGE_TOKEN` or `--token-stdin`, and tokens are never written to logs. General production users use OAuth rather than a fixed API key.
 
-## Skill / OpenAI Plugin・MCP App
+## Skill / OpenAI Plugin / MCP App
 
-- 正規Skill：[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
-- OpenAI Plugin準備パッケージ：[`plugins/questforge/`](plugins/questforge/)
-- MCP App登録用雛形：[`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
-- 提出チェックリスト：[`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)
+- Official Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- OpenAI Plugin preparation package: [`plugins/questforge/`](plugins/questforge/)
+- MCP App registration template: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
+- Submission checklist: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)
 
-Skillは、読み取り、dry-run、確認、実行、レビュー返却の順序をAIへ教えます。OpenAI公式レビューは自動完了しません。公開βで実アカウント受入とプライバシー・アカウント削除導線を確認した後、運用者がDashboardから申請します。
+The Skill teaches AI the sequence of read, dry-run, confirm, execute, and return a review. OpenAI official review is not completed automatically. After real-account acceptance, privacy, and account-deletion paths are verified in the public beta, an operator submits the application from the Dashboard.
 
-## 9言語
+## 9 Languages
 
-日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語に対応します。言語設定は端末単位で保存し、クラウド同期には含めません。日付・数値・比較順はIntl APIを使います。
+Guilduo supports Japanese, English, Spanish, Brazilian Portuguese, French, German, Korean, Simplified Chinese, and Russian. Language settings are stored per device and are not included in cloud sync. Dates, numbers, and sort order use the Intl API.
 
-## 外部サービスのロードマップ
+## External Services Roadmap
 
-現在は契約と安全な表示を先に実装し、Provider OAuthはEarly Accessとして保留しています。
+The current priority is to establish contracts and safe presentation; Provider OAuth remains on hold as Early Access.
 
-1. Google Calendar：読み取り専用予定枠
-2. Google Tasks：削除なし双方向同期
-3. Toggl Track：時間記録と見積・MP変換
-4. Notion：日次ログ出力
-5. Todoist、Discord / Slack：同期・通知
-6. OpenClaw、Hermes Agent：接続レシピとSkill再利用
+1. Google Calendar: read-only availability windows
+2. Google Tasks: bidirectional sync without deletion
+3. Toggl Track: time tracking, estimates, and MP conversion
+4. Notion: daily log export
+5. Todoist, Discord / Slack: sync and notifications
+6. OpenClaw, Hermes Agent: connection recipes and Skill reuse
 
-初回同期はプレビュー必須、外部削除はGuilduoから自動削除しません。Provider SecretはWorker Secretだけに置きます。
+Initial sync requires a preview, and Guilduo never automatically deletes external data. Provider Secrets live only in Worker Secrets.
 
-## パフォーマンスと計測
+## Performance and Telemetry
 
-Pixel 9相当を基準に、LCP 2.5秒以下、INP 200ms以下、CLS 0.1以下、初期圧縮JavaScript 250KB以下を目標にします。匿名計測は明示同意したユーザーだけが対象で、Quest本文、メモ、メール、UID、トークン、外部本文は送信しません。実装済みの許可イベントはWeb Vitals、JavaScriptエラー、同期結果、初回Quest完了、MCP接続、Agent割り当てで、計測を拒否・撤回した場合は送信しません。公開前に管理者が `TELEMETRY_ENDPOINT` とD1 migration 0006を設定します。
+Targets use a Pixel 9-class device: LCP at or below 2.5 seconds, INP at or below 200 ms, CLS at or below 0.1, and initial compressed JavaScript at or below 250 KB. Anonymous telemetry applies only to users who explicitly consent; Quest content, notes, email, UID, tokens, and external content are not sent. Permitted implemented events are Web Vitals, JavaScript errors, sync results, first Quest completion, MCP connection, and Agent assignment. Nothing is sent after telemetry is declined or withdrawn. Before public release, an administrator must configure `TELEMETRY_ENDPOINT` and D1 migration 0006.
 
-## ローカル開発
+## Local Development
 
-要件はNode.js 22+とWranglerです。Appwriteのリソース管理にはAppwrite ConsoleまたはMCPを使います。
+Requirements are Node.js 22+ and Wrangler. Manage Appwrite resources through the Appwrite Console or MCP.
 
 ```bash
 npm install
@@ -235,7 +237,7 @@ cp wrangler.example.jsonc wrangler.jsonc
 npm run dev
 ```
 
-PowerShellでは `Copy-Item` を使ってください。主要コマンドは次です。
+Use `Copy-Item` in PowerShell. The main commands are:
 
 ```bash
 npm run check
@@ -246,21 +248,21 @@ npm run api:generate
 npm run worker:dev
 ```
 
-TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自動生成します。`npm run typecheck`は型生成、生成結果の整合性確認、明示的な`any`と`@ts-nocheck`の検査、ブラウザ・Worker・Node・バトル原型のstrict型チェックをまとめて実行します。Viteの変換と型チェックは分離し、API/MCPの契約は別テストで維持します。
+During TypeScript development, the Worker runtime types are generated from the Wrangler configuration. `npm run typecheck` combines type generation, generated-output consistency checks, explicit `any` and `@ts-nocheck` checks, and strict type checks for the browser, Worker, Node, and battle prototype. Vite transformation and type checking are separate, while API/MCP contracts are maintained by dedicated tests.
 
-公開デプロイは `v*` タグ専用GitHub Actionsです。D1 migration、Worker deploy、health確認の順にゲートし、Appwrite Sitesの公開先をスモークテストします。Firebaseからの移行は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)の検証と切替手順に従います。
+Public deployment is reserved for `v*` tag GitHub Actions. The pipeline gates D1 migration, Worker deployment, and health checks in that order, then smoke-tests the Appwrite Sites publication. Follow [`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md) for Firebase migration validation and cutover.
 
-## ドキュメント
+## Documentation
 
-- [視覚設計正本](DESIGN.md)
-- [技術仕様正本](PROJECT_SPEC.md)
+- [Visual design source of truth](DESIGN.md)
+- [Technical specification](PROJECT_SPEC.md)
 - [Design tokens](design/TOKENS.json)
 - [Component specification](design/COMPONENTS.md)
 - [Screen blueprints](design/SCREENS.md)
 - [Asset manifest](design/ASSET_MANIFEST.md)
 - [Golden references](design/reference/README.md)
-- [公開βロードマップ](ROADMAP.md)
-- [公開URLガイド](docs/public-urls.md)
+- [Public beta roadmap](ROADMAP.md)
+- [Public URL guide](docs/public-urls.md)
 - [API / MCP / OAuth setup](API_MCP_SETUP.md)
 - [Tagged release setup](RELEASE_SETUP.md)
 - [Guilduo E2 brand rollout](docs/brand-rollout.md)
@@ -271,6 +273,6 @@ TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自�
 - [Assets](ASSETS.md)
 - [License](LICENSE)
 
-## ライセンス
+## License
 
-GuilduoはGNU AGPL-3.0-onlyです。ネットワーク越しに改変版を提供する場合は、同ライセンスのソース提供条件に従ってください。
+Guilduo is licensed under GNU AGPL-3.0-only. If you provide a modified version over a network, follow the source-availability requirements of that license.

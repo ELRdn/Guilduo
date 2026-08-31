@@ -60,7 +60,7 @@ test("public beta keeps external provider OAuth in preparation while Appwrite an
   assert.match(labHtml, /公開βでは外部サービスのOAuth接続を準備中/);
   assert.match(app, /const externalOAuthEnabled/);
   assert.match(app, /integration\.status\.public_beta/);
-  assert.match(readme, /Early Access \/ OAuth準備中/);
+  assert.match(readme, /Early Access \/ OAuth preparation/);
 });
 
 test("CLI, Skill bundle, and MCP App handoff package are present without credentials", () => {

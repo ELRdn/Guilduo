@@ -24,8 +24,8 @@ test("public URL guide defines the five stable service entry points", () => {
 
 test("README puts new users on the official Relay Forge URL", () => {
   const readme = read("README.md");
-  const start = readme.indexOf("### 新規ユーザーはここから");
-  const end = readme.indexOf("### 公開URLの役割", start);
+  const start = readme.indexOf("### New users start here");
+  const end = readme.indexOf("### What each public URL is for", start);
   assert.ok(start >= 0);
   assert.ok(end > start);
   const newcomerSection = readme.slice(start, end);
