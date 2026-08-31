@@ -47,7 +47,7 @@ Guilduo est un projet indépendant, sans affiliation, approbation ni lien de rem
 | Connexion Google Appwrite et stockage invité sur l'appareil | Disponible (authentification configurée) |
 | CRUD des Quests, archivage, Quest Tree et combat MP | Disponible |
 | Agent Registry, liaison des clients MCP et Handoff | Disponible |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | Bêta publique de la Web App officielle (Desktop / Mobile). `/next/relay-forge/` est un chemin interne de déploiement et de compatibilité |
 | 9 langues | Disponibles dans l'UI principale ; l'UI bêta couvre la navigation principale |
 | Google Calendar, Google Tasks, Notion et Toggl | **Early Access / préparation OAuth** |
@@ -96,7 +96,7 @@ L'endpoint de connexion stable est :
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` expose 51 tools couvrant les Quests, l'archivage, Quest Tree, Agent Handoff, Agent Registry, les profils, les parties, le combat et le contrat Toggl Focus. `/mcp-next` est une voie de validation pour le nouveau SDK et ajoute Resources et Workflow Prompts. Utilisez `/mcp` pour l'usage normal afin de préserver la compatibilité avec les clients existants.
+MCP `2.7.0` expose 54 tools couvrant les Quests, l'archivage, Quest Tree, Agent Handoff, Agent Registry, les profils, les parties, le combat et le contrat Toggl Focus. `/mcp-next` est une voie de validation pour le nouveau SDK et ajoute Resources et Workflow Prompts. Utilisez `/mcp` pour l'usage normal afin de préserver la compatibilité avec les clients existants.
 
 Pendant la migration, l'ancien `/mcp` de `workers.dev` reste disponible pour la compatibilité, mais les nouvelles inscriptions et reconnexions doivent utiliser `mcp.guilduo.com/mcp` ci-dessus.
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 Vérifiez la séquence suivante depuis le client :
 
 1. L'initialisation MCP réussit.
-2. `tools/list` renvoie 51 tools.
+2. `tools/list` renvoie 54 tools.
 3. `list_registered_agents` renvoie uniquement votre propre Agent.
 4. Appelez `get_current_agent_context`.
 

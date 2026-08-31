@@ -47,7 +47,7 @@ Guilduo is an independent project and is not affiliated with, endorsed by, or an
 | Appwrite Google sign-in and device guest storage | Available (authentication configured) |
 | Quest CRUD, archiving, Quest Tree, and MP battle | Available |
 | Agent Registry, MCP client linking, and Handoff | Available |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | Public beta of the official Web App (Desktop / Mobile). Internal `/next/relay-forge/` is a deployment and compatibility path |
 | 9 languages | Available in the root UI; the beta UI covers the primary navigation |
 | Google Calendar, Google Tasks, Notion, and Toggl | **Early Access / OAuth preparation** |
@@ -96,7 +96,7 @@ The stable connection endpoint is:
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` exposes 51 tools covering Quests, archiving, Quest Tree, Agent Handoff, Agent Registry, profiles, parties, battle, and the Toggl Focus contract. `/mcp-next` is a validation lane for the new SDK and adds Resources and Workflow Prompts. Keep using `/mcp` for normal use to preserve compatibility with existing clients.
+MCP `2.7.0` exposes 54 tools covering Quests, archiving, Quest Tree, Agent Handoff, Agent Registry, profiles, parties, battle, and the Toggl Focus contract. `/mcp-next` is a validation lane for the new SDK and adds Resources and Workflow Prompts. Keep using `/mcp` for normal use to preserve compatibility with existing clients.
 
 During the migration, the old `workers.dev` `/mcp` remains available for compatibility, but new registrations and reconnections should use `mcp.guilduo.com/mcp` above.
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 Check the following sequence from the client:
 
 1. MCP initialization succeeds.
-2. `tools/list` returns 51 tools.
+2. `tools/list` returns 54 tools.
 3. `list_registered_agents` returns only your own Agent.
 4. Call `get_current_agent_context`.
 

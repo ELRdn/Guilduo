@@ -1974,7 +1974,7 @@
         }
       },
       "delete": {
-        "summary": "Revoke and unlink an OAuth MCP client",
+        "summary": "Unlink an OAuth MCP client from an Agent without revoking its OAuth grant",
         "parameters": [
           {
             "name": "agentId",
@@ -1995,7 +1995,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Revoked connection",
+            "description": "Unlinked connection",
             "content": {
               "application/json": {
                 "schema": {
@@ -2285,7 +2285,8 @@
               "parties:write": "Create, invite, join, leave, and manage a party",
               "battle:read": "Read command battle state",
               "battle:write": "Preview and execute command battle turns",
-              "agents:read": "Read registered Agent profiles and the current Agent context"
+              "agents:read": "Read registered Agent profiles and the current Agent context",
+              "agents:write": "Link and unlink the current OAuth MCP connection to a registered Agent"
             }
           }
         }

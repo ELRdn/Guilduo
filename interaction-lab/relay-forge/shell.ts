@@ -106,7 +106,7 @@ import {
   FixtureConnectionsPort,
   REQUIRED_SCOPES,
 } from "./screens/connections-port.ts";
-import { normalizeAgentRecord, normalizeProfileRecord, type RelayForgeRuntime } from "./production.ts";
+import { normalizeAgentConnections, normalizeAgentRecord, normalizeProfileRecord, type RelayForgeRuntime } from "./production.ts";
 import { initialsFor, normalizeCommandModel, type ProfileRecord, resolveActors } from "./adapter.ts";
 import { questActionState, type QuestActionId } from "./quest-actions.ts";
 import {
@@ -120,6 +120,14 @@ import {
   type SettingsSection,
   type SettingsState,
 } from "./screens/settings.ts";
+import {
+  FIXTURE_MCP_TOOLS,
+  initialSkillsState,
+  normalizeSkillsModel,
+  renderSkillsDesktop,
+  renderSkillsMobile,
+  type SkillsState,
+} from "./screens/skills.ts";
 import { AvatarImageError, resizeAvatarImage } from "./primitives/image-resize.ts";
 import { gatewayDefaultUrl } from "../repository.ts";
 import { effectiveTheme, nextQuickToggleTheme, parseThemePreference, THEME_KEY, type ThemePreference } from "./theme.ts";
@@ -127,7 +135,7 @@ import { effectiveTheme, nextQuickToggleTheme, parseThemePreference, THEME_KEY, 
 /**
  * Section 5.1 primary domains of NEWDESIGN.md.
  *
- * Command remains the visual reference; the other five are separate screens
+ * Command remains the visual reference; the other destinations are separate screens
  * that share the shell, the tokens, the identity map and the state vocabulary,
  * and nothing else. Each owns its own composition and scroll ownership.
  */
@@ -138,12 +146,13 @@ const DOMAINS = [
   { id: "party", label: "Party", mnemonic: "P", migrated: true, primaryOnMobile: true },
   { id: "battle", label: "Battle", mnemonic: "B", migrated: true, primaryOnMobile: false },
   { id: "connections", label: "Connections", mnemonic: "X", migrated: true, primaryOnMobile: false },
+  { id: "skills", label: "Skills", mnemonic: "S", migrated: true, primaryOnMobile: false },
 ] as const;
 
 /**
  * At 390px the bar carries four primary destinations plus `More`, so every
  * label stays legible rather than being truncated to fit six (brief 1.1).
- * Battle and Connections move under `More`.
+ * Battle, Connections and Skills move under `More`.
  */
 const MOBILE_OVERFLOW = DOMAINS.filter((domain) => !domain.primaryOnMobile);
 
@@ -188,7 +197,7 @@ interface ShellState {
   lensTrigger: HTMLElement | null;
   /**
    * Per-screen view state. Selection is NOT in here: `selectedQuestId` above
-   * stays the single source of truth across all six destinations, so a Quest
+   * stays the single source of truth across all seven destinations, so a Quest
    * chosen in Quests is the Quest Command opens (section 10, extended).
    */
   screens: {
@@ -197,6 +206,7 @@ interface ShellState {
     party: PartyState;
     battle: BattleScreenState;
     connections: ConnectionsState;
+    skills: SkillsState;
     settings: SettingsState;
   };
   /** The forced fixture state, shared by every screen for the capture set. */
@@ -229,6 +239,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   /** Mutable so a saved Account avatar is reflected everywhere the profile is read. */
   let sharedProfile: ProfileRecord | null = runtime?.profile ?? null;
   let profileLoadError = runtime?.profileLoadError ?? null;
+  let sharedAgentConnections = [...(runtime?.agentConnections ?? [])];
+  let agentConnectionsLoadError = runtime?.agentConnectionsLoadError ?? null;
+  let agentConnectionsLoading = false;
+  let sharedMcpTools = [...(runtime?.mcpTools ?? [])];
+  let mcpToolsLoadError = runtime?.mcpToolsLoadError ?? null;
+  let mcpToolsLoading = false;
 
   /*
    * Agent avatar images. The server never hands out a usable URL — every
@@ -393,6 +409,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       party: initialPartyState(),
       battle: initialBattleState(),
       connections: initialConnectionsState(),
+      skills: initialSkillsState(),
       settings: initialSettingsState(),
     },
     variant: readVariant(),
@@ -1835,6 +1852,124 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     render();
   }
 
+  function toolsFromResponse(value: unknown): unknown[] {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return [];
+    const tools = (value as { tools?: unknown }).tools;
+    return Array.isArray(tools) ? tools : [];
+  }
+
+  async function retryMcpTools(): Promise<void> {
+    if (runtime === null || mcpToolsLoading) return;
+    mcpToolsLoading = true;
+    mcpToolsLoadError = null;
+    render();
+    try {
+      const response = await runLifecycleStep(lifecycle, () => runtime!.mcpToolsPort.listMcpTools());
+      if (response.status === "disposed") return;
+      sharedMcpTools = toolsFromResponse(response.value);
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      mcpToolsLoadError = profileErrorMessage(error, "MCP Tool一覧を取得できませんでした。再試行してください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      mcpToolsLoading = false;
+      render();
+    }
+  }
+
+  async function refreshAgentConnections(): Promise<void> {
+    if (runtime === null) return;
+    const response = await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.listAgentConnections());
+    if (response.status === "disposed") return;
+    sharedAgentConnections = normalizeAgentConnections(response.value);
+    agentConnectionsLoadError = null;
+  }
+
+  async function retryAgentConnections(): Promise<void> {
+    if (runtime === null || agentConnectionsLoading) return;
+    agentConnectionsLoading = true;
+    agentConnectionsLoadError = null;
+    render();
+    try {
+      await refreshAgentConnections();
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      agentConnectionsLoadError = profileErrorMessage(error, "MCP接続の一覧を取得できませんでした。再試行してください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      agentConnectionsLoading = false;
+      render();
+    }
+  }
+
+  function openAgentPicker(clientId: string): void {
+    const row = sharedAgentConnections.find((connection) => connection.clientId === clientId);
+    state.screens.settings.connectionDrafts[clientId] = row?.linkedAgentId ?? "";
+    state.screens.settings.connectionMessage = "";
+    state.screens.settings.connectionTone = null;
+    render();
+  }
+
+  function cancelAgentPicker(clientId: string): void {
+    delete state.screens.settings.connectionDrafts[clientId];
+    render();
+  }
+
+  function selectConnectionAgent(clientId: string, agentId: string): void {
+    state.screens.settings.connectionDrafts[clientId] = agentId;
+    render();
+  }
+
+  async function linkAgent(clientId: string, agentId: string): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null || agentId === "" || settings.connectionBusyId !== null) return;
+    settings.connectionBusyId = clientId;
+    settings.connectionMessage = "";
+    settings.connectionTone = null;
+    render();
+    try {
+      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.linkAgentConnection(agentId, clientId));
+      await refreshAgentConnections();
+      delete settings.connectionDrafts[clientId];
+      settings.connectionTone = "success";
+      settings.connectionMessage = "Linked Agentを更新しました。";
+      announce("Linked Agentを更新しました。");
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.connectionTone = "error";
+      settings.connectionMessage = profileErrorMessage(error, "Linked Agentを更新できませんでした。再試行してください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.connectionBusyId = null;
+      render();
+    }
+  }
+
+  async function unlinkAgent(clientId: string, agentId: string): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null || agentId === "" || settings.connectionBusyId !== null) return;
+    settings.connectionBusyId = clientId;
+    settings.connectionMessage = "";
+    settings.connectionTone = null;
+    render();
+    try {
+      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.unlinkAgentConnection(agentId, clientId));
+      await refreshAgentConnections();
+      delete settings.connectionDrafts[clientId];
+      settings.connectionTone = "success";
+      settings.connectionMessage = "Agentのリンクを解除しました。MCP接続は維持されています。";
+      announce("Agentのリンクを解除しました。");
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.connectionTone = "error";
+      settings.connectionMessage = profileErrorMessage(error, "Agentのリンクを解除できませんでした。再試行してください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.connectionBusyId = null;
+      render();
+    }
+  }
+
   /* ---------------------------------------------------------------- *
    * Region renderers
    * ---------------------------------------------------------------- */
@@ -2360,7 +2495,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   /**
    * The one context every screen receives. Screens cannot touch shell state
    * directly; they ask through these callbacks, which is what keeps a single
-   * selection and a single identity map across six destinations.
+   * selection and a single identity map across every destination.
    */
   function screenContext(): ScreenContext {
     return {
@@ -2512,6 +2647,47 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         ? renderConnectionsMobile(model, state.screens.connections, context, connectionsPort)
         : renderConnectionsDesktop(model, state.screens.connections, context, connectionsPort);
     }
+    if (state.domain === "skills") {
+      const mcpUrl = deriveMcpUrl(runtime?.gatewayUrl ?? gatewayDefaultUrl());
+      const authorizedConnections = sharedAgentConnections.filter((connection) => connection.authorized).length;
+      const fixtureTools = state.variant === "empty" || state.variant === "loading"
+        ? []
+        : FIXTURE_MCP_TOOLS;
+      const model = normalizeSkillsModel({
+        tools: production ? sharedMcpTools : fixtureTools,
+        sourceLabel: "Guilduo MCP",
+        sourceUrl: mcpUrl,
+        connectionLabel: production
+          ? authorizedConnections === 0 ? "No external OAuth client connected" : `${authorizedConnections} authorized OAuth connection${authorizedConnections === 1 ? "" : "s"}`
+          : "Preview catalog",
+        query: state.screens.skills.query,
+        loading: production ? mcpToolsLoading : state.variant === "loading",
+        connected: production ? mcpUrl !== "" : state.variant !== "permission",
+        error: production ? mcpToolsLoadError : state.variant === "error" ? "fixture_error" : null,
+      });
+      const callbacks = {
+        onSearch: (query: string) => {
+          state.screens.skills.query = query;
+          render();
+          window.requestAnimationFrame(() => {
+            const input = screenHost.querySelector<HTMLInputElement>(".rf-skills-search-input");
+            if (input !== null) {
+              input.focus();
+              const position = Math.min(query.length, input.value.length);
+              input.setSelectionRange(position, position);
+            }
+          });
+        },
+        onToggleGroup: (groupId: string) => {
+          state.screens.skills.expandedGroups[groupId] = state.screens.skills.expandedGroups[groupId] !== true;
+          render();
+        },
+        onRetry: () => { void retryMcpTools(); },
+      };
+      return isMobile()
+        ? renderSkillsMobile(model, state.screens.skills, context, callbacks)
+        : renderSkillsDesktop(model, state.screens.skills, context, callbacks);
+    }
     if (state.domain === "settings") {
       const model = normalizeSettingsModel({
         isDemo: runtime === null,
@@ -2528,6 +2704,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           role: agent.role || "assistant",
           status: agent.status ?? "active",
         })),
+        mcpConnections: sharedAgentConnections,
+        mcpConnectionLoadError: agentConnectionsLoadError,
       });
       const callbacks = {
         onThemeSelect: selectTheme,
@@ -2537,6 +2715,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onSaveProfile: () => { void saveProfile(); },
         onRetryProfile: () => { void retryProfile(); },
         onCopyMcpUrl: () => { void copyMcpUrl(model.mcpUrl); },
+        onRetryMcpConnections: () => { void retryAgentConnections(); },
+        onOpenAgentPicker: openAgentPicker,
+        onCancelAgentPicker: cancelAgentPicker,
+        onSelectConnectionAgent: selectConnectionAgent,
+        onLinkAgent: (clientId: string, agentId: string) => { void linkAgent(clientId, agentId); },
+        onUnlinkAgent: (clientId: string, agentId: string) => { void unlinkAgent(clientId, agentId); },
         canManageAgents: runtime !== null,
         onCreateAgent: openCreateAgent,
         onEditAgent: openEditAgent,
@@ -2646,7 +2830,7 @@ function domainLabel(id: NavId): string {
 
 /**
  * `?state=` already selects a Command state; the same parameter selects the
- * screen fixture state so one capture run can drive all six destinations.
+ * screen fixture state so one capture run can drive every destination.
  * It only ever restricts what the UI will do — it never fabricates a success.
  */
 function readVariant(): ScreenVariant {

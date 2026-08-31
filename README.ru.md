@@ -47,7 +47,7 @@ Guilduo — независимый проект, не связанный с Habi
 | Вход через Google в Appwrite и гостевое хранение на устройстве | Доступно (аутентификация настроена) |
 | CRUD для Quest, архивирование, Quest Tree и MP-битвы | Доступно |
 | Agent Registry, привязка MCP-клиентов и Handoff | Доступно |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | Публичная beta официального Web App (Desktop / Mobile). Внутренний `/next/relay-forge/` — путь deployment и совместимости |
 | 9 языков | Доступны в корневом UI; beta-UI поддерживает основную навигацию |
 | Google Calendar, Google Tasks, Notion и Toggl | **Early Access / подготовка OAuth** |
@@ -96,7 +96,7 @@ Tokens, API keys и secrets никогда не сохраняются в пуб
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` предоставляет 51 tool для Quests, архивирования, Quest Tree, Agent Handoff, Agent Registry, профилей, party, битв и контракта Toggl Focus. `/mcp-next` — lane проверки нового SDK, добавляющий Resources и Workflow Prompts. Для обычного использования продолжайте применять `/mcp`, чтобы сохранить совместимость с существующими клиентами.
+MCP `2.7.0` предоставляет 54 tool для Quests, архивирования, Quest Tree, Agent Handoff, Agent Registry, профилей, party, битв и контракта Toggl Focus. `/mcp-next` — lane проверки нового SDK, добавляющий Resources и Workflow Prompts. Для обычного использования продолжайте применять `/mcp`, чтобы сохранить совместимость с существующими клиентами.
 
 Во время миграции старый `/mcp` на `workers.dev` остаётся для совместимости, но новые регистрации и переподключения должны использовать `mcp.guilduo.com/mcp` выше.
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 Проверьте в клиенте следующую последовательность:
 
 1. Инициализация MCP завершается успешно.
-2. `tools/list` возвращает 51 tool.
+2. `tools/list` возвращает 54 tool.
 3. `list_registered_agents` возвращает только вашего Agent.
 4. Вызовите `get_current_agent_context`.
 

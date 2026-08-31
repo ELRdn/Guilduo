@@ -19,6 +19,7 @@ import "./screens/party.css";
 import "./screens/battle.css";
 import "./screens/connections.css";
 import "./screens/settings.css";
+import "./screens/skills.css";
 import { requireElement } from "./primitives/dom.ts";
 import { mountRelayForge } from "./shell.ts";
 import { dismissOAuthFailure, observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";

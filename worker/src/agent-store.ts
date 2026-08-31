@@ -63,6 +63,7 @@ const ALLOWED_AGENT_SCOPES = new Set([
   "battle:read", "battle:write", "agents:read",
   "profiles:write", "webhooks:manage", "plugins:manage",
 ]);
+const ALLOWED_CONNECTION_SCOPES = new Set([...ALLOWED_AGENT_SCOPES, "agents:write"]);
 const SECRET_KEY_PATTERN = /(token|secret|password|passwd|apikey|webhook|endpoint|credential)/i;
 
 const CREATE_AGENT_KEYS = [
@@ -147,14 +148,14 @@ function parseScopes(value: unknown, fallback: readonly string[] = []): string[]
   }
 }
 
-function validateScopes(value: unknown, fallback: readonly string[] = []): string[] {
+function validateScopes(value: unknown, fallback: readonly string[] = [], allowed = ALLOWED_AGENT_SCOPES): string[] {
   if (value === undefined) return [...fallback];
   if (!Array.isArray(value)) throw agentError(400, "scopes_invalid", "Scopes must be an array of strings.");
   if (value.length > 100) throw agentError(400, "scopes_too_many", "Scopes must contain at most 100 entries.");
   const result: string[] = [];
   for (const item of value) {
     const scope = cleanString(item, 80, "scope", { required: true });
-    if (!ALLOWED_AGENT_SCOPES.has(scope)) throw agentError(400, "scope_invalid", `Unsupported agent scope: ${scope}`);
+    if (!allowed.has(scope)) throw agentError(400, "scope_invalid", `Unsupported agent scope: ${scope}`);
     if (!result.includes(scope)) result.push(scope);
   }
   return result;
@@ -523,6 +524,35 @@ export async function listAgentConnections(env: WorkerEnv, uid: string, agentId:
   return rows.map(normalizeConnection).filter((connection): connection is AgentConnectionRecord => Boolean(connection));
 }
 
+/**
+ * Reads one relation without treating a revoked relation as absent.  The
+ * distinction is useful to the connection-management UI and to MCP's
+ * idempotent link/unlink tools: a revoked relation can be safely reactivated
+ * without creating a second row.
+ */
+export async function getAgentConnection(env: WorkerEnv, uid: string, clientId: string): Promise<AgentConnectionRecord | null> {
+  const connection = normalizeConnection(await getConnectionRow(env, uid, clientId));
+  return connection && connection.uid === uid ? connection : null;
+}
+
+/**
+ * Lists every relation for an owner, including revoked or legacy rows whose
+ * Agent is no longer active.  The foreign key and soft-archive policy keep
+ * new data consistent, while this all-owner view lets the UI report legacy
+ * dangling references instead of silently losing connection history.
+ */
+export async function listAllAgentConnections(env: WorkerEnv, uid: string): Promise<AgentConnectionRecord[]> {
+  let rows: unknown[];
+  if (env.QUESTFORGE_DB) {
+    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? ORDER BY first_connected_at DESC").bind(uid).all<JsonRecord>()).results || [];
+  } else {
+    rows = [...memory(env).connections.values()]
+      .filter((connection) => connection.uid === uid)
+      .sort((a, b) => b.firstConnectedAt.localeCompare(a.firstConnectedAt));
+  }
+  return rows.map(normalizeConnection).filter((connection): connection is AgentConnectionRecord => Boolean(connection));
+}
+
 export async function linkAgentConnection(env: WorkerEnv, uid: string, agentId: string, input: AgentInput = {}): Promise<AgentConnectionRecord | null> {
   assertSafeKeys(input, LINK_CONNECTION_KEYS, "agent connection");
   const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
@@ -530,7 +560,7 @@ export async function linkAgentConnection(env: WorkerEnv, uid: string, agentId: 
   if (agent.status === "archived") throw agentError(409, "agent_archived", "Archived agents cannot be linked to clients.");
   const clientId = cleanString(input.clientId, 200, "client_id", { required: true });
   const clientName = cleanString(input.clientName, 80, "client_name", { required: true });
-  const scopes = validateScopes(input.scopes);
+  const scopes = validateScopes(input.scopes, [], ALLOWED_CONNECTION_SCOPES);
   const firstConnectedAt = String(input.firstConnectedAt || nowIso(env));
   const lastUsedAt = String(input.lastUsedAt || "");
 
@@ -572,6 +602,71 @@ export async function linkAgentConnection(env: WorkerEnv, uid: string, agentId: 
       revokedAt: null,
       createdAt,
       updatedAt: createdAt,
+    });
+  }
+  return normalizeConnection(row);
+}
+
+/**
+ * Explicitly selects the Agent for an already-authorized OAuth client.  This
+ * is intentionally separate from `linkAgentConnection`: existing callers
+ * relied on that function rejecting a client that is already linked to a
+ * different Agent, while the new UI/MCP action is the deliberate relink path.
+ * A revoked relation is reactivated in place so the one-row-per-user/client
+ * invariant and the original connection timestamps are preserved.
+ */
+export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId: string, input: AgentInput = {}): Promise<AgentConnectionRecord | null> {
+  assertSafeKeys(input, LINK_CONNECTION_KEYS, "agent connection");
+  const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
+  if (!agent) throw agentError(404, "agent_not_found", "Agent was not found.");
+  if (agent.status === "archived") throw agentError(409, "agent_archived", "Archived agents cannot be linked to clients.");
+  if (agent.status !== "active") throw agentError(409, "agent_inactive", "Only an active Agent can be linked to a client.");
+
+  const clientId = cleanString(input.clientId, 200, "client_id", { required: true });
+  const clientName = cleanString(input.clientName, 80, "client_name", { required: true });
+  const scopes = validateScopes(input.scopes, [], ALLOWED_CONNECTION_SCOPES);
+  const existing = normalizeConnection(await getConnectionRow(env, uid, clientId));
+  const updatedAt = nowIso(env);
+  const firstConnectedAt = existing?.firstConnectedAt || String(input.firstConnectedAt || updatedAt);
+  const lastUsedAt = String(input.lastUsedAt || existing?.lastUsedAt || "");
+  const createdAt = existing?.createdAt || updatedAt;
+  const row = {
+    client_id: clientId,
+    uid,
+    agent_id: agentId,
+    client_name: clientName,
+    scopes: JSON.stringify(scopes),
+    first_connected_at: firstConnectedAt,
+    last_used_at: lastUsedAt,
+    revoked_at: null,
+    created_at: createdAt,
+    updated_at: updatedAt,
+  };
+
+  if (env.QUESTFORGE_DB) {
+    if (existing) {
+      await env.QUESTFORGE_DB.prepare(`UPDATE agent_registry_connections
+        SET agent_id = ?, client_name = ?, scopes = ?, first_connected_at = ?, last_used_at = ?, revoked_at = NULL, updated_at = ?
+        WHERE uid = ? AND client_id = ?`)
+        .bind(agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, updatedAt, uid, clientId).run();
+    } else {
+      await env.QUESTFORGE_DB.prepare(`INSERT INTO agent_registry_connections
+        (client_id, uid, agent_id, client_name, scopes, first_connected_at, last_used_at, revoked_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(clientId, uid, agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, null, createdAt, updatedAt).run();
+    }
+  } else {
+    memory(env).connections.set(`${uid}:${clientId}`, {
+      clientId,
+      uid,
+      agentId,
+      clientName,
+      scopes,
+      firstConnectedAt,
+      lastUsedAt,
+      revokedAt: null,
+      createdAt,
+      updatedAt,
     });
   }
   return normalizeConnection(row);

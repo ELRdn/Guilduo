@@ -150,7 +150,7 @@ test("generated contracts expose Agent Registry, social, Quest Tree, battle, and
   const mcp = JSON.parse(fs.readFileSync(path.join(root, "api/mcp-tools.json"), "utf8")) as { version: string; tools: ContractTool[] };
   assert.equal(openapi.info.version, "2.7.0");
   assert.equal(mcp.version, "2.7.0");
-  assert.equal(mcp.tools.length, 51);
+  assert.equal(mcp.tools.length, 54);
   for (const pathName of ["/v1/agents", "/v1/agents/{agentId}", "/v1/agent-connections", "/v1/agents/{agentId}/connections/{clientId}", "/v1/profile", "/v1/friends", "/v1/party", "/v1/battle/session", "/v1/battle/commands", "/v1/quests/tree", "/v1/quests/batch-score", "/v1/agent-handoffs", "/v1/quests/{questId}/handoff", "/v1/quests/{questId}/toggl-focus-task", "/v1/integrations/toggl-focus/connect", "/v1/integrations/toggl-focus/disconnect", "/v1/integrations/toggl-focus/tracking", "/v1/integrations/toggl-focus/time-entries", "/v1/integrations/toggl-focus/attributions"]) assert.ok(openapi.paths[pathName], pathName);
   assert.ok(openapi.components.schemas.Assignee);
   assert.ok(mcp.tools.some((tool) => tool.name === "battle_command"));

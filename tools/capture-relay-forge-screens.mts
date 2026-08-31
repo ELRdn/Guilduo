@@ -1,6 +1,6 @@
 /**
- * Captures the Relay Forge destination screens: Quests, Network, Party, Battle
- * and Connections, Desktop and Mobile, across the section 6 state matrix.
+ * Captures the Relay Forge destination screens: Quests, Network, Party, Battle,
+ * Connections and Skills, Desktop and Mobile, across the section 6 state matrix.
  *
  * Command is captured by `capture-relay-forge-golden.mts` and is deliberately
  * not re-captured here; this script does however assert that every destination
@@ -36,7 +36,7 @@ const chromePath = process.env.QF_CHROME_PATH
     : "/usr/bin/google-chrome");
 
 type Mode = "dark" | "light";
-type Domain = "quests" | "network" | "party" | "battle" | "connections";
+type Domain = "quests" | "network" | "party" | "battle" | "connections" | "skills";
 
 const NAV_INDEX: Readonly<Record<Domain, number>> = {
   quests: 1,
@@ -44,10 +44,11 @@ const NAV_INDEX: Readonly<Record<Domain, number>> = {
   party: 3,
   battle: 4,
   connections: 5,
+  skills: 6,
 };
 
 /** Destinations that sit behind `More` on the mobile bottom navigation. */
-const MOBILE_OVERFLOW: readonly Domain[] = ["battle", "connections"];
+const MOBILE_OVERFLOW: readonly Domain[] = ["battle", "connections", "skills"];
 
 /** Anchor selector proving the destination actually rendered. */
 const READY: Readonly<Record<Domain, string>> = {
@@ -56,6 +57,7 @@ const READY: Readonly<Record<Domain, string>> = {
   party: ".rf-screen--party",
   battle: ".rf-screen--battle",
   connections: ".rf-screen--connections",
+  skills: ".rf-skills-screen",
 };
 
 interface Frame {
@@ -222,7 +224,7 @@ const INTERACTIONS: readonly Frame[] = [
   },
 ];
 
-const DOMAINS: readonly Domain[] = ["quests", "network", "party", "battle", "connections"];
+const DOMAINS: readonly Domain[] = ["quests", "network", "party", "battle", "connections", "skills"];
 
 const FRAMES: readonly Frame[] = [
   ...DOMAINS.flatMap((domain) => baseFrames(domain)),
@@ -248,7 +250,10 @@ const SMALL_TEXT = `(function () {
     "rf-c-detail-label", "rf-c-scope-label", "rf-n-outline-title", "rf-n-rail-label",
     "rf-b-sources-label", "rf-unavailable-tag", "rf-mark", "rf-nav-item",
     "rf-col-label", "rf-inline-label",
-    "rf-avatar-fallback", "rf-identity-initials", "rf-revision-label"
+    "rf-avatar-fallback", "rf-identity-initials", "rf-revision-label",
+    "rf-n-map-control", "rf-skills-eyebrow", "rf-skills-source-url",
+    "rf-skills-connection-value", "rf-skills-count", "rf-skills-tool-name",
+    "rf-skills-search-count"
   ];
   var nodes = document.querySelectorAll(".rf-screen-host *, .rf-screen-sticky *");
   for (var index = 0; index < nodes.length; index += 1) {
@@ -388,7 +393,7 @@ async function captureFrame(browser: Browser, frame: Frame): Promise<FrameReport
   });
 
   const stateQuery = frame.state === undefined ? "" : `&state=${frame.state}`;
-  await page.goto(`${baseUrl}${pagePath}?theme=${frame.mode}${stateQuery}`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl}${pagePath}?theme=${frame.mode}&fixture=1${stateQuery}`, { waitUntil: "networkidle" });
   await page.waitForSelector(".rf-rail .rf-nav-item");
   /* Below 1600px Command's Intervention Lens is an overlay with a full-viewport
    * scrim, so the Forge Rail sits under it. That is Command's existing

@@ -81,7 +81,7 @@ Object.assign(openapi.paths, {
   },
   "/v1/agents/{agentId}/connections/{clientId}": {
     put: { summary: "Link an OAuth MCP client to one Agent", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Linked connection") },
-    delete: { summary: "Revoke and unlink an OAuth MCP client", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Revoked connection") },
+    delete: { summary: "Unlink an OAuth MCP client from an Agent without revoking its OAuth grant", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Unlinked connection") },
   },
   "/v1/profile": {
     get: { summary: "Get the authenticated user's profile", responses: ok("Own profile", { type: "object", properties: { profile: { anyOf: [{ $ref: "#/components/schemas/OwnProfile" }, { type: "null" }] } } }) },
@@ -204,6 +204,7 @@ authorizationCode.authorizationUrl = "https://mcp.guilduo.com/oauth/authorize";
 authorizationCode.tokenUrl = "https://mcp.guilduo.com/oauth/token";
 Object.assign(scopes, {
   "agents:read": "Read registered Agent profiles and the current Agent context",
+  "agents:write": "Link and unlink the current OAuth MCP connection to a registered Agent",
   "profiles:read": "Read public profile data",
   "profiles:write": "Create and update the user's public profile",
   "friends:read": "Read friends and pending requests",

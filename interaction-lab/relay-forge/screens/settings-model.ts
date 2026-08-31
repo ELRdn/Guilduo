@@ -29,6 +29,10 @@ export interface SettingsState {
   profileDraft: ProfileDraft | null;
   mcpCopyMessage: string;
   mcpCopyTone: "success" | "error" | null;
+  connectionBusyId: string | null;
+  connectionMessage: string;
+  connectionTone: "success" | "error" | null;
+  connectionDrafts: Record<string, string>;
   /** Section to bring into view on the next render — consumed once, then cleared. */
   pendingFocus: SettingsSection | null;
 }
@@ -45,6 +49,10 @@ export function initialSettingsState(): SettingsState {
     profileDraft: null,
     mcpCopyMessage: "",
     mcpCopyTone: null,
+    connectionBusyId: null,
+    connectionMessage: "",
+    connectionTone: null,
+    connectionDrafts: {},
     pendingFocus: "top",
   };
 }
@@ -55,6 +63,22 @@ export interface SettingsAgentRow {
   readonly provider: string;
   readonly role: string;
   readonly status: string;
+}
+
+export interface SettingsMcpConnectionRow {
+  readonly clientId: string;
+  readonly clientName: string;
+  readonly scopes: readonly string[];
+  readonly firstConnectedAt: string;
+  readonly lastUsedAt: string;
+  /** The last/current relation target, retained for a useful legacy state. */
+  readonly linkedAgentId: string | null;
+  /** Non-null when the relation exists but is no longer active. */
+  readonly linkRevokedAt: string | null;
+  /** True when an active OAuth grant exists for this client. */
+  readonly authorized: boolean;
+  /** OAuth grant revocation, distinct from an Agent unlink. */
+  readonly revokedAt: string | null;
 }
 
 export interface SettingsModel {
@@ -74,6 +98,8 @@ export interface SettingsModel {
   readonly effectiveTheme: "light" | "dark";
   readonly mcpUrl: string;
   readonly agents: readonly SettingsAgentRow[];
+  readonly mcpConnections: readonly SettingsMcpConnectionRow[];
+  readonly mcpConnectionLoadError: string | null;
 }
 
 export interface NormalizeSettingsOptions {
@@ -85,6 +111,8 @@ export interface NormalizeSettingsOptions {
   readonly effectiveTheme: "light" | "dark";
   readonly gatewayUrl: string;
   readonly agents: readonly SettingsAgentRow[];
+  readonly mcpConnections?: readonly SettingsMcpConnectionRow[];
+  readonly mcpConnectionLoadError?: string | null;
 }
 
 /** `{gatewayUrl}/mcp` with no doubled or missing slash — the one normal-use MCP URL. */
@@ -113,6 +141,8 @@ export function normalizeSettingsModel(options: NormalizeSettingsOptions): Setti
     effectiveTheme: options.effectiveTheme,
     mcpUrl: deriveMcpUrl(options.gatewayUrl),
     agents: options.agents,
+    mcpConnections: options.mcpConnections ?? [],
+    mcpConnectionLoadError: options.mcpConnectionLoadError?.trim() || null,
   };
 }
 
@@ -124,6 +154,12 @@ export interface SettingsCallbacks {
   readonly onSaveProfile: () => void;
   readonly onRetryProfile: () => void;
   readonly onCopyMcpUrl: () => void;
+  readonly onRetryMcpConnections: () => void;
+  readonly onOpenAgentPicker: (clientId: string) => void;
+  readonly onCancelAgentPicker: (clientId: string) => void;
+  readonly onSelectConnectionAgent: (clientId: string, agentId: string) => void;
+  readonly onLinkAgent: (clientId: string, agentId: string) => void;
+  readonly onUnlinkAgent: (clientId: string, agentId: string) => void;
   readonly canManageAgents: boolean;
   readonly onCreateAgent: () => void;
   readonly onEditAgent: (agentId: string) => void;

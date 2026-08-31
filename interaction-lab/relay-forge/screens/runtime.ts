@@ -2,7 +2,7 @@
  * Relay Forge — shared screen grammar.
  *
  * This module is deliberately small. It carries only what every destination
- * must share so the six screens read as one product:
+ * must share so the destination screens read as one product:
  *
  *   - the screen frame (title, the 5-second question, meta, primary actions)
  *   - one status vocabulary  (loading / empty / partial / error / permission /
@@ -15,7 +15,7 @@
  * What it does NOT carry: layout. Command's Loom, Lens and Shelf stay in
  * `../primitives/`; each screen owns its own composition, scroll ownership and
  * mobile re-composition. Nothing here is allowed to grow into a generic
- * "screen template" — that is how six screens become one screen six times.
+ * "screen template" — that is how distinct screens become one screen repeated.
  */
 
 import type { Actor } from "../model.ts";
@@ -42,7 +42,7 @@ export type { ScreenId, ScreenNotice, ScreenStatus } from "./screen-state.ts";
  * Everything a screen renderer is allowed to reach. Notably it does NOT get the
  * shell's state object: a screen cannot mutate selection or navigation directly,
  * it asks through these callbacks, which keeps the single-selection rule of
- * NEWDESIGNv2 section 10 intact across six destinations instead of one.
+ * NEWDESIGNv2 section 10 intact across destinations instead of one.
  */
 export interface ScreenContext {
   /** The one identity map, shared with Command. Screens never build their own. */

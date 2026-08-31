@@ -47,7 +47,7 @@ Guilduo é um projeto independente e não é afiliado, endossado nem uma alterna
 | Login do Google com Appwrite e armazenamento de convidado no dispositivo | Disponível (autenticação configurada) |
 | CRUD de Quest, arquivamento, Quest Tree e batalha de MP | Disponível |
 | Agent Registry, vinculação de clientes MCP e Handoff | Disponível |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | Beta público da Web App oficial (Desktop / Mobile). `/next/relay-forge/` interno é um caminho de deployment e compatibilidade |
 | 9 idiomas | Disponível na UI principal; a UI beta cobre a navegação principal |
 | Google Calendar, Google Tasks, Notion e Toggl | **Early Access / preparação do OAuth** |
@@ -96,7 +96,7 @@ O endpoint de conexão estável é:
 https://mcp.guilduo.com/mcp
 ```
 
-O MCP `2.7.0` expõe 51 tools para Quests, arquivamento, Quest Tree, Agent Handoff, Agent Registry, perfis, parties, batalha e o contrato Toggl Focus. `/mcp-next` é uma trilha de validação para o novo SDK e adiciona Resources e Workflow Prompts. Continue usando `/mcp` no uso normal para preservar a compatibilidade com clientes existentes.
+O MCP `2.7.0` expõe 54 tools para Quests, arquivamento, Quest Tree, Agent Handoff, Agent Registry, perfis, parties, batalha e o contrato Toggl Focus. `/mcp-next` é uma trilha de validação para o novo SDK e adiciona Resources e Workflow Prompts. Continue usando `/mcp` no uso normal para preservar a compatibilidade com clientes existentes.
 
 Durante a migração, o `/mcp` antigo de `workers.dev` continua disponível para compatibilidade, mas novos registros e reconexões devem usar `mcp.guilduo.com/mcp` acima.
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 Verifique a sequência a seguir no cliente:
 
 1. A inicialização do MCP é concluída com sucesso.
-2. `tools/list` retorna 51 tools.
+2. `tools/list` retorna 54 tools.
 3. `list_registered_agents` retorna somente o seu próprio Agent.
 4. Chame `get_current_agent_context`.
 

@@ -30,6 +30,7 @@ export const ALL_SCOPES = [
   "battle:read",
   "battle:write",
   "agents:read",
+  "agents:write",
 ];
 
 export interface AuthIdentity {

@@ -22,6 +22,7 @@ import {
   type SettingsAgentRow,
   type SettingsCallbacks,
   type SettingsModel,
+  type SettingsMcpConnectionRow,
   type SettingsSection,
   type SettingsState,
   type ProfileDraft,
@@ -31,7 +32,9 @@ import {
   metricRow,
   type ScreenContext,
   type ScreenRender,
+  screenEmpty,
   screenHeader,
+  screenNotice,
   screenRegion,
   stateChip,
 } from "./runtime.ts";
@@ -267,9 +270,150 @@ function appearanceRegion(model: SettingsModel, callbacks: SettingsCallbacks): H
  * MCP Connection
  * ------------------------------------------------------------------ */
 
-function mcpRegion(model: SettingsModel, state: SettingsState, callbacks: SettingsCallbacks): HTMLElement {
+function agentOption(
+  agent: SettingsAgentRow,
+  selected: boolean,
+  context: ScreenContext,
+  clientId: string,
+  callbacks: SettingsCallbacks,
+): HTMLElement {
+  const actor = context.actors.get(agent.agentId);
+  const option = el(
+    "button",
+    {
+      type: "button",
+      class: "rf-set-agent-picker-option",
+      role: "option",
+      "aria-selected": selected ? "true" : "false",
+      "data-agent-id": agent.agentId,
+    },
+    actor === undefined ? el("span", { class: "rf-set-agent-picker-fallback", "aria-hidden": "true" }, "A") : actorAvatar(actor, { size: "row", showMarker: false }),
+    el(
+      "span",
+      { class: "rf-set-agent-picker-copy" },
+      el("span", { class: "rf-set-agent-picker-name" }, agent.displayName),
+      el("span", { class: "rf-set-agent-picker-meta" }, agent.provider === "" ? agent.role : `${agent.role} · ${agent.provider}`),
+    ),
+    selected ? el("span", { class: "rf-set-agent-picker-check", "aria-hidden": "true" }, "✓") : null,
+  );
+  option.addEventListener("click", () => callbacks.onSelectConnectionAgent(clientId, agent.agentId));
+  return option;
+}
+
+function connectionAgentSummary(
+  row: SettingsMcpConnectionRow,
+  model: SettingsModel,
+  context: ScreenContext,
+): { readonly agent: SettingsAgentRow | null; readonly stale: boolean } {
+  void context;
+  const agent = row.linkedAgentId === null
+    ? null
+    : model.agents.find((candidate) => candidate.agentId === row.linkedAgentId) ?? null;
+  return {
+    agent,
+    stale: row.linkedAgentId !== null && (row.linkRevokedAt !== null || agent === null || agent.status !== "active"),
+  };
+}
+
+function connectionRow(
+  row: SettingsMcpConnectionRow,
+  model: SettingsModel,
+  state: SettingsState,
+  context: ScreenContext,
+  callbacks: SettingsCallbacks,
+): HTMLElement {
+  const summary = connectionAgentSummary(row, model, context);
+  const activeLink = summary.agent !== null && !summary.stale && row.linkRevokedAt === null;
+  const pickerOpen = Object.prototype.hasOwnProperty.call(state.connectionDrafts, row.clientId);
+  const selectedAgentId = state.connectionDrafts[row.clientId] ?? (activeLink ? row.linkedAgentId ?? "" : "");
+  const activeAgents = model.agents.filter((agent) => agent.status === "active");
+  const busy = state.connectionBusyId === row.clientId;
+  const canLink = row.authorized && callbacks.canManageAgents && !busy;
+  const avatar = summary.agent === null
+    ? el("span", { class: "rf-set-connection-agent-placeholder", "aria-hidden": "true" }, "—")
+    : (() => {
+      const actor = context.actors.get(summary.agent!.agentId);
+      return actor === undefined ? el("span", { class: "rf-set-connection-agent-placeholder", "aria-hidden": "true" }, "A") : actorAvatar(actor, { size: "row", showMarker: false });
+    })();
+  const openPicker = el("button", { type: "button", class: "rf-secondary-button", disabled: canLink ? null : true }, activeLink ? "Agentを変更" : "Agentをリンク");
+  openPicker.addEventListener("click", () => callbacks.onOpenAgentPicker(row.clientId));
+  const unlink = activeLink || (row.linkedAgentId !== null && row.linkRevokedAt === null)
+    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-unlink", disabled: busy ? true : null }, busy ? "処理中…" : "Unlink")
+    : null;
+  unlink?.addEventListener("click", () => callbacks.onUnlinkAgent(row.clientId, row.linkedAgentId ?? ""));
+  const picker = pickerOpen
+    ? el(
+      "div",
+      { class: "rf-set-agent-picker", role: "listbox", "aria-label": `${row.clientName}のLinked Agent` },
+      activeAgents.length === 0
+        ? el("p", { class: "rf-set-agent-picker-empty" }, "リンクできるActive Agentがありません。先にAgentsで登録してください。")
+        : activeAgents.map((agent) => agentOption(agent, selectedAgentId === agent.agentId, context, row.clientId, callbacks)),
+      el(
+        "div",
+        { class: "rf-set-agent-picker-actions" },
+        el("button", { type: "button", class: "rf-primary-button", disabled: !canLink || selectedAgentId === "" ? true : null }, busy ? "保存中…" : activeLink ? "変更を保存" : "リンクする"),
+        el("button", { type: "button", class: "rf-secondary-button", disabled: busy ? true : null }, "キャンセル"),
+      ),
+    )
+    : null;
+  const pickerButtons = picker?.querySelectorAll("button");
+  if (picker !== null && pickerButtons !== undefined && pickerButtons.length > 0) {
+    const actionButtons = [...pickerButtons].slice(-2);
+    actionButtons[0]?.addEventListener("click", () => {
+      if (selectedAgentId !== "") callbacks.onLinkAgent(row.clientId, selectedAgentId);
+    });
+    actionButtons[1]?.addEventListener("click", () => callbacks.onCancelAgentPicker(row.clientId));
+  }
+  return el(
+    "article",
+    { class: "rf-set-connection-card", "data-authorized": row.authorized ? "true" : "false", "data-linked": activeLink ? "true" : "false" },
+    el(
+      "div",
+      { class: "rf-set-connection-head" },
+      el(
+        "div",
+        { class: "rf-set-connection-copy" },
+        el("strong", { class: "rf-set-connection-name" }, row.clientName),
+        el("span", { class: "rf-set-connection-id" }, row.clientId),
+      ),
+      row.authorized
+        ? stateChip({ tone: "done", label: "Authorized", mark: "OK" })
+        : stateChip({ tone: "neutral", label: "再接続が必要", mark: "--" }),
+    ),
+    el(
+      "div",
+      { class: "rf-set-connection-link" },
+      el("span", { class: "rf-set-connection-label" }, "Linked Agent"),
+      avatar,
+      el(
+        "div",
+        { class: "rf-set-connection-agent-copy" },
+        el("strong", {}, activeLink ? summary.agent!.displayName : row.linkedAgentId !== null && summary.stale ? "Agentを利用できません" : "No agent linked"),
+        el("span", {}, activeLink ? "このMCP接続はこのAgentとして動作します。" : row.linkedAgentId !== null && summary.stale ? "以前のリンク先が削除または無効になっています。" : "接続はAgentなしでも利用できます。"),
+      ),
+      el("div", { class: "rf-set-connection-actions" }, openPicker, unlink),
+    ),
+    picker,
+    state.connectionMessage === "" || state.connectionBusyId !== row.clientId
+      ? null
+      : el("p", { class: "rf-set-connection-status", "data-tone": state.connectionTone, role: state.connectionTone === "error" ? "alert" : "status" }, state.connectionMessage),
+  );
+}
+
+function mcpRegion(model: SettingsModel, state: SettingsState, context: ScreenContext, callbacks: SettingsCallbacks): HTMLElement {
   const copyButton = el("button", { type: "button", class: "rf-secondary-button" }, "Copy");
   copyButton.addEventListener("click", () => callbacks.onCopyMcpUrl());
+  const connectionBody = model.mcpConnectionLoadError !== null
+    ? screenNotice({
+      status: "error",
+      detail: "MCP接続の一覧を取得できませんでした。Tool利用自体は継続できます。",
+      action: { label: "再試行", onAct: callbacks.onRetryMcpConnections },
+    })
+    : model.isDemo
+      ? screenEmpty("MCP接続はPreviewです", "Googleでサインインすると、OAuth MCP clientとLinked Agentをここで管理できます。")
+      : model.mcpConnections.length === 0
+        ? screenEmpty("接続済みMCP clientはまだありません", "MCP clientを接続すると、ここでどのAgentとして動作するかを設定できます。")
+        : el("div", { class: "rf-set-connection-list" }, ...model.mcpConnections.map((row) => connectionRow(row, model, state, context, callbacks)));
   return screenRegion(
     "MCP Connection",
     {},
@@ -296,6 +440,15 @@ function mcpRegion(model: SettingsModel, state: SettingsState, callbacks: Settin
           state.mcpCopyMessage,
         ),
       el("p", { class: "rf-set-mcp-note" }, "OAuth接続です。APIキー、Bearer Token、Client Secretの入力は不要です。"),
+      el(
+        "div",
+        { class: "rf-set-mcp-connections" },
+        el("div", { class: "rf-set-mcp-subhead" }, el("h3", {}, "Linked Agent"), el("p", {}, "MCP clientがどのAgentとして動作するかを設定します。")),
+        state.connectionMessage === ""
+          ? null
+          : el("p", { class: "rf-set-connection-status", "data-tone": state.connectionTone, role: state.connectionTone === "error" ? "alert" : "status" }, state.connectionMessage),
+        connectionBody,
+      ),
     ),
   );
 }
@@ -363,7 +516,7 @@ function settingsMain(
     screenHeader({ title: "Settings", question: "アカウント、テーマ、MCP接続をここで管理します。" }),
     accountRegion(model, state, context, callbacks),
     appearanceRegion(model, callbacks),
-    mcpRegion(model, state, callbacks),
+    mcpRegion(model, state, context, callbacks),
     agentsRegion(model, context, callbacks),
   );
   return main;

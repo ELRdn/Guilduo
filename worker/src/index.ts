@@ -43,11 +43,14 @@ import {
   bumpAgentAvatarVersion,
   createAgent,
   getAgent,
+  getAgentConnection,
   getAgentForClient,
   linkAgentConnection,
+  listAllAgentConnections,
   listAgentConnections,
   listAgents,
   noteAgentConnectionUse,
+  relinkAgentConnection,
   unlinkAgentConnection,
   updateAgent,
 } from "./agent-store.ts";
@@ -117,12 +120,12 @@ import {
 } from "./social-store.ts";
 import type { FocusInput } from "./toggl-focus.ts";
 import type { AuthIdentity } from "./security.ts";
-import type { AgentRecord } from "./agent-store.ts";
+import type { AgentConnectionRecord, AgentRecord } from "./agent-store.ts";
 import type { JsonRecord, R2ObjectLike, WorkerEnv, WorkerError } from "./worker-types.ts";
 import { isQuest } from "../../types/questforge.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 
-type WorkerIdentity = AuthIdentity & { agent?: AgentRecord };
+type WorkerIdentity = AuthIdentity & { agent?: AgentRecord; connectionScopes?: string[] };
 type WorkerContext = { waitUntil(promise: Promise<unknown>): void };
 type WorkerArgs = JsonRecord;
 type McpArgs = JsonRecord & {
@@ -365,6 +368,23 @@ const AGENT_OBJECT = {
   additionalProperties: false,
 };
 const AGENT_LIST_OUTPUT = { type: "object", properties: { agents: { type: "array", items: AGENT_OBJECT } }, additionalProperties: false };
+const AGENT_CONNECTION_OBJECT = {
+  type: "object",
+  properties: {
+    clientId: { type: "string" }, clientName: { type: "string" }, scopes: { type: "array", items: { type: "string" } },
+    firstConnectedAt: { type: "string" }, lastUsedAt: { type: "string" }, revokedAt: { type: ["string", "null"] },
+  },
+  additionalProperties: false,
+};
+const AGENT_LINK_OUTPUT = {
+  type: "object",
+  properties: {
+    linked: { type: "boolean" }, relinked: { type: "boolean" }, unlinked: { type: "boolean" }, stale: { type: "boolean" },
+    agent: { anyOf: [AGENT_OBJECT, { type: "null" }] },
+    connection: { anyOf: [AGENT_CONNECTION_OBJECT, { type: "null" }] },
+  },
+  additionalProperties: false,
+};
 const CALENDAR_OVERRIDE_PROPERTIES = {
   title: QUEST_INPUT_PROPERTIES.title, notes: QUEST_INPUT_PROPERTIES.notes, category: QUEST_INPUT_PROPERTIES.category,
   dueDate: QUEST_INPUT_PROPERTIES.dueDate, scheduledDate: QUEST_INPUT_PROPERTIES.scheduledDate,
@@ -436,6 +456,9 @@ const MCP_TOOLS = [
   { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned Guilduo handoffs by lifecycle state.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "list_registered_agents", title: "List Registered Agents", description: "List the authenticated user's private Guilduo Agent Registry profiles.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LIST_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "get_agent_link", title: "Get Agent Link", description: "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "link_agent", title: "Link MCP Connection to Agent", description: "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents.", inputSchema: { type: "object", required: ["agentId"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } }, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "unlink_agent", title: "Unlink MCP Connection", description: "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "assign_quest_to_agent", title: "Assign Quest to Agent", description: "Preview or assign one Quest to a registered Agent. Execution requires the Quest's current updatedAt value.", inputSchema: { type: "object", required: ["questId", "agentId"], properties: { questId: { type: "string" }, agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" }, expectedUpdatedAt: { type: "string" }, handoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: AGENT_ASSIGNMENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "transition_quest_handoff", title: "Transition Quest Handoff", description: "Preview or transition an agent-assigned Quest between none, ready, working, blocked, review_required, and accepted.", inputSchema: { type: "object", required: ["questId", "state"], properties: { questId: { type: "string" }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, expectedState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, blockedReason: { type: "string", maxLength: 500 }, artifactUrl: { type: "string", format: "uri" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: HANDOFF_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate Guilduo activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
@@ -604,6 +627,60 @@ function toPublicAgents(agents: AgentRecord[]): Array<Omit<AgentRecord, "avatarA
   return agents.map(toPublicAgent);
 }
 
+/** Connection metadata is safe to expose, but the owner uid and every token
+ * remain server-side only.  MCP uses this shape for both linked and unlinked
+ * current connections. */
+function toPublicAgentConnection(connection: AgentConnectionRecord | null, client: JsonRecord | null = null): JsonRecord | null {
+  if (!connection && !client) return null;
+  const source = connection || client || {};
+  const scopes = Array.isArray(source.scopes) ? source.scopes.filter((scope): scope is string => typeof scope === "string") : [];
+  return {
+    clientId: String(source.clientId || ""),
+    clientName: String(source.clientName || "Guilduo MCP client"),
+    scopes,
+    firstConnectedAt: String(source.firstConnectedAt || ""),
+    lastUsedAt: String(source.lastUsedAt || ""),
+    revokedAt: connection?.revokedAt ?? (source.revokedAt ? String(source.revokedAt) : null),
+  };
+}
+
+async function requireMcpConnection(env: WorkerEnv, identity: WorkerIdentity, requiredScope: string): Promise<JsonRecord> {
+  if (identity.authType !== "oauth" || !identity.clientId) {
+    throw new DomainError(403, "mcp_connection_required", "This Agent link action requires an authenticated OAuth MCP connection.");
+  }
+  const client = await getAuthorizedClient(env, identity.uid, identity.clientId);
+  if (!client) {
+    throw new DomainError(401, "mcp_connection_revoked", "The current OAuth MCP connection is no longer authorized.");
+  }
+  // Agent effective scopes are intentionally narrower than the original
+  // OAuth grant. Link management is a connection-level control-plane action,
+  // so it must use the unfiltered grant rather than the linked Agent policy.
+  assertScope(identity.connectionScopes || identity.scopes, requiredScope);
+  return client;
+}
+
+async function currentMcpAgentLink(env: WorkerEnv, identity: WorkerIdentity, client: JsonRecord): Promise<JsonRecord> {
+  const connection = await getAgentConnection(env, identity.uid, String(client.clientId || identity.clientId || ""));
+  let agent: AgentRecord | null = null;
+  let stale = false;
+  if (connection) {
+    try {
+      agent = await getAgent(env, identity.uid, connection.agentId, { includeArchived: true });
+      stale = agent.status !== "active";
+    } catch (error) {
+      if (errorCode(error) !== "agent_not_found") throw error;
+      stale = true;
+    }
+  }
+  const linked = Boolean(connection && !connection.revokedAt && agent && agent.status === "active");
+  return {
+    linked,
+    stale,
+    agent: agent ? toPublicAgent(agent) : null,
+    connection: toPublicAgentConnection(connection, client),
+  };
+}
+
 /**
  * Reads a request body up to `maxBytes`, cancelling the underlying stream the
  * instant the running total is exceeded. A declared `content-length` cannot
@@ -641,12 +718,13 @@ async function readBoundedBody(request: Request, maxBytes: number): Promise<Uint
 
 async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity): Promise<WorkerIdentity> {
   if (identity?.authType !== "oauth" || !identity.clientId) return identity;
+  const connectionScopes = [...(identity.scopes || [])];
   await noteAuthorizedClientUse(env, identity);
   const agent = await getAgentForClient(env, identity.uid, identity.clientId);
-  if (!agent || agent.uid !== identity.uid) return identity;
+  if (!agent || agent.uid !== identity.uid) return { ...identity, connectionScopes };
   await noteAgentConnectionUse(env, identity.uid, identity.clientId).catch(() => undefined);
   const allowed = new Set(agent.allowedScopes || []);
-  return { ...identity, scopes: (identity.scopes || []).filter((scope) => allowed.has(scope)), agent };
+  return { ...identity, connectionScopes, scopes: (identity.scopes || []).filter((scope) => allowed.has(scope)), agent };
 }
 
 async function assignQuestToAgent(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, input: WorkerArgs): Promise<JsonRecord> {
@@ -741,9 +819,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   }
   if (path === "/v1/agent-connections" && method === "GET") {
     assertAgentRegistryWebMutation(request, env, identity);
-    const agents = await listAgents(env, identity.uid, { includeArchived: true });
-    const linked = (await Promise.all(agents.map((agent) => listAgentConnections(env, identity.uid, agent.agentId)))).flat();
-    return json({ authorizedClients: await listAuthorizedClients(env, identity.uid), connections: linked });
+    return json({ authorizedClients: await listAuthorizedClients(env, identity.uid), connections: await listAllAgentConnections(env, identity.uid) });
   }
   const agentMatch = path.match(/^\/v1\/agents\/([^/]+)$/);
   if (agentMatch && method === "GET") {
@@ -816,7 +892,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const clientId = decodeURIComponent(agentConnectionMatch[2]);
     const client = await getAuthorizedClient(env, identity.uid, clientId);
     if (!client) throw new DomainError(404, "oauth_client_not_found", "An active OAuth MCP client with this ID was not found for the signed-in user.");
-    return json({ connection: await linkAgentConnection(env, identity.uid, agentId, {
+    return json({ connection: await relinkAgentConnection(env, identity.uid, agentId, {
       clientId: client.clientId,
       clientName: client.clientName,
       scopes: client.scopes,
@@ -828,10 +904,13 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     assertAgentRegistryWebMutation(request, env, identity);
     const agentId = decodeURIComponent(agentConnectionMatch[1]);
     const clientId = decodeURIComponent(agentConnectionMatch[2]);
-    const existing = (await listAgentConnections(env, identity.uid, agentId)).find((connection) => connection.clientId === clientId);
-    if (!existing) throw new DomainError(404, "agent_connection_not_found", "This connection is not linked to the requested Agent.");
+    // Read the relation directly instead of going through the Agent-scoped
+    // listing. That keeps the cleanup path usable for a legacy relation whose
+    // Agent row was removed or is no longer visible, while still requiring the
+    // same owner and exact Agent id before unlinking.
+    const existing = await getAgentConnection(env, identity.uid, clientId);
+    if (!existing || existing.agentId !== agentId) throw new DomainError(404, "agent_connection_not_found", "This connection is not linked to the requested Agent.");
     const connection = await unlinkAgentConnection(env, identity.uid, clientId);
-    await revokeAuthorizedClient(env, identity.uid, clientId);
     return json({ connection });
   }
   if (path === "/v1/profile/avatar" && method === "GET") {
@@ -1263,6 +1342,36 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
       clientId: identity.clientId || null,
       effectiveScopes: identity.scopes || [],
       linked: Boolean(identity.agent),
+    };
+  }
+  if (name === "get_agent_link") {
+    const client = await requireMcpConnection(env, identity, "agents:read");
+    return currentMcpAgentLink(env, identity, client);
+  }
+  if (name === "link_agent") {
+    const client = await requireMcpConnection(env, identity, "agents:write");
+    const agentId = requiredString(args.agentId, "agentId");
+    const previous = await getAgentConnection(env, identity.uid, identity.clientId || "");
+    await relinkAgentConnection(env, identity.uid, agentId, {
+      clientId: client.clientId,
+      clientName: client.clientName,
+      scopes: client.scopes,
+      firstConnectedAt: client.firstConnectedAt,
+      lastUsedAt: client.lastUsedAt,
+    });
+    return {
+      ...(await currentMcpAgentLink(env, identity, client)),
+      relinked: Boolean(previous && (previous.agentId !== agentId || previous.revokedAt)),
+    };
+  }
+  if (name === "unlink_agent") {
+    const client = await requireMcpConnection(env, identity, "agents:write");
+    const previous = await getAgentConnection(env, identity.uid, identity.clientId || "");
+    if (previous && !previous.revokedAt) await unlinkAgentConnection(env, identity.uid, identity.clientId || "");
+    return {
+      ...(await currentMcpAgentLink(env, identity, client)),
+      linked: false,
+      unlinked: Boolean(previous && !previous.revokedAt),
     };
   }
   if (name === "assign_quest_to_agent") {

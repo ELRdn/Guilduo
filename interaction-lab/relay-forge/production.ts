@@ -15,6 +15,7 @@ import {
 import type { ConnectionsPort } from "./screens/connections-model.ts";
 import type { AgentRecord, PartyMemberRecord } from "./screens/party-model.ts";
 import type { IntegrationRecord } from "./screens/connections-model.ts";
+import type { SettingsMcpConnectionRow } from "./screens/settings-model.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -41,6 +42,12 @@ export interface RelayForgeRuntime {
   readonly profilePort: Pick<QuestForgeRepository, "getProfile" | "updateProfile">;
   readonly profileAvatarPort: Pick<QuestForgeRepository, "uploadProfileAvatar" | "fetchProfileAvatar" | "deleteProfileAvatar">;
   readonly agentAvatarPort: Pick<QuestForgeRepository, "uploadAgentAvatar" | "fetchAgentAvatar">;
+  readonly agentConnectionPort: Pick<QuestForgeRepository, "listAgentConnections" | "linkAgentConnection" | "unlinkAgentConnection">;
+  readonly agentConnections: readonly SettingsMcpConnectionRow[];
+  readonly agentConnectionsLoadError: string | null;
+  readonly mcpToolsPort: Pick<QuestForgeRepository, "listMcpTools">;
+  readonly mcpTools: readonly unknown[];
+  readonly mcpToolsLoadError: string | null;
   /**
    * Injected by the composition root (`main.ts`), never imported by the shell
    * directly, so Appwrite Auth stays a swappable port rather than a hard
@@ -61,6 +68,47 @@ function text(value: unknown): string {
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeAgentConnections(value: unknown): SettingsMcpConnectionRow[] {
+  const source = record(value);
+  const rows = new Map<string, SettingsMcpConnectionRow>();
+  const authorizedClients = Array.isArray(source.authorizedClients) ? source.authorizedClients : [];
+  for (const item of authorizedClients) {
+    const client = record(item);
+    const clientId = text(client.clientId);
+    if (!clientId) continue;
+    rows.set(clientId, {
+      clientId,
+      clientName: text(client.clientName) || "Guilduo MCP client",
+      scopes: strings(client.scopes),
+      firstConnectedAt: text(client.firstConnectedAt),
+      lastUsedAt: text(client.lastUsedAt),
+      linkedAgentId: null,
+      linkRevokedAt: null,
+      authorized: !text(client.revokedAt),
+      revokedAt: text(client.revokedAt) || null,
+    });
+  }
+  const connections = Array.isArray(source.connections) ? source.connections : [];
+  for (const item of connections) {
+    const connection = record(item);
+    const clientId = text(connection.clientId);
+    if (!clientId) continue;
+    const previous = rows.get(clientId);
+    rows.set(clientId, {
+      clientId,
+      clientName: text(connection.clientName) || previous?.clientName || "Guilduo MCP client",
+      scopes: strings(connection.scopes).length > 0 ? strings(connection.scopes) : previous?.scopes ?? [],
+      firstConnectedAt: text(connection.firstConnectedAt) || previous?.firstConnectedAt || "",
+      lastUsedAt: text(connection.lastUsedAt) || previous?.lastUsedAt || "",
+      linkedAgentId: text(connection.agentId) || previous?.linkedAgentId || null,
+      linkRevokedAt: text(connection.revokedAt) || null,
+      authorized: previous?.authorized ?? false,
+      revokedAt: previous?.revokedAt ?? null,
+    });
+  }
+  return [...rows.values()].sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt) || a.clientName.localeCompare(b.clientName));
 }
 
 export function normalizeProfileRecord(item: unknown): ProfileRecord | null {
@@ -208,5 +256,13 @@ export async function createProductionRuntime(
     profilePort: repository,
     profileAvatarPort: repository,
     agentAvatarPort: repository,
+    agentConnectionPort: repository,
+    agentConnections: normalizeAgentConnections(snapshot.agentConnections),
+    agentConnectionsLoadError: snapshot.panelErrors.find((entry) => entry.index === 6)?.message ?? null,
+    mcpToolsPort: repository,
+    mcpTools: snapshot.mcpTools,
+    mcpToolsLoadError: snapshot.panelErrors.find((entry) => entry.index === 7)?.message ?? null,
   };
 }
+
+export { normalizeAgentConnections };
