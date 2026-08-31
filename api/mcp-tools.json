@@ -2619,6 +2619,491 @@
       }
     },
     {
+      "name": "get_agent_link",
+      "title": "Get Agent Link",
+      "description": "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "linked": {
+            "type": "boolean"
+          },
+          "relinked": {
+            "type": "boolean"
+          },
+          "unlinked": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "uid": {
+                    "type": "string"
+                  },
+                  "agentId": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "archived"
+                    ]
+                  },
+                  "allowedScopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "quests:read",
+                        "quests:write",
+                        "character:read",
+                        "rewards:write",
+                        "integrations:read",
+                        "integrations:sync",
+                        "events:read",
+                        "webhooks:manage",
+                        "plugins:manage",
+                        "profiles:read",
+                        "profiles:write",
+                        "friends:read",
+                        "friends:write",
+                        "parties:read",
+                        "parties:write",
+                        "battle:read",
+                        "battle:write",
+                        "agents:read"
+                      ]
+                    }
+                  },
+                  "defaultHandoffState": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "ready",
+                      "working",
+                      "blocked",
+                      "review_required",
+                      "accepted"
+                    ]
+                  },
+                  "reviewRequired": {
+                    "type": "boolean"
+                  },
+                  "dryRunDefault": {
+                    "type": "boolean"
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string"
+                  },
+                  "clientName": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "firstConnectedAt": {
+                    "type": "string"
+                  },
+                  "lastUsedAt": {
+                    "type": "string"
+                  },
+                  "revokedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "link_agent",
+      "title": "Link MCP Connection to Agent",
+      "description": "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "agentId"
+        ],
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "linked": {
+            "type": "boolean"
+          },
+          "relinked": {
+            "type": "boolean"
+          },
+          "unlinked": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "uid": {
+                    "type": "string"
+                  },
+                  "agentId": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "archived"
+                    ]
+                  },
+                  "allowedScopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "quests:read",
+                        "quests:write",
+                        "character:read",
+                        "rewards:write",
+                        "integrations:read",
+                        "integrations:sync",
+                        "events:read",
+                        "webhooks:manage",
+                        "plugins:manage",
+                        "profiles:read",
+                        "profiles:write",
+                        "friends:read",
+                        "friends:write",
+                        "parties:read",
+                        "parties:write",
+                        "battle:read",
+                        "battle:write",
+                        "agents:read"
+                      ]
+                    }
+                  },
+                  "defaultHandoffState": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "ready",
+                      "working",
+                      "blocked",
+                      "review_required",
+                      "accepted"
+                    ]
+                  },
+                  "reviewRequired": {
+                    "type": "boolean"
+                  },
+                  "dryRunDefault": {
+                    "type": "boolean"
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string"
+                  },
+                  "clientName": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "firstConnectedAt": {
+                    "type": "string"
+                  },
+                  "lastUsedAt": {
+                    "type": "string"
+                  },
+                  "revokedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "unlink_agent",
+      "title": "Unlink MCP Connection",
+      "description": "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "linked": {
+            "type": "boolean"
+          },
+          "relinked": {
+            "type": "boolean"
+          },
+          "unlinked": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "uid": {
+                    "type": "string"
+                  },
+                  "agentId": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "archived"
+                    ]
+                  },
+                  "allowedScopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "quests:read",
+                        "quests:write",
+                        "character:read",
+                        "rewards:write",
+                        "integrations:read",
+                        "integrations:sync",
+                        "events:read",
+                        "webhooks:manage",
+                        "plugins:manage",
+                        "profiles:read",
+                        "profiles:write",
+                        "friends:read",
+                        "friends:write",
+                        "parties:read",
+                        "parties:write",
+                        "battle:read",
+                        "battle:write",
+                        "agents:read"
+                      ]
+                    }
+                  },
+                  "defaultHandoffState": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "ready",
+                      "working",
+                      "blocked",
+                      "review_required",
+                      "accepted"
+                    ]
+                  },
+                  "reviewRequired": {
+                    "type": "boolean"
+                  },
+                  "dryRunDefault": {
+                    "type": "boolean"
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string"
+                  },
+                  "clientName": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "firstConnectedAt": {
+                    "type": "string"
+                  },
+                  "lastUsedAt": {
+                    "type": "string"
+                  },
+                  "revokedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "assign_quest_to_agent",
       "title": "Assign Quest to Agent",
       "description": "Preview or assign one Quest to a registered Agent. Execution requires the Quest's current updatedAt value.",

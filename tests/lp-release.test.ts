@@ -85,7 +85,7 @@ test("LP uses real product captures with dimensions, alt text, and deferred load
 test("LP facts remain source-backed and avoid invented proof", () => {
   const contract = JSON.parse(read("api/mcp-tools.json")) as { tools?: unknown[] } | unknown[];
   const count = Array.isArray(contract) ? contract.length : contract.tools?.length ?? 0;
-  assert.equal(count, 51);
+  assert.equal(count, 54);
   assert.match(read("lp/main.ts"), /contractToolCount/);
   assert.doesNotMatch(ja, /trusted by|conversion|10×|first ever|only AI platform/i);
 });

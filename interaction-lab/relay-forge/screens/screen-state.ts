@@ -7,7 +7,7 @@
  * project.
  */
 
-export type ScreenId = "quests" | "network" | "party" | "battle" | "connections";
+export type ScreenId = "quests" | "network" | "party" | "battle" | "connections" | "skills";
 
 /**
  * One vocabulary for every non-ready condition. A screen never invents a new

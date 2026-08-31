@@ -1,5 +1,5 @@
 /**
- * Behavioural verification for the five Relay Forge destination screens.
+ * Behavioural verification for the six Relay Forge destination screens.
  *
  * The capture script proves the frames render; this one proves they *work*:
  * filters, selection, keyboard traversal, the preview-then-execute decisions,
@@ -21,9 +21,9 @@ const chromePath = process.env.QF_CHROME_PATH
     : "/usr/bin/google-chrome");
 
 const NAV_INDEX: Readonly<Record<string, number>> = {
-  command: 0, quests: 1, network: 2, party: 3, battle: 4, connections: 5,
+  command: 0, quests: 1, network: 2, party: 3, battle: 4, connections: 5, skills: 6,
 };
-const MOBILE_OVERFLOW = ["battle", "connections"];
+const MOBILE_OVERFLOW = ["battle", "connections", "skills"];
 
 let passed = 0;
 let failed = 0;
@@ -40,7 +40,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 
 async function goto(page: Page, state = ""): Promise<void> {
   const query = state === "" ? "" : `&state=${state}`;
-  await page.goto(`${baseUrl}${pagePath}?theme=dark${query}`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl}${pagePath}?theme=dark&fixture=1${query}`, { waitUntil: "networkidle" });
   await page.waitForSelector(".rf-rail .rf-nav-item");
 }
 
@@ -89,13 +89,13 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     };
   })()`) as { count: number; labels: string[]; enabled: boolean };
   check(
-    "the Forge Rail carries all six destinations and every one is reachable",
-    rail.count === 6 && rail.enabled
-      && rail.labels.join(",") === "Command,Quests,Network,Party,Battle,Connections",
+    "the Forge Rail carries all seven destinations and every one is reachable",
+    rail.count === 7 && rail.enabled
+      && rail.labels.join(",") === "Command,Quests,Network,Party,Battle,Connections,Skills",
     JSON.stringify(rail),
   );
 
-  for (const domain of ["quests", "network", "party", "battle", "connections"]) {
+  for (const domain of ["quests", "network", "party", "battle", "connections", "skills"]) {
     await navigate(page, domain);
     const state = await page.evaluate(`(function () {
       var shell = document.querySelector(".rf-shell");
@@ -599,6 +599,86 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     JSON.stringify(offline),
   );
 
+  /* ---------------- Skills ---------------- */
+
+  await goto(page);
+  await navigate(page, "skills");
+  const skillsFrame = await page.evaluate(`(function () {
+    var groups = [].slice.call(document.querySelectorAll(".rf-skills-group"));
+    return {
+      groups: groups.length,
+      tools: document.querySelectorAll(".rf-skills-tool-row").length,
+      humanTitle: (groups[0] && groups[0].querySelector(".rf-skills-group-title") || {}).textContent || "",
+      source: (document.querySelector(".rf-skills-source-name") || {}).textContent || "",
+      search: document.querySelectorAll(".rf-skills-search-input").length,
+      rawNames: document.querySelectorAll(".rf-skills-tool-name").length
+    };
+  })()`) as { groups: number; tools: number; humanTitle: string; source: string; search: number; rawNames: number };
+  check(
+    "Skills: live-shaped MCP tools render as human-readable groups with a source and search",
+    skillsFrame.groups >= 3 && skillsFrame.tools > 0 && skillsFrame.humanTitle.length > 3
+      && skillsFrame.source === "Guilduo MCP" && skillsFrame.search === 1 && skillsFrame.rawNames > 0,
+    JSON.stringify(skillsFrame),
+  );
+
+  const skillsExpandBefore = await page.locator('.rf-skills-group[data-group="agent-relay"] .rf-skills-tool-row').count();
+  await page.locator('.rf-skills-group[data-group="agent-relay"] .rf-skills-group-toggle').click();
+  await page.waitForTimeout(60);
+  const skillsExpand = await page.evaluate(`(function () {
+    var group = document.querySelector('.rf-skills-group[data-group="agent-relay"]');
+    return {
+      before: ${skillsExpandBefore},
+      after: group === null ? 0 : group.querySelectorAll(".rf-skills-tool-row").length,
+      expanded: group !== null && group.getAttribute("data-expanded") === "true"
+    };
+  })()`) as { before: number; after: number; expanded: boolean };
+  check(
+    "Skills: a capability group expands to readable tools while keeping technical names inspectable",
+    skillsExpand.before === 0 && skillsExpand.after > 0 && skillsExpand.expanded,
+    JSON.stringify(skillsExpand),
+  );
+
+  await page.locator(".rf-skills-search-input").fill("link_agent");
+  const skillsSearch = await page.evaluate(`(function () {
+    return {
+      groups: document.querySelectorAll(".rf-skills-group").length,
+      tools: document.querySelectorAll(".rf-skills-tool-row").length,
+      raw: [].slice.call(document.querySelectorAll(".rf-skills-tool-name")).map(function (n) { return n.textContent; })
+    };
+  })()`) as { groups: number; tools: number; raw: string[] };
+  check(
+    "Skills: search matches the technical MCP name and retains its capability context",
+    skillsSearch.groups === 1 && skillsSearch.tools === 1 && skillsSearch.raw.includes("link_agent"),
+    JSON.stringify(skillsSearch),
+  );
+
+  await goto(page, "permission");
+  await navigate(page, "skills");
+  const skillsUnconnected = await page.evaluate(`(function () {
+    return {
+      empty: (document.querySelector(".rf-screen-empty") || {}).textContent || "",
+      groups: document.querySelectorAll(".rf-skills-group").length
+    };
+  })()`) as { empty: string; groups: number };
+  check(
+    "Skills: an unconnected MCP server has an explicit empty state, not a fake tool list",
+    skillsUnconnected.empty.includes("MCP server未接続") && skillsUnconnected.groups === 0,
+    JSON.stringify(skillsUnconnected),
+  );
+
+  await goto(page, "empty");
+  await navigate(page, "skills");
+  const skillsEmpty = await page.evaluate(`(document.querySelector(".rf-screen-empty") || {}).textContent || ""`) as string;
+  check("Skills: zero tools has a useful empty state", skillsEmpty.includes("利用できるMCP Toolはまだありません"), skillsEmpty);
+
+  await goto(page, "error");
+  await navigate(page, "skills");
+  const skillsError = await page.evaluate(`(function () {
+    var notice = document.querySelector('.rf-screen-notice[data-status="error"]');
+    return { notice: notice !== null, retry: notice !== null && notice.querySelector("button") !== null };
+  })()`) as { notice: boolean; retry: boolean };
+  check("Skills: fetch failure has an error state and retry action", skillsError.notice && skillsError.retry, JSON.stringify(skillsError));
+
   check("desktop: no console or page errors across the whole run", errors.length === 0, errors.join(" | "));
   await context.close();
 }
@@ -636,13 +716,13 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     };
   })()`) as Record<string, unknown>;
   check(
-    "mobile: five labelled destinations with 44px targets, Battle and Connections behind More",
+    "mobile: five labelled destinations with 44px targets, Battle, Connections and Skills behind More",
     nav.count === 5 && nav.allLabelled === true && nav.tall === true
       && (nav.labels as string[])[4] === "More",
     JSON.stringify(nav),
   );
 
-  for (const domain of ["quests", "network", "party", "battle", "connections"]) {
+  for (const domain of ["quests", "network", "party", "battle", "connections", "skills"]) {
     await navigate(page, domain, true);
     const shown = await page.evaluate(`(function () {
       var shell = document.querySelector(".rf-shell");
@@ -767,6 +847,23 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     "mobile Connections: the detail replaces the list and offers a way back",
     mobileConnections.cards === 0 && mobileConnections.detail === 1 && mobileConnections.back === 1,
     JSON.stringify(mobileConnections),
+  );
+
+  await goto(page);
+  await navigate(page, "skills", true);
+  const mobileSkills = await page.evaluate(`(function () {
+    var screen = document.querySelector(".rf-skills-screen");
+    return {
+      groups: document.querySelectorAll(".rf-skills-group").length,
+      search: document.querySelectorAll(".rf-skills-search-input").length,
+      pageScroll: document.documentElement.scrollHeight > document.documentElement.clientHeight,
+      screenHeight: screen === null ? 0 : screen.getBoundingClientRect().height
+    };
+  })()`) as { groups: number; search: number; pageScroll: boolean; screenHeight: number };
+  check(
+    "mobile Skills: the catalogue remains searchable and uses the page scroll owner",
+    mobileSkills.groups > 0 && mobileSkills.search === 1 && mobileSkills.pageScroll && mobileSkills.screenHeight > 0,
+    JSON.stringify(mobileSkills),
   );
 
   check("mobile: no console or page errors across the whole run", errors.length === 0, errors.join(" | "));

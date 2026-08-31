@@ -137,3 +137,28 @@ test("Settings: Agent rows pass through untouched — this screen lists, it does
   assert.equal(model.agents.length, 2);
   assert.equal(model.agents[1].status, "disabled");
 });
+
+test("Settings: MCP connection rows keep a linked Agent separate from OAuth authorization", () => {
+  const model = normalizeSettingsModel({
+    isDemo: false,
+    profile: { displayName: "Hironao", handle: "hironao" },
+    theme: "dark",
+    effectiveTheme: "dark",
+    gatewayUrl: "https://mcp.guilduo.com",
+    agents: [{ agentId: "forge", displayName: "Forge", provider: "generic", role: "assistant", status: "active" }],
+    mcpConnections: [{
+      clientId: "client-1",
+      clientName: "Claude",
+      scopes: ["agents:read"],
+      firstConnectedAt: "2026-08-30T00:00:00.000Z",
+      lastUsedAt: "2026-08-30T01:00:00.000Z",
+      linkedAgentId: "forge",
+      linkRevokedAt: null,
+      authorized: true,
+      revokedAt: null,
+    }],
+  });
+  assert.equal(model.mcpConnections[0]?.linkedAgentId, "forge");
+  assert.equal(model.mcpConnections[0]?.authorized, true);
+  assert.equal(model.mcpConnections[0]?.scopes[0], "agents:read");
+});

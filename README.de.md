@@ -47,7 +47,7 @@ Guilduo ist ein unabhängiges Projekt und nicht mit Habitica verbunden, von Habi
 | Appwrite-Google-Anmeldung und Gast-Speicher auf dem Gerät | Verfügbar (Authentifizierung konfiguriert) |
 | Quest-CRUD, Archivierung, Quest Tree und MP-Kampf | Verfügbar |
 | Agent Registry, MCP-Client-Verknüpfung und Handoff | Verfügbar |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | Öffentliche Beta der offiziellen Web App (Desktop / Mobile). Der interne Pfad `/next/relay-forge/` dient Deployment und Kompatibilität |
 | 9 Sprachen | In der Haupt-UI verfügbar; die Beta-UI unterstützt die primäre Navigation |
 | Google Calendar, Google Tasks, Notion und Toggl | **Early Access / OAuth-Vorbereitung** |
@@ -96,7 +96,7 @@ Der stabile Verbindungsendpunkt ist:
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` stellt 51 Tools für Quests, Archivierung, Quest Tree, Agent Handoff, Agent Registry, Profile, Partys, Kämpfe und den Toggl-Focus-Vertrag bereit. `/mcp-next` ist eine Validierungsschiene für das neue SDK und ergänzt Resources und Workflow Prompts. Verwende für den normalen Betrieb weiterhin `/mcp`, um die Kompatibilität mit bestehenden Clients zu erhalten.
+MCP `2.7.0` stellt 54 Tools für Quests, Archivierung, Quest Tree, Agent Handoff, Agent Registry, Profile, Partys, Kämpfe und den Toggl-Focus-Vertrag bereit. `/mcp-next` ist eine Validierungsschiene für das neue SDK und ergänzt Resources und Workflow Prompts. Verwende für den normalen Betrieb weiterhin `/mcp`, um die Kompatibilität mit bestehenden Clients zu erhalten.
 
 Während der Migration bleibt das alte `/mcp` von `workers.dev` aus Kompatibilitätsgründen verfügbar. Neue Registrierungen und Wiederverbindungen sollten jedoch `mcp.guilduo.com/mcp` verwenden.
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 Prüfe im Client die folgende Reihenfolge:
 
 1. Die MCP-Initialisierung ist erfolgreich.
-2. `tools/list` gibt 51 Tools zurück.
+2. `tools/list` gibt 54 Tools zurück.
 3. `list_registered_agents` gibt nur deinen eigenen Agent zurück.
 4. Rufe `get_current_agent_context` auf.
 

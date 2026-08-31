@@ -122,7 +122,7 @@ test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the 
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
   const tools = await json<McpListResponse>(toolsResponse);
-  assert.equal(tools.result.tools.length, 51);
+  assert.equal(tools.result.tools.length, 54);
   assert.ok(tools.result.tools.some((tool) => tool.name === "create_quest"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "list_quests"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "batch_update_quests"));
@@ -173,8 +173,8 @@ test("MCP v2.7 SDK lane exposes Agent resources, Focus resources, and workflow p
   };
 
   const tools = await mcpCall<{ tools: McpTool[] }>("tools/list");
-  assert.equal(tools.tools.length, 51);
-  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 51);
+  assert.equal(tools.tools.length, 54);
+  assert.equal(tools.tools.filter((tool) => tool.outputSchema).length, 54);
 
   const resources = await mcpCall<McpResourcesResponse>("resources/list");
   assert.deepEqual(resources.resources.map((resource) => resource.uri).sort(), [

@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import { getKv, sha256 } from "../worker/src/security.ts";
 import type { AuthIdentity } from "../worker/src/security.ts";
 import type { D1DatabaseLike, D1StatementLike, WorkerEnv } from "../worker/src/worker-types.ts";
 import { asQuestForgeState, FakeR2Bucket, hasErrorCode, json, SqliteD1Database, type TestContext, type TestRequestOptions } from "./test-helpers.ts";
@@ -20,6 +21,33 @@ async function workerCallUnauthenticated(path: string, options: TestRequestOptio
   return worker.fetch(new Request(`http://worker.test${path}`, { ...options, headers: { origin: "http://localhost:5173", ...(options.headers || {}) } }), env, context);
 }
 
+async function seedOAuthConnection(clientId: string, scopes: string[], token = `oauth-${clientId}`): Promise<string> {
+  const firstConnectedAt = "2026-05-01T00:00:00.000Z";
+  const grant = {
+    uid: "agent-user",
+    email: "agent@example.com",
+    clientId,
+    clientName: "Test MCP",
+    scopes,
+    firstConnectedAt,
+    lastUsedAt: firstConnectedAt,
+    revokedAt: "",
+  };
+  const kv = getKv(env);
+  await kv.put(`user-client:agent-user:${clientId}`, JSON.stringify(grant));
+  await kv.put(`access:${await sha256(token)}`, JSON.stringify({ ...grant, expiresAt: Date.now() + 60 * 60 * 1000 }));
+  return token;
+}
+
+async function mcpOAuthCall(token: string, name: string, args: Record<string, unknown> = {}): Promise<Response> {
+  const worker = (await import("../worker/src/index.ts")).default;
+  return worker.fetch(new Request("http://worker.test/mcp", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, origin: "http://localhost:5173", "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method: "tools/call", params: { name, arguments: args } }),
+  }), env, context);
+}
+
 const WEBP_MAGIC = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0, 0, 0, 0]);
 const NOT_AN_IMAGE = new TextEncoder().encode("<script>alert(1)</script>");
 
@@ -31,6 +59,61 @@ test.beforeEach(async () => {
   const { writeState, readState } = await import("../worker/src/appwrite-store.ts");
   const current = await readState(env, "agent-user");
   await writeState(env, "agent-user", { schemaVersion: 6, state: asQuestForgeState({ schemaVersion: 6, tasks: [], taskEvents: [], syncEvents: [], rewardClaims: {}, character: { level: 1, hp: 50, maxHp: 50, xp: 0, nextXp: 100, gems: 0, ownedItems: [], equippedItems: [] }, battle: { mp: 0, maxMp: 80 }, boss: { hp: 100, maxHp: 100 } }), clientUpdatedAt: new Date().toISOString() }, current.etag);
+});
+
+test("MCP Agent link tools persist, authorize, unlink, and relink the current OAuth connection", async () => {
+  const agentStore = await import("../worker/src/agent-store.ts");
+  await agentStore.createAgent(env, "agent-user", { agentId: "first", displayName: "First Agent" });
+  await agentStore.createAgent(env, "agent-user", { agentId: "second", displayName: "Second Agent" });
+  const token = await seedOAuthConnection("mcp-link-client", ["agents:read", "agents:write"]);
+
+  const before = await json<{ result: { structuredContent: { linked: boolean; connection: { clientName: string } } } }>(await mcpOAuthCall(token, "get_agent_link"));
+  assert.equal(before.result.structuredContent.linked, false);
+  assert.equal(before.result.structuredContent.connection.clientName, "Test MCP");
+
+  const linked = await json<{ result: { structuredContent: { linked: boolean; relinked: boolean; agent: { agentId: string; displayName: string } } } }>(await mcpOAuthCall(token, "link_agent", { agentId: "first" }));
+  assert.equal(linked.result.structuredContent.linked, true);
+  assert.equal(linked.result.structuredContent.relinked, false);
+  assert.equal(linked.result.structuredContent.agent.agentId, "first");
+  assert.equal(linked.result.structuredContent.agent.displayName, "First Agent");
+
+  const relinked = await json<{ result: { structuredContent: { linked: boolean; relinked: boolean; agent: { agentId: string } } } }>(await mcpOAuthCall(token, "link_agent", { agentId: "second" }));
+  assert.equal(relinked.result.structuredContent.linked, true);
+  assert.equal(relinked.result.structuredContent.relinked, true);
+  assert.equal(relinked.result.structuredContent.agent.agentId, "second");
+
+  const unlinked = await json<{ result: { structuredContent: { linked: boolean; unlinked: boolean; agent: { agentId: string } | null } } }>(await mcpOAuthCall(token, "unlink_agent"));
+  assert.equal(unlinked.result.structuredContent.linked, false);
+  assert.equal(unlinked.result.structuredContent.unlinked, true);
+  assert.equal(unlinked.result.structuredContent.agent?.agentId, "second");
+  assert.equal((await agentStore.getAgentConnection(env, "agent-user", "mcp-link-client"))?.revokedAt !== null, true);
+});
+
+test("MCP Agent linking rejects foreign or nonexistent Agents and preserves old unlinked connections", async () => {
+  const agentStore = await import("../worker/src/agent-store.ts");
+  await agentStore.createAgent(env, "other-user", { agentId: "private", displayName: "Private Agent" });
+  const token = await seedOAuthConnection("mcp-read-only", ["agents:read"]);
+
+  const current = await json<{ result: { structuredContent: { linked: boolean } } }>(await mcpOAuthCall(token, "get_agent_link"));
+  assert.equal(current.result.structuredContent.linked, false);
+
+  const writeToken = await seedOAuthConnection("mcp-write-foreign", ["agents:read", "agents:write"]);
+  const foreign = await json<{ result: { isError: boolean; structuredContent: { error: { code: string } } } }>(await mcpOAuthCall(writeToken, "link_agent", { agentId: "private" }));
+  assert.equal(foreign.result.isError, true);
+  assert.equal(foreign.result.structuredContent.error.code, "agent_not_found");
+
+  const readOnlyLinkAttempt = await json<{ result: { isError: boolean; structuredContent: { error: { code: string } } } }>(await mcpOAuthCall(token, "link_agent", { agentId: "private" }));
+  assert.equal(readOnlyLinkAttempt.result.isError, true);
+  assert.equal(readOnlyLinkAttempt.result.structuredContent.error.code, "insufficient_scope");
+
+  const nonexistent = await json<{ result: { isError: boolean; structuredContent: { error: { code: string } } } }>(await mcpOAuthCall(writeToken, "link_agent", { agentId: "missing" }));
+  assert.equal(nonexistent.result.isError, true);
+  assert.equal(nonexistent.result.structuredContent.error.code, "agent_not_found");
+});
+
+test("MCP Agent link tools require an authenticated OAuth connection", async () => {
+  const response = await workerCallUnauthenticated("/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_agent_link", arguments: {} } }) });
+  assert.equal(response.status, 401);
 });
 
 class ThrowAfterAvatarCommitStatement implements D1StatementLike {

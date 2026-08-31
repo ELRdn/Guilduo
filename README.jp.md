@@ -47,7 +47,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 | Appwrite Googleログイン・端末ゲスト保存 | 利用可能（認証設定済み） |
 | Quest CRUD、保管、Quest Tree、MPバトル | 利用可能 |
 | Agent Registry、MCPクライアント紐付け、Handoff | 利用可能 |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | 正式Web Appの公開β（Desktop / Mobile）。内部の`/next/relay-forge/`はデプロイ・互換path |
 | 9言語 | ルートUIで利用可能。βUIも主要ナビを対応 |
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth準備中** |
@@ -96,7 +96,7 @@ GuilduoはHabiticaとは独立したプロジェクトです。提携・承認�
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、プロフィール、パーティー、バトル、Toggl Focus契約を含む51 toolsを公開します。`/mcp-next`は新SDK向けの検証レーンで、ResourcesとWorkflow Promptsを追加します。既存クライアントの互換性のため、通常利用は `/mcp` を維持します。
+MCP `2.7.0` はQuest、保管、Quest Tree、Agent Handoff、Agent Registry、プロフィール、パーティー、バトル、Toggl Focus契約を含む54 toolsを公開します。`/mcp-next`は新SDK向けの検証レーンで、ResourcesとWorkflow Promptsを追加します。既存クライアントの互換性のため、通常利用は `/mcp` を維持します。
 
 移行期間中は旧workers.devの`/mcp`も互換用に残しますが、新規登録と再接続には上記の`mcp.guilduo.com/mcp`を使います。
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 クライアントから次の順に確認します。
 
 1. MCPの初期化が成功する。
-2. `tools/list`で51 toolsを取得できる。
+2. `tools/list`で54 toolsを取得できる。
 3. `list_registered_agents`で自分のAgentだけが返る。
 4. `get_current_agent_context`を呼び出す。
 

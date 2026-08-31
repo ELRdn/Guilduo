@@ -233,6 +233,29 @@ test("connections cannot be linked to archived agents", async () => {
   );
 });
 
+test("explicit relink reactivates one connection in place and preserves its original creation time", async () => {
+  const env: WorkerEnv = { AGENT_NOW: "2026-04-01T00:00:00.000Z" };
+  await create(env, "alpha", "first");
+  await create(env, "alpha", "second");
+  const created = required(await agents.linkAgentConnection(env, "alpha", "first", {
+    clientId: "relink-client", clientName: "MCP", firstConnectedAt: "2026-03-01T00:00:00.000Z",
+  }));
+  const revoked = required(await agents.unlinkAgentConnection(env, "alpha", "relink-client"));
+  assert.equal(revoked.revokedAt, "2026-04-01T00:00:00.000Z");
+
+  env.AGENT_NOW = "2026-04-02T00:00:00.000Z";
+  const relinked = required(await agents.relinkAgentConnection(env, "alpha", "second", {
+    clientId: "relink-client", clientName: "Updated MCP", scopes: ["agents:read"],
+  }));
+  assert.equal(relinked.agentId, "second");
+  assert.equal(relinked.clientName, "Updated MCP");
+  assert.deepEqual(relinked.scopes, ["agents:read"]);
+  assert.equal(relinked.revokedAt, null);
+  assert.equal(relinked.firstConnectedAt, created.firstConnectedAt);
+  assert.equal((await agents.listAllAgentConnections(env, "alpha")).length, 1);
+  assert.equal((await agents.getAgentForClient(env, "alpha", "relink-client"))?.agentId, "second");
+});
+
 test("an avatar upload bumps the version, flips hasCustomAvatar, and activates the new assetId, without ever storing bytes in D1", async () => {
   const env: WorkerEnv = {};
   await create(env, "alpha", "main");

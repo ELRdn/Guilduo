@@ -40,6 +40,7 @@ type Snapshot = JsonRecord & {
   party: JsonRecord | null;
   agents: unknown[];
   agentConnections: JsonRecord;
+  mcpTools: unknown[];
   panelErrors: Array<{ index: number; message: string }>;
 };
 
@@ -246,6 +247,7 @@ export class QuestForgeRepository {
       this.request("/v1/party"),
       this.request("/v1/agents?includeArchived=true"),
       this.request("/v1/agent-connections"),
+      this.listMcpTools(),
     ]);
     const value = (index: number, fallback: JsonRecord): JsonRecord => {
       const entry = optionalEntries[index];
@@ -275,8 +277,26 @@ export class QuestForgeRepository {
       party: nullableObjectField(4, "party"),
       agents: arrayField(5, "agents"),
       agentConnections: value(6, { authorizedClients: [], connections: [] }),
+      mcpTools: arrayField(7, "tools"),
       panelErrors,
     };
+  }
+
+  async listMcpTools(): Promise<JsonRecord> {
+    const response = await this.request<JsonRecord>("/mcp", {
+      method: "POST",
+      body: JSON.stringify({ jsonrpc: "2.0", id: "relay-forge-tools", method: "tools/list", params: {} }),
+    });
+    const rpcError = response.error && typeof response.error === "object" && !Array.isArray(response.error)
+      ? response.error as JsonRecord
+      : null;
+    if (rpcError !== null) {
+      throw new QuestForgeApiError(502, String(rpcError.code || "mcp_tools_error"), String(rpcError.message || "MCP Tool一覧を取得できませんでした."), null);
+    }
+    const result = response.result && typeof response.result === "object" && !Array.isArray(response.result)
+      ? response.result as JsonRecord
+      : {};
+    return { tools: Array.isArray(result.tools) ? result.tools : [] };
   }
 
   async createQuest(input: JsonRecord): Promise<JsonRecord> {

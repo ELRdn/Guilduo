@@ -47,7 +47,7 @@ Guilduo 是独立项目，与 Habitica 没有合作、认可或替代关系。�
 | Appwrite Google 登录和设备访客存储 | 可用（认证已配置） |
 | Quest CRUD、归档、Quest Tree、MP 战斗 | 可用 |
 | Agent Registry、MCP 客户端绑定、Handoff | 可用 |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | 官方 Web App 的公开 Beta（Desktop / Mobile）。内部 `/next/relay-forge/` 是部署和兼容路径 |
 | 9 种语言 | 根 UI 可用；Beta UI 支持主要导航 |
 | Google Calendar、Google Tasks、Notion、Toggl | **Early Access / OAuth 准备中** |
@@ -96,7 +96,7 @@ Token、API key 和 secret 不会存储在 Appwrite 公共 row 或浏览器 Loca
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` 提供51个 tool，涵盖 Quest、归档、Quest Tree、Agent Handoff、Agent Registry、资料、队伍、战斗和 Toggl Focus contract。`/mcp-next` 是面向新 SDK 的验证 lane，并增加 Resources 和 Workflow Prompts。为保持现有 client 的兼容性，日常使用请继续使用 `/mcp`。
+MCP `2.7.0` 提供54个 tool，涵盖 Quest、归档、Quest Tree、Agent Handoff、Agent Registry、资料、队伍、战斗和 Toggl Focus contract。`/mcp-next` 是面向新 SDK 的验证 lane，并增加 Resources 和 Workflow Prompts。为保持现有 client 的兼容性，日常使用请继续使用 `/mcp`。
 
 迁移期间，旧 `workers.dev` 的 `/mcp` 仍作为兼容入口保留，但新注册和重新连接应使用上面的 `mcp.guilduo.com/mcp`。
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 请在 client 中按以下顺序确认：
 
 1. MCP 初始化成功。
-2. `tools/list` 返回51个 tool。
+2. `tools/list` 返回54个 tool。
 3. `list_registered_agents` 只返回自己的 Agent。
 4. 调用 `get_current_agent_context`。
 

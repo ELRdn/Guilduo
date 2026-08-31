@@ -1,7 +1,7 @@
 /**
  * FIXTURE DATA — NOT PRODUCTION CONTENT.
  *
- * Deterministic material for the five non-Command screens. Every record here is
+ * Deterministic material for the six non-Command screens. Every record here is
  * built as a genuine domain value (`types/questforge.ts` Quest, the OpenAPI
  * Integration / Party / RegisteredAgent / BattleSession shapes) and pushed
  * through the same production adapters, so a fixture cannot pass a case the
@@ -59,7 +59,7 @@ export function isScreenVariant(value: string | null): value is ScreenVariant {
 }
 
 /**
- * The notice set for a variant. Kept in one place so all five screens speak with
+ * The notice set for a variant. Kept in one place so all six screens speak with
  * the same voice for the same condition, with only the object name changing.
  */
 export function noticesFor(variant: ScreenVariant, object: string, onRetry: () => void): readonly ScreenNotice[] {

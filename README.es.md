@@ -47,7 +47,7 @@ Guilduo es un proyecto independiente y no está afiliado, respaldado ni pretende
 | Inicio de sesión de Google con Appwrite y almacenamiento de invitados en el dispositivo | Disponible (autenticación configurada) |
 | CRUD de Quest, archivado, Quest Tree y batalla de MP | Disponible |
 | Agent Registry, vinculación de clientes MCP y Handoff | Disponible |
-| REST API 2.7.0 / MCP `/mcp` | 51 tools / OpenAPI 52 paths |
+| REST API 2.7.0 / MCP `/mcp` | 54 tools / OpenAPI 52 paths |
 | `app.guilduo.com/` Guilduo / Relay Forge | Beta pública de la Web App oficial (Desktop / Mobile). `/next/relay-forge/` interno es una ruta de despliegue y compatibilidad |
 | 9 idiomas | Disponibles en la UI principal; la UI beta cubre la navegación principal |
 | Google Calendar, Google Tasks, Notion y Toggl | **Early Access / preparación de OAuth** |
@@ -96,7 +96,7 @@ El endpoint de conexión estable es:
 https://mcp.guilduo.com/mcp
 ```
 
-MCP `2.7.0` expone 51 tools para Quests, archivado, Quest Tree, Agent Handoff, Agent Registry, perfiles, grupos, batalla y el contrato de Toggl Focus. `/mcp-next` es una vía de validación para el nuevo SDK y añade Resources y Workflow Prompts. Sigue usando `/mcp` normalmente para mantener la compatibilidad con los clientes existentes.
+MCP `2.7.0` expone 54 tools para Quests, archivado, Quest Tree, Agent Handoff, Agent Registry, perfiles, grupos, batalla y el contrato de Toggl Focus. `/mcp-next` es una vía de validación para el nuevo SDK y añade Resources y Workflow Prompts. Sigue usando `/mcp` normalmente para mantener la compatibilidad con los clientes existentes.
 
 Durante la migración, el antiguo `/mcp` de `workers.dev` permanece disponible para compatibilidad, pero las nuevas altas y reconexiones deben usar `mcp.guilduo.com/mcp`.
 
@@ -142,7 +142,7 @@ https://mcp.guilduo.com/.well-known/oauth-protected-resource/mcp
 Comprueba la siguiente secuencia desde el cliente:
 
 1. La inicialización de MCP tiene éxito.
-2. `tools/list` devuelve 51 tools.
+2. `tools/list` devuelve 54 tools.
 3. `list_registered_agents` devuelve únicamente tu propio Agent.
 4. Llama a `get_current_agent_context`.
 
