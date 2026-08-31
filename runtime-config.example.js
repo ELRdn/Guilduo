@@ -1,10 +1,10 @@
 const runtimeConfig = {
-  gatewayUrl: "https://your-questforge-worker.example.workers.dev",
-  joinGuildUrl: "/next/",
+  gatewayUrl: "https://mcp.guilduo.com",
+  joinGuildUrl: "https://app.guilduo.com/",
   sourceUrl: "https://github.com/your-account/QuestForge",
   externalOAuthEnabled: false,
   telemetryEndpoint: "",
-  appwriteEndpoint: "https://sgp.cloud.appwrite.io/v1",
+  appwriteEndpoint: "https://api.guilduo.com/v1",
   appwriteProjectId: "YOUR_APPWRITE_PROJECT_ID",
 };
 

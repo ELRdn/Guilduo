@@ -5,6 +5,12 @@ import type { Quest } from "../types/questforge.ts";
 import { fixtureActors } from "../interaction-lab/relay-forge/fixtures.ts";
 import { normalizeQuestsModel } from "../interaction-lab/relay-forge/screens/quests-model.ts";
 import { normalizeNetworkModel } from "../interaction-lab/relay-forge/screens/network-model.ts";
+import {
+  centreNetworkCamera,
+  fitNetworkCamera,
+  layoutNetworkWorld,
+  zoomNetworkCameraAt,
+} from "../interaction-lab/relay-forge/screens/network-layout.ts";
 import { normalizePartyModel } from "../interaction-lab/relay-forge/screens/party-model.ts";
 import { normalizeBattleModel } from "../interaction-lab/relay-forge/screens/battle-model.ts";
 import { FixtureBattlePort, fixtureBattleState } from "../interaction-lab/relay-forge/screens/battle-port.ts";
@@ -248,6 +254,38 @@ test("Network: an actor with no Quests is not drawn", () => {
   const kinds = [...model.nodes.values()].map((node) => node.kind);
   assert.equal(kinds.filter((kind) => kind === "actor").length, 1, "only the one actor that holds something");
   assert.equal(kinds.filter((kind) => kind === "connection").length, 0, "an integration with no Quests is not a node");
+});
+
+test("Network: a 50-node neighbourhood uses a non-overlapping four-column world grid", () => {
+  const downstream = Array.from({ length: 50 }, (_, index) => `q-${index + 1}`);
+  const layout = layoutNetworkWorld(["up-1", "up-2"], "focus", downstream);
+  const nodes = [...layout.nodes.values()];
+  assert.equal(nodes.length, 53);
+  for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
+    const left = nodes[leftIndex];
+    assert.ok(left !== undefined);
+    for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
+      const right = nodes[rightIndex];
+      assert.ok(right !== undefined);
+      const overlaps = Math.abs(left.x - right.x) < (left.width + right.width) / 2
+        && Math.abs(left.y - right.y) < (left.height + right.height) / 2;
+      assert.equal(overlaps, false, `${left.id} and ${right.id} must not overlap`);
+    }
+  }
+  assert.ok(layout.height > 620, "large neighbourhoods expand the world instead of squeezing the viewport");
+});
+
+test("Network: zoom preserves the world point under the cursor and fit stays readable", () => {
+  const layout = layoutNetworkWorld([], "focus", Array.from({ length: 12 }, (_, index) => `q-${index}`));
+  const camera = centreNetworkCamera(1000, 620, layout.focus, 1);
+  const cursor = { x: 180, y: 220 };
+  const before = { x: (cursor.x - camera.x) / camera.scale, y: (cursor.y - camera.y) / camera.scale };
+  const zoomed = zoomNetworkCameraAt(camera, 1.35, cursor);
+  const after = { x: (cursor.x - zoomed.x) / zoomed.scale, y: (cursor.y - zoomed.y) / zoomed.scale };
+  assert.ok(Math.abs(before.x - after.x) < 0.0001);
+  assert.ok(Math.abs(before.y - after.y) < 0.0001);
+  const fitted = fitNetworkCamera(1000, 620, layout);
+  assert.ok(fitted.scale <= 1 && fitted.scale >= 0.42);
 });
 
 /* ------------------------------------------------------------------ *

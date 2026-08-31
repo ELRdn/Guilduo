@@ -17,6 +17,20 @@ export interface AgentRecord {
   dryRunDefault: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Metadata only — the image bytes live in `agent-avatar-store.ts`, not D1. */
+  avatarVersion: number;
+  hasCustomAvatar: boolean;
+  /** The R2 key suffix of the currently-active avatar asset, or `null`. Never serialized in any API response — see `toPublicAgent` in index.ts. */
+  avatarAssetId: string | null;
+  /**
+   * Monotonic CAS guard, always advancing by exactly 1 on every successful
+   * write. `updatedAt` alone cannot serve this role: two writes landing in
+   * the same millisecond can compute an identical "new" timestamp, so a
+   * losing writer's WHERE clause can still match after the winner commits.
+   * Internal only — never serialized in any API response, same as
+   * `avatarAssetId` (see `toPublicAgent` in index.ts).
+   */
+  revision: number;
 }
 
 export interface AgentConnectionRecord {
@@ -73,6 +87,19 @@ function nowDate(env: WorkerEnv): Date {
 
 function nowIso(env: WorkerEnv): string {
   return nowDate(env).toISOString();
+}
+
+/**
+ * Keeps the public `expectedUpdatedAt` token useful even when two writes land
+ * in the same millisecond (or a test freezes the clock). `revision` remains
+ * the internal D1 CAS source of truth, while this value is the client-visible
+ * generation token and therefore must advance after every successful write.
+ */
+function nextUpdatedAt(env: WorkerEnv, previousUpdatedAt: string): string {
+  const currentMs = nowDate(env).getTime();
+  const previousMs = Date.parse(previousUpdatedAt);
+  const nextMs = Number.isFinite(previousMs) ? Math.max(currentMs, previousMs + 1) : currentMs;
+  return new Date(nextMs).toISOString();
 }
 
 function memory(env: WorkerEnv): AgentMemory {
@@ -175,6 +202,10 @@ function normalizeAgent(row: unknown): AgentRecord | null {
     dryRunDefault: Boolean(item.dry_run_default ?? item.dryRunDefault ?? 0),
     createdAt: String(item.created_at ?? item.createdAt ?? ""),
     updatedAt: String(item.updated_at ?? item.updatedAt ?? ""),
+    avatarVersion: Number(item.avatar_version ?? item.avatarVersion ?? 0),
+    hasCustomAvatar: Boolean(item.has_custom_avatar ?? item.hasCustomAvatar ?? 0),
+    avatarAssetId: (item.avatar_asset_id ?? item.avatarAssetId) != null ? String(item.avatar_asset_id ?? item.avatarAssetId) : null,
+    revision: Number(item.revision ?? 1) || 1,
   };
 }
 
@@ -195,18 +226,29 @@ function normalizeConnection(row: unknown): AgentConnectionRecord | null {
   };
 }
 
+/**
+ * The in-memory fallback's Map holds the live, mutable record — unlike a
+ * real D1 `SELECT`, which reflects a snapshot taken at query time. Every
+ * caller here awaits before doing anything with the result, and a
+ * concurrent writer can mutate that same object during the wait; returning
+ * a shallow copy freezes the read at the moment this function actually ran,
+ * matching real D1 semantics and keeping a "stale" CAS read stale even
+ * under genuine (Promise.all) concurrency, not just sequential calls.
+ */
 async function getAgentRow(env: WorkerEnv, uid: string, agentId: string): Promise<unknown> {
   if (env.QUESTFORGE_DB) {
     return env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_agents WHERE uid = ? AND agent_id = ?").bind(uid, agentId).first();
   }
-  return memory(env).agents.get(agentKey(uid, agentId));
+  const stored = memory(env).agents.get(agentKey(uid, agentId));
+  return stored === undefined ? undefined : { ...stored };
 }
 
 async function getConnectionRow(env: WorkerEnv, uid: string, clientId: string): Promise<unknown> {
   if (env.QUESTFORGE_DB) {
     return env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND client_id = ?").bind(uid, clientId).first();
   }
-  return memory(env).connections.get(`${uid}:${clientId}`);
+  const stored = memory(env).connections.get(`${uid}:${clientId}`);
+  return stored === undefined ? undefined : { ...stored };
 }
 
 async function countActiveAgents(env: WorkerEnv, uid: string): Promise<number> {
@@ -291,13 +333,18 @@ export async function createAgent(env: WorkerEnv, uid: string, input: AgentInput
     dry_run_default: dryRunDefault ? 1 : 0,
     created_at: createdAt,
     updated_at: createdAt,
+    avatar_version: 0,
+    has_custom_avatar: 0,
+    avatar_asset_id: null,
+    revision: 1,
   };
   if (env.QUESTFORGE_DB) {
     await env.QUESTFORGE_DB.prepare(`INSERT INTO agent_registry_agents
-      (uid, agent_id, display_name, provider, role, instructions, status, allowed_scopes, default_handoff_state, review_required, dry_run_default, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (uid, agent_id, display_name, provider, role, instructions, status, allowed_scopes, default_handoff_state, review_required, dry_run_default, created_at, updated_at, avatar_version, has_custom_avatar, avatar_asset_id, revision)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(row.uid, row.agent_id, row.display_name, row.provider, row.role, row.instructions, row.status, row.allowed_scopes,
-        row.default_handoff_state, row.review_required, row.dry_run_default, row.created_at, row.updated_at).run();
+        row.default_handoff_state, row.review_required, row.dry_run_default, row.created_at, row.updated_at,
+        row.avatar_version, row.has_custom_avatar, row.avatar_asset_id, row.revision).run();
   } else {
     memory(env).agents.set(agentKey(uid, agentId), {
       uid,
@@ -313,6 +360,10 @@ export async function createAgent(env: WorkerEnv, uid: string, input: AgentInput
       dryRunDefault,
       createdAt,
       updatedAt: createdAt,
+      avatarVersion: 0,
+      hasCustomAvatar: false,
+      avatarAssetId: null,
+      revision: 1,
     });
   }
   return normalizeAgent(row);
@@ -338,24 +389,56 @@ export async function updateAgent(env: WorkerEnv, uid: string, agentId: string, 
   const reviewRequired = patch.reviewRequired === undefined ? agent.reviewRequired : coerceBoolean(patch.reviewRequired, "review_required");
   const dryRunDefault = patch.dryRunDefault === undefined ? agent.dryRunDefault : coerceBoolean(patch.dryRunDefault, "dry_run_default");
 
-  const updatedAt = nowIso(env);
+  const updatedAt = nextUpdatedAt(env, agent.updatedAt);
   const revoke = status === "disabled" || status === "archived";
   if (env.QUESTFORGE_DB) {
+    // Compare-and-swap on `revision`, the monotonic counter read at the top
+    // of this call — not `updated_at`. A timestamp guard can be defeated when
+    // two writes land in the same millisecond, because the "new" value a
+    // racer computes can equal the "old" value it also uses as its guard,
+    // leaving the WHERE clause perpetually satisfied. `revision` always
+    // advances by exactly 1 on a real write, so a second write racing this
+    // one always sees a changed guard and changes zero rows here — not just
+    // the pre-check above. This is what keeps an avatar upload
+    // (`bumpAgentAvatarVersion`) and a metadata PATCH from both succeeding
+    // when they race each other.
+    //
+    // The connection-revoke statement below cannot simply ride along in the
+    // same `.batch()` unconditionally: D1's batch is one implicit
+    // transaction, but a `changes = 0` UPDATE is not a SQL error, so the
+    // batch still commits even when the agent CAS above matched nothing —
+    // see https://developers.cloudflare.com/d1/worker-api/d1-database/#batch.
+    // Gating it on `changes() = 1` (SQLite's own "rows touched by the
+    // statement that just ran on this connection" function) makes the revoke
+    // itself conditional on the *actual* result of the immediately preceding
+    // statement, not on a value guessed in JS ahead of time — which is what a
+    // "does revision now equal what I expected to write" check would be, and
+    // which two racers reading the same stale revision could both guess
+    // identically. Verified against a local D1 instance: a losing CAS leaves
+    // both the agent row and any connections untouched; a winning one
+    // revokes them in the same batch. `.batch()` runs its statements
+    // sequentially on one connection, so `changes()` at statement N reflects
+    // statement N-1, not some interleaved write from another request.
     const statements = [
       env.QUESTFORGE_DB.prepare(`UPDATE agent_registry_agents
-        SET display_name = ?, provider = ?, role = ?, instructions = ?, status = ?, allowed_scopes = ?, default_handoff_state = ?, review_required = ?, dry_run_default = ?, updated_at = ?
-        WHERE uid = ? AND agent_id = ?`)
+        SET display_name = ?, provider = ?, role = ?, instructions = ?, status = ?, allowed_scopes = ?, default_handoff_state = ?, review_required = ?, dry_run_default = ?, updated_at = ?, revision = revision + 1
+        WHERE uid = ? AND agent_id = ? AND status <> 'archived' AND revision = ?`)
         .bind(displayName, provider, role, instructions, status, JSON.stringify(allowedScopes), defaultHandoffState,
-          reviewRequired ? 1 : 0, dryRunDefault ? 1 : 0, updatedAt, uid, agentId),
+          reviewRequired ? 1 : 0, dryRunDefault ? 1 : 0, updatedAt, uid, agentId, agent.revision),
     ];
     if (revoke) {
-      statements.push(env.QUESTFORGE_DB.prepare("UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL")
-        .bind(updatedAt, updatedAt, uid, agentId));
+      statements.push(env.QUESTFORGE_DB.prepare(
+        "UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL AND changes() = 1",
+      ).bind(updatedAt, updatedAt, uid, agentId));
     }
-    await env.QUESTFORGE_DB.batch(statements);
+    const results = await env.QUESTFORGE_DB.batch(statements);
+    if ((results[0]?.meta?.changes ?? 0) !== 1) {
+      throw agentError(409, "agent_conflict", "Agent changed since it was last read. Please retry.");
+    }
   } else {
     const stored = memory(env).agents.get(agentKey(uid, agentId));
     if (!stored) throw agentError(404, "agent_not_found", "Agent was not found.");
+    if (stored.revision !== agent.revision) throw agentError(409, "agent_conflict", "Agent changed since it was last read. Please retry.");
     stored.displayName = displayName;
     stored.provider = provider;
     stored.role = role;
@@ -366,9 +449,63 @@ export async function updateAgent(env: WorkerEnv, uid: string, agentId: string, 
     stored.reviewRequired = reviewRequired;
     stored.dryRunDefault = dryRunDefault;
     stored.updatedAt = updatedAt;
+    stored.revision += 1;
     if (revoke) await revokeAgentConnections(env, uid, agentId, updatedAt);
   }
   return getAgent(env, uid, agentId, { includeArchived: true });
+}
+
+/**
+ * Activates a newly-uploaded avatar asset in D1 after `agent-avatar-store.ts`
+ * has already written it to R2 under `newAssetId`. This is the compare-and-
+ * swap that decides whether that asset becomes "current": the WHERE clause
+ * binds the `revision` read at the top of this call, so a concurrent
+ * metadata PATCH or a second avatar upload racing this one causes zero rows
+ * to change here rather than either silently overwriting the other —
+ * `revision`, not `updated_at`, because a timestamp guard can stay satisfied
+ * across an unbounded number of same-millisecond racers (see `updateAgent`).
+ * On a 409 the caller (index.ts) is responsible for deleting the
+ * now-orphaned R2 object this call never activated — this function only
+ * ever touches D1.
+ */
+export async function bumpAgentAvatarVersion(env: WorkerEnv, uid: string, agentId: string, newAssetId: string, expectedUpdatedAt?: string): Promise<AgentRecord> {
+  const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
+  if (!agent) throw agentError(404, "agent_not_found", "Agent was not found.");
+  if (agent.status === "archived") throw agentError(409, "agent_archived", "Archived agents cannot be updated.");
+  if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== agent.updatedAt) {
+    throw agentError(409, "agent_conflict", "Agent changed since it was last read. Please retry.");
+  }
+  const nextVersion = agent.avatarVersion + 1;
+  const updatedAt = nextUpdatedAt(env, agent.updatedAt);
+  if (env.QUESTFORGE_DB) {
+    const result = await env.QUESTFORGE_DB.prepare(
+      "UPDATE agent_registry_agents SET avatar_version = ?, has_custom_avatar = 1, avatar_asset_id = ?, updated_at = ?, revision = revision + 1 WHERE uid = ? AND agent_id = ? AND status <> 'archived' AND revision = ?",
+    ).bind(nextVersion, newAssetId, updatedAt, uid, agentId, agent.revision).run();
+    if ((result.meta?.changes ?? 0) !== 1) {
+      throw agentError(409, "agent_conflict", "Agent changed since it was last read. Please retry.");
+    }
+  } else {
+    const stored = memory(env).agents.get(agentKey(uid, agentId));
+    if (!stored) throw agentError(404, "agent_not_found", "Agent was not found.");
+    if (stored.revision !== agent.revision) throw agentError(409, "agent_conflict", "Agent changed since it was last read. Please retry.");
+    stored.avatarVersion = nextVersion;
+    stored.hasCustomAvatar = true;
+    stored.avatarAssetId = newAssetId;
+    stored.updatedAt = updatedAt;
+    stored.revision += 1;
+  }
+  // The successful CAS above already determines this exact committed
+  // generation. Avoid a second SELECT: if that follow-up read failed after
+  // the UPDATE committed, the HTTP caller could misclassify the active R2
+  // object as an orphan and delete it.
+  return {
+    ...agent,
+    avatarVersion: nextVersion,
+    hasCustomAvatar: true,
+    avatarAssetId: newAssetId,
+    updatedAt,
+    revision: agent.revision + 1,
+  };
 }
 
 export async function listAgentConnections(env: WorkerEnv, uid: string, agentId: string): Promise<AgentConnectionRecord[]> {

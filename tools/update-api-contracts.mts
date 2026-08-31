@@ -59,7 +59,7 @@ openapi.info = {
   description: "Guilduo REST API for quests, Quest Trees, agent handoffs, work-management reviews, profiles, friends, parties, command battles, Toggl Focus, integrations, plugins, and signed webhooks.",
 };
 openapi.servers = [
-  { url: "https://your-questforge-worker.example.workers.dev", description: "Cloudflare Worker" },
+  { url: "https://mcp.guilduo.com", description: "Guilduo Worker REST / MCP gateway" },
   { url: "http://127.0.0.1:8787", description: "Local Wrangler" },
 ];
 
@@ -72,6 +72,10 @@ Object.assign(openapi.paths, {
     get: { summary: "Get one registered Agent", parameters: [parameter("agentId")], responses: ok("Registered Agent", { type: "object", properties: { agent: { $ref: "#/components/schemas/RegisteredAgent" } } }) },
     patch: { summary: "Update, disable, or archive an Agent from the Appwrite-authenticated web app", parameters: [parameter("agentId")], requestBody: body({ $ref: "#/components/schemas/RegisteredAgentPatch" }), responses: ok("Updated Agent") },
   },
+  "/v1/agents/{agentId}/avatar": {
+    put: { summary: "Upload one Agent's avatar image from the Appwrite-authenticated web app", description: "Body is the raw image (PNG/JPEG/WebP, max 300 KB); the server independently validates format and size regardless of Content-Type, streaming the body and rejecting mid-transfer once the cap is exceeded. Bumps avatarVersion and, optionally, checks X-Expected-Updated-At against the Agent's current updatedAt, returning 409 agent_conflict on a mismatch.", parameters: [parameter("agentId")], requestBody: { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } }, responses: { ...ok("Avatar stored", { type: "object", properties: { agent: { $ref: "#/components/schemas/RegisteredAgent" }, avatarVersion: { type: "integer" } } }), "409": { description: "Agent changed since it was last read (agent_conflict)" }, "413": { description: "Image exceeds 300 KB (avatar_too_large)" }, "415": { description: "Body is not a real PNG/JPEG/WebP image (avatar_format_invalid)" }, "503": { description: "Avatar storage is not configured; nothing was saved (avatar_storage_unavailable)" } } },
+    get: { summary: "Fetch one Agent's avatar image", description: "Bearer-authenticated like every other Agent route. Clients fetch this with `fetch()` and an Authorization header and convert the response into a Blob URL, since a plain <img src> cannot carry the header. Supports conditional GET via If-None-Match / ETag. `v` is required and must be a positive integer matching the Agent's current avatarVersion exactly — only that exact match gets the year-long `immutable` Cache-Control; anything else (missing, zero, negative, decimal, or a non-matching version) never does.", parameters: [parameter("agentId"), { name: "v", in: "query", required: true, schema: { type: "integer", minimum: 1 }, description: "The exact current avatarVersion. Required; a missing or malformed value is 400, a non-matching one is 404 — neither is ever served with an immutable cache header." }], responses: { "200": { description: "Image bytes, with a one-year immutable Cache-Control" }, "304": { description: "Not modified" }, "400": { description: "v is missing or not a positive integer (avatar_version_required)" }, "401": { description: "Missing or invalid Bearer token" }, "404": { description: "No avatar stored for this Agent, foreign agentId, or v does not match the current version (avatar_version_stale)" } } },
+  },
   "/v1/agent-connections": {
     get: { summary: "List OAuth MCP clients and Agent links for the signed-in web user", responses: ok("Agent connections") },
   },
@@ -82,6 +86,16 @@ Object.assign(openapi.paths, {
   "/v1/profile": {
     get: { summary: "Get the authenticated user's profile", responses: ok("Own profile", { type: "object", properties: { profile: { anyOf: [{ $ref: "#/components/schemas/OwnProfile" }, { type: "null" }] } } }) },
     patch: { summary: "Create or update the authenticated user's profile", requestBody: body({ $ref: "#/components/schemas/ProfileInput" }), responses: ok("Updated profile", { type: "object", properties: { profile: { $ref: "#/components/schemas/OwnProfile" } } }) },
+  },
+  "/v1/profile/avatar": {
+    put: { summary: "Upload the authenticated user's private profile avatar", description: "Body is the raw image (PNG/JPEG/WebP, max 300 KB). The server validates the real image signature and size, stores the bytes in private R2 storage, and advances avatarVersion. This route is for the authenticated Guilduo web app.", requestBody: { required: true, content: {
+      "image/png": { schema: { type: "string", format: "binary" } },
+      "image/jpeg": { schema: { type: "string", format: "binary" } },
+      "image/webp": { schema: { type: "string", format: "binary" } },
+      "application/octet-stream": { schema: { type: "string", format: "binary" } },
+    } }, responses: { ...ok("Profile avatar stored", { type: "object", properties: { profile: { $ref: "#/components/schemas/OwnProfile" }, avatarVersion: { type: "integer" } } }), "401": { description: "Missing or invalid Bearer token" }, "413": { description: "Image exceeds 300 KB (avatar_too_large)" }, "415": { description: "Body is not a real PNG/JPEG/WebP image (avatar_format_invalid)" }, "503": { description: "Avatar storage is not configured; nothing was saved (avatar_storage_unavailable)" } } },
+    get: { summary: "Fetch the authenticated user's private profile avatar", description: "Bearer-authenticated image response. Clients fetch with Authorization and convert the response into a Blob URL. The required v query must exactly match the current avatarVersion; stale or missing versions are not served.", parameters: [{ name: "v", in: "query", required: true, schema: { type: "integer", minimum: 1 } }], responses: { "200": { description: "Private image bytes with a version-safe immutable cache header" }, "304": { description: "Not modified" }, "400": { description: "v is missing or malformed (avatar_version_required)" }, "401": { description: "Missing or invalid Bearer token" }, "404": { description: "No avatar exists or v is stale (avatar_not_found / avatar_version_stale)" } } },
+    delete: { summary: "Remove the authenticated user's profile avatar", description: "Removes the current profile avatar, advances avatarVersion to invalidate stale image links, and returns the updated profile.", responses: ok("Profile avatar removed", { type: "object", properties: { profile: { $ref: "#/components/schemas/OwnProfile" }, avatarVersion: { type: "integer" } } }) },
   },
   "/v1/profiles/{handle}": {
     get: { summary: "Find a public profile by exact @handle", parameters: [parameter("handle")], responses: ok("Public profile", { type: "object", properties: { profile: { anyOf: [{ $ref: "#/components/schemas/PublicProfile" }, { type: "null" }] } } }) },
@@ -186,8 +200,8 @@ bearerAuth.bearerFormat = "Appwrite JWT";
 const flows = oauth2.flows as OpenApiSchema;
 const authorizationCode = flows.authorizationCode as OpenApiSchema;
 const scopes = authorizationCode.scopes as Record<string, string>;
-authorizationCode.authorizationUrl = "https://your-questforge-worker.example.workers.dev/oauth/authorize";
-authorizationCode.tokenUrl = "https://your-questforge-worker.example.workers.dev/oauth/token";
+authorizationCode.authorizationUrl = "https://mcp.guilduo.com/oauth/authorize";
+authorizationCode.tokenUrl = "https://mcp.guilduo.com/oauth/token";
 Object.assign(scopes, {
   "agents:read": "Read registered Agent profiles and the current Agent context",
   "profiles:read": "Read public profile data",
@@ -203,7 +217,7 @@ Object.assign(scopes, {
 const schemas = openapi.components.schemas;
 schemas.RegisteredAgentInput = { type: "object", required: ["agentId", "displayName"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" }, displayName: { type: "string", minLength: 1, maxLength: 40 }, provider: { type: "string", maxLength: 40 }, role: { type: "string", maxLength: 60 }, instructions: { type: "string", maxLength: 4000 }, allowedScopes: { type: "array", items: { type: "string" } }, defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" } }, additionalProperties: false };
 schemas.RegisteredAgentPatch = { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 40 }, provider: { type: "string", maxLength: 40 }, role: { type: "string", maxLength: 60 }, instructions: { type: "string", maxLength: 4000 }, status: { type: "string", enum: ["active", "disabled", "archived"] }, allowedScopes: { type: "array", items: { type: "string" } }, defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" }, expectedUpdatedAt: { type: "string", format: "date-time" } }, additionalProperties: false };
-schemas.RegisteredAgent = { allOf: [{ $ref: "#/components/schemas/RegisteredAgentInput" }, { type: "object", required: ["status", "createdAt", "updatedAt"], properties: { uid: { type: "string" }, status: { type: "string", enum: ["active", "disabled", "archived"] }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } }] };
+schemas.RegisteredAgent = { allOf: [{ $ref: "#/components/schemas/RegisteredAgentInput" }, { type: "object", required: ["status", "createdAt", "updatedAt"], properties: { uid: { type: "string" }, status: { type: "string", enum: ["active", "disabled", "archived"] }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, avatarVersion: { type: "integer", minimum: 0, description: "Bumped on every avatar upload. The image itself is never embedded here or in the list response." }, hasCustomAvatar: { type: "boolean", description: "Derived from whether an avatar asset is currently active. Fetch the image with GET .../agents/{agentId}/avatar?v={avatarVersion} using a Bearer header." } } }] };
 schemas.Assignee = {
   type: "object",
   required: ["type", "id", "label", "handoffState"],
@@ -246,21 +260,21 @@ schemas.ProfileInput = {
   type: "object",
   required: ["displayName", "handle"],
   properties: {
-    displayName: { type: "string", minLength: 1, maxLength: 40 },
+    displayName: { type: "string", minLength: 1, maxLength: 60 },
     handle: { type: "string", pattern: "^@?[A-Za-z0-9_]{3,20}$" },
     bio: { type: "string", maxLength: 160 },
     avatarRole: { type: "string", maxLength: 40 },
     avatarVariant: { type: "string", maxLength: 40 },
-    avatarUrl: { type: "string", maxLength: 700000, pattern: "^data:image/(png|jpeg|webp);base64," },
     level: { type: "integer", minimum: 1 },
   },
 };
 schemas.PublicProfile = {
   type: "object",
-  required: ["uid", "displayName", "handle", "bio", "avatarRole", "avatarVariant", "avatarUrl", "level"],
+  required: ["uid", "displayName", "handle", "bio", "avatarRole", "avatarVariant", "avatarUrl", "hasCustomAvatar", "avatarVersion", "level"],
   properties: {
     uid: { type: "string" }, displayName: { type: "string" }, handle: { type: "string" }, bio: { type: "string" },
-    avatarRole: { type: "string" }, avatarVariant: { type: "string" }, avatarUrl: { type: "string", maxLength: 700000 }, level: { type: "integer" },
+    avatarRole: { type: "string" }, avatarVariant: { type: "string" }, avatarUrl: { type: "string", maxLength: 0, description: "Compatibility field; always empty because image bytes are private." },
+    hasCustomAvatar: { type: "boolean" }, avatarVersion: { type: "integer", minimum: 0 }, level: { type: "integer" },
   },
 };
 schemas.OwnProfile = { allOf: [{ $ref: "#/components/schemas/PublicProfile" }, { type: "object", properties: { handleChangedAt: { type: "string", format: "date-time" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } }] };

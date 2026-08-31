@@ -235,8 +235,8 @@ components:
 
 > **English summary:** Guilduo is a Human × AI Work Platform presented as a tactical operations board. The work interface is primary, RPG language adds motivation and identity, and Relay, Evidence, and Decision make human-agent coordination explicit. The root `/` surface is the visual baseline; `/next/` documents only its intentional visual and interaction differences.
 
-最終更新: 2026-08-17  
-対象: `0.6.0-beta.7` / REST・MCP `2.7.0` / Schema `7`
+最終更新: 2026-08-29
+対象: `0.6.0-beta.8`候補 / REST・MCP `2.7.0` / Schema `7`
 文書の位置づけ: 視覚設計とUI操作の正本
 
 技術仕様、ドメイン不変条件、認証、MCP、リリースの正本は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)である。UI変更前にはこの文書と対象Surfaceの設計書を読む。
@@ -279,7 +279,19 @@ Guilduoは、**HumanとAI Agentの作戦盤に、節度あるRPGの手触りを�
 
 キャラクターとボス画像は装飾ではなく、担当者・相棒・敵・戦闘状態を理解するために使う。RPG要素を増やす場合も、作業判断の邪魔をしない。
 
-### 1.1 Token precedence
+### 1.1 Guilduo E2 brand mark
+
+- `assets/brand/guilduo-mark-master.svg`をSVG正本とし、現段階はユーザー許可済みの暫定トレース版として扱う。
+- 公開ワードマークは常に`Guilduo`。資料内の大文字見出しやGolden Referenceの歴史的表示は公開ブランド表記へ流用しない。
+- UIとLPでは背景なし単色マークを使い、PWA、favicon、OG、GitHubではForge Teal＋Antique Goldの角丸フルカラー版を使う。maskableだけはOS安全領域用に角丸なしで生成する。
+- ブランド色はNight Surface `#0F1418`、Forge Teal `#13352F`、Antique Gold `#B89A5E`、Ivory Text `#E7E3DA`を公開βの正式採用パレットとして扱う。2026-08-29にひろなおの公開前レビュー承認を記録済みだが、これは商標登録や法務意見を意味しない。
+- 旧キャラクターアイコンはブランド識別から退役し、Astraなどの人格表現に限定する。
+
+### 1.2 Palette scope
+
+新しいForge系カラーパレットを適用するのは`/next/relay-forge/`だけ。root `/`、旧`/next/`、LPの既存配色、Battle/Unity関連Surfaceの意味色は変更しない。Relay Forge内でもHuman、Agent、RPG、Dangerの意味色は保持し、背景・面・境界・ブランドアクセントだけをE2アンカーへ寄せる。
+
+### 1.3 Token precedence
 
 数値トークンの機械的な正本は[`design/TOKENS.json`](design/TOKENS.json)である。Front Matterの共通値は`Soft Ops Light`を表すlint用スナップショットであり、実行時は選択されたテーマとライト／ダークモードの値を優先する。意味、優先順位、禁止事項はこの文書を正本とする。
 
@@ -293,7 +305,7 @@ interaction-lab/           = explicit Next-only overrides
 
 `design/tokens.generated.css`は`design/TOKENS.json`から`npm run tokens:generate`（`tools/generate-tokens.mts`）で生成する。**このファイルを直接編集してはならない**。トークン値を変更する場合は`design/TOKENS.json`を編集してから再生成し、`npm run tokens:check`でドリフトがないことを確認する。
 
-`/interaction-lab/`は開発用ルート、ビルド後に公開される`/next/`は公開βルートであり、別のデザインシステムではない。
+`/interaction-lab/`は開発・キャプチャ用のsource routeである。Relay Forgeの公開Web Appは`https://app.guilduo.com/`で、同じAppwrite Siteの`/next/relay-forge/`へhost-based rewriteされる。`/next/relay-forge/`は内部デプロイ・互換pathであり、別のデザインシステムでも、新規ユーザー向けのcanonical URLでもない。LPと正式URLの対応は[`docs/public-urls.md`](docs/public-urls.md)を参照する。
 
 ## 2. Colors
 

@@ -11,6 +11,22 @@ export type IdentityProof = {
   appwriteEmailVerified: boolean;
 };
 
+/**
+ * Deliberately excludes `avatar_version` / `has_custom_avatar` /
+ * `avatar_asset_id`. This tool copies Agent metadata rows to a new uid but
+ * never touches R2 — the avatar image itself lives under an immutable,
+ * randomly-generated R2 key (`agents/avatars/{crypto.randomUUID()}`,
+ * agent-avatar-store.ts), never a uid-scoped one; D1's `avatar_asset_id` is
+ * the only place that maps a uid+agentId to which object is current, and
+ * that mapping is not migrated either. Including those columns in the
+ * checksum would make a migrated Agent's copy legitimately mismatch its
+ * source and fail `post_copy_checksum_mismatch`, since the new row always
+ * starts at `avatar_version: 0` / `avatar_asset_id: null`. A migrated Agent
+ * shows the role-crest/initials fallback until its owner re-uploads an
+ * avatar under the new uid — the old R2 object is left in place, unreferenced,
+ * for the same reason a superseded avatar is never deleted on a normal
+ * replace (see PRIVACY.md).
+ */
 export type AgentRow = {
   uid: string; agent_id: string; display_name: string; provider: string; role: string;
   instructions: string; status: string; allowed_scopes: string; default_handoff_state: string;

@@ -63,17 +63,11 @@
 }
 
 .rf-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   width: var(--qf-space-9);
-  height: var(--qf-space-9);
+  height: var(--qf-space-11);
   flex: none;
-  border: var(--qf-border-width) solid var(--qf-color-review);
-  border-radius: var(--qf-radius-md);
-  font: var(--qf-text-label);
-  letter-spacing: 0.06em;
-  color: var(--qf-color-review);
+  object-fit: contain;
 }
 
 .rf-rail-workspace {
@@ -197,6 +191,11 @@
 .rf-rail-utility .rf-nav-label { flex: 1; }
 .rf-rail-utility .rf-kbd { margin-left: auto; }
 
+.rf-rail-utility[data-selected="true"] {
+  color: var(--qf-color-fg-strong);
+  background: var(--qf-color-selected);
+}
+
 /* Theme control reads as a two-state switch without needing an icon font. */
 .rf-theme-switch {
   display: inline-flex;
@@ -249,6 +248,21 @@
   border-right: var(--qf-border-width) solid currentColor;
   border-bottom: var(--qf-border-width) solid currentColor;
 }
+
+/* A plain ring, matching the restrained mark language used everywhere else in
+ * this rail — not a gear, not an icon font. */
+.rf-settings-mark {
+  display: inline-block;
+  flex: none;
+  width: var(--qf-space-4);
+  height: var(--qf-space-4);
+  border-radius: var(--qf-radius-pill);
+  border: var(--qf-border-width) solid currentColor;
+  box-shadow: inset 0 0 0 calc(var(--qf-border-width) * 2) transparent, inset 0 0 0 calc(var(--qf-space-4) / 3) var(--qf-color-canvas);
+  margin-left: auto;
+}
+
+.rf-nav-glyph[data-domain="settings"] { border-radius: var(--qf-radius-pill); box-shadow: inset 0 0 0 calc(var(--qf-space-4) / 3) var(--qf-color-canvas); }
 
 .rf-collapse-mark { transform: rotate(135deg); }
 .rf-chevron-mark { transform: rotate(-135deg); }
@@ -393,6 +407,78 @@
   font: var(--qf-text-label);
   color: var(--qf-color-human);
 }
+
+/* ---------------------------------------------------------------- *
+ * Account menu (Phase 2)
+ * ---------------------------------------------------------------- */
+
+.rf-account-menu-host { position: relative; display: inline-flex; }
+
+.rf-account-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--qf-radius-pill);
+}
+
+.rf-account-trigger:focus-visible {
+  outline: var(--qf-focus-width) solid var(--qf-color-focus);
+  outline-offset: var(--qf-focus-offset);
+}
+
+.rf-account-menu {
+  position: absolute;
+  top: calc(100% + var(--qf-space-3));
+  right: 0;
+  z-index: var(--qf-z-popover);
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: var(--qf-space-2);
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+  box-shadow: var(--qf-shadow-overlay);
+}
+
+/* `[hidden]` and `.rf-account-menu` share specificity; without this the class
+ * rule's `display: flex` would win over the browser's default `display: none`
+ * for `[hidden]` purely by source order, leaving the closed menu visible. */
+.rf-account-menu[hidden] {
+  display: none;
+}
+
+.rf-account-menu-header {
+  padding: var(--qf-space-3) var(--qf-space-3) var(--qf-space-2);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  margin-bottom: var(--qf-space-1);
+}
+
+.rf-account-menu-name { font: var(--qf-text-component); font-size: 14px; color: var(--qf-color-fg-strong); margin: 0; }
+.rf-account-menu-handle { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-muted); margin: var(--qf-space-1) 0 0; }
+.rf-account-menu-demo { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); margin: var(--qf-space-1) 0 0; max-width: 32ch; }
+
+.rf-account-menu-items { display: flex; flex-direction: column; gap: var(--qf-space-1); }
+
+.rf-account-menu-item {
+  display: flex;
+  align-items: center;
+  height: var(--qf-control-default);
+  padding-inline: var(--qf-space-3);
+  border-radius: var(--qf-radius-xs);
+  font: var(--qf-text-compact);
+  font-size: 13px;
+  color: var(--qf-color-fg-default);
+  text-align: left;
+}
+
+.rf-account-menu-item:hover:not(:disabled) { background: var(--qf-color-inset); }
+.rf-account-menu-item:focus-visible {
+  outline: var(--qf-focus-width) solid var(--qf-color-focus);
+  outline-offset: calc(var(--qf-focus-offset) * -1);
+}
+.rf-account-menu-item:disabled { color: var(--qf-color-fg-disabled); cursor: not-allowed; }
+.rf-account-menu-item--danger:not(:disabled) { color: var(--qf-color-danger); }
 
 /* ---------------------------------------------------------------- *
  * Capacity Band
@@ -893,6 +979,42 @@
 }
 
 .rf-create-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--qf-space-4); }
+
+/* ---------------------------------------------------------------- *
+ * Agent Dialog avatar picker (Phase 3) — shared by Party and Settings,
+ * because this is the one Agent Dialog.
+ * ---------------------------------------------------------------- */
+
+.rf-agent-avatar-field { display: flex; align-items: center; gap: var(--qf-space-4); }
+
+.rf-agent-avatar-preview {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--qf-space-12);
+  height: var(--qf-space-12);
+  border-radius: var(--qf-radius-pill);
+  background: var(--qf-color-inset);
+  border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  overflow: hidden;
+}
+
+.rf-agent-avatar-fallback { font: var(--qf-text-label); color: var(--qf-color-fg-muted); }
+.rf-agent-avatar-fallback[hidden] { display: none; }
+
+.rf-agent-avatar-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rf-agent-avatar-controls { display: flex; flex-direction: column; gap: var(--qf-space-2); min-width: 0; }
+.rf-agent-avatar-controls .rf-secondary-button { width: fit-content; cursor: pointer; }
+.rf-agent-avatar-status { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
 
 .rf-create-error {
   margin: 0;

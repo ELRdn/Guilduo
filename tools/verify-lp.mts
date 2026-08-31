@@ -1,6 +1,7 @@
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 
 const baseUrl = process.argv[2] ?? "http://localhost:5173";
+const expectedWebAppOrigin = process.env.WEB_APP_URL?.replace(/\/$/, "") ?? "https://app.guilduo.com";
 const chromePath = process.env.QF_CHROME_PATH
   ?? (process.platform === "win32" ? "C:/Program Files/Google/Chrome/Application/chrome.exe" : "/usr/bin/google-chrome");
 
@@ -64,7 +65,9 @@ try {
     check(`${frame.width}px has no horizontal overflow`, metrics.scrollWidth <= metrics.clientWidth, JSON.stringify(metrics));
     check(`${frame.width}px hydrates source-backed facts`, metrics.toolCount === "51", JSON.stringify(metrics));
     const joinCtaValid = metrics.joinCta?.tagName === "A"
-      ? metrics.joinCta.state === "ready" && new URL(metrics.joinCta.href ?? "", baseUrl).pathname === "/next/"
+      ? metrics.joinCta.state === "ready"
+        && new URL(metrics.joinCta.href ?? "", baseUrl).origin === expectedWebAppOrigin
+        && new URL(metrics.joinCta.href ?? "", baseUrl).pathname === "/"
       : metrics.joinCta?.tagName === "BUTTON" && metrics.joinCta.disabled === true;
     check(`${frame.width}px CTA follows runtime configuration`, joinCtaValid, JSON.stringify(metrics));
     const brokenPhraseLocks = await page.evaluate(() => {

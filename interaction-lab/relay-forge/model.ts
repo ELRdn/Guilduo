@@ -31,7 +31,7 @@ export interface Actor {
   /**
    * Identity image resolution inputs. These mirror the existing domain contract
    * and are never invented here:
-   *   avatarUrl / avatarRole / avatarVariant  social-store profile fields
+ *   avatarUrl / avatarRole / avatarVariant  authenticated profile display fields
    *   provider                                AgentRecord.provider
    */
   readonly avatarUrl?: string;

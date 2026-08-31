@@ -1,4 +1,4 @@
-const defaultGatewayUrl = "https://questforge-gateway.guangchuannaito.workers.dev";
+const defaultGatewayUrl = "https://mcp.guilduo.com";
 
 type JsonRecord = Record<string, unknown>;
 type LabState = JsonRecord & {
@@ -12,6 +12,24 @@ type LabState = JsonRecord & {
 };
 type RequestOptions = { method?: string; body?: string; headers?: Record<string, string> };
 type TokenProvider = (forceRefresh?: boolean) => Promise<string>;
+type UploadProgressEvent = { readonly lengthComputable: boolean; readonly loaded: number; readonly total: number };
+type UploadTarget = { addEventListener(type: "progress", listener: (event: UploadProgressEvent) => void): void };
+type UploadXhr = {
+  status: number;
+  responseType: string;
+  responseText: string;
+  upload: UploadTarget;
+  open(method: string, url: string): void;
+  setRequestHeader(name: string, value: string): void;
+  addEventListener(type: "load" | "error" | "abort", listener: () => void): void;
+  send(body: Blob): void;
+};
+
+function createUploadXhr(): UploadXhr {
+  const constructor = (globalThis as unknown as { XMLHttpRequest?: new () => UploadXhr }).XMLHttpRequest;
+  if (!constructor) throw new QuestForgeApiError(0, "upload_unsupported", "この環境では画像アップロードを利用できません。");
+  return new constructor();
+}
 type Snapshot = JsonRecord & {
   quests: unknown[];
   total: number;
@@ -357,8 +375,158 @@ export class QuestForgeRepository {
     return this.request("/v1/agent-connections");
   }
 
+  async getProfile(): Promise<JsonRecord> {
+    return this.request("/v1/profile");
+  }
+
   async updateProfile(input: JsonRecord): Promise<JsonRecord> {
     return this.request("/v1/profile", { method: "PATCH", body: JSON.stringify(input) });
+  }
+
+  /**
+   * Uploads the profile image as raw bytes. XHR is intentional here: browser
+   * fetch has no upload-progress event, while the Account screen promises a
+   * real progress state. The token refresh and JSON error shape match
+   * `request()` and the Agent avatar port.
+   */
+  async uploadProfileAvatar(blob: Blob, onProgress: (loaded: number, total: number) => void = () => {}): Promise<JsonRecord> {
+    if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
+    const path = "/v1/profile/avatar";
+    const send = (token: string): Promise<{ status: number; text: string }> => new Promise((resolve, reject) => {
+      const xhr = createUploadXhr();
+      xhr.open("PUT", `${this.baseUrl}${path}`);
+      xhr.responseType = "text";
+      xhr.setRequestHeader("accept", "application/json");
+      xhr.setRequestHeader("content-type", blob.type || "application/octet-stream");
+      if (token) xhr.setRequestHeader("authorization", `Bearer ${token}`);
+      onProgress(0, blob.size);
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) onProgress(event.loaded, event.total);
+      });
+      xhr.addEventListener("load", () => {
+        onProgress(blob.size, blob.size);
+        resolve({ status: xhr.status, text: xhr.responseText || "" });
+      });
+      xhr.addEventListener("error", () => reject(new QuestForgeApiError(0, "network_error", "画像のアップロードに失敗しました。接続を確認してください。")));
+      xhr.addEventListener("abort", () => reject(new QuestForgeApiError(0, "upload_aborted", "画像のアップロードをキャンセルしました。")));
+      xhr.send(blob);
+    });
+    const parse = (text: string): unknown => {
+      try { return text ? JSON.parse(text) : null; } catch { return { message: text }; }
+    };
+    const asApiError = (status: number, text: string): QuestForgeApiError => {
+      const body = parse(text);
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as JsonRecord : {};
+      const error = bodyRecord.error && typeof bodyRecord.error === "object" && !Array.isArray(bodyRecord.error) ? bodyRecord.error as JsonRecord : {};
+      return new QuestForgeApiError(status, String(error.code || bodyRecord.code || `http_${status}`), String(error.message || bodyRecord.message || `QuestForge API error (${status})`), error.details || null);
+    };
+    const token = await this.getToken(false);
+    let result = await send(token);
+    if (result.status === 401 && token) {
+      const refreshedToken = await this.getToken(true);
+      if (refreshedToken) result = await send(refreshedToken);
+    }
+    if (result.status < 200 || result.status >= 300) throw asApiError(result.status, result.text);
+    return parse(result.text) as JsonRecord;
+  }
+
+  async deleteProfileAvatar(): Promise<JsonRecord> {
+    return this.request("/v1/profile/avatar", { method: "DELETE" });
+  }
+
+  /** Fetches a private profile avatar with Bearer auth; callers own the Blob URL lifecycle. */
+  async fetchProfileAvatar(version: number): Promise<Blob> {
+    if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
+    const path = `/v1/profile/avatar?v=${encodeURIComponent(String(version))}`;
+    const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
+      headers: {
+        accept: "image/*",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const token = await this.getToken(false);
+    let response = await send(token);
+    if (response.status === 401 && token) {
+      const refreshedToken = await this.getToken(true);
+      if (refreshedToken) response = await send(refreshedToken);
+    }
+    if (!response.ok) {
+      const text = await response.text();
+      let body: unknown = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = { message: text }; }
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as JsonRecord : {};
+      const error = bodyRecord.error && typeof bodyRecord.error === "object" && !Array.isArray(bodyRecord.error) ? bodyRecord.error as JsonRecord : {};
+      throw new QuestForgeApiError(response.status, String(error.code || bodyRecord.code || `http_${response.status}`), String(error.message || bodyRecord.message || `QuestForge API error (${response.status})`), error.details || null);
+    }
+    return response.blob();
+  }
+
+  /**
+   * Uploads the raw image bytes for one Agent's avatar. This bypasses
+   * `request()` because the body is binary, not JSON — everything else
+   * (auth header, 401 retry, error shape) mirrors it exactly.
+   */
+  async uploadAgentAvatar(agentId: string, blob: Blob, expectedUpdatedAt?: string): Promise<JsonRecord> {
+    if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
+    const path = `/v1/agents/${encodeURIComponent(agentId)}/avatar`;
+    const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
+      method: "PUT",
+      body: blob,
+      headers: {
+        accept: "application/json",
+        "content-type": blob.type || "application/octet-stream",
+        ...(expectedUpdatedAt ? { "x-expected-updated-at": expectedUpdatedAt } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const token = await this.getToken(false);
+    let response = await send(token);
+    if (response.status === 401 && token) {
+      const refreshedToken = await this.getToken(true);
+      if (refreshedToken) response = await send(refreshedToken);
+    }
+    const text = await response.text();
+    let body: unknown = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = { message: text }; }
+    if (!response.ok) {
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as JsonRecord : {};
+      const error = bodyRecord.error && typeof bodyRecord.error === "object" && !Array.isArray(bodyRecord.error) ? bodyRecord.error as JsonRecord : {};
+      throw new QuestForgeApiError(response.status, String(error.code || bodyRecord.code || `http_${response.status}`), String(error.message || bodyRecord.message || `QuestForge API error (${response.status})`), error.details || null);
+    }
+    return body as JsonRecord;
+  }
+
+  /**
+   * Fetches the raw image bytes for one Agent's avatar as a Blob, for the
+   * caller to turn into an object URL. This bypasses `request()` because the
+   * response is binary, not JSON — everything else (auth header, 401 retry,
+   * error shape) mirrors it exactly. `version` is `avatarVersion` from the
+   * Agent record; the server 404s `avatar_version_stale` on a mismatch.
+   */
+  async fetchAgentAvatar(agentId: string, version: number): Promise<Blob> {
+    if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
+    const path = `/v1/agents/${encodeURIComponent(agentId)}/avatar?v=${encodeURIComponent(String(version))}`;
+    const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
+      headers: {
+        accept: "image/*",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const token = await this.getToken(false);
+    let response = await send(token);
+    if (response.status === 401 && token) {
+      const refreshedToken = await this.getToken(true);
+      if (refreshedToken) response = await send(refreshedToken);
+    }
+    if (!response.ok) {
+      const text = await response.text();
+      let body: unknown = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = { message: text }; }
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as JsonRecord : {};
+      const error = bodyRecord.error && typeof bodyRecord.error === "object" && !Array.isArray(bodyRecord.error) ? bodyRecord.error as JsonRecord : {};
+      throw new QuestForgeApiError(response.status, String(error.code || bodyRecord.code || `http_${response.status}`), String(error.message || bodyRecord.message || `QuestForge API error (${response.status})`), error.details || null);
+    }
+    return response.blob();
   }
 
   async linkAgentConnection(agentId: string, clientId: string): Promise<JsonRecord> {

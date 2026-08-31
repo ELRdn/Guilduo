@@ -329,7 +329,7 @@ const storageKey = "questforge-prototype-state";
 const trackTelemetry = (...args: unknown[]) => globalThis.QuestForgeTelemetry?.track?.(...args);
 const appearanceStorageKey = "questforge-appearance-mode";
 const appearanceModes = ["light", "dark", "system"];
-const appVersion = "2026.08.14-public-beta";
+const appVersion = "2026.08.29-brand-beta";
 const productionGatewayUrl = String(globalThis.QuestForgeConfig?.gatewayUrl || "").replace(/\/$/, "");
 const externalOAuthEnabled = globalThis.QuestForgeConfig?.externalOAuthEnabled === true;
 const hadLocalStateAtStartup = Boolean(localStorage.getItem(storageKey));

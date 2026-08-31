@@ -3,7 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#232b31" />
+    <meta name="theme-color" content="#0F1418" />
+    <meta name="description" content="Guilduo is the Human × AI Work Platform for delegating, owning, relaying, and reviewing work together." />
+    <link rel="canonical" href="__GUILDUO_WEB_APP_ORIGIN__/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Guilduo" />
+    <meta property="og:title" content="Guilduo" />
+    <meta property="og:description" content="Human × AI Work Platform" />
+    <meta property="og:url" content="__GUILDUO_WEB_APP_ORIGIN__/" />
+    <meta property="og:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Guilduo E2 emblem in Forge Teal and Antique Gold" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="__GUILDUO_WEB_APP_ORIGIN__/" />
+    <meta name="twitter:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Guilduo" />
@@ -28,15 +42,16 @@
       })();
     </script>
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/assets/icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./assets/icons/favicon-48.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon-180.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="current-v4-shell" data-theme="soft" data-motion="on">
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">QF</div>
+          <img class="brand-mark" src="./assets/brand/guilduo-mark-gold.svg" alt="" aria-hidden="true" />
           <div>
             <h1>Guilduo</h1>
             <p id="brandTagline">Soft Ops Companion</p>
@@ -901,7 +916,7 @@
                 </div>
                 <label class="runtime-field">
                   API / MCP URL
-                  <input id="gatewayUrlInput" type="url" placeholder="https://questforge-gateway.example.workers.dev" />
+                  <input id="gatewayUrlInput" type="url" placeholder="https://mcp.guilduo.com" />
                 </label>
                 <div class="runtime-actions">
                   <button class="primary-button" type="button" id="saveGatewayButton">上書きを保存</button>

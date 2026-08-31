@@ -266,7 +266,10 @@
   grid-template-columns: var(--qf-space-8) minmax(0, 1fr) auto;
   align-items: start;
   column-gap: var(--qf-space-4);
+  box-sizing: border-box;
+  block-size: 72px;
   padding: var(--qf-space-4) var(--qf-space-4) var(--qf-space-4) 0;
+  border: var(--qf-selection-width) solid transparent;
   cursor: pointer;
   border-radius: var(--qf-radius-sm);
   transition: background-color var(--qf-motion-quick) var(--qf-ease-move);
@@ -389,7 +392,7 @@
   line-height: 1.45;
   color: var(--qf-color-fg-default);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -403,9 +406,8 @@
 /* The hub is the selected Quest: review border, stronger title, no fill riot. */
 .rf-spine-row[data-relation="hub"] {
   background: var(--qf-color-selected);
-  border: var(--qf-selection-width) solid var(--qf-color-review);
+  border-color: var(--qf-color-review);
   padding-inline: var(--qf-space-4);
-  margin-block: var(--qf-space-3);
 }
 
 .rf-spine-row[data-relation="hub"] .rf-spine-title {

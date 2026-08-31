@@ -340,15 +340,11 @@ body[data-theme="retro"][data-motion="on"] button:not(:disabled) {
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 48px;
   height: 48px;
-  border: 2px solid var(--brand-mark-border);
-  border-radius: var(--radius);
-  background: var(--brand-mark-bg);
-  color: #fff3b2;
-  font-weight: 800;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .brand h1,

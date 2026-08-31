@@ -1,8 +1,8 @@
 /* ------------------------------------------------------------------ *
  * Network — relationship explorer
  *
- * The canvas never scrolls: it fits its neighbourhood. The explanation rail is
- * the one scrolling region, because reasons are text and text is long.
+ * The canvas is a clipped viewport over a fixed-gap world. The explanation rail
+ * remains the one scrolling region; camera motion never becomes page scroll.
  * ------------------------------------------------------------------ */
 
 .rf-screen--network {
@@ -25,13 +25,29 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
   border-radius: var(--qf-radius-sm);
   background: var(--qf-color-inset);
+}
+
+.rf-n-canvas[data-dragging="true"] { cursor: grabbing; }
+
+.rf-n-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 .rf-n-lane-labels {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -47,7 +63,7 @@
   color: var(--qf-color-fg-muted);
 }
 
-.rf-n-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rf-n-edges { position: absolute; inset: 0; overflow: visible; }
 
 /* Non-scaling strokes keep every connector exactly 1px whatever the canvas
  * aspect ratio is, so the Loom's line weight survives here. */
@@ -81,6 +97,8 @@
   flex-direction: column;
   gap: var(--qf-space-2);
   width: 216px;
+  height: 96px;
+  box-sizing: border-box;
   padding: var(--qf-space-3) var(--qf-space-4);
   text-align: left;
   background: var(--qf-color-surface);
@@ -120,6 +138,9 @@
   font-size: 13px;
   color: var(--qf-color-fg-muted);
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rf-n-node-label {
@@ -140,6 +161,30 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.rf-n-map-controls {
+  position: absolute;
+  z-index: var(--qf-z-sticky);
+  right: var(--qf-space-4);
+  bottom: var(--qf-space-4);
+  display: flex;
+  gap: var(--qf-space-1);
+  padding: var(--qf-space-1);
+  background: var(--qf-color-surface);
+  border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+}
+
+.rf-n-map-control {
+  min-width: var(--qf-space-9);
+  min-height: var(--qf-space-9);
+  padding-inline: var(--qf-space-3);
+  color: var(--qf-color-fg-default);
+  font: var(--qf-text-label);
+  border-radius: var(--qf-radius-xs);
+}
+
+.rf-n-map-control:hover { background: var(--qf-color-raised); color: var(--qf-color-fg-strong); }
 
 /* ---------------- outline ---------------- */
 
@@ -274,8 +319,6 @@
 
 @media (max-width: 1600px) and (min-width: 901px) {
   .rf-n-workspace { grid-template-columns: minmax(0, 1fr) minmax(330px, 32%); }
-  .rf-n-node { width: 188px; }
-  .rf-n-node[data-focused="true"] { width: 228px; }
 }
 
 /* ---------------- mobile ---------------- */

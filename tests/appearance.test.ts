@@ -37,12 +37,12 @@ test("all three tastes define dedicated dark palettes and a readable battle stag
   assert.match(css, /background: var\(--panel\);/);
 });
 
-test("PWA cache and app version are bumped for the Agent Registry beta", () => {
+test("PWA cache and app version are bumped for the Guilduo E2 brand", () => {
   const app = fs.readFileSync(path.join(root, "app.ts"), "utf8");
   const worker = fs.readFileSync(path.join(root, "service-worker.ts"), "utf8");
 
-  assert.match(app, /const appVersion = "2026\.08\.14-public-beta"/);
-  assert.match(worker, /const APP_VERSION = "2026\.08\.14-public-beta"/);
-  assert.match(worker, /CACHE_PREFIX}v21/);
+  assert.match(app, /const appVersion = "2026\.08\.29-brand-beta"/);
+  assert.match(worker, /const APP_VERSION = "2026\.08\.29-brand-beta"/);
+  assert.match(worker, /CACHE_PREFIX}v22/);
   assert.match(worker, /BETA_NAVIGATION_PATH = "\/next\/index\.html"/);
 });

@@ -14,7 +14,7 @@ test("the public app reads one production MCP endpoint from local runtime config
   assert.match(app, /QuestForgeConfig\?\.gatewayUrl/);
   assert.match(app, /return productionGatewayUrl/);
   assert.match(main, /runtime-config\.js/);
-  assert.match(example, /your-questforge-worker\.example\.workers\.dev/);
+  assert.match(example, /https:\/\/mcp\.guilduo\.com/);
   assert.doesNotMatch(app, /guangchuannaito/);
   assert.match(html, /id="mcpEndpointInput"[^>]*readonly/);
   assert.match(html, /id="copyMcpUrlButton"/);

@@ -37,11 +37,13 @@ import {
   submitDecision,
 } from "./decision.ts";
 import { FixtureHandoffPort } from "./fixture-port.ts";
+import { actorAvatar } from "./primitives/avatar.ts";
 import { fixtureRawQuests } from "./fixtures.ts";
 import { mobileCommand, mobileDecisionBar } from "./mobile.ts";
 import { capacityBand } from "./primitives/capacity.ts";
 import { chronicleStrip, executionChronicle } from "./primitives/chronicle.ts";
 import { el, replaceChildren } from "./primitives/dom.ts";
+import { createLifecycleGuard, runLifecycleStep } from "./primitives/lifecycle-guard.ts";
 import { interventionLens, type LensState } from "./primitives/lens.ts";
 import { selectedQuestWorkspace } from "./primitives/selected-quest.ts";
 import { attentionShelf } from "./primitives/shelf.ts";
@@ -104,9 +106,23 @@ import {
   FixtureConnectionsPort,
   REQUIRED_SCOPES,
 } from "./screens/connections-port.ts";
-import { normalizeAgentRecord, type RelayForgeRuntime } from "./production.ts";
-import { normalizeCommandModel, resolveActors } from "./adapter.ts";
+import { normalizeAgentRecord, normalizeProfileRecord, type RelayForgeRuntime } from "./production.ts";
+import { initialsFor, normalizeCommandModel, type ProfileRecord, resolveActors } from "./adapter.ts";
 import { questActionState, type QuestActionId } from "./quest-actions.ts";
+import {
+  deriveMcpUrl,
+  initialSettingsState,
+  normalizeSettingsModel,
+  renderSettingsDesktop,
+  renderSettingsMobile,
+  type ProfileDraft,
+  type ProfileDraftField,
+  type SettingsSection,
+  type SettingsState,
+} from "./screens/settings.ts";
+import { AvatarImageError, resizeAvatarImage } from "./primitives/image-resize.ts";
+import { gatewayDefaultUrl } from "../repository.ts";
+import { effectiveTheme, nextQuickToggleTheme, parseThemePreference, THEME_KEY, type ThemePreference } from "./theme.ts";
 
 /**
  * Section 5.1 primary domains of NEWDESIGN.md.
@@ -132,10 +148,16 @@ const DOMAINS = [
 const MOBILE_OVERFLOW = DOMAINS.filter((domain) => !domain.primaryOnMobile);
 
 type DomainId = (typeof DOMAINS)[number]["id"];
+/**
+ * Settings is account-level chrome, not a Quest domain: it never joins
+ * `DOMAINS` (the Forge Rail / Mobile primary bar), it is reached only from
+ * the Rail's bottom utility area and the Mobile More panel.
+ */
+type NavId = DomainId | "settings";
 
 interface ShellState {
   model: CommandModel;
-  domain: DomainId;
+  domain: NavId;
   /** Section 10: the single source of truth for selection across all regions. */
   selectedQuestId: string | null;
   lensState: LensState;
@@ -175,9 +197,14 @@ interface ShellState {
     party: PartyState;
     battle: BattleScreenState;
     connections: ConnectionsState;
+    settings: SettingsState;
   };
   /** The forced fixture state, shared by every screen for the capture set. */
   variant: ScreenVariant;
+  /** Popover state for the Operation Bar account menu (Phase 2). */
+  accountMenuOpen: boolean;
+  /** Section Settings should scroll/focus into view on its next render. */
+  settingsFocusSection: SettingsSection | null;
 }
 
 function resolveTheme(preference: ShellState["theme"]): void {
@@ -186,12 +213,155 @@ function resolveTheme(preference: ShellState["theme"]): void {
   else root.setAttribute("data-theme", preference);
 }
 
-export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | null = null): void {
+const prefersDarkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+/** Binds the DOM-free decision in `theme.ts` to the real OS media query. */
+function currentEffectiveTheme(preference: ShellState["theme"]): "light" | "dark" {
+  return effectiveTheme(preference, prefersDarkQuery.matches);
+}
+
+export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | null = null): () => void {
   const production = runtime !== null;
   const initialModel = runtime?.model ?? createFixtureCommandModel();
   const initialQuestId = initialModel.interventions[0]?.questId ?? initialModel.quests[0]?.id ?? null;
   let sharedQuests = [...(runtime?.quests ?? fixtureQuestsFor(readVariant()))];
   let sharedAgents: AgentRecord[] = [...(runtime?.agents ?? fixtureAgentsFor(readVariant()))];
+  /** Mutable so a saved Account avatar is reflected everywhere the profile is read. */
+  let sharedProfile: ProfileRecord | null = runtime?.profile ?? null;
+  let profileLoadError = runtime?.profileLoadError ?? null;
+
+  /*
+   * Agent avatar images. The server never hands out a usable URL — every
+   * fetch is a Bearer-authenticated GET — so the shell owns a small cache of
+   * Blob object URLs, keyed by namespace plus identity and version, so a new
+   * upload (a version bump) never serves the stale image out of cache.
+   */
+  const avatarBlobUrls = new Map<string, string>();
+  const avatarFetchInFlight = new Set<string>();
+  const profileAvatarFetchInFlight = new Set<string>();
+  let profilePreviewUrl: string | null = null;
+  /**
+   * Guards every avatar fetch this mount starts: `fetchAgentAvatar` is a
+   * plain Bearer-authenticated network call with no way to cancel it, so a
+   * fetch begun just before unmount can still resolve afterward. Every
+   * continuation that would otherwise create a Blob URL, mutate
+   * `sharedAgents`/`state`, or call `render()` checks `.disposed` first —
+   * `unmountRelayForge` below calls `.dispose()` before doing anything else.
+   */
+  const lifecycle = createLifecycleGuard();
+
+  function avatarCacheKey(agentId: string, version: number): string {
+    return `agent:${agentId}:${version}`;
+  }
+
+  function profileAvatarCacheKey(version: number): string {
+    return `profile:${runtime?.selfUid ?? "self"}:${version}`;
+  }
+
+  function clearProfileAvatarCache(keepKey: string | null = null): void {
+    for (const [key, url] of avatarBlobUrls) {
+      if (!key.startsWith("profile:") || key === keepKey) continue;
+      URL.revokeObjectURL(url);
+      avatarBlobUrls.delete(key);
+    }
+  }
+
+  function syncProfileActors(): void {
+    state.model = {
+      ...state.model,
+      actors: resolveActors(sharedProfile, sharedAgents, [...state.model.actors.values()]),
+    };
+  }
+
+  /** Reattaches a cached Blob URL when one already exists for the Agent's current version. */
+  function withCachedAvatar(agent: AgentRecord): AgentRecord {
+    if (!agent.hasCustomAvatar) return agent;
+    const cached = avatarBlobUrls.get(avatarCacheKey(agent.agentId, agent.avatarVersion ?? 0));
+    return cached === undefined ? agent : { ...agent, avatarUrl: cached };
+  }
+
+  /**
+   * Fetches and caches the image for every Agent that has a custom avatar but
+   * no cached Blob for its current version yet. Runs in the background: it
+   * never blocks the caller, and each fetch that lands rebuilds the actor map
+   * and re-renders so the portrait appears in place once ready.
+   */
+  function refreshAgentAvatars(): void {
+    if (runtime === null) return;
+    for (const agent of sharedAgents) {
+      if (!agent.hasCustomAvatar) continue;
+      const version = agent.avatarVersion ?? 0;
+      const key = avatarCacheKey(agent.agentId, version);
+      if (avatarBlobUrls.has(key) || avatarFetchInFlight.has(key)) continue;
+      avatarFetchInFlight.add(key);
+      void runtime.agentAvatarPort.fetchAgentAvatar(agent.agentId, version)
+        .then((blob) => {
+          avatarFetchInFlight.delete(key);
+          // The mount may have been torn down while this fetch was in
+          // flight (sign-out, remount, the "デモを見る" fallback); a result
+          // that lands after that must not resurrect a disposed Shell's
+          // Blob URLs, shared state, or trigger a render against DOM this
+          // mount no longer owns.
+          if (lifecycle.disposed) return;
+          // The Agent may have moved on to a newer version while this was in
+          // flight; a superseded fetch is simply discarded.
+          const current = sharedAgents.find((entry) => entry.agentId === agent.agentId);
+          if (current === undefined || (current.avatarVersion ?? 0) !== version) return;
+          const url = URL.createObjectURL(blob);
+          if (lifecycle.disposed) {
+            // Disposed between the check above and here (e.g. a synchronous
+            // unmount triggered by a `.then` microtask ordered ahead of this
+            // one) — release the URL immediately rather than caching one
+            // nothing will ever revoke.
+            URL.revokeObjectURL(url);
+            return;
+          }
+          avatarBlobUrls.set(key, url);
+          sharedAgents = sharedAgents.map((entry) => entry.agentId === agent.agentId ? { ...entry, avatarUrl: url } : entry);
+          state.model = { ...state.model, actors: resolveActors(sharedProfile, sharedAgents, [...state.model.actors.values()]) };
+          render();
+        })
+        .catch(() => {
+          avatarFetchInFlight.delete(key);
+        });
+    }
+  }
+
+  /** Fetches the signed-in user's private profile image using the same
+   * Bearer + exact-version contract as Agent avatars. */
+  function refreshProfileAvatar(): void {
+    if (runtime === null || sharedProfile === null || sharedProfile.hasCustomAvatar !== true) return;
+    const version = sharedProfile.avatarVersion ?? 0;
+    if (version < 1) return;
+    const key = profileAvatarCacheKey(version);
+    if (avatarBlobUrls.has(key) || profileAvatarFetchInFlight.has(key)) return;
+    profileAvatarFetchInFlight.add(key);
+    void runtime.profileAvatarPort.fetchProfileAvatar(version)
+      .then((blob) => {
+        profileAvatarFetchInFlight.delete(key);
+        if (lifecycle.disposed) return;
+        const current = sharedProfile;
+        if (current === null || current.hasCustomAvatar !== true || (current.avatarVersion ?? 0) !== version) return;
+        const url = URL.createObjectURL(blob);
+        if (lifecycle.disposed) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        clearProfileAvatarCache(key);
+        avatarBlobUrls.set(key, url);
+        if (profilePreviewUrl !== null) {
+          URL.revokeObjectURL(profilePreviewUrl);
+          profilePreviewUrl = null;
+        }
+        sharedProfile = { ...current, avatarUrl: url };
+        syncProfileActors();
+        render();
+      })
+      .catch(() => {
+        profileAvatarFetchInFlight.delete(key);
+      });
+  }
+
   const state: ShellState = {
     model: initialModel,
     domain: "command",
@@ -223,8 +393,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       party: initialPartyState(),
       battle: initialBattleState(),
       connections: initialConnectionsState(),
+      settings: initialSettingsState(),
     },
     variant: readVariant(),
+    accountMenuOpen: false,
+    settingsFocusSection: null,
   };
   resolveTheme(state.theme);
 
@@ -363,7 +536,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     inputmode: "numeric",
   });
   const createAssignee = el("select", { class: "rf-create-input", name: "assignee" });
-  createAssignee.append(el("option", { value: "self" }, runtime?.profile?.displayName || "自分"));
+  createAssignee.append(el("option", { value: "self" }, sharedProfile?.displayName || "自分"));
   for (const agent of sharedAgents) {
     createAssignee.append(el("option", { value: agent.agentId }, `${agent.displayName} · Agent`));
   }
@@ -481,7 +654,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     const editedQuest = editingQuestId === null ? null : sharedQuests.find((quest) => quest.id === editingQuestId) ?? null;
     const assigneePatch = editing
       ? selectedAgent === undefined
-        ? { type: "self" as const, id: runtime.selfUid, label: runtime.profile?.displayName || "自分", handoffState: "none" as const }
+        ? { type: "self" as const, id: runtime.selfUid, label: sharedProfile?.displayName || "自分", handoffState: "none" as const }
         : {
           type: "agent" as const,
           id: selectedAgent.agentId,
@@ -533,7 +706,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       sharedQuests = [created, ...sharedQuests.filter((quest) => quest.id !== created.id)];
       rawHandoffStates.set(created.id, created.assignee.handoffState);
       const normalized = normalizeCommandModel({
-        profile: runtime.profile ?? { uid: runtime.selfUid, displayName: "あなた" },
+        profile: sharedProfile ?? { uid: runtime.selfUid, displayName: "あなた" },
         agents: sharedAgents,
         quests: sharedQuests,
         syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
@@ -617,6 +790,55 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }, ...agentScopeValues.map((scope) => el("option", { value: scope }, scope)));
   const agentReviewInput = el("input", { type: "checkbox", name: "reviewRequired", checked: true });
   const agentDryRunInput = el("input", { type: "checkbox", name: "dryRunDefault", checked: true });
+
+  /* Avatar picker, shared by Party and Settings because this is the one Agent
+   * Dialog (brief Phase 3, "PartyとSettingsで別々の保存処理を持たない"). The
+   * image is resized client-side and held in memory until submit — it is
+   * never uploaded ahead of the Agent existing, since the server derives the
+   * R2 key from the owner UID and this Agent ID. */
+  const agentAvatarInput = el("input", {
+    type: "file",
+    class: "rf-visually-hidden",
+    accept: "image/png,image/jpeg,image/webp",
+    id: "rf-agent-avatar-input",
+  }) as HTMLInputElement;
+  const agentAvatarImg = el("img", { class: "rf-agent-avatar-image", alt: "", hidden: true }) as HTMLImageElement;
+  const agentAvatarFallback = el("span", { class: "rf-agent-avatar-fallback", "aria-hidden": "true" }, "?");
+  agentAvatarImg.addEventListener("error", () => {
+    agentAvatarImg.hidden = true;
+    agentAvatarImg.removeAttribute("src");
+    agentAvatarFallback.hidden = false;
+  });
+  const agentAvatarStatus = el("p", { class: "rf-agent-avatar-status", role: "status" });
+  const agentAvatarField = el(
+    "div",
+    { class: "rf-agent-avatar-field" },
+    el("span", { class: "rf-agent-avatar-preview" }, agentAvatarFallback, agentAvatarImg),
+    el(
+      "div",
+      { class: "rf-agent-avatar-controls" },
+      el("label", { for: "rf-agent-avatar-input", class: "rf-secondary-button" }, "画像を選択"),
+      agentAvatarInput,
+      agentAvatarStatus,
+    ),
+  );
+  let pendingAgentAvatar: { readonly blob: Blob; readonly dataUrl: string } | null = null;
+  agentAvatarInput.addEventListener("change", () => {
+    const file = agentAvatarInput.files?.[0];
+    agentAvatarInput.value = "";
+    if (file === undefined) return;
+    agentAvatarStatus.textContent = "画像を処理しています…";
+    void resizeAvatarImage(file).then((resized) => {
+      pendingAgentAvatar = { blob: resized.blob, dataUrl: resized.dataUrl };
+      agentAvatarImg.src = resized.dataUrl;
+      agentAvatarImg.hidden = false;
+      agentAvatarFallback.hidden = true;
+      agentAvatarStatus.textContent = "保存時にこの画像を反映します。";
+    }).catch((error: unknown) => {
+      agentAvatarStatus.textContent = error instanceof AvatarImageError ? error.message : "画像を読み込めませんでした。";
+    });
+  });
+
   const agentError = el("p", { class: "rf-create-error", role: "alert", hidden: true });
   const agentHeading = el("h2", { class: "rf-create-title", id: "rf-agent-title" }, "Agentを登録");
   const agentKicker = el("p", { class: "rf-region-label" }, "NEW AGENT");
@@ -642,6 +864,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       { class: "rf-create-body" },
       createField("Agent ID", agentIdInput, "半角小文字・数字・ハイフン。登録後は変更できません"),
       createField("表示名", agentNameInput),
+      agentAvatarField,
       el(
         "div",
         { class: "rf-create-pair" },
@@ -684,6 +907,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     for (const option of agentScopesInput.options) option.selected = option.value === "quests:read";
     agentError.hidden = true;
     agentError.textContent = "";
+    pendingAgentAvatar = null;
+    agentAvatarImg.hidden = true;
+    agentAvatarImg.removeAttribute("src");
+    agentAvatarFallback.hidden = false;
+    agentAvatarStatus.textContent = "";
   }
 
   function openCreateAgent(): void {
@@ -720,6 +948,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     for (const option of agentScopesInput.options) option.selected = selectedScopes.has(option.value);
     agentReviewInput.checked = agent.reviewRequired !== false;
     agentDryRunInput.checked = agent.dryRunDefault !== false;
+    if (agent.avatarUrl !== undefined && agent.avatarUrl !== "") {
+      agentAvatarImg.src = agent.avatarUrl;
+      agentAvatarImg.hidden = false;
+      agentAvatarFallback.hidden = true;
+    }
     if (!agentDialog.open) agentDialog.showModal();
     queueMicrotask(() => agentNameInput.focus());
   }
@@ -728,7 +961,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     const selected = createAssignee.value;
     replaceChildren(
       createAssignee,
-      el("option", { value: "self" }, runtime?.profile?.displayName || "自分"),
+      el("option", { value: "self" }, sharedProfile?.displayName || "自分"),
       ...sharedAgents
         .filter((agent) => agent.status !== "archived" && agent.status !== "disabled")
         .map((agent) => el("option", { value: agent.agentId }, `${agent.displayName} · Agent`)),
@@ -795,10 +1028,64 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           status: agentStatusInput.value,
           expectedUpdatedAt: existing?.updatedAt,
         });
-      const saved = normalizeAgentRecord(response.agent);
-      if (saved === null) throw new Error("保存結果にAgentが含まれていません。");
-      sharedAgents = [saved, ...sharedAgents.filter((agent) => agent.agentId !== saved.agentId)];
-      const profile = runtime.profile ?? { uid: runtime.selfUid, displayName: "あなた" };
+      const normalizedSaved = normalizeAgentRecord(response.agent);
+      if (normalizedSaved === null) throw new Error("保存結果にAgentが含まれていません。");
+      let saved = withCachedAvatar(normalizedSaved);
+
+      /* Metadata is already saved at this point. The avatar is a second,
+       * independent write against the same conflict guard (`updatedAt`), so a
+       * failure here must not roll back or hide the successful save — it
+       * leaves the dialog open on the avatar step so the user can retry just
+       * the image, instead of losing the Agent ID / role / scopes they just
+       * entered (brief Phase 3, "古い編集画面から新しい画像を上書きしない"). */
+      let avatarWarning: string | null = null;
+      const previousAvatarKey = existing?.hasCustomAvatar === true
+        ? avatarCacheKey(existing.agentId, existing.avatarVersion ?? 0)
+        : null;
+      if (pendingAgentAvatar !== null) {
+        try {
+          const avatarResponse = await runtime.agentAvatarPort.uploadAgentAvatar(saved.agentId, pendingAgentAvatar.blob, saved.updatedAt);
+          const updated = normalizeAgentRecord(avatarResponse.agent);
+          if (updated !== null) saved = updated;
+          pendingAgentAvatar = null;
+          // Refetch the image the server just stored — over the same
+          // authenticated route every other viewer uses — instead of trusting
+          // the client-resized preview, and cache it under the new version.
+          try {
+            const newKey = avatarCacheKey(saved.agentId, saved.avatarVersion ?? 0);
+            const blob = await runtime.agentAvatarPort.fetchAgentAvatar(saved.agentId, saved.avatarVersion ?? 0);
+            // The dialog's Save action can outlive the Shell it was opened
+            // in (sign-out, remount, mid-flight demo fallback) — a result
+            // landing after that must not populate a disposed mount's Blob
+            // cache or shared state (see `refreshAgentAvatars` above for the
+            // same guard on the background refresh path).
+            if (lifecycle.disposed) return;
+            const url = URL.createObjectURL(blob);
+            avatarBlobUrls.set(newKey, url);
+            saved = { ...saved, avatarUrl: url };
+            if (previousAvatarKey !== null && previousAvatarKey !== newKey) {
+              const staleUrl = avatarBlobUrls.get(previousAvatarKey);
+              if (staleUrl !== undefined) {
+                URL.revokeObjectURL(staleUrl);
+                avatarBlobUrls.delete(previousAvatarKey);
+              }
+            }
+          } catch {
+            avatarWarning = "画像は保存されましたが、表示の更新に失敗しました。ページを再読み込みすると反映されます。";
+          }
+        } catch (avatarError) {
+          const apiError = avatarError as { status?: number; code?: string };
+          avatarWarning = apiError.status === 409 || apiError.code === "agent_conflict"
+            ? "ほかの場所でAgentが更新されたため、画像は反映されませんでした。最新の状態を読み込み直してから、もう一度お試しください。"
+            : "Agentは保存しましたが、画像を保存できませんでした。もう一度お試しください。";
+        }
+      }
+
+      // The metadata save itself already reached the server; only the local
+      // state application below needs to be skipped for a disposed mount.
+      if (lifecycle.disposed) return;
+      sharedAgents = [saved, ...sharedAgents.filter((agent) => agent.agentId !== saved!.agentId)];
+      const profile = sharedProfile ?? { uid: runtime.selfUid, displayName: "あなた" };
       state.model = {
         ...state.model,
         actors: resolveActors(profile, sharedAgents, [...state.model.actors.values()]),
@@ -806,9 +1093,19 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       state.screens.party.selectedActorId = saved.agentId;
       state.screens.party.filter = "all";
       syncAgentAssigneeOptions();
-      closeAgentDialog();
+
+      if (avatarWarning !== null) {
+        editingAgentId = saved.agentId;
+        agentIdInput.disabled = true;
+        agentError.textContent = avatarWarning;
+        agentError.hidden = false;
+        announce(avatarWarning);
+      } else {
+        closeAgentDialog();
+        announce(editing ? `${saved.displayName}を更新しました。` : `${saved.displayName}を登録しました。`);
+      }
       render();
-      announce(editing ? `${saved.displayName}を更新しました。` : `${saved.displayName}を登録しました。`);
+      refreshAgentAvatars();
     } catch (error) {
       const apiError = error as { status?: number; code?: string };
       agentError.textContent = apiError.status === 409 || apiError.code === "agent_conflict"
@@ -820,6 +1117,124 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       agentSubmit.textContent = editing ? "変更を保存" : "Agentを登録";
     }
   }
+  /* ---------------------------------------------------------------- *
+   * Account menu (Phase 2) — replaces the fixed "Hironao" / "HN" span.
+   * ---------------------------------------------------------------- */
+
+  /* A plain disclosure (APG "Disclosure (Show/Hide)" pattern), not a menu
+   * widget — `aria-expanded` on the trigger and a plain button panel is the
+   * whole contract. `aria-haspopup`/`role="menu"`/`role="menuitem"` were
+   * dropped: they claim a full ARIA menu (roving tabindex, Up/Down/Home/End
+   * navigation) that was never implemented, which is worse for screen-reader
+   * users than no menu semantics at all — Tab/Shift+Tab through the plain
+   * buttons below already works correctly without them. */
+  const accountMenuButton = el("button", {
+    type: "button",
+    class: "rf-account-trigger",
+    "aria-expanded": "false",
+  });
+  const accountMenuPanel = el("div", {
+    class: "rf-account-menu",
+    "aria-label": "アカウントメニュー",
+    hidden: true,
+  });
+  /* A single positioning context for the trigger and its popover — the panel
+   * is `position: absolute` against this, not against the button alone, so it
+   * can be a plain DOM sibling instead of needing JS-computed coordinates. */
+  const accountMenuHost = el("span", { class: "rf-account-menu-host" }, accountMenuButton, accountMenuPanel);
+
+  function closeAccountMenu(returnFocus: boolean): void {
+    if (!state.accountMenuOpen) return;
+    state.accountMenuOpen = false;
+    render();
+    if (returnFocus) accountMenuButton.focus();
+  }
+
+  accountMenuButton.addEventListener("click", () => {
+    state.accountMenuOpen = !state.accountMenuOpen;
+    render();
+    if (state.accountMenuOpen) {
+      window.requestAnimationFrame(() => {
+        accountMenuPanel.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+      });
+    }
+  });
+
+  function handleAccountMenuOutsideClick(event: MouseEvent): void {
+    if (!state.accountMenuOpen) return;
+    /* Not `event.target` + `.contains()`: the trigger's own click handler
+     * re-renders synchronously (rebuilding its inner avatar/initials) before
+     * this listener runs, so `target` can already reference a node that was
+     * just detached from the button — `.contains()` would then read as
+     * "outside" on the very click that opened the menu. `composedPath()` is
+     * captured at dispatch time and survives that mutation. */
+    const path = event.composedPath();
+    if (path.includes(accountMenuButton) || path.includes(accountMenuPanel)) return;
+    closeAccountMenu(false);
+  }
+  document.addEventListener("click", handleAccountMenuOutsideClick);
+
+  function handleAccountMenuKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || !state.accountMenuOpen) return;
+    event.preventDefault();
+    closeAccountMenu(true);
+  }
+  document.addEventListener("keydown", handleAccountMenuKeydown);
+
+  async function handleSignOut(): Promise<void> {
+    if (runtime === null || runtime.signOut === undefined) return;
+    closeAccountMenu(false);
+    try {
+      await runtime.signOut();
+    } catch {
+      announce("ログアウトに失敗しました。もう一度お試しください。");
+    }
+  }
+
+  /** Rebuilds the trigger's content and the menu's items from current state. */
+  function renderAccountMenu(): void {
+    const selfActor = [...state.model.actors.values()].find((actor) => actor.kind === "human") ?? null;
+    const displayName = sharedProfile?.displayName?.trim() || (production ? "あなた" : "デモ");
+    accountMenuButton.setAttribute("aria-expanded", state.accountMenuOpen ? "true" : "false");
+    accountMenuButton.setAttribute("aria-label", `アカウントメニューを開く（${displayName}）`);
+    accountMenuButton.title = displayName;
+    replaceChildren(
+      accountMenuButton,
+      selfActor === null
+        ? el("span", { class: "rf-identity-initials" }, initialsFor(displayName))
+        : actorAvatar(selfActor, { size: "row", showMarker: false }),
+    );
+
+    const accountItem = el("button", { type: "button", class: "rf-account-menu-item" }, "アカウント");
+    accountItem.addEventListener("click", () => openSettings("account"));
+    const settingsItem = el("button", { type: "button", class: "rf-account-menu-item" }, "設定");
+    settingsItem.addEventListener("click", () => openSettings("top"));
+    const signOutItem = el(
+      "button",
+      {
+        type: "button",
+        class: "rf-account-menu-item rf-account-menu-item--danger",
+        disabled: production ? null : true,
+      },
+      "ログアウト",
+    );
+    if (production) signOutItem.addEventListener("click", () => { void handleSignOut(); });
+
+    replaceChildren(
+      accountMenuPanel,
+      el(
+        "div",
+        { class: "rf-account-menu-header" },
+        el("p", { class: "rf-account-menu-name" }, displayName),
+        production
+          ? (sharedProfile?.handle ? el("p", { class: "rf-account-menu-handle" }, `@${sharedProfile.handle}`) : null)
+          : el("p", { class: "rf-account-menu-demo" }, "デモ表示です。実際の操作にはGoogleサインインが必要です。"),
+      ),
+      el("div", { class: "rf-account-menu-items" }, accountItem, settingsItem, signOutItem),
+    );
+    accountMenuPanel.hidden = !state.accountMenuOpen;
+  }
+
   const shell = el(
     "div",
     { class: "rf-shell" },
@@ -866,7 +1281,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     rawHandoffStates.set(quest.id, quest.assignee.handoffState);
     if (runtime === null) return;
     const normalized = normalizeCommandModel({
-      profile: runtime.profile ?? { uid: runtime.selfUid, displayName: "あなた" },
+      profile: sharedProfile ?? { uid: runtime.selfUid, displayName: "あなた" },
       agents: sharedAgents,
       quests: sharedQuests,
       syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
@@ -943,6 +1358,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function select(questId: string, trigger: HTMLElement): void {
+    const previousLoom = workfield.querySelector<HTMLElement>(".rf-spine-list");
+    const triggerLoom = trigger.closest<HTMLElement>(".rf-spine-list");
+    const triggerWasInLoom = previousLoom !== null && triggerLoom === previousLoom;
+    const loomSnapshot = previousLoom === null
+      ? null
+      : {
+          top: previousLoom.scrollTop,
+          anchorOffset: triggerWasInLoom
+            ? trigger.getBoundingClientRect().top - previousLoom.getBoundingClientRect().top
+            : null,
+        };
     state.selectedQuestId = questId;
     // Mobile has no Lens panel — the decision lives in the fixed bar — so
     // selection must not open one behind the page.
@@ -957,7 +1383,19 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     keepScroll = true;
     // Selection moves focus back to the equivalent control in the new tree so
     // keyboard users are not dropped at the document root.
-    const restored = shell.querySelector<HTMLElement>(`[data-quest-id="${questId}"]`);
+    const nextLoom = workfield.querySelector<HTMLElement>(".rf-spine-list");
+    const restored = triggerWasInLoom
+      ? [...(nextLoom?.querySelectorAll<HTMLElement>(".rf-spine-row") ?? [])]
+          .find((row) => row.dataset.questId === questId) ?? null
+      : shell.querySelector<HTMLElement>(`[data-quest-id="${questId}"]`);
+    if (loomSnapshot !== null && nextLoom !== null) {
+      if (loomSnapshot.anchorOffset !== null && restored !== null) {
+        const nextOffset = restored.getBoundingClientRect().top - nextLoom.getBoundingClientRect().top;
+        nextLoom.scrollTop = loomSnapshot.top + nextOffset - loomSnapshot.anchorOffset;
+      } else {
+        nextLoom.scrollTop = loomSnapshot.top;
+      }
+    }
     restored?.focus({ preventScroll: true });
   }
 
@@ -1120,6 +1558,284 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   /* ---------------------------------------------------------------- *
+   * Settings — Account, Appearance, MCP Connection (Phase 1/2)
+   * ---------------------------------------------------------------- */
+
+  function openSettings(section: SettingsSection): void {
+    state.domain = "settings";
+    state.settingsFocusSection = section;
+    state.moreOpen = false;
+    state.accountMenuOpen = false;
+    render();
+    window.requestAnimationFrame(() => {
+      screenHost.querySelector<HTMLElement>("h1")?.focus();
+    });
+  }
+
+  function selectTheme(next: ThemePreference): void {
+    state.theme = next;
+    storeTheme(next);
+    resolveTheme(next);
+    render();
+  }
+
+  function currentProfileDraft(): ProfileDraft {
+    const profile = sharedProfile;
+    return state.screens.settings.profileDraft ?? {
+      displayName: profile?.displayName ?? "",
+      handle: profile?.handle ?? "",
+      bio: profile?.bio ?? "",
+    };
+  }
+
+  function profileFromResponse(value: unknown): ProfileRecord | null {
+    const normalized = normalizeProfileRecord(value);
+    if (normalized === null || normalized.hasCustomAvatar !== true || normalized.avatarVersion === undefined) return normalized;
+    const cached = avatarBlobUrls.get(profileAvatarCacheKey(normalized.avatarVersion));
+    return cached === undefined ? normalized : { ...normalized, avatarUrl: cached };
+  }
+
+  function profileErrorMessage(error: unknown, fallback: string): string {
+    const apiError = error as { status?: number };
+    if (apiError.status === 401) return "認証の有効期限が切れました。ページを再読み込みしてサインインし直してください。";
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  function updateProfileDraft(field: ProfileDraftField, value: string): void {
+    const draft = currentProfileDraft();
+    state.screens.settings.profileDraft = { ...draft, [field]: value };
+  }
+
+  async function retryProfile(): Promise<void> {
+    if (runtime === null || state.screens.settings.profileSaving) return;
+    state.screens.settings.profileMessage = "";
+    state.screens.settings.profileTone = null;
+    render();
+    try {
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profilePort.getProfile());
+      if (response.status === "disposed") return;
+      profileLoadError = null;
+      sharedProfile = profileFromResponse(response.value.profile);
+      state.screens.settings.profileDraft = null;
+      syncProfileActors();
+      render();
+      refreshProfileAvatar();
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      profileLoadError = profileErrorMessage(error, "プロフィールを読み込めませんでした。再試行してください。");
+      render();
+    }
+  }
+
+  async function saveProfile(): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null) {
+      settings.profileTone = "error";
+      settings.profileMessage = "デモでは保存できません。Googleでサインインしてから設定してください。";
+      render();
+      return;
+    }
+    const draft = currentProfileDraft();
+    const displayName = draft.displayName.trim();
+    const handle = draft.handle.trim().replace(/^@+/, "").toLowerCase();
+    const bio = draft.bio.trim();
+    if (displayName.length < 1 || displayName.length > 60) {
+      settings.profileTone = "error";
+      settings.profileMessage = "Display Nameは1〜60文字で入力してください。";
+      render();
+      return;
+    }
+    if (!/^[a-z0-9_]{3,20}$/.test(handle)) {
+      settings.profileTone = "error";
+      settings.profileMessage = "Username / Handleは英数字と _ の3〜20文字で入力してください。";
+      render();
+      return;
+    }
+    if (bio.length > 160) {
+      settings.profileTone = "error";
+      settings.profileMessage = "Bioは160文字以内で入力してください。";
+      render();
+      return;
+    }
+    settings.profileSaving = true;
+    settings.profileMessage = "";
+    settings.profileTone = null;
+    render();
+    try {
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profilePort.updateProfile({ displayName, handle, bio }));
+      if (response.status === "disposed") return;
+      const updated = profileFromResponse(response.value.profile);
+      if (updated === null) throw new Error("保存結果にプロフィールが含まれていません。");
+      profileLoadError = null;
+      sharedProfile = updated;
+      settings.profileDraft = null;
+      syncProfileActors();
+      settings.profileTone = "success";
+      settings.profileMessage = "プロフィールを保存しました。";
+      announce("プロフィールを保存しました。");
+      render();
+      refreshProfileAvatar();
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.profileTone = "error";
+      settings.profileMessage = profileErrorMessage(error, "プロフィールを保存できませんでした。もう一度お試しください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.profileSaving = false;
+      render();
+    }
+  }
+
+  /** Reused by the Account section and the account menu's own avatar. */
+  async function saveProfileAvatar(file: File): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null) {
+      settings.avatarTone = "error";
+      settings.avatarMessage = "デモでは保存できません。Googleでサインインしてから変更してください。";
+      render();
+      return;
+    }
+    if (sharedProfile === null) {
+      settings.avatarTone = "error";
+      settings.avatarMessage = "先にプロフィールを保存してから、Avatarを追加してください。";
+      render();
+      return;
+    }
+    settings.avatarSaving = true;
+    settings.avatarProgress = 0;
+    settings.avatarMessage = "";
+    settings.avatarTone = null;
+    render();
+    const previousProfile = sharedProfile;
+    let previewUrl: string | null = null;
+    let committed = false;
+    try {
+      const resized = await runLifecycleStep(lifecycle, () => resizeAvatarImage(file));
+      if (resized.status === "disposed") return;
+      previewUrl = URL.createObjectURL(resized.value.blob);
+      profilePreviewUrl = previewUrl;
+      sharedProfile = { ...previousProfile, avatarUrl: previewUrl, hasCustomAvatar: true };
+      syncProfileActors();
+      render();
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profileAvatarPort.uploadProfileAvatar(
+        resized.value.blob,
+        (loaded, total) => {
+          if (lifecycle.disposed) return;
+          settings.avatarProgress = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+          render();
+        },
+      ));
+      if (response.status === "disposed") return;
+      const updated = normalizeProfileRecord(response.value.profile);
+      if (updated === null || updated.hasCustomAvatar !== true || updated.avatarVersion === undefined || updated.avatarVersion < 1) {
+        throw new Error("保存結果にAvatar情報が含まれていません。");
+      }
+      committed = true;
+      profileLoadError = null;
+      const newKey = profileAvatarCacheKey(updated.avatarVersion);
+      clearProfileAvatarCache(newKey);
+      sharedProfile = { ...updated, avatarUrl: previewUrl };
+      syncProfileActors();
+      settings.avatarProgress = 100;
+      render();
+      try {
+        const image = await runLifecycleStep(lifecycle, () => runtime!.profileAvatarPort.fetchProfileAvatar(updated.avatarVersion!));
+        if (image.status === "disposed") return;
+        const finalUrl = URL.createObjectURL(image.value);
+        if (lifecycle.disposed) {
+          URL.revokeObjectURL(finalUrl);
+          return;
+        }
+        avatarBlobUrls.set(newKey, finalUrl);
+        if (profilePreviewUrl === previewUrl && previewUrl !== null) {
+          URL.revokeObjectURL(previewUrl);
+          profilePreviewUrl = null;
+        }
+        sharedProfile = { ...updated, avatarUrl: finalUrl };
+        syncProfileActors();
+        settings.avatarTone = "success";
+        settings.avatarMessage = "Avatarを更新しました。";
+        announce("Avatarを更新しました。");
+      } catch {
+        settings.avatarTone = "success";
+        settings.avatarMessage = "Avatarを保存しました。表示の更新は再読み込み後に反映されます。";
+      }
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.avatarTone = "error";
+      settings.avatarMessage = committed
+        ? "Avatarは保存されましたが、表示の更新に失敗しました。再読み込みしてください。"
+        : profileErrorMessage(error, "Avatarを保存できませんでした。もう一度お試しください。");
+      if (!committed) {
+        sharedProfile = previousProfile;
+        syncProfileActors();
+        if (previewUrl !== null && profilePreviewUrl === previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+          profilePreviewUrl = null;
+        }
+      }
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.avatarProgress = null;
+      settings.avatarSaving = false;
+      render();
+    }
+  }
+
+  async function removeProfileAvatar(): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null || sharedProfile === null || sharedProfile.hasCustomAvatar !== true || settings.avatarSaving) return;
+    settings.avatarSaving = true;
+    settings.avatarProgress = null;
+    settings.avatarMessage = "";
+    settings.avatarTone = null;
+    render();
+    try {
+      const response = await runLifecycleStep(lifecycle, () => runtime!.profileAvatarPort.deleteProfileAvatar());
+      if (response.status === "disposed") return;
+      const updated = normalizeProfileRecord(response.value.profile);
+      if (updated === null) throw new Error("保存結果にプロフィールが含まれていません。");
+      clearProfileAvatarCache();
+      if (profilePreviewUrl !== null) {
+        URL.revokeObjectURL(profilePreviewUrl);
+        profilePreviewUrl = null;
+      }
+      sharedProfile = updated;
+      syncProfileActors();
+      settings.avatarTone = "success";
+      settings.avatarMessage = "Avatarを削除しました。";
+      announce("Avatarを削除しました。");
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.avatarTone = "error";
+      settings.avatarMessage = profileErrorMessage(error, "Avatarを削除できませんでした。もう一度お試しください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.avatarSaving = false;
+      render();
+    }
+  }
+
+  async function copyMcpUrl(url: string): Promise<void> {
+    const settings = state.screens.settings;
+    if (url === "") {
+      settings.mcpCopyTone = "error";
+      settings.mcpCopyMessage = "MCP URLを取得できませんでした。";
+      render();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      settings.mcpCopyTone = "success";
+      settings.mcpCopyMessage = "コピーしました。";
+    } catch {
+      settings.mcpCopyTone = "error";
+      settings.mcpCopyMessage = "コピーできませんでした。手動で選択してコピーしてください。";
+    }
+    render();
+  }
+
+  /* ---------------------------------------------------------------- *
    * Region renderers
    * ---------------------------------------------------------------- */
 
@@ -1129,7 +1845,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       el(
         "div",
         { class: "rf-rail-top" },
-        el("span", { class: "rf-mark", "aria-hidden": "true" }, "GD"),
+        el("img", {
+          class: "rf-mark",
+          src: "../../assets/brand/guilduo-mark-gold.svg",
+          alt: "",
+          "aria-hidden": "true",
+        }),
         el(
           "span",
           { class: "rf-rail-workspace" },
@@ -1183,7 +1904,6 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
                 {
                   type: "button",
                   class: "rf-nav-item rf-nav-more",
-                  "aria-haspopup": "true",
                   "aria-expanded": state.moreOpen ? "true" : "false",
                   "aria-current": overflowActive ? "page" : null,
                   "data-selected": overflowActive ? "true" : "false",
@@ -1225,25 +1945,51 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
             });
             return el("li", null, button);
           }),
+          (() => {
+            const selected = state.domain === "settings";
+            const button = el(
+              "button",
+              {
+                type: "button",
+                class: "rf-nav-item",
+                "data-selected": selected ? "true" : "false",
+                "aria-current": selected ? "page" : null,
+              },
+              el("span", { class: "rf-nav-glyph", "data-domain": "settings", "aria-hidden": "true" }),
+              el("span", { class: "rf-nav-label" }, "Settings"),
+            );
+            button.addEventListener("click", () => openSettings("top"));
+            return el("li", null, button);
+          })(),
         )
         : null,
       el(
         "div",
         { class: "rf-rail-bottom" },
         (() => {
+          const current = currentEffectiveTheme(state.theme);
+          const label = state.theme === "system" ? `Theme: System (${current === "dark" ? "Dark" : "Light"})` : `Theme: ${current === "dark" ? "Dark" : "Light"}`;
           const toggle = el(
             "button",
-            { type: "button", class: "rf-rail-utility", title: "Theme" },
+            {
+              type: "button",
+              class: "rf-rail-utility",
+              title: `${label} — click to switch to ${current === "dark" ? "Light" : "Dark"}. Choose System in Settings.`,
+            },
             el("span", { class: "rf-nav-label" }, "Theme"),
             el(
               "span",
-              { class: "rf-theme-switch", "data-theme-mode": state.theme },
+              { class: "rf-theme-switch", "data-theme-mode": current },
               el("span", { class: "rf-theme-glyph", "data-mode": "dark", "aria-hidden": "true" }),
               el("span", { class: "rf-theme-glyph", "data-mode": "light", "aria-hidden": "true" }),
             ),
           );
           toggle.addEventListener("click", () => {
-            state.theme = state.theme === "dark" ? "light" : state.theme === "light" ? "system" : "dark";
+            // A quick toggle only ever flips the theme actually on screen. From
+            // `system` it switches to the explicit opposite of what OS dark/light
+            // is currently rendering, so the click is never a visual no-op; going
+            // back to `system` is a Settings action, not part of this cycle.
+            state.theme = nextQuickToggleTheme(state.theme, prefersDarkQuery.matches);
             storeTheme(state.theme);
             resolveTheme(state.theme);
             render();
@@ -1263,6 +2009,22 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
             render();
           });
           return collapse;
+        })(),
+        (() => {
+          const settingsButton = el(
+            "button",
+            {
+              type: "button",
+              class: "rf-rail-utility",
+              title: "Settings",
+              "aria-current": state.domain === "settings" ? "page" : null,
+              "data-selected": state.domain === "settings" ? "true" : "false",
+            },
+            el("span", { class: "rf-nav-label" }, "Settings"),
+            el("span", { class: "rf-settings-mark", "aria-hidden": "true" }),
+          );
+          settingsButton.addEventListener("click", () => openSettings("top"));
+          return settingsButton;
         })(),
       ),
     );
@@ -1304,13 +2066,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           el("span", { class: "rf-bell-mark", "aria-hidden": "true" }),
           `Alerts ${state.model.interventions.length}`,
         ),
-        el(
-          "span",
-          { class: "rf-identity", title: "Hironao" },
-          el("span", { class: "rf-identity-initials" }, "HN"),
-        ),
+        accountMenuHost,
       ),
     );
+    renderAccountMenu();
   }
 
   function renderBand(): void {
@@ -1753,6 +2512,41 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         ? renderConnectionsMobile(model, state.screens.connections, context, connectionsPort)
         : renderConnectionsDesktop(model, state.screens.connections, context, connectionsPort);
     }
+    if (state.domain === "settings") {
+      const model = normalizeSettingsModel({
+        isDemo: runtime === null,
+        profile: sharedProfile,
+        email: runtime?.email ?? "",
+        profileLoadError,
+        theme: state.theme,
+        effectiveTheme: currentEffectiveTheme(state.theme),
+        gatewayUrl: runtime?.gatewayUrl ?? gatewayDefaultUrl(),
+        agents: screenAgents().map((agent) => ({
+          agentId: agent.agentId,
+          displayName: agent.displayName,
+          provider: agent.provider ?? "",
+          role: agent.role || "assistant",
+          status: agent.status ?? "active",
+        })),
+      });
+      const callbacks = {
+        onThemeSelect: selectTheme,
+        onAvatarFileSelected: (file: File) => { void saveProfileAvatar(file); },
+        onRemoveAvatar: () => { void removeProfileAvatar(); },
+        onProfileDraftChange: updateProfileDraft,
+        onSaveProfile: () => { void saveProfile(); },
+        onRetryProfile: () => { void retryProfile(); },
+        onCopyMcpUrl: () => { void copyMcpUrl(model.mcpUrl); },
+        canManageAgents: runtime !== null,
+        onCreateAgent: openCreateAgent,
+        onEditAgent: openEditAgent,
+      };
+      const focusSection = state.settingsFocusSection;
+      state.settingsFocusSection = null;
+      return isMobile()
+        ? renderSettingsMobile(model, state.screens.settings, context, callbacks, focusSection)
+        : renderSettingsDesktop(model, state.screens.settings, context, callbacks, focusSection);
+    }
     return null;
   }
 
@@ -1799,13 +2593,21 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     else replaceChildren(screenSticky, screen.sticky);
   }
 
-  lensAsSheet.addEventListener("change", (event) => {
+  function handleLensAsSheetChange(event: MediaQueryListEvent): void {
     state.lensState = event.matches ? "closed" : "open";
     if (!event.matches) closeQuestFlow();
     render();
-  });
+  }
+  lensAsSheet.addEventListener("change", handleLensAsSheetChange);
 
-  document.addEventListener("keydown", (event) => {
+  // `system` tracks the OS live: the Rail glyph, the Settings Appearance
+  // section and the CSS itself must all agree the instant it changes.
+  function handlePrefersDarkChange(): void {
+    if (state.theme === "system") render();
+  }
+  prefersDarkQuery.addEventListener("change", handlePrefersDarkChange);
+
+  function handleLensKeydown(event: KeyboardEvent): void {
     if (event.key !== "Escape") return;
     // A sheet owns Escape while it is open, and mobile has no Lens to close.
     if (state.questFlowOpen || isMobile()) return;
@@ -1813,12 +2615,32 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       event.preventDefault();
       closeLens();
     }
-  });
+  }
+  document.addEventListener("keydown", handleLensKeydown);
 
   render();
+  refreshAgentAvatars();
+  refreshProfileAvatar();
+
+  return function unmountRelayForge(): void {
+    // First, so every in-flight avatar fetch's continuation (however many
+    // microtask hops away it still is) observes disposal before it can
+    // create a Blob URL, mutate shared state, or render.
+    lifecycle.dispose();
+    document.removeEventListener("click", handleAccountMenuOutsideClick);
+    document.removeEventListener("keydown", handleAccountMenuKeydown);
+    lensAsSheet.removeEventListener("change", handleLensAsSheetChange);
+    prefersDarkQuery.removeEventListener("change", handlePrefersDarkChange);
+    document.removeEventListener("keydown", handleLensKeydown);
+    for (const url of avatarBlobUrls.values()) URL.revokeObjectURL(url);
+    avatarBlobUrls.clear();
+    if (profilePreviewUrl !== null) URL.revokeObjectURL(profilePreviewUrl);
+    profilePreviewUrl = null;
+  };
 }
 
-function domainLabel(id: DomainId): string {
+function domainLabel(id: NavId): string {
+  if (id === "settings") return "Settings";
   return DOMAINS.find((domain) => domain.id === id)?.label ?? "Command";
 }
 
@@ -1832,17 +2654,16 @@ function readVariant(): ScreenVariant {
   return isScreenVariant(requested) ? requested : "default";
 }
 
-const THEME_KEY = "qf-relay-forge-theme";
-
 /**
  * Theme initialization follows OS preference on first run; a saved choice wins.
  * `?theme=` is accepted so the capture set can be taken deterministically.
+ * An invalid stored value (hand-edited storage, an old format) falls back to
+ * `system` rather than crashing or rendering unthemed.
  */
 function readStoredTheme(): ShellState["theme"] {
   const requested = new URLSearchParams(window.location.search).get("theme");
   if (requested === "light" || requested === "dark" || requested === "system") return requested;
-  const stored = window.localStorage.getItem(THEME_KEY);
-  return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+  return parseThemePreference(window.localStorage.getItem(THEME_KEY));
 }
 
 function storeTheme(theme: ShellState["theme"]): void {

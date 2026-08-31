@@ -2,7 +2,9 @@
 
 import { pathToFileURL } from "node:url";
 
-export const DEFAULT_API_URL = "https://questforge-gateway.example.workers.dev";
+// The Worker currently serves REST /v1 and Remote MCP from the same formal
+// origin. api.guilduo.com is reserved for the separate Appwrite API.
+export const DEFAULT_API_URL = "https://mcp.guilduo.com";
 
 interface CliOptions {
   json: boolean;

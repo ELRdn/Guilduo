@@ -31,20 +31,29 @@ jobs:
           APPWRITE_STATE_TABLE_ID: ${{ vars.APPWRITE_STATE_TABLE_ID }}
           APPWRITE_LEGACY_TABLE_ID: ${{ vars.APPWRITE_LEGACY_TABLE_ID }}
           WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          PROVIDER_OAUTH_BASE_URL: ${{ vars.PROVIDER_OAUTH_BASE_URL || vars.WORKER_BASE_URL }}
+          MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
           SOURCE_URL: ${{ vars.SOURCE_URL }}
           EXTERNAL_OAUTH_ENABLED: ${{ vars.EXTERNAL_OAUTH_ENABLED || 'false' }}
-          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || '/next/' }}
+          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || 'https://app.guilduo.com/' }}
           D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
       - run: npm run design:check
       - run: npx -y -p @google/design.md designmd lint DESIGN.md
       - run: npx -y -p @google/design.md designmd lint interaction-lab/DESIGN.md
       - run: npm run check
+      - run: npm run brand:assets -- --check
       - run: npm test
       - run: npm run build
+        env:
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
       - name: Verify Appwrite Worker key can read the state table
         shell: bash
         run: |
@@ -78,39 +87,55 @@ jobs:
           echo "$deployment"
           echo "url=$(jq -er '.url' <<<"$deployment")" >> "$GITHUB_OUTPUT"
         env:
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
+          APPWRITE_SITE_URL: ${{ vars.WEB_APP_URL || 'https://app.guilduo.com' }}
       - name: Register active Appwrite Site as the web platform
         shell: bash
         run: |
-          hostname="${SITE_URL#https://}"
-          host_prefix="${hostname%%.*}"
-          platform_id="guilduo-site-${host_prefix}"
-          response_file="$RUNNER_TEMP/appwrite-platform.json"
-          status="$(curl --silent --show-error \
-            --output "$response_file" \
-            --write-out '%{http_code}' \
-            --request POST \
-            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-            --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-            --header "Content-Type: application/json" \
-            --data "$(jq -cn --arg platformId "$platform_id" --arg name "Guilduo ${host_prefix}" --arg hostname "$hostname" '{platformId:$platformId,name:$name,hostname:$hostname}')" \
-            "$APPWRITE_ENDPOINT/project/platforms/web")"
-          if [[ "$status" == "409" ]]; then
-            curl --silent --show-error --fail \
+          register_platform() {
+            local platform_id="$1"
+            local platform_name="$2"
+            local hostname="$3"
+            local response_file="$RUNNER_TEMP/appwrite-platform-${platform_id}.json"
+            local status
+            status="$(curl --silent --show-error \
+              --output "$response_file" \
+              --write-out '%{http_code}' \
+              --request POST \
               --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
               --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-              "$APPWRITE_ENDPOINT/project/platforms/web/$platform_id" \
-              | jq -e --arg hostname "$hostname" '.hostname == $hostname' >/dev/null
-          elif [[ "$status" != "200" && "$status" != "201" ]]; then
-            echo "Appwrite web platform registration failed with HTTP $status" >&2
-            exit 1
+              --header "Content-Type: application/json" \
+              --data "$(jq -cn --arg platformId "$platform_id" --arg name "$platform_name" --arg hostname "$hostname" '{platformId:$platformId,name:$name,hostname:$hostname}')" \
+              "$APPWRITE_SITE_ENDPOINT/project/platforms/web")"
+            if [[ "$status" == "409" ]]; then
+              curl --silent --show-error --fail \
+                --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+                --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
+                "$APPWRITE_SITE_ENDPOINT/project/platforms/web/$platform_id" \
+                | jq -e --arg hostname "$hostname" '.hostname == $hostname' >/dev/null
+            elif [[ "$status" != "200" && "$status" != "201" ]]; then
+              echo "Appwrite web platform registration failed for $hostname with HTTP $status" >&2
+              exit 1
+            fi
+          }
+
+          deployment_hostname="${SITE_URL#https://}"
+          deployment_hostname="${deployment_hostname#http://}"
+          deployment_hostname="${deployment_hostname%%/*}"
+          configured_hostname="${WEB_APP_URL#https://}"
+          configured_hostname="${configured_hostname#http://}"
+          configured_hostname="${configured_hostname%%/*}"
+          register_platform "guilduo-site-${deployment_hostname%%.*}" "Guilduo ${deployment_hostname%%.*}" "$deployment_hostname"
+          if [[ "$configured_hostname" != "$deployment_hostname" ]]; then
+            register_platform "guilduo-web-${configured_hostname//./-}" "Guilduo Web App" "$configured_hostname"
           fi
         env:
           SITE_URL: ${{ steps.appwrite_site.outputs.url }}
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
       - name: Regenerate Worker configuration for active Appwrite Site
@@ -122,13 +147,18 @@ jobs:
           APPWRITE_STATE_TABLE_ID: ${{ vars.APPWRITE_STATE_TABLE_ID }}
           APPWRITE_LEGACY_TABLE_ID: ${{ vars.APPWRITE_LEGACY_TABLE_ID }}
           WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
-          WEB_APP_URL: ${{ steps.appwrite_site.outputs.url }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          PROVIDER_OAUTH_BASE_URL: ${{ vars.PROVIDER_OAUTH_BASE_URL || vars.WORKER_BASE_URL }}
+          MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL || steps.appwrite_site.outputs.url }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
           SOURCE_URL: ${{ vars.SOURCE_URL }}
           EXTERNAL_OAUTH_ENABLED: ${{ vars.EXTERNAL_OAUTH_ENABLED || 'false' }}
-          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || '/next/' }}
+          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || 'https://app.guilduo.com/' }}
           D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
       - name: Publish Appwrite Worker secret
         shell: bash
         run: printf '%s' "$APPWRITE_API_KEY" | npx wrangler secret put APPWRITE_API_KEY
@@ -149,17 +179,32 @@ jobs:
           node -e 'const h=JSON.parse(process.argv[1]); if(h.version!=="2.7.0"||h.schemaVersion!==7||h.agentStorage!=="d1") process.exit(1)' "$health"
           curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-authorization-server' >/dev/null
           test "$(curl -s -o /dev/null -w '%{http_code}' '${{ vars.WORKER_BASE_URL }}/v1/quests')" = "401"
+      - name: Verify MCP custom domain
+        shell: bash
+        env:
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+        run: |
+          mcp_base="${MCP_BASE_URL%/}"
+          metadata="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-authorization-server")"
+          resource="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-protected-resource/mcp")"
+          node -e 'const [metadata, resource, base] = process.argv.slice(1).map((value, index) => index < 2 ? JSON.parse(value) : value); if (metadata.issuer !== base || metadata.authorization_endpoint !== `${base}/oauth/authorize` || metadata.token_endpoint !== `${base}/oauth/token` || resource.resource !== `${base}/mcp` || !Array.isArray(resource.authorization_servers) || !resource.authorization_servers.includes(base)) process.exit(1)' "$metadata" "$resource" "$mcp_base"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 3 -X POST "$mcp_base/mcp")" = "401"
       - name: Smoke test public routes
         shell: bash
         run: |
-          root_html="$(curl --fail --retry 5 --retry-delay 3 "$SITE_URL/")"
-          grep -q '<title>Guilduo</title>' <<<"$root_html"
-          grep -q '<h1>Guilduo</h1>' <<<"$root_html"
+          app_html="$(curl --fail --retry 5 --retry-delay 3 "$SITE_URL/")"
+          grep -q '<title>Guilduo' <<<"$app_html"
+          grep -q 'rel="canonical" href="https://app.guilduo.com/"' <<<"$app_html"
           curl --fail --retry 5 --retry-delay 3 "$SITE_URL/next/" >/dev/null
+          official_html="$(curl --fail --retry 5 --retry-delay 3 "${PUBLIC_SITE_URL%/}/")"
+          grep -q '<title>Guilduo' <<<"$official_html"
+          grep -q 'rel="canonical" href="https://guilduo.com/"' <<<"$official_html"
+          curl --fail --retry 5 --retry-delay 3 "${PUBLIC_SITE_URL%/}/lp/en/" >/dev/null
           curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-protected-resource/mcp' >/dev/null
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST '${{ vars.WORKER_BASE_URL }}/mcp')" = "401"
         env:
           SITE_URL: ${{ steps.appwrite_site.outputs.url }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

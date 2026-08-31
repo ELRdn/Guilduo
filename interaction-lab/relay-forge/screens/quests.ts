@@ -425,12 +425,19 @@ function portfolioRow(
       "aria-current": selected ? "true" : null,
     },
     el("span", { class: "rf-q-cell rf-q-cell-state", role: "cell" }, bucketChip(row.bucket)),
-    el("span", { class: "rf-q-cell rf-srow-id", role: "cell" }, row.ref),
+    el("span", { class: "rf-q-cell rf-srow-id", role: "cell", title: row.ref }, row.ref),
     el(
       "span",
       { class: "rf-q-cell rf-q-cell-title", role: "cell" },
-      el("span", { class: "rf-srow-title rf-q-title" }, row.title),
-      el("span", { class: "rf-srow-sub" }, row.nextAction === "" ? BUCKET_LABEL[row.bucket] : row.nextAction),
+      el("span", { class: "rf-srow-title rf-q-title", title: row.title }, row.title),
+      el(
+        "span",
+        {
+          class: "rf-srow-sub rf-q-next",
+          title: row.nextAction === "" ? BUCKET_LABEL[row.bucket] : row.nextAction,
+        },
+        row.nextAction === "" ? BUCKET_LABEL[row.bucket] : row.nextAction,
+      ),
     ),
     el("span", { class: "rf-q-cell rf-q-cell-owner", role: "cell" }, ownerCell(context, row)),
     el("span", { class: "rf-q-cell rf-q-cell-impact", role: "cell" }, impactCell(row)),
@@ -440,6 +447,40 @@ function portfolioRow(
   );
   element.addEventListener("click", () => onSelect(row.id));
   return element;
+}
+
+function findPortfolioRow(id: string): HTMLElement | null {
+  return [...document.querySelectorAll<HTMLElement>(".rf-screen--quests .rf-q-row")]
+    .find((row) => row.dataset.questId === id) ?? null;
+}
+
+function selectPortfolioRow(element: HTMLElement, id: string, context: ScreenContext): void {
+  const owner = element.closest<HTMLElement>('.rf-screen-region[data-variant="portfolio"]');
+  const snapshot = owner === null
+    ? null
+    : {
+        top: owner.scrollTop,
+        restoreFocus: element.contains(document.activeElement),
+      };
+  context.onSelectQuest(id);
+  if (snapshot === null) return;
+  const nextOwner = document.querySelector<HTMLElement>('.rf-screen--quests .rf-screen-region[data-variant="portfolio"]');
+  const nextRow = findPortfolioRow(id);
+  if (nextOwner === null || nextRow === null) return;
+  // Selection does not alter portfolio row geometry, so restoring the owned
+  // scroll offset also restores the selected row's viewport position exactly.
+  nextOwner.scrollTop = snapshot.top;
+  if (snapshot.restoreFocus) nextRow.focus({ preventScroll: true });
+}
+
+function revealPortfolioRow(id: string): void {
+  const owner = document.querySelector<HTMLElement>('.rf-screen--quests .rf-screen-region[data-variant="portfolio"]');
+  const row = findPortfolioRow(id);
+  if (owner === null || row === null) return;
+  const ownerRect = owner.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  if (rowRect.top < ownerRect.top) owner.scrollTop -= ownerRect.top - rowRect.top;
+  else if (rowRect.bottom > ownerRect.bottom) owner.scrollTop += rowRect.bottom - ownerRect.bottom;
 }
 
 export function renderQuestsDesktop(
@@ -496,7 +537,9 @@ export function renderQuestsDesktop(
           "div",
           { class: "rf-q-body" },
           ...rows.map((row) => portfolioRow(row, context, visibleSelectedId, (id) => {
-            context.onSelectQuest(id);
+            const element = findPortfolioRow(id);
+            if (element !== null) selectPortfolioRow(element, id, context);
+            else context.onSelectQuest(id);
             context.announce(`${row.ref} を選択しました`);
           })),
         ),
@@ -517,6 +560,9 @@ export function renderQuestsDesktop(
     const target = rows[next];
     if (target === undefined) return;
     context.onSelectQuest(target.id);
+    const nextTable = document.querySelector<HTMLElement>(".rf-screen--quests .rf-q-table");
+    nextTable?.focus({ preventScroll: true });
+    revealPortfolioRow(target.id);
     context.announce(`${target.ref} ${target.title}`);
   });
 

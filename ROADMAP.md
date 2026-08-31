@@ -1,6 +1,6 @@
 # Guilduo 公開βロードマップ
 
-最終更新: 2026-08-26
+最終更新: 2026-08-30
 
 ## 設計書の正本
 
@@ -12,8 +12,24 @@
 - [`design/SCREENS.md`](design/SCREENS.md)：Today、Tree、Battle、Party、連携、Profile、SettingsのBlueprint
 - [`design/ASSET_MANIFEST.md`](design/ASSET_MANIFEST.md)：画像・アイコン・役職素材の用途契約
 - [`design/reference/README.md`](design/reference/README.md)：サニタイズ済みGolden Referenceの基準
-- `DESIGN.md`が視覚設計、`PROJECT_SPEC.md`が技術仕様の正本であり、Next版は差分だけを管理する。Next版から`/`への昇格は自動化せず、実アカウント・PC・Pixel 9・9言語・MCP・アクセシビリティの明示受入を通す。
+- `DESIGN.md`が視覚設計、`PROJECT_SPEC.md`が技術仕様の正本であり、Next版は差分だけを管理する。現在の正式Web Appは`https://app.guilduo.com/`で、`/next/relay-forge/`はその内部デプロイ・互換pathである。昇格や正式リリースの判断は、実アカウント・PC・Pixel 9・9言語・MCP・アクセシビリティの明示受入を通す。
 - DeepSeek Harness、OpenClaw、Hermesなどは外部Execution Planeとして扱い、GuilduoはRemote MCP、Skill、Agent Registry、Handoff、権限を提供する。Harnessの実接続コードやモデルAPIキーは公開βへ持ち込まない。
+
+## 正式URLと現在の公開状態
+
+新規ユーザーや接続手順へ載せるURLは、次の正式URLに統一する。内部path、generated domain、旧workers.dev URLは互換性・検証・rollback用であり、新規導線には使わない。
+
+| 用途 | 正式URL | 状態 |
+| --- | --- | --- |
+| 公式サイト / LP | `https://guilduo.com/` | READY |
+| 英語LP | `https://guilduo.com/lp/en/` | READY |
+| Web App / Guilduo / Relay Forge | `https://app.guilduo.com/` | READY |
+| MCP | `https://mcp.guilduo.com/mcp` | READY |
+| Appwrite API | `https://api.guilduo.com/v1` | READY |
+| `www` redirect | `https://www.guilduo.com/` → apex | WAITING FOR DNS |
+| Documentation | `https://docs.guilduo.com/` | Reserved / Future |
+
+URLの詳しい役割分担は[`docs/public-urls.md`](docs/public-urls.md)、host-based rewriteは[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)を参照する。
 
 ## TypeScript移行
 
@@ -25,7 +41,7 @@
 
 ## 現在地
 
-Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman × AI Work Platform**として公開βの直前まで進んでいる。
+Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman × AI Work Platform**として公開βを運用する段階にある。
 
 > AIを仲間に、最強のパーティーを。
 
@@ -33,7 +49,7 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 
 ### 実装済み
 
-- / の現行UI、/next/ の公開βUI、/lp/ を同じAppwrite Sites成果物へビルド
+- 公式サイト`guilduo.com/`、正式Web App`app.guilduo.com/`、英語LPを同じAppwrite Sites成果物へビルドし、rootをhost-based rewriteで分離
 - Appwrite Authの復元、Worker経由のユーザー単位TablesDB同期、再接続、同期中スケルトン、書き込みロック
 - TodayのPC・タブレット固定レイアウトと中央Quest欄の独立スクロール
 - スマホのページスクロール、下部Quest詳細、ポップアップ詳細切替
@@ -45,12 +61,12 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 - 日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語
 - Google Calendar、Google Tasks、Toggl、Notionの状態表示。Provider OAuthは公開βではEarly Accessとして停止
 - 匿名計測の同意UI、許可イベント限定のクライアント送信、Worker `/telemetry` 受け口、D1保存、90日保持上限
-- v0.6.0-beta.1のリリース設定と、D1 → Worker → Health Check → Appwrite Sitesのタグ専用Workflow
+- `0.6.0-beta.8`候補のリリース設定と、D1 → Appwrite Sites → Worker → Health Checkのタグ専用Workflow
 - Unity Battle Labはペンディングのまま本体リリースから分離
 
 ## 検証結果
 
-2026-08-14時点のローカル検証:
+2026-08-14時点のローカル検証（歴史的ベースライン）:
 
 - npm run check: 成功
 - npm test: 115/115 成功
@@ -70,7 +86,20 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 
 スクショはローカルの /screenshots/public-beta/ に保存している。スクショはGitへ含めない。
 
-## 公開前ゲート
+### 公開URLのデプロイ検証
+
+2026-08-30時点で、URL正規化に関係するAppwrite Site、Cloudflare Worker、Appwrite API Custom Domainを確認済みである。
+
+- `https://guilduo.com/`: LPとcanonical rootを確認
+- `https://guilduo.com/lp/en/`: 英語LPを確認
+- `https://app.guilduo.com/`: Relay Forgeとcanonical rootを確認
+- `https://app.guilduo.com/next/relay-forge/`: compatibility pathとして維持
+- `https://mcp.guilduo.com/mcp`: 未認証`401`とOAuth metadataを確認
+- `https://api.guilduo.com/v1`: Appwrite APIへの到達を確認。認証なしでは`401`が正しい
+- 旧workers.dev URL: OAuth metadata、未認証`401`、CORS互換を確認
+- Googleログイン済みのAppwriteセッションを使う認証E2EとAgent再リンクは、実クライアントでの受入確認を残す
+
+## 公開・リリースゲート
 
 ### P0: ユーザーによる実機受入
 
@@ -82,24 +111,23 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 - 同期中に完了・編集・保管が無効になることを確認
 - Agent登録、MCPクライアント紐付け、Quest割り当て、Handoffを実アカウントで確認
 
-### P0: Appwrite移行とデプロイ確認
+### 完了した公開基盤
 
-- Appwrite Web Platform、Google OAuth、Sites生成ドメインを確認
-- Firebase AuthユーザーとRealtime Databaseをエクスポートし、`legacy_states`の件数・checksumを照合
-- GitHub Environment productionのCloudflare/Appwrite Secretを確認
-- Workerを先にデプロイし、/healthでVersion、Schema、D1接続を確認
-- Appwrite JWTで`/v1/state`の作成・更新・競合検知・再読込を確認
-- Appwrite Sitesをデプロイ
-- /、/next/、/mcp、OAuth metadata、未認証401をスモークテスト
-- CI成功後にだけv0.6.0-beta.1タグとGitHub Releaseを作成
+- [x] Appwrite Siteの`app.guilduo.com/`、`guilduo.com/` routingを反映
+- [x] `APPWRITE_ENDPOINT=https://api.guilduo.com/v1`へWorkerとWeb Appを移行
+- [x] `APPWRITE_SITE_ENDPOINT`をSite管理API専用に分離
+- [x] `mcp.guilduo.com/mcp`のOAuth metadata、未認証`401`、App Web AppからのCORSを確認
+- [x] 旧workers.dev URLを互換・rollback面として維持
+- [x] README、API/MCP手順、公開URLガイド、エージェント引き継ぎ文書を正式URLへ同期
 
-### P1: 手動登録が必要な外部手続き
+### 残存ゲート
 
-- OpenAI MCP Appの技術App IDをDashboardで発行し、plugins/questforge/.app.jsonへ反映
-- plugins/questforge/openai-submission.jsonの空欄を実際の技術App IDで更新
-- OpenAIのレビュー申請。レビュー通過は公開βの必須条件ではない
-- Privacy、Terms、アカウント削除手順の公開URLを確認
-- Google OAuthを再開する場合だけProvider Secret、Authorized Domain、審査を設定
+- [ ] `www.guilduo.com`のDNSとapex redirectを有効化する（WAITING FOR DNS）
+- [ ] `docs.guilduo.com`をDocumentation公開時に構築する（Reserved / Future）
+- [ ] OpenClaw等でGoogleログインからOAuth approve、localhost callback、Agent contextまで実地確認する
+- [ ] OpenAI MCP Appの技術App ID、レビュー申請、公開導線を運用者が判断する
+- [ ] GitHub Social Previewや外部表示の追加確認を行う
+- [ ] 全受入完了後にのみ`v0.6.0-beta.8`タグとGitHub Releaseを作成する
 
 ## 次の改善
 
@@ -117,7 +145,7 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 3. 実アカウント受入では、認証復元中のスケルトンから同期済みへの遷移をPixel 9で確認する。
 4. Agent台帳は接続済みクライアントがない場合の空状態を、接続手順付きの案内へさらに改善する。
 5. 外部サービスはOAuthが再開されるまで、モックを実データと誤認しないEarly Access表示を維持する。
-6. LCP、INP、CLSの匿名計測は同意制の実装済み。公開前に `TELEMETRY_ENDPOINT` と D1 migration 0006 を本番環境へ設定し、実測を開始する。
+6. LCP、INP、CLSの匿名計測は同意制の実装済み。公開後に `TELEMETRY_ENDPOINT` と D1 migration 0006 を本番環境へ設定し、実測を開始する。
 7. Unity、ネイティブAndroid/iOS、Agent自動実行、外部OAuth正式公開は公開βの範囲に戻さない。
 
 ## 公開後の順序

@@ -14,9 +14,9 @@
  *     is one segment away at all times and carries the identical information,
  *     so the screen works with no SVG, no pointer and no colour.
  *
- * Scroll ownership: the explanation rail scrolls; the canvas does not — it
- * re-lays out to fit, because a graph you must scroll to see is a graph you
- * cannot read.
+ * Scroll ownership: the explanation rail scrolls. The graph is a map-like
+ * viewport over a deterministic world: drag/pinch/wheel move its camera without
+ * creating a second document scroller or rebuilding the screen DOM.
  */
 
 import type { Actor } from "../model.ts";
@@ -28,6 +28,17 @@ import {
   type NetworkModel,
   type NetworkNode,
 } from "./network-model.ts";
+import {
+  centreNetworkCamera,
+  fitNetworkCamera,
+  layoutNetworkWorld,
+  NETWORK_MAX_SCALE,
+  NETWORK_MIN_SCALE,
+  orthogonalNetworkPath,
+  type NetworkCamera,
+  type NetworkWorldNode,
+  zoomNetworkCameraAt,
+} from "./network-layout.ts";
 import {
   type Metric,
   metricRow,
@@ -57,10 +68,20 @@ export interface NetworkState {
   /** Mobile only. */
   upstreamOpen: boolean;
   downstreamOpen: boolean;
+  camera: NetworkCamera;
+  cameraFocusId: string | null;
 }
 
 export function initialNetworkState(): NetworkState {
-  return { focusId: null, view: "graph", trail: [], upstreamOpen: true, downstreamOpen: true };
+  return {
+    focusId: null,
+    view: "graph",
+    trail: [],
+    upstreamOpen: true,
+    downstreamOpen: true,
+    camera: { x: 0, y: 0, scale: 1 },
+    cameraFocusId: null,
+  };
 }
 
 interface Neighbourhood {
@@ -139,13 +160,13 @@ function nodeCard(
       "span",
       { class: "rf-n-node-top" },
       actor === null
-        ? el("span", { class: "rf-n-node-ref" }, node.ref)
+        ? el("span", { class: "rf-n-node-ref", title: node.ref }, node.ref)
         : actorAvatar(actor, { size: "row" }),
-      actor === null ? null : el("span", { class: "rf-n-node-ref" }, node.ref),
+      actor === null ? null : el("span", { class: "rf-n-node-ref", title: node.ref }, node.ref),
       nodeChip(node),
     ),
-    el("span", { class: "rf-n-node-label" }, node.label),
-    el("span", { class: "rf-n-node-sub" }, node.sub),
+    el("span", { class: "rf-n-node-label", title: node.label }, node.label),
+    el("span", { class: "rf-n-node-sub", title: node.sub }, node.sub),
     options.focused === true ? el("span", { class: "rf-visually-hidden" }, "中心のノード") : null,
   );
   card.addEventListener("click", () => options.onFocus());
@@ -160,99 +181,211 @@ function nodeCard(
  * stable across re-renders and identical between a browser and a capture.
  * ------------------------------------------------------------------ */
 
-const VIEW_W = 1000;
-const VIEW_H = 620;
-const ROW_UP = 84;
-const ROW_MID = 310;
-const ROW_DOWN = 536;
-
-function laneX(index: number, total: number): number {
-  if (total <= 1) return VIEW_W / 2;
-  const margin = 130;
-  return margin + ((VIEW_W - margin * 2) * index) / (total - 1);
-}
-
-/** Orthogonal route with one joint, matching the Quest Loom's connector language. */
-function edgePath(fromX: number, fromY: number, toX: number, toY: number): string {
-  const mid = (fromY + toY) / 2;
-  return `M ${fromX} ${fromY} L ${fromX} ${mid} L ${toX} ${mid} L ${toX} ${toY}`;
-}
-
 function graphCanvas(
   view: Neighbourhood,
   context: ScreenContext,
   state: NetworkState,
   onFocus: (id: string) => void,
 ): HTMLElement {
+  const layout = layoutNetworkWorld(
+    view.upstream.map((entry) => entry.node.id),
+    view.focus.id,
+    view.downstream.map((entry) => entry.node.id),
+  );
   const nodes = el("div", { class: "rf-n-nodes" });
   const lines: SVGElement[] = [];
 
-  const place = (element: HTMLElement, x: number, y: number): void => {
-    element.style.left = `${(x / VIEW_W) * 100}%`;
-    element.style.top = `${(y / VIEW_H) * 100}%`;
+  const place = (element: HTMLElement, point: NetworkWorldNode): void => {
+    element.style.left = `${point.x}px`;
+    element.style.top = `${point.y}px`;
     nodes.append(element);
   };
 
-  view.upstream.forEach((entry, index) => {
-    const x = laneX(index, view.upstream.length);
+  view.upstream.forEach((entry) => {
+    const point = layout.nodes.get(entry.node.id);
+    if (point === undefined) return;
     place(
       nodeCard(entry.node, context, { role: "upstream", onFocus: () => onFocus(entry.node.id) }),
-      x,
-      ROW_UP,
+      point,
     );
     lines.push(
       svg("path", {
         class: "rf-n-edge",
         "data-kind": entry.edge.kind,
         "data-blocking": entry.edge.blocking ? "true" : "false",
-        d: edgePath(x, ROW_UP + 46, VIEW_W / 2, ROW_MID - 52),
+        d: orthogonalNetworkPath(point, layout.focus),
         fill: "none",
       }),
-      svg("rect", { class: "rf-n-joint", x: String(x - 3), y: String((ROW_UP + 46 + ROW_MID - 52) / 2 - 3), width: "6", height: "6" }),
     );
   });
 
-  view.downstream.forEach((entry, index) => {
-    const x = laneX(index, view.downstream.length);
+  view.downstream.forEach((entry) => {
+    const point = layout.nodes.get(entry.node.id);
+    if (point === undefined) return;
     place(
       nodeCard(entry.node, context, { role: "downstream", onFocus: () => onFocus(entry.node.id) }),
-      x,
-      ROW_DOWN,
+      point,
     );
     lines.push(
       svg("path", {
         class: "rf-n-edge",
         "data-kind": entry.edge.kind,
         "data-blocking": entry.edge.blocking ? "true" : "false",
-        d: edgePath(VIEW_W / 2, ROW_MID + 52, x, ROW_DOWN - 46),
+        d: orthogonalNetworkPath(layout.focus, point),
         fill: "none",
       }),
-      svg("rect", { class: "rf-n-joint", x: String(x - 3), y: String((ROW_MID + 52 + ROW_DOWN - 46) / 2 - 3), width: "6", height: "6" }),
     );
   });
 
   place(
     nodeCard(view.focus, context, { role: "focus", focused: true, onFocus: () => onFocus(view.focus.id) }),
-    VIEW_W / 2,
-    ROW_MID,
+    layout.focus,
   );
+
+  const edges = svg(
+    "svg",
+    {
+      class: "rf-n-edges",
+      viewBox: `0 0 ${layout.width} ${layout.height}`,
+      width: String(layout.width),
+      height: String(layout.height),
+      "aria-hidden": "true",
+    },
+    ...lines,
+  ) as unknown as SVGElement;
+  const world = el("div", { class: "rf-n-world", "aria-hidden": "false" }, edges as unknown as Node, nodes);
+  world.style.width = `${layout.width}px`;
+  world.style.height = `${layout.height}px`;
+  world.style.visibility = "hidden";
+
+  const control = (label: string, text: string, act: () => void): HTMLButtonElement => {
+    const button = el("button", { type: "button", class: "rf-n-map-control", "aria-label": label, title: label }, text);
+    button.addEventListener("click", act);
+    return button;
+  };
 
   const canvas = el(
     "div",
-    { class: "rf-n-canvas", role: "group", "aria-label": `${view.focus.label} の関係図` },
+    {
+      class: "rf-n-canvas",
+      role: "group",
+      tabindex: 0,
+      "aria-label": `${view.focus.label} の関係図。ドラッグで移動、ホイールで拡大縮小できます`,
+    },
     el(
       "div",
       { class: "rf-n-lane-labels", "aria-hidden": "true" },
       el("span", null, "上流 — これが終わらないと進めない"),
       el("span", null, "下流 — これを待っている"),
     ),
-    svg(
-      "svg",
-      { class: "rf-n-edges", viewBox: `0 0 ${VIEW_W} ${VIEW_H}`, preserveAspectRatio: "none", "aria-hidden": "true" },
-      ...lines,
-    ) as unknown as Node,
-    nodes,
+    world,
   );
+
+  let frame: number | null = null;
+  const applyCamera = (): void => {
+    frame = null;
+    world.style.transform = `translate3d(${state.camera.x}px, ${state.camera.y}px, 0) scale(${state.camera.scale})`;
+    world.style.visibility = "visible";
+    canvas.setAttribute("aria-valuetext", `${Math.round(state.camera.scale * 100)}%`);
+  };
+  const scheduleCamera = (): void => {
+    if (frame === null) frame = window.requestAnimationFrame(applyCamera);
+  };
+  const setCamera = (camera: NetworkCamera): void => {
+    state.camera = camera;
+    scheduleCamera();
+  };
+  const centreOn = (point: NetworkWorldNode, scale = state.camera.scale): void => {
+    setCamera(centreNetworkCamera(canvas.clientWidth, canvas.clientHeight, point, scale));
+  };
+
+  const controls = el(
+    "div",
+    { class: "rf-n-map-controls", role: "group", "aria-label": "関係図の表示操作" },
+    control("拡大", "+", () => {
+      const centre = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+      setCamera(zoomNetworkCameraAt(state.camera, state.camera.scale * 1.2, centre));
+    }),
+    control("縮小", "−", () => {
+      const centre = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+      setCamera(zoomNetworkCameraAt(state.camera, state.camera.scale / 1.2, centre));
+    }),
+    control("中心へ戻す", "中心", () => centreOn(layout.focus)),
+    control("全体を表示", "全体", () => setCamera(fitNetworkCamera(canvas.clientWidth, canvas.clientHeight, layout))),
+  );
+  canvas.append(controls);
+
+  window.requestAnimationFrame(() => {
+    if (state.cameraFocusId !== view.focus.id) {
+      state.camera = centreNetworkCamera(canvas.clientWidth, canvas.clientHeight, layout.focus, state.cameraFocusId === null ? 1 : state.camera.scale);
+      state.cameraFocusId = view.focus.id;
+    }
+    applyCamera();
+  });
+
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    setCamera(zoomNetworkCameraAt(state.camera, state.camera.scale * factor, point));
+  }, { passive: false });
+
+  const pointers = new Map<number, { x: number; y: number }>();
+  let previousCentroid: { x: number; y: number } | null = null;
+  let previousDistance = 0;
+  const pointerGeometry = (): { centroid: { x: number; y: number }; distance: number } | null => {
+    const values = [...pointers.values()];
+    if (values.length === 0) return null;
+    if (values.length === 1) return { centroid: values[0] as { x: number; y: number }, distance: 0 };
+    const first = values[0] as { x: number; y: number };
+    const second = values[1] as { x: number; y: number };
+    return {
+      centroid: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
+      distance: Math.hypot(second.x - first.x, second.y - first.y),
+    };
+  };
+  const updatePointerBaseline = (): void => {
+    const geometry = pointerGeometry();
+    previousCentroid = geometry?.centroid ?? null;
+    previousDistance = geometry?.distance ?? 0;
+  };
+  canvas.addEventListener("pointerdown", (event) => {
+    if ((event.target as Element).closest(".rf-n-node, .rf-n-map-controls") !== null) return;
+    canvas.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    updatePointerBaseline();
+    canvas.dataset.dragging = "true";
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!pointers.has(event.pointerId) || previousCentroid === null) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const geometry = pointerGeometry();
+    if (geometry === null) return;
+    let next: NetworkCamera = {
+      x: state.camera.x + geometry.centroid.x - previousCentroid.x,
+      y: state.camera.y + geometry.centroid.y - previousCentroid.y,
+      scale: state.camera.scale,
+    };
+    if (geometry.distance > 0 && previousDistance > 0) {
+      const rect = canvas.getBoundingClientRect();
+      next = zoomNetworkCameraAt(next, next.scale * (geometry.distance / previousDistance), {
+        x: geometry.centroid.x - rect.left,
+        y: geometry.centroid.y - rect.top,
+      });
+    }
+    state.camera = next;
+    previousCentroid = geometry.centroid;
+    previousDistance = geometry.distance;
+    scheduleCamera();
+  });
+  const releasePointer = (event: PointerEvent): void => {
+    pointers.delete(event.pointerId);
+    updatePointerBaseline();
+    if (pointers.size === 0) delete canvas.dataset.dragging;
+  };
+  canvas.addEventListener("pointerup", releasePointer);
+  canvas.addEventListener("pointercancel", releasePointer);
 
   /* Keyboard traversal: Up/Down move between the lanes, Left/Right along a
    * lane, Enter re-centres. The whole canvas is one tab stop. */
@@ -267,15 +400,35 @@ function graphCanvas(
       if (lane.length === 0) return;
       const at = lane.findIndex((entry) => entry.node.id === active?.dataset.nodeId);
       const next = Math.min(lane.length - 1, Math.max(0, at + (key === "ArrowRight" ? 1 : -1)));
-      canvas.querySelector<HTMLElement>(`[data-node-id="${lane[next]?.node.id ?? ""}"]`)?.focus();
+      const id = lane[next]?.node.id;
+      if (id === undefined) return;
+      canvas.querySelector<HTMLElement>(`[data-node-id="${id}"]`)?.focus({ preventScroll: true });
+      const point = layout.nodes.get(id);
+      if (point !== undefined) centreOn(point);
       return;
     }
     const target = key === "ArrowUp"
       ? (role === "downstream" ? view.focus.id : view.upstream[0]?.node.id)
       : (role === "upstream" ? view.focus.id : view.downstream[0]?.node.id);
     if (target === undefined) return;
-    canvas.querySelector<HTMLElement>(`[data-node-id="${target}"]`)?.focus();
+    canvas.querySelector<HTMLElement>(`[data-node-id="${target}"]`)?.focus({ preventScroll: true });
+    const point = layout.nodes.get(target);
+    if (point !== undefined) centreOn(point);
   });
+
+  canvas.addEventListener("keydown", (event) => {
+    if (event.key !== "+" && event.key !== "-" && event.key !== "0") return;
+    event.preventDefault();
+    if (event.key === "0") centreOn(layout.focus);
+    else {
+      const centre = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+      const factor = event.key === "+" ? 1.2 : 1 / 1.2;
+      setCamera(zoomNetworkCameraAt(state.camera, state.camera.scale * factor, centre));
+    }
+  });
+
+  canvas.dataset.minScale = String(NETWORK_MIN_SCALE);
+  canvas.dataset.maxScale = String(NETWORK_MAX_SCALE);
 
   return canvas;
 }

@@ -96,7 +96,7 @@ test("locale preference is device-local and PWA fallback manifests are available
 
 test("release metadata, license, public docs, and CI are present", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.6.0-beta.7");
+  assert.equal(packageJson.version, "0.6.0-beta.8");
   assert.equal(packageJson.license, "AGPL-3.0-only");
   assert.match(fs.readFileSync(path.join(root, "LICENSE"), "utf8"), /GNU AFFERO GENERAL PUBLIC LICENSE/);
   for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", "RELEASE_SETUP.md", ".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
@@ -126,6 +126,23 @@ test("public examples omit local absolute paths and private deployment identifie
   assert.doesNotMatch(content, /guangchuannaito|questforge-cb6ba|AIzaSyAs44|5a8a50b8|98241f88/i);
   const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
   for (const ignored of ["runtime-config.js", "appwrite-config.js", "wrangler.jsonc", "unity-battle-prototype/"]) assert.match(gitignore, new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("public URL references keep site, app, MCP, and Appwrite API roles separate", () => {
+  const files = [
+    "README.md", "API_MCP_SETUP.md", "RELEASE_SETUP.md", "index.html", "lp/index.html", "lp/en/index.html",
+    "mcp-local/client-configs.md", "plugins/questforge/.app.json.example", "plugins/questforge/.mcp.json",
+    "plugins/questforge/openai-submission.json", "api/openapi.json", "tools/update-api-contracts.mts", "vite.config.ts",
+  ];
+  const content = files.map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
+  assert.doesNotMatch(content, /6a90bb258248d43363a2\.appwrite\.network/);
+  assert.doesNotMatch(content, /your-questforge-worker\.example\.workers\.dev/);
+  assert.match(content, /https:\/\/guilduo\.com/);
+  assert.match(content, /https:\/\/app\.guilduo\.com/);
+  assert.match(content, /https:\/\/mcp\.guilduo\.com/);
+  assert.match(content, /https:\/\/api\.guilduo\.com/);
+  assert.match(content, /https:\/\/api\.guilduo\.com\/v1/);
+  assert.match(content, /PUBLIC_SITE_URL/);
 });
 
 test("generated contracts expose Agent Registry, social, Quest Tree, battle, and MCP v2.7 operations", () => {

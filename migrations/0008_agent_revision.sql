@@ -1,0 +1,12 @@
+-- Monotonic per-Agent revision counter — the real optimistic-concurrency
+-- guard for agent_registry_agents. `updated_at` alone is not sufficient: two
+-- writes that land in the same millisecond can compute the identical "new"
+-- timestamp they also use as their CAS guard, so a losing writer's WHERE
+-- clause can still match after the winner's write commits (the guard never
+-- changed). `revision` always advances by exactly 1 on every successful
+-- write regardless of the clock, closing that gap.
+--
+-- SQLite backfills the DEFAULT across every existing row when adding a
+-- NOT NULL column this way, so existing Agents safely start at revision 1
+-- with no separate backfill statement required.
+ALTER TABLE agent_registry_agents ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;

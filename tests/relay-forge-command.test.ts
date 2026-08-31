@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   canTransition,
@@ -12,6 +13,7 @@ import { blockingReason, submitDecision } from "../interaction-lab/relay-forge/d
 import type { Quest } from "../types/questforge.ts";
 import { transitionQuestHandoff } from "../server/questforge-domain.ts";
 import { questActionState } from "../interaction-lab/relay-forge/quest-actions.ts";
+import { weaveQuestRows } from "../interaction-lab/relay-forge/primitives/spine-model.ts";
 
 /**
  * These tests run the Command adapter against the real domain, not against the
@@ -109,13 +111,40 @@ test("identity resolves from the profile and Agent registry, not from screen fix
   assert.equal(human.avatarUrl, "data:image/webp;base64,AAAA");
   assert.equal(human.avatarRole, "operator");
   assert.equal(human.avatarVariant, "masc");
-  assert.equal(human.initials, "HI");
+  assert.equal(human.initials, "ME", "the signed-in Human uses a stable self marker instead of clipped name text");
 
   const agent = actors.get("forge-runner");
   assert.ok(agent, "registered agents become actors");
   assert.equal(agent.kind, "agent");
   assert.equal(agent.provider, "generic");
   assert.equal(agent.avatarUrl, undefined, "an agent never borrows a human portrait");
+});
+
+test("Quest Loom keeps the source order when the selected hub changes", () => {
+  const model = normalizeCommandModel({
+    profile: { uid: "uid-1", displayName: "Hironao" },
+    agents: [],
+    quests: [
+      buildQuest({ id: "q-a", title: "A", dependencyIds: [] }),
+      buildQuest({ id: "q-b", title: "B", dependencyIds: ["q-a"] }),
+      buildQuest({ id: "q-c", title: "C", dependencyIds: ["q-b"] }),
+      buildQuest({ id: "q-d", title: "D", dependencyIds: [] }),
+    ],
+    syncLabel: "10:52",
+  });
+  const source = model.quests.map((quest) => quest.id);
+  assert.deepEqual(weaveQuestRows(model.quests, "q-b").map((row) => row.quest.id), source);
+  assert.deepEqual(weaveQuestRows(model.quests, "q-c").map((row) => row.quest.id), source);
+  assert.equal(weaveQuestRows(model.quests, "q-b").find((row) => row.quest.id === "q-b")?.relation, "hub");
+});
+
+test("Relay Forge loading bootstrap announces status without focusing its heading", () => {
+  const main = readFileSync(new URL("../interaction-lab/relay-forge/main.ts", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../interaction-lab/relay-forge/foundation.css", import.meta.url), "utf8");
+  assert.match(main, /kind === "loading"[\s\S]*role", "status"/);
+  assert.match(main, /if \(kind !== "loading"\) heading\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(css, /\.rf-bootstrap h1:focus\s*\{\s*outline:\s*none;/);
+  assert.doesNotMatch(css, /\.rf-bootstrap button:focus[^}]*outline:\s*none/s, "real controls keep their focus ring");
 });
 
 test("an actor with no profile or registry entry gets a placeholder, never a portrait", () => {

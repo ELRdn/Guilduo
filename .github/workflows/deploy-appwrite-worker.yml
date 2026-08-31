@@ -30,17 +30,24 @@ jobs:
           APPWRITE_STATE_TABLE_ID: ${{ vars.APPWRITE_STATE_TABLE_ID }}
           APPWRITE_LEGACY_TABLE_ID: ${{ vars.APPWRITE_LEGACY_TABLE_ID }}
           WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          PROVIDER_OAUTH_BASE_URL: ${{ vars.PROVIDER_OAUTH_BASE_URL || vars.WORKER_BASE_URL }}
+          MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
           SOURCE_URL: ${{ vars.SOURCE_URL }}
           EXTERNAL_OAUTH_ENABLED: ${{ vars.EXTERNAL_OAUTH_ENABLED || 'false' }}
-          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || '/next/' }}
+          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || 'https://app.guilduo.com/' }}
           D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
       - run: npm run check
       - run: npm test
       - run: npm run build
+        env:
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
       - name: Apply additive D1 migrations
         run: npx wrangler d1 migrations apply "${{ vars.D1_DATABASE_NAME }}" --remote
         env:
@@ -79,3 +86,13 @@ jobs:
             sleep 3
           done
           test "$cors_ok" = true
+      - name: Verify MCP custom domain
+        shell: bash
+        env:
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+        run: |
+          mcp_base="${MCP_BASE_URL%/}"
+          metadata="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-authorization-server")"
+          resource="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-protected-resource/mcp")"
+          node -e 'const [metadata, resource, base] = process.argv.slice(1).map((value, index) => index < 2 ? JSON.parse(value) : value); if (metadata.issuer !== base || metadata.authorization_endpoint !== `${base}/oauth/authorize` || metadata.token_endpoint !== `${base}/oauth/token` || resource.resource !== `${base}/mcp` || !Array.isArray(resource.authorization_servers) || !resource.authorization_servers.includes(base)) process.exit(1)' "$metadata" "$resource" "$mcp_base"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 3 -X POST "$mcp_base/mcp")" = "401"

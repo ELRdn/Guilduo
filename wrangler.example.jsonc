@@ -6,20 +6,32 @@
 	"compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "vars": {
-    "APPWRITE_ENDPOINT": "https://sgp.cloud.appwrite.io/v1",
+    "APPWRITE_ENDPOINT": "https://api.guilduo.com/v1",
     "APPWRITE_PROJECT_ID": "your-appwrite-project-id",
     "APPWRITE_DATABASE_ID": "guilduo",
     "APPWRITE_STATE_TABLE_ID": "user_states",
     "APPWRITE_LEGACY_TABLE_ID": "legacy_states",
     "PUBLIC_BASE_URL": "https://your-questforge-worker.example.workers.dev",
-    "WEB_APP_URL": "https://your-guilduo-site.appwrite.network",
-    "ALLOWED_ORIGINS": "https://your-guilduo-site.appwrite.network,http://localhost:5173,http://127.0.0.1:5173"
+    "PROVIDER_OAUTH_BASE_URL": "https://your-questforge-worker.example.workers.dev",
+    "MCP_ALLOWED_ORIGINS": "https://your-questforge-worker.example.workers.dev,https://mcp.guilduo.com",
+		"WEB_APP_URL": "https://app.guilduo.com",
+		"ALLOWED_ORIGINS": "https://app.guilduo.com,https://guilduo.com,http://localhost:5173,http://127.0.0.1:5173"
   },
+  "routes": [{ "pattern": "mcp.guilduo.com", "custom_domain": true }],
+  // APPWRITE_API_KEY is a secret, not a var — set it with
+  // `wrangler secret put APPWRITE_API_KEY`, never here in plaintext.
   "triggers": { "crons": ["*/15 * * * *"] },
   "d1_databases": [
     { "binding": "QUESTFORGE_DB", "database_name": "questforge-data", "database_id": "your-d1-database-id" }
   ],
   "kv_namespaces": [
     { "binding": "QUESTFORGE_KV", "id": "your-kv-namespace-id", "remote": true }
+  ],
+  // Agent avatar image bytes (worker/src/agent-avatar-store.ts), keyed by a
+  // random asset ID that D1's agent_registry_agents.avatar_asset_id column
+  // maps to an Agent. Create the bucket with `wrangler r2 bucket create
+  // guilduo-agent-avatars` before this binding will resolve.
+  "r2_buckets": [
+    { "binding": "AGENT_AVATARS", "bucket_name": "guilduo-agent-avatars" }
   ]
 }

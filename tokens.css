@@ -1,6 +1,70 @@
 @import "./interaction-lab/relay-forge/tokens.css";
 
-/* Guilduo LP semantic aliases. This file is loaded by /lp/ only. */
+/* Guilduo LP semantic aliases. This file is loaded by /lp/ only.
+ * Relay Forge has its own E2 palette, but the LP remains on the approved
+ * pre-E2 marketing palette until a separate LP art-direction decision. */
+:root[data-theme="light"] {
+  --qf-color-canvas: #e9ece8;
+  --qf-color-field: #f1f3ef;
+  --qf-color-surface: #fafbf8;
+  --qf-color-raised: #ffffff;
+  --qf-color-inset: #e4e8e3;
+  --qf-color-selected: #dce9e1;
+  --qf-color-fg-strong: #17201e;
+  --qf-color-fg-default: #40504b;
+  --qf-color-fg-muted: #66756f;
+  --qf-color-fg-disabled: #919b96;
+  --qf-color-border-subtle: #d3d9d4;
+  --qf-color-border-default: #b9c2bc;
+  --qf-color-border-strong: #7c8b84;
+  --qf-color-accent: #23312d;
+  --qf-color-accent-hover: #17221f;
+  --qf-color-fg-on-accent: #f7faf8;
+  --qf-color-human: #1d6d4d;
+  --qf-color-agent: #2d65a7;
+  --qf-color-system: #596863;
+  --qf-color-review: #76531b;
+  --qf-color-waiting: #825b18;
+  --qf-color-success: #236b43;
+  --qf-color-warning: #8b5b13;
+  --qf-color-danger: #a33f3a;
+  --qf-color-mp: #684aa3;
+  --qf-color-battle: #8b482d;
+  --qf-color-focus: #145fa8;
+  --qf-color-scrim: rgba(20, 28, 25, 0.36);
+}
+
+:root[data-theme="dark"] {
+  --qf-color-canvas: #0b0f10;
+  --qf-color-field: #101617;
+  --qf-color-surface: #151d1f;
+  --qf-color-raised: #1c2729;
+  --qf-color-inset: #0d1213;
+  --qf-color-selected: #20302c;
+  --qf-color-fg-strong: #edf2ef;
+  --qf-color-fg-default: #c4ceca;
+  --qf-color-fg-muted: #8e9b97;
+  --qf-color-fg-disabled: #5e6966;
+  --qf-color-border-subtle: #253032;
+  --qf-color-border-default: #344244;
+  --qf-color-border-strong: #536365;
+  --qf-color-accent: #d7e2de;
+  --qf-color-accent-hover: #ebf2ef;
+  --qf-color-fg-on-accent: #111816;
+  --qf-color-human: #67c194;
+  --qf-color-agent: #75a7e8;
+  --qf-color-system: #9aa7a3;
+  --qf-color-review: #d9b36a;
+  --qf-color-waiting: #d2a65a;
+  --qf-color-success: #64ba86;
+  --qf-color-warning: #e1a85a;
+  --qf-color-danger: #e77068;
+  --qf-color-mp: #b59ae8;
+  --qf-color-battle: #d8875f;
+  --qf-color-focus: #9bc8ff;
+  --qf-color-scrim: rgba(0, 0, 0, 0.62);
+}
+
 :root {
   --color-paper: var(--qf-color-canvas);
   --color-paper-2: var(--qf-color-field);

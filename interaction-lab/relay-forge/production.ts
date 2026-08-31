@@ -22,6 +22,8 @@ export interface RelayForgeRuntime {
   readonly mode: "production";
   readonly model: CommandModel;
   readonly profile: ProfileRecord | null;
+  readonly email: string;
+  readonly profileLoadError: string | null;
   readonly quests: readonly Quest[];
   readonly selfUid: string;
   readonly members: readonly PartyMemberRecord[];
@@ -34,6 +36,17 @@ export interface RelayForgeRuntime {
   readonly battlePort: BattlePort;
   readonly battleSession: BattleSession | null;
   readonly connectionsPort: ConnectionsPort;
+  /** The Gateway base URL actually in use — Settings derives the MCP URL from this. */
+  readonly gatewayUrl: string;
+  readonly profilePort: Pick<QuestForgeRepository, "getProfile" | "updateProfile">;
+  readonly profileAvatarPort: Pick<QuestForgeRepository, "uploadProfileAvatar" | "fetchProfileAvatar" | "deleteProfileAvatar">;
+  readonly agentAvatarPort: Pick<QuestForgeRepository, "uploadAgentAvatar" | "fetchAgentAvatar">;
+  /**
+   * Injected by the composition root (`main.ts`), never imported by the shell
+   * directly, so Appwrite Auth stays a swappable port rather than a hard
+   * dependency of the Relay Forge UI.
+   */
+  readonly signOut?: () => Promise<void>;
 }
 
 function record(value: unknown): JsonRecord {
@@ -48,6 +61,23 @@ function text(value: unknown): string {
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+export function normalizeProfileRecord(item: unknown): ProfileRecord | null {
+  const profile = record(item);
+  if (Object.keys(profile).length === 0) return null;
+  const avatarVersion = Number(profile.avatarVersion);
+  return {
+    uid: text(profile.uid),
+    displayName: text(profile.displayName),
+    handle: text(profile.handle).trim().replace(/^@+/, ""),
+    bio: text(profile.bio),
+    avatarUrl: text(profile.avatarUrl),
+    avatarRole: text(profile.avatarRole),
+    avatarVariant: text(profile.avatarVariant),
+    hasCustomAvatar: profile.hasCustomAvatar === true && Number.isSafeInteger(avatarVersion) && avatarVersion > 0,
+    avatarVersion: Number.isSafeInteger(avatarVersion) && avatarVersion > 0 ? avatarVersion : 0,
+  };
 }
 
 export function normalizePartyMembers(
@@ -80,11 +110,22 @@ export function normalizePartyMembers(
   return members;
 }
 
+/**
+ * The image bytes never pass through this function or through `/v1/agents` —
+ * `hasCustomAvatar` and `avatarVersion` only tell the caller whether one
+ * exists and which version it is. Resolving that into a displayable
+ * `avatarUrl` (a Blob object URL, fetched over the authenticated avatar
+ * route) is the shell's job, not this normalizer's — see
+ * `withCachedAvatar`/`refreshAgentAvatars` in `shell.ts`.
+ */
 export function normalizeAgentRecord(item: unknown): AgentRecord | null {
     const agent = record(item);
+    const agentId = text(agent.agentId);
+    const avatarVersion = typeof agent.avatarVersion === "number" && agent.avatarVersion > 0 ? agent.avatarVersion : 0;
+    const hasCustomAvatar = agent.hasCustomAvatar === true && avatarVersion > 0;
     const normalized: AgentRecord = {
-      agentId: text(agent.agentId),
-      displayName: text(agent.displayName) || text(agent.agentId) || "Agent",
+      agentId,
+      displayName: text(agent.displayName) || agentId || "Agent",
       provider: text(agent.provider),
       role: text(agent.role),
       instructions: text(agent.instructions),
@@ -94,12 +135,14 @@ export function normalizeAgentRecord(item: unknown): AgentRecord | null {
       dryRunDefault: agent.dryRunDefault !== false,
       defaultHandoffState: text(agent.defaultHandoffState),
       updatedAt: text(agent.updatedAt),
+      avatarVersion,
+      hasCustomAvatar,
     };
     return normalized.agentId === "" ? null : normalized;
 }
 
 function normalizeAgents(source: readonly unknown[]): AgentRecord[] {
-  return source.map(normalizeAgentRecord).filter((agent): agent is AgentRecord => agent !== null);
+  return source.map((item) => normalizeAgentRecord(item)).filter((agent): agent is AgentRecord => agent !== null);
 }
 
 function normalizeIntegrations(source: readonly unknown[]): IntegrationRecord[] {
@@ -127,10 +170,11 @@ function normalizeIntegrations(source: readonly unknown[]): IntegrationRecord[] 
 export async function createProductionRuntime(
   repository: QuestForgeRepository,
   selfUid: string,
+  email = "",
 ): Promise<RelayForgeRuntime> {
   const snapshot = await repository.loadSnapshot();
   const quests = snapshot.quests as Quest[];
-  const profile = snapshot.profile as ProfileRecord | null;
+  const profile = normalizeProfileRecord(snapshot.profile);
   const effectiveProfile: ProfileRecord = profile ?? { uid: selfUid, displayName: "あなた" };
   const agents = normalizeAgents(snapshot.agents);
   const integrations = normalizeIntegrations(snapshot.integrations);
@@ -146,6 +190,8 @@ export async function createProductionRuntime(
     mode: "production",
     model,
     profile,
+    email: email.trim(),
+    profileLoadError: snapshot.panelErrors.find((entry) => entry.index === 3)?.message ?? null,
     quests,
     selfUid,
     members: normalizePartyMembers(party, selfUid, effectiveProfile),
@@ -158,5 +204,9 @@ export async function createProductionRuntime(
     battlePort: new RepositoryBattlePort(repository),
     battleSession: Object.keys(snapshot.battle).length === 0 ? null : snapshot.battle as unknown as BattleSession,
     connectionsPort: new RepositoryConnectionsPort(repository),
+    gatewayUrl: repository.baseUrl,
+    profilePort: repository,
+    profileAvatarPort: repository,
+    agentAvatarPort: repository,
   };
 }

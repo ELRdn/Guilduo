@@ -8,6 +8,17 @@
 - QuestForge is the legacy public name. Compatibility-sensitive identifiers such as package names, CLI commands, MCP IDs, environment variables, storage keys, routes, schemas, types, events, and existing file paths must not be renamed without an explicit migration plan.
 - Brand source of truth: [BRAND.md](BRAND.md)
 
+## Public URL policy
+
+- Read [docs/public-urls.md](docs/public-urls.md) before adding or changing a user-facing link.
+- Official site: https://guilduo.com/
+- Official Web App: https://app.guilduo.com/ — the public **Guilduo / Relay Forge** entry.
+- Official MCP endpoint: https://mcp.guilduo.com/mcp
+- Appwrite API endpoint: https://api.guilduo.com/v1
+- app.guilduo.com/next/relay-forge/ is an internal deployment and compatibility path, not a new-user entry point.
+- Old workers.dev and Appwrite generated domains are compatibility or rollback surfaces only.
+- Keep QuestForge in compatibility-sensitive technical identifiers, but use Guilduo and Guilduo / Relay Forge in new public copy and links.
+
 ## Before UI changes
 
 - Read [`DESIGN.md`](DESIGN.md) before changing visual identity, layout, components, interaction states, motion, or accessibility.
@@ -23,7 +34,7 @@
 
 ## Validation
 
-- Keep the root surface and `/next/` surface responsibilities separate.
-- Treat `/interaction-lab/` as the local development route and `/next/` as the built public beta route.
+- Keep the root surface and `/next/` implementation surface responsibilities separate.
+- Treat `/interaction-lab/` as the local development route, app.guilduo.com/ as the official Web App, and `/next/relay-forge/` as its compatibility/deployment path.
 - Run `npm run design:check` after changing design documents, tokens, components, screens, or asset references.
 - Run the relevant type checks, tests, build, contract checks, and visual validation before declaring a change complete.

@@ -40,6 +40,7 @@ import {
   tokenEndpoint,
 } from "./oauth.ts";
 import {
+  bumpAgentAvatarVersion,
   createAgent,
   getAgent,
   getAgentForClient,
@@ -50,6 +51,9 @@ import {
   unlinkAgentConnection,
   updateAgent,
 } from "./agent-store.ts";
+import { deleteAgentAvatarAsset, getAgentAvatarObject, MAX_AVATAR_BYTES, putAgentAvatar } from "./agent-avatar-store.ts";
+import { deleteProfileAvatarAsset, getProfileAvatarObject, putProfileAvatar } from "./profile-avatar-store.ts";
+import { planAgentAvatarCleanup } from "./agent-avatar-cleanup.ts";
 import {
   calendarSchedule,
   configureIntegration,
@@ -79,6 +83,7 @@ import {
 import { listDueIntegrationAccounts } from "./integration-store.ts";
 import { beginIntegrationConnect, disconnectIntegration, handleProviderCallback } from "./provider-oauth.ts";
 import { handleMcpNext } from "./mcp-server.ts";
+import { mcpOriginForRequest, primaryMcpOrigin, providerOAuthOriginForRequest } from "./mcp-origin.ts";
 import {
   createWebhook,
   deleteWebhook,
@@ -97,6 +102,7 @@ import {
   declineFriendRequest,
   findProfileByHandle,
   getOwnProfile,
+  getOwnProfileAvatarState,
   getParty,
   inviteToParty,
   leaveParty,
@@ -104,13 +110,15 @@ import {
   listFriends,
   removeFriend,
   removePartyMember,
+  removeProfileAvatar,
   sendFriendRequest,
   upsertProfile,
+  activateProfileAvatar,
 } from "./social-store.ts";
 import type { FocusInput } from "./toggl-focus.ts";
 import type { AuthIdentity } from "./security.ts";
 import type { AgentRecord } from "./agent-store.ts";
-import type { JsonRecord, WorkerEnv, WorkerError } from "./worker-types.ts";
+import type { JsonRecord, R2ObjectLike, WorkerEnv, WorkerError } from "./worker-types.ts";
 import { isQuest } from "../../types/questforge.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 
@@ -165,6 +173,11 @@ function errorMessage(error: unknown): string {
 
 function errorCode(error: unknown): string {
   return error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "internal_error";
+}
+
+function avatarActivationDefinitelyNotApplied(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === "agent_conflict" || code === "agent_not_found" || code === "agent_archived";
 }
 
 function errorStatus(error: unknown): number | undefined {
@@ -402,7 +415,7 @@ const MCP_TOOLS = [
   { name: "sync_external_service", title: "Sync External Service", description: "Run a configured external sync. dryRun defaults to true and provider writes require explicit execution.", inputSchema: { type: "object", required: ["service", "direction"], properties: { service: { type: "string", enum: ["google-calendar", "google-tasks", "notion"] }, direction: { type: "string", enum: ["import", "export", "bidirectional"] }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: SYNC_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
   { name: "get_my_profile", title: "Get My Profile", description: "Get the authenticated user's Guilduo public profile settings.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "find_profile_by_handle", title: "Find Profile by Handle", description: "Find one Guilduo public profile by an exact @handle.", inputSchema: { type: "object", required: ["handle"], properties: { handle: { type: "string", minLength: 3, maxLength: 21 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
-  { name: "update_profile", title: "Update Profile", description: "Create or update the authenticated user's public Guilduo profile, including the selected character icon.", inputSchema: { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 40 }, handle: { type: "string", minLength: 3, maxLength: 21 }, bio: { type: "string", maxLength: 160 }, avatarRole: { type: "string", maxLength: 40 }, avatarVariant: { type: "string", maxLength: 40 }, avatarUrl: { type: "string", maxLength: 700000, pattern: "^data:image/(png|jpeg|webp);base64," }, level: { type: "integer", minimum: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "update_profile", title: "Update Profile", description: "Create or update the authenticated user's public Guilduo profile metadata. Profile images are managed by the authenticated web avatar endpoint, not embedded in MCP JSON.", inputSchema: { type: "object", properties: { displayName: { type: "string", minLength: 1, maxLength: 60 }, handle: { type: "string", minLength: 3, maxLength: 20 }, bio: { type: "string", maxLength: 160 }, avatarRole: { type: "string", maxLength: 40 }, avatarVariant: { type: "string", maxLength: 40 }, level: { type: "integer", minimum: 1 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { profile: QUEST_OBJECT }, additionalProperties: false }, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_friends", title: "List Friends", description: "List accepted friends using minimal public profile fields.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { friends: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "list_friend_requests", title: "List Friend Requests", description: "List pending incoming and outgoing friend requests.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { requests: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "send_friend_request", title: "Send Friend Request", description: "Send a friend request to a stable Guilduo user ID after exact-handle lookup.", inputSchema: { type: "object", required: ["receiverUid"], properties: { receiverUid: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { request: QUEST_OBJECT }, additionalProperties: false }, annotations: WRITE_ANNOTATIONS },
@@ -508,6 +521,124 @@ function assertAgentRegistryWebMutation(request: Request, env: WorkerEnv, identi
   }
 }
 
+function assertProfileAvatarWebMutation(request: Request, env: WorkerEnv, identity: AuthIdentity): void {
+  if (!identity || !["appwrite", "dev"].includes(identity.authType)) {
+    throw new DomainError(403, "profile_avatar_web_required", "Profile avatars can only be changed from the Guilduo web app.");
+  }
+  if (identity.authType === "appwrite" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+    throw new DomainError(403, "profile_avatar_origin_required", "Open Guilduo in an approved browser origin to change your profile avatar.");
+  }
+}
+
+/**
+ * Serves one Agent avatar image over the normal Bearer-authenticated path —
+ * there is no pre-auth special case for this route. The client fetches this
+ * with `fetch()` + an Authorization header and turns the response into a
+ * Blob URL rather than using a plain `<img src>` (see relay-forge/shell.ts).
+ * Scoping to `identity.uid` via `getAgent` also gives us the "someone else's
+ * Agent -> 404" behaviour for free: a foreign agentId simply never resolves.
+ */
+/** A `v` query value that is safe to trust as an exact avatarVersion match: a positive integer, nothing else. */
+const POSITIVE_INTEGER_PATTERN = /^[1-9][0-9]*$/;
+
+async function serveAgentAvatar(request: Request, env: WorkerEnv, identity: WorkerIdentity, agentId: string): Promise<Response> {
+  const agent = await getAgent(env, identity.uid, agentId, { includeArchived: true });
+  if (!agent.avatarAssetId) return json({ error: { code: "avatar_not_found", message: "No avatar is stored for this Agent." } }, 404);
+  // `v` is required and must be a real positive integer — missing, NaN, "0",
+  // a negative number, a decimal, or anything else non-numeric all reject
+  // rather than silently falling through to serve *some* image. That
+  // matters beyond correctness: only a request that names an exact,
+  // currently-current version is allowed to receive the `immutable`
+  // Cache-Control below, so a malformed or version-less URL can never end up
+  // cached for a year against content that can change.
+  const rawVersion = new URL(request.url).searchParams.get("v");
+  if (rawVersion === null || !POSITIVE_INTEGER_PATTERN.test(rawVersion)) {
+    return json({ error: { code: "avatar_version_required", message: "A positive integer v (avatarVersion) query parameter is required." } }, 400);
+  }
+  const requestedVersion = Number(rawVersion);
+  if (!Number.isSafeInteger(requestedVersion) || requestedVersion !== agent.avatarVersion) {
+    return json({ error: { code: "avatar_version_stale", message: "This image link points at an older version." } }, 404);
+  }
+  const object = await getAgentAvatarObject(env, agent.avatarAssetId);
+  if (object === null) return json({ error: { code: "avatar_not_found", message: "No avatar is stored for this Agent." } }, 404);
+
+  return responseForAvatarObject(request, object);
+}
+
+function responseForAvatarObject(request: Request, object: R2ObjectLike): Response {
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag ?? "");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("cache-control", "private, max-age=31536000, immutable");
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (object.httpEtag && ifNoneMatch === object.httpEtag) {
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(object.body, { status: 200, headers });
+}
+
+async function serveProfileAvatar(request: Request, env: WorkerEnv, identity: WorkerIdentity): Promise<Response> {
+  const state = await getOwnProfileAvatarState(env, identity.uid);
+  if (!state?.assetId || state.version < 1) return json({ error: { code: "avatar_not_found", message: "No avatar is stored for this profile." } }, 404);
+  const rawVersion = new URL(request.url).searchParams.get("v");
+  if (rawVersion === null || !POSITIVE_INTEGER_PATTERN.test(rawVersion)) {
+    return json({ error: { code: "avatar_version_required", message: "A positive integer v (avatarVersion) query parameter is required." } }, 400);
+  }
+  const requestedVersion = Number(rawVersion);
+  if (!Number.isSafeInteger(requestedVersion) || requestedVersion !== state.version) {
+    return json({ error: { code: "avatar_version_stale", message: "This image link points at an older version." } }, 404);
+  }
+  const object = await getProfileAvatarObject(env, state.assetId);
+  if (object === null) return json({ error: { code: "avatar_not_found", message: "No avatar is stored for this profile." } }, 404);
+  return responseForAvatarObject(request, object);
+}
+
+/** Strips internal-only fields (the R2 asset key, the CAS revision counter) from an Agent record before it reaches any API response. */
+function toPublicAgent(agent: AgentRecord): Omit<AgentRecord, "avatarAssetId" | "revision"> {
+  const { avatarAssetId, revision, ...rest } = agent;
+  return rest;
+}
+
+function toPublicAgents(agents: AgentRecord[]): Array<Omit<AgentRecord, "avatarAssetId" | "revision">> {
+  return agents.map(toPublicAgent);
+}
+
+/**
+ * Reads a request body up to `maxBytes`, cancelling the underlying stream the
+ * instant the running total is exceeded. A declared `content-length` cannot
+ * be trusted alone (chunked transfer can omit or lie about it), so this is
+ * the actual enforcement point — not `request.arrayBuffer()`, which would
+ * buffer an attacker-controlled amount before any check could run.
+ */
+async function readBoundedBody(request: Request, maxBytes: number): Promise<Uint8Array> {
+  const reader = request.body?.getReader();
+  if (!reader) {
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.byteLength > maxBytes) throw new DomainError(413, "avatar_too_large", "Avatar must be 300 KB or smaller.");
+    return bytes;
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new DomainError(413, "avatar_too_large", "Avatar must be 300 KB or smaller.");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity): Promise<WorkerIdentity> {
   if (identity?.authType !== "oauth" || !identity.clientId) return identity;
   await noteAuthorizedClientUse(env, identity);
@@ -601,11 +732,12 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   if (path === "/v1/agents" && method === "GET") {
     assertScope(identity.scopes, "agents:read");
     const includeArchived = new URL(request.url).searchParams.get("includeArchived") === "true";
-    return json({ agents: await listAgents(env, identity.uid, { includeArchived }) });
+    return json({ agents: toPublicAgents(await listAgents(env, identity.uid, { includeArchived })) });
   }
   if (path === "/v1/agents" && method === "POST") {
     assertAgentRegistryWebMutation(request, env, identity);
-    return json({ agent: await createAgent(env, identity.uid, await requestRecord(request)) }, 201);
+    const created = await createAgent(env, identity.uid, await requestRecord(request));
+    return json({ agent: created === null ? null : toPublicAgent(created) }, 201);
   }
   if (path === "/v1/agent-connections" && method === "GET") {
     assertAgentRegistryWebMutation(request, env, identity);
@@ -616,7 +748,8 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   const agentMatch = path.match(/^\/v1\/agents\/([^/]+)$/);
   if (agentMatch && method === "GET") {
     assertScope(identity.scopes, "agents:read");
-    return json({ agent: await getAgent(env, identity.uid, decodeURIComponent(agentMatch[1]), { includeArchived: true }) });
+    const agent = await getAgent(env, identity.uid, decodeURIComponent(agentMatch[1]), { includeArchived: true });
+    return json({ agent: toPublicAgent(agent) });
   }
   if (agentMatch && method === "PATCH") {
     assertAgentRegistryWebMutation(request, env, identity);
@@ -626,7 +759,55 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
       const connections = await listAgentConnections(env, identity.uid, agentId);
       await Promise.all(connections.map((connection) => revokeAuthorizedClient(env, identity.uid, connection.clientId)));
     }
-    return json({ agent });
+    return json({ agent: toPublicAgent(agent) });
+  }
+  const agentAvatarMatch = path.match(/^\/v1\/agents\/([^/]+)\/avatar$/);
+  if (agentAvatarMatch && method === "GET") {
+    assertScope(identity.scopes, "agents:read");
+    return serveAgentAvatar(request, env, identity, decodeURIComponent(agentAvatarMatch[1]));
+  }
+  if (agentAvatarMatch && method === "PUT") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const agentId = decodeURIComponent(agentAvatarMatch[1]);
+    const expectedUpdatedAt = request.headers.get("x-expected-updated-at") || undefined;
+    // Ownership + existence are enforced by requiring the row first: an
+    // unknown or foreign agentId never reaches R2 at all.
+    await getAgent(env, identity.uid, agentId, { includeArchived: false });
+    if (!env.AGENT_AVATARS) {
+      throw new DomainError(503, "avatar_storage_unavailable", "Avatar storage is not configured. The image was not saved.");
+    }
+    const declaredLength = Number(request.headers.get("content-length") || "0");
+    if (declaredLength > MAX_AVATAR_BYTES) throw new DomainError(413, "avatar_too_large", "Avatar must be 300 KB or smaller.");
+    const bytes = await readBoundedBody(request, MAX_AVATAR_BYTES);
+    const { assetId } = await putAgentAvatar(env, bytes);
+    try {
+      const agent = await bumpAgentAvatarVersion(env, identity.uid, agentId, assetId, expectedUpdatedAt);
+      return json({ agent: toPublicAgent(agent), avatarVersion: agent.avatarVersion });
+    } catch (error) {
+      // A thrown D1 call can have an ambiguous commit outcome. Deleting the R2
+      // object in that state risks removing the image that D1 just activated.
+      // Retain it and let the reference-aware scheduled cleanup classify it
+      // after the grace period. Immediate deletion is safe only for domain
+      // outcomes which prove the CAS did not apply.
+      if (!avatarActivationDefinitelyNotApplied(error)) {
+        console.error("agent_avatar_activation_outcome_unknown", {
+          operation: "activate_agent_avatar",
+          assetId,
+          agentId,
+          errorCode: errorCode(error),
+        });
+        throw error;
+      }
+      await deleteAgentAvatarAsset(env, assetId).catch((cleanupError: unknown) => {
+        console.error("agent_avatar_orphan_cleanup_failed", {
+          operation: "delete_orphaned_avatar_asset",
+          assetId,
+          agentId,
+          errorCode: errorCode(cleanupError),
+        });
+      });
+      throw error;
+    }
   }
   const agentConnectionMatch = path.match(/^\/v1\/agents\/([^/]+)\/connections\/([^/]+)$/);
   if (agentConnectionMatch && method === "PUT") {
@@ -652,6 +833,71 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const connection = await unlinkAgentConnection(env, identity.uid, clientId);
     await revokeAuthorizedClient(env, identity.uid, clientId);
     return json({ connection });
+  }
+  if (path === "/v1/profile/avatar" && method === "GET") {
+    assertScope(identity.scopes, "profiles:read");
+    return serveProfileAvatar(request, env, identity);
+  }
+  if (path === "/v1/profile/avatar" && method === "PUT") {
+    assertProfileAvatarWebMutation(request, env, identity);
+    if (!env.AGENT_AVATARS) {
+      throw new DomainError(503, "avatar_storage_unavailable", "Avatar storage is not configured. The image was not saved.");
+    }
+    const declaredLength = Number(request.headers.get("content-length") || "0");
+    if (declaredLength > MAX_AVATAR_BYTES) throw new DomainError(413, "avatar_too_large", "Avatar must be 300 KB or smaller.");
+    const bytes = await readBoundedBody(request, MAX_AVATAR_BYTES);
+    const { assetId } = await putProfileAvatar(env, bytes);
+    try {
+      const mutation = await activateProfileAvatar(env, identity.uid, assetId);
+      if (mutation.previousAssetId) {
+        await deleteProfileAvatarAsset(env, mutation.previousAssetId).catch((error: unknown) => {
+          console.error("profile_avatar_previous_asset_cleanup_failed", {
+            operation: "delete_previous_profile_avatar",
+            assetId: mutation.previousAssetId,
+            uid: identity.uid,
+            errorCode: errorCode(error),
+          });
+        });
+      }
+      return json({ profile: mutation.profile, avatarVersion: mutation.profile.avatarVersion });
+    } catch (error) {
+      // If there is no profile to activate, the freshly-written object can
+      // never be current. For an ambiguous storage/database failure, retain it
+      // so a later operator cleanup cannot delete an object D1 may reference.
+      if (errorCode(error) === "profile_not_found" || errorCode(error) === "profile_avatar_conflict" || errorCode(error) === "avatar_version_exhausted") {
+        await deleteProfileAvatarAsset(env, assetId).catch((cleanupError: unknown) => {
+          console.error("profile_avatar_orphan_cleanup_failed", {
+            operation: "delete_orphaned_profile_avatar",
+            assetId,
+            uid: identity.uid,
+            errorCode: errorCode(cleanupError),
+          });
+        });
+      } else {
+        console.error("profile_avatar_activation_outcome_unknown", {
+          operation: "activate_profile_avatar",
+          assetId,
+          uid: identity.uid,
+          errorCode: errorCode(error),
+        });
+      }
+      throw error;
+    }
+  }
+  if (path === "/v1/profile/avatar" && method === "DELETE") {
+    assertProfileAvatarWebMutation(request, env, identity);
+    const mutation = await removeProfileAvatar(env, identity.uid);
+    if (mutation.previousAssetId) {
+      await deleteProfileAvatarAsset(env, mutation.previousAssetId).catch((error: unknown) => {
+        console.error("profile_avatar_previous_asset_cleanup_failed", {
+          operation: "delete_removed_profile_avatar",
+          assetId: mutation.previousAssetId,
+          uid: identity.uid,
+          errorCode: errorCode(error),
+        });
+      });
+    }
+    return json({ profile: mutation.profile, avatarVersion: mutation.profile.avatarVersion });
   }
   if (path === "/v1/profile" && method === "GET") {
     assertScope(identity.scopes, "profiles:read");
@@ -1008,12 +1254,12 @@ async function convertCalendarEventWithOverrides(env: WorkerEnv, identity: Worke
 async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<unknown> {
   if (name === "list_registered_agents") {
     assertScope(identity.scopes, "agents:read");
-    return { agents: await listAgents(env, identity.uid) };
+    return { agents: toPublicAgents(await listAgents(env, identity.uid)) };
   }
   if (name === "get_current_agent_context") {
     assertScope(identity.scopes, "agents:read");
     return {
-      agent: identity.agent || null,
+      agent: identity.agent ? toPublicAgent(identity.agent) : null,
       clientId: identity.clientId || null,
       effectiveScopes: identity.scopes || [],
       linked: Boolean(identity.agent),
@@ -1231,8 +1477,12 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.7.0", schemaVersion: 7, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
-  if (path === "/.well-known/oauth-authorization-server") return json(oauthMetadata(request, env));
-  if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return json(protectedResourceMetadata(request, env));
+  const mcpOrigin = mcpOriginForRequest(request, env);
+  const rejectUntrustedMcpHost = () => json({ error: { code: "mcp_host_not_allowed", message: "MCP host is not configured." } }, 421, { "cache-control": "no-store" });
+  if (path === "/.well-known/oauth-authorization-server") return mcpOrigin ? json(oauthMetadata(request, env)) : rejectUntrustedMcpHost();
+  if (path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp") return mcpOrigin ? json(protectedResourceMetadata(request, env)) : rejectUntrustedMcpHost();
+  const isMcpOAuthEndpoint = path === "/oauth/register" || path === "/oauth/authorize" || path === "/oauth/approve" || path === "/oauth/token" || path === "/oauth/revoke";
+  if (isMcpOAuthEndpoint && !mcpOrigin) return rejectUntrustedMcpHost();
   if (path === "/oauth/register" && request.method === "POST") return registerClient(request, env);
   if (path === "/oauth/authorize" && request.method === "GET") return authorizePage(request, env);
   if (path === "/oauth/approve" && request.method === "POST") return approveAuthorization(request, env);
@@ -1240,11 +1490,12 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
   if (path === "/oauth/revoke" && request.method === "POST") return revokeToken(request, env);
   if (path === "/telemetry") return acceptTelemetry(request, env);
   const providerCallbackMatch = path.match(/^\/oauth\/callback\/(google|notion)$/);
-  if (providerCallbackMatch && request.method === "GET") return handleProviderCallback(request, env, providerCallbackMatch[1]);
+  if (providerCallbackMatch && request.method === "GET") return providerOAuthOriginForRequest(request, env) ? handleProviderCallback(request, env, providerCallbackMatch[1]) : rejectUntrustedMcpHost();
   if (path === "/openapi.json") return fetch(new URL("/api/openapi.json", env.WEB_APP_URL || "http://localhost:5173"));
 
+  if ((path === "/mcp" || path === "/mcp-next") && !mcpOrigin) return rejectUntrustedMcpHost();
   const authenticated = await authenticateRequest(request, env);
-  if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` });
+  if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${mcpOrigin || primaryMcpOrigin(env)}/.well-known/oauth-protected-resource/mcp"` });
   const identity = await identityWithAgentContext(env, authenticated);
   if (path === "/mcp") return handleMcp(request, env, context, identity);
   if (path === "/mcp-next") return handleMcpNext(request, env, context, identity);
@@ -1261,12 +1512,50 @@ export default {
     context.waitUntil(retryDeliveries(env));
     context.waitUntil(runScheduledIntegrations(env));
     context.waitUntil(purgeTelemetry(env));
+    context.waitUntil(runAgentAvatarCleanup(env));
   },
 };
 
 async function purgeTelemetry(env: WorkerEnv): Promise<void> {
   if (!env.QUESTFORGE_DB) return;
   await env.QUESTFORGE_DB.prepare("DELETE FROM telemetry_events WHERE created_at < datetime('now', '-90 days')").run();
+}
+
+/**
+ * Report-only unless `AGENT_AVATAR_CLEANUP_EXECUTE` is set to exactly
+ * "true" — which nothing in this repo's release config sets, so a fresh
+ * deploy always starts in dry-run/inventory mode (P2-5). The log line is
+ * the operator-visible inventory: candidate keys, sizes, ages, and R2
+ * checksums, never a token/secret or a full uid.
+ */
+async function runAgentAvatarCleanup(env: WorkerEnv): Promise<void> {
+  const report = await planAgentAvatarCleanup(env, { execute: env.AGENT_AVATAR_CLEANUP_EXECUTE === "true" });
+  if (report.status === "blocked") {
+    console.error("agent_avatar_cleanup_blocked", {
+      operation: "cleanup_orphaned_avatar_assets",
+      mode: report.mode,
+      reason: report.blockedReason,
+      errorCode: report.blockedErrorCode,
+    });
+    return;
+  }
+  if (report.candidates.length === 0 && report.mode === "dry-run") return; // Nothing to report; avoid log noise every 15 minutes.
+  console.log("agent_avatar_cleanup_report", {
+    mode: report.mode,
+    scannedObjects: report.scannedObjects,
+    activeReferences: report.activeReferences,
+    candidateCount: report.candidates.length,
+    deletedCount: report.deleted.length,
+    deletionErrorCount: report.deletionErrors.length,
+    referenceCheckErrorCount: report.referenceCheckErrors.length,
+    candidates: report.candidates.map((candidate) => ({ key: candidate.key, sizeBytes: candidate.sizeBytes, ageHours: candidate.ageHours, checksum: candidate.checksum })),
+  });
+  for (const failure of report.deletionErrors) {
+    console.error("agent_avatar_cleanup_delete_failed", { operation: "cleanup_delete_orphaned_avatar_asset", key: failure.key, errorCode: failure.errorCode });
+  }
+  for (const failure of report.referenceCheckErrors) {
+    console.error("agent_avatar_cleanup_reference_check_failed", { operation: "cleanup_recheck_avatar_reference", key: failure.key, errorCode: failure.errorCode });
+  }
 }
 
 async function runScheduledIntegrations(env: WorkerEnv): Promise<void> {
