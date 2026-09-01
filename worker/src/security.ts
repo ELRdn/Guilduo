@@ -1,4 +1,7 @@
-import type { JsonRecord, KvNamespaceLike, WorkerEnv } from "./worker-types.ts";
+import { getOAuthRecordStore } from "./oauth-record-store.ts";
+import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
+
+export { getKv } from "./kv-store.ts";
 
 const encoder = new TextEncoder();
 type CryptoSubtleCompat = {
@@ -8,8 +11,6 @@ type CryptoSubtleCompat = {
   sign(algorithm: string, key: unknown, data: unknown): Promise<ArrayBuffer>;
 };
 const subtle = crypto.subtle as unknown as CryptoSubtleCompat;
-type MemoryKvValue = { value: string; expiresAt: number };
-const memoryKv = new Map<string, MemoryKvValue>();
 
 export const ALL_SCOPES = [
   "quests:read",
@@ -40,34 +41,6 @@ export interface AuthIdentity {
   authType: "appwrite" | "dev" | "oauth";
   appwriteJwt?: string;
   clientId?: string;
-}
-
-function jsonValue(value: string): unknown {
-  try { return JSON.parse(value) as unknown; } catch { return null; }
-}
-
-export function getKv(env: WorkerEnv): KvNamespaceLike {
-  if (env.QUESTFORGE_KV) return env.QUESTFORGE_KV;
-  return {
-    async get<T = unknown>(key: string, type?: "text" | "json"): Promise<T | null> {
-      const item = memoryKv.get(key);
-      if (!item || (item.expiresAt && item.expiresAt < Date.now())) {
-        memoryKv.delete(key);
-        return null;
-      }
-      return (type === "json" ? jsonValue(item.value) : item.value) as T;
-    },
-    async put(key: string, value: string, options: { expirationTtl?: number } = {}): Promise<void> {
-      memoryKv.set(key, {
-        value: String(value),
-        expiresAt: options.expirationTtl ? Date.now() + options.expirationTtl * 1000 : 0,
-      });
-    },
-    async delete(key: string): Promise<void> { memoryKv.delete(key); },
-    async list({ prefix = "" }: { prefix?: string } = {}): Promise<{ keys: Array<{ name: string }> }> {
-      return { keys: [...memoryKv.keys()].filter((key) => key.startsWith(prefix)).map((name) => ({ name })) };
-    },
-  };
 }
 
 export function randomToken(prefix = "qf"): string {
@@ -123,7 +96,7 @@ export async function authenticateRequest(request: Request, env: WorkerEnv): Pro
   if (env.DEV_BEARER_TOKEN && token === env.DEV_BEARER_TOKEN) {
     return { uid: env.DEV_USER_ID || "local-dev", email: "local@questforge.dev", scopes: [...ALL_SCOPES], authType: "dev" };
   }
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   const record = await kv.get<JsonRecord>(`access:${await sha256(token)}`, "json");
   const oauth = asAuthIdentity(record);
   const refreshHash = typeof record?.refreshHash === "string" ? record.refreshHash : "";
