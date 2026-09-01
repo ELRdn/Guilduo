@@ -395,6 +395,10 @@ export class QuestForgeRepository {
     return this.request("/v1/agent-connections");
   }
 
+  async revokeMcpConnection(clientId: string): Promise<JsonRecord> {
+    return this.request(`/v1/agent-connections/${encodeURIComponent(clientId)}`, { method: "DELETE" });
+  }
+
   async getProfile(): Promise<JsonRecord> {
     return this.request("/v1/profile");
   }

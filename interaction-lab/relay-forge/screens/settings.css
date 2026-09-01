@@ -283,6 +283,7 @@
 .rf-set-connection-agent-placeholder { display: inline-flex; align-items: center; justify-content: center; width: var(--qf-space-8); height: var(--qf-space-8); flex: 0 0 auto; border: var(--qf-border-width) dashed var(--qf-color-border-default); border-radius: var(--qf-radius-pill); color: var(--qf-color-fg-muted); font: var(--qf-font-mono); }
 .rf-set-connection-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--qf-space-2); flex: 0 0 auto; flex-wrap: wrap; }
 .rf-set-connection-unlink { color: var(--qf-color-danger); border-color: var(--qf-color-danger); }
+.rf-set-connection-revoke { color: var(--qf-color-danger); border-color: var(--qf-color-danger); }
 .rf-set-connection-status { margin: 0; color: var(--qf-color-fg-muted); font: var(--qf-text-compact); font-size: 13px; }
 .rf-set-connection-status[data-tone="success"] { color: var(--qf-color-success); }
 .rf-set-connection-status[data-tone="error"] { color: var(--qf-color-danger); }

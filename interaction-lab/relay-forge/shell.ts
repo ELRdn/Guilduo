@@ -1970,6 +1970,31 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
   }
 
+  async function revokeMcpConnection(clientId: string): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null || clientId === "" || settings.connectionBusyId !== null) return;
+    settings.connectionBusyId = clientId;
+    settings.connectionMessage = "";
+    settings.connectionTone = null;
+    render();
+    try {
+      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.revokeMcpConnection(clientId));
+      await refreshAgentConnections();
+      delete settings.connectionDrafts[clientId];
+      settings.connectionTone = "success";
+      settings.connectionMessage = "MCP接続を解除しました。Agent本体は削除されません。";
+      announce("MCP接続を解除しました。");
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.connectionTone = "error";
+      settings.connectionMessage = profileErrorMessage(error, "MCP接続を解除できませんでした。もう一度お試しください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.connectionBusyId = null;
+      render();
+    }
+  }
+
   /* ---------------------------------------------------------------- *
    * Region renderers
    * ---------------------------------------------------------------- */
@@ -2721,6 +2746,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onSelectConnectionAgent: selectConnectionAgent,
         onLinkAgent: (clientId: string, agentId: string) => { void linkAgent(clientId, agentId); },
         onUnlinkAgent: (clientId: string, agentId: string) => { void unlinkAgent(clientId, agentId); },
+        onRevokeConnection: (clientId: string) => { void revokeMcpConnection(clientId); },
         canManageAgents: runtime !== null,
         onCreateAgent: openCreateAgent,
         onEditAgent: openEditAgent,

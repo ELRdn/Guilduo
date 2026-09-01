@@ -126,7 +126,9 @@ export async function authenticateRequest(request: Request, env: WorkerEnv): Pro
   const kv = getKv(env);
   const record = await kv.get<JsonRecord>(`access:${await sha256(token)}`, "json");
   const oauth = asAuthIdentity(record);
-  if (oauth && record && numberField(record, "expiresAt") > Date.now()) return { ...oauth, authType: "oauth" };
+  const refreshHash = typeof record?.refreshHash === "string" ? record.refreshHash : "";
+  const revoked = refreshHash ? await kv.get(`refresh-revoked:${refreshHash}`) : null;
+  if (oauth && record && numberField(record, "expiresAt") > Date.now() && !revoked) return { ...oauth, authType: "oauth" };
   try {
     return await verifyAppwriteJwt(token, env);
   } catch {

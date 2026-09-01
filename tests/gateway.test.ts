@@ -313,7 +313,7 @@ test("gateway rejects unauthenticated API and publishes OAuth metadata", async (
   assert.ok(body.scopes_supported.includes("quests:write"));
 });
 
-test("OAuth tokens carry and rotate the delegated Guilduo session", async () => {
+test("OAuth tokens carry and persist the delegated Guilduo session until revoke", async () => {
   const { authenticateRequest, getKv, sha256 } = await import("../worker/src/security.ts");
   const { revokeToken, tokenEndpoint } = await import("../worker/src/oauth.ts");
   const oauthEnv = { ...env };
