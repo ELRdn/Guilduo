@@ -41,6 +41,7 @@ import {
   revokeToken,
   tokenEndpoint,
 } from "./oauth.ts";
+import { oauthStorageKind } from "./oauth-record-store.ts";
 import {
   bumpAgentAvatarVersion,
   createAgent,
@@ -1595,7 +1596,7 @@ async function handleMcp(request: Request, env: WorkerEnv, context: WorkerContex
 async function handleRequest(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.7.0", schemaVersion: 7, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: env.QUESTFORGE_KV ? "persistent" : "ephemeral", integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
+  if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.7.0", schemaVersion: 7, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: oauthStorageKind(env), integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
   const mcpOrigin = mcpOriginForRequest(request, env);
   const rejectUntrustedMcpHost = () => json({ error: { code: "mcp_host_not_allowed", message: "MCP host is not configured." } }, 421, { "cache-control": "no-store" });
   if (path === "/.well-known/oauth-authorization-server") return mcpOrigin ? json(oauthMetadata(request, env)) : rejectUntrustedMcpHost();
@@ -1627,7 +1628,7 @@ export default {
     try { return withCors(await handleRequest(request, env, context), request, env); }
     catch (error) {
       const operation = oauthOperationForRequest(request);
-      if (operation) logOAuthFailure(operation, request, error);
+      if (operation) await logOAuthFailure(operation, request, error);
       else console.error(error);
       return withCors(errorResponse(error), request, env);
     }

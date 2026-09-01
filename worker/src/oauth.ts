@@ -1,4 +1,5 @@
-import { ALL_SCOPES, getKv, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
+import { getOAuthRecordStore, oauthStorageKind, oauthStorageLogContext } from "./oauth-record-store.ts";
+import { ALL_SCOPES, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
 import type { AuthIdentity } from "./security.ts";
 import { mcpOriginForRequest, primaryMcpOrigin } from "./mcp-origin.ts";
 import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
@@ -26,6 +27,7 @@ const MAX_JWT_LENGTH = 16384;
 const MAX_SCOPE_LENGTH = 4096;
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
 const REFRESH_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60;
+const CLIENT_LAST_USED_WRITE_INTERVAL_MS = 15 * 60 * 1000;
 const OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/;
 const CLIENT_ID_PATTERN = new RegExp(`^[A-Za-z0-9._~-]{1,${MAX_CLIENT_ID_LENGTH}}$`);
 const PKCE_CHALLENGE_PATTERN = new RegExp(`^[A-Za-z0-9._~-]{43,${MAX_CODE_CHALLENGE_LENGTH}}$`);
@@ -72,6 +74,24 @@ function json(value: unknown, status = 200, headers: Record<string, string> = {}
 
 function oauthError(code: string, status = 400): Response {
   return json({ error: code }, status, { "cache-control": "no-store" });
+}
+
+async function atOAuthStage<T>(stage: string, env: WorkerEnv, storageOperation: string, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    const source = error && typeof error === "object" ? error as JsonRecord : {};
+    const wrapped = new Error(error instanceof Error ? error.message : String(error));
+    wrapped.name = error instanceof Error ? error.name : "Error";
+    throw Object.assign(wrapped, {
+      ...(typeof source.code === "string" ? { code: source.code } : {}),
+      ...(typeof source.type === "string" ? { type: source.type } : {}),
+      ...(typeof source.status === "number" ? { status: source.status } : {}),
+      oauthStage: stage,
+      storage: oauthStorageKind(env).toUpperCase(),
+      storageOperation,
+    });
+  }
 }
 
 function isSafeClientId(value: unknown): value is string {
@@ -152,12 +172,12 @@ export async function registerClient(request: Request, env: WorkerEnv): Promise<
   if (!redirectUris.length || redirectUris.length !== redirectValues.length || redirectUris.length > 20) return oauthError("invalid_redirect_uri");
   const clientId = randomToken("qfc");
   const clientName = typeof input.client_name === "string" && input.client_name.trim() ? input.client_name.trim().slice(0, 100) : "Guilduo MCP client";
-  await getKv(env).put(`client:${clientId}`, JSON.stringify({
+  await atOAuthStage("client_registration", env, "put", () => getOAuthRecordStore(env).put(`client:${clientId}`, JSON.stringify({
     clientId,
     clientName,
     redirectUris,
     createdAt: Date.now(),
-  }));
+  })));
   return json({ client_id: clientId, client_name: clientName, redirect_uris: redirectUris, token_endpoint_auth_method: "none" }, 201);
 }
 
@@ -191,7 +211,8 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
   const scopes = allowedScopes(url.searchParams.get("scope"));
   if (responseType !== "code" || !isSafeClientId(clientId) || !isAllowedRedirectUri(redirectUri) || !isSafePkceChallenge(challenge) || url.searchParams.get("code_challenge_method") !== "S256" || state.length > MAX_STATE_LENGTH || resource.length > MAX_RESOURCE_LENGTH) return oauthError("invalid_request");
   if (!scopes) return oauthError("invalid_scope");
-  const client = asClient(await getKv(env).get(`client:${clientId}`, "json"));
+  const store = getOAuthRecordStore(env);
+  const client = asClient(await atOAuthStage("client_load", env, "get", () => store.get(`client:${clientId}`, "json")));
   if (!client) return oauthError("invalid_client");
   if (!client.redirectUris.includes(redirectUri)) return oauthError("invalid_redirect_uri");
   const requestId = randomToken("req");
@@ -203,7 +224,7 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
     resource,
     scopes,
   };
-  await getKv(env).put(`authorize:${requestId}`, JSON.stringify(authorizationRequest), { expirationTtl: 600 });
+  await atOAuthStage("authorization_request_persist", env, "put", () => store.put(`authorize:${requestId}`, JSON.stringify(authorizationRequest), { expirationTtl: 600 }));
   const appwriteEndpoint = String(env.APPWRITE_ENDPOINT || "").replace(/\/$/, "");
   const appwriteProjectId = env.APPWRITE_PROJECT_ID || "";
   const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(copy.title)}</title><style>body{font-family:system-ui;margin:0;background:#eef1ed;color:#202a32}.box{max-width:520px;margin:8vh auto;background:white;border:1px solid #d7ddd8;padding:24px;border-radius:8px;box-shadow:0 18px 45px #20302a20}button{width:100%;padding:13px;border:0;border-radius:7px;background:#526b5c;color:white;font-weight:800}.scopes{padding:12px;background:#f4f6f3;border-radius:7px;line-height:1.8}small{color:#66716b}@media(prefers-color-scheme:dark){body{background:#171c1a;color:#edf2ee}.box{background:#222a26;border-color:#3b4741}.scopes{background:#18201c}small{color:#b7c2bb}}</style></head><body><main class="box"><h1>${escapeHtml(copy.heading)}</h1><p><strong>${escapeHtml(client.clientName)}</strong> ${escapeHtml(copy.request)}</p><div class="scopes">${authorizationRequest.scopes.map(escapeHtml).join("<br>")}</div><p><small>${escapeHtml(copy.privacy)}</small></p><button id="approve">${escapeHtml(copy.approve)}</button><p id="status" role="status"></p></main><script>const endpoint=${JSON.stringify(appwriteEndpoint)},project=${JSON.stringify(appwriteProjectId)};const headers={'content-type':'application/json','x-appwrite-project':project};document.querySelector('#approve').onclick=async()=>{const status=document.querySelector('#status');status.textContent=${JSON.stringify(copy.connecting)};try{const account=await fetch(endpoint+'/account',{credentials:'include',headers});if(account.status===401){const oauth=new URL(endpoint+'/account/sessions/oauth2/google');oauth.searchParams.set('project',project);oauth.searchParams.set('success',location.href);oauth.searchParams.set('failure',location.href);location.href=oauth.toString();return;}if(!account.ok)throw new Error('account_'+account.status);const jwtResponse=await fetch(endpoint+'/account/jwts',{method:'POST',credentials:'include',headers,body:'{}'});if(!jwtResponse.ok)throw new Error('jwt_'+jwtResponse.status);const jwt=(await jwtResponse.json()).jwt;const response=await fetch('/oauth/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:${JSON.stringify(requestId)},jwt})});const data=await response.json();if(!response.ok)throw new Error(data.error||'authorization_failed');location.href=data.redirect;}catch(error){status.textContent=${JSON.stringify(copy.failed)}+error.message;}};</script></body></html>`;
@@ -220,7 +241,7 @@ export async function approveAuthorization(request: Request, env: WorkerEnv): Pr
   const requestId = typeof input.requestId === "string" ? input.requestId : "";
   const jwt = typeof input.jwt === "string" ? input.jwt : "";
   if (!isSafeOpaqueValue(requestId, MAX_REQUEST_ID_LENGTH) || !jwt || jwt.length > MAX_JWT_LENGTH) return oauthError("invalid_request");
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   const pending = asAuthorizationRequest(await kv.get(`authorize:${requestId}`, "json"));
   if (!pending) return json({ error: "authorization_request_expired" }, 400);
   let identity;
@@ -235,11 +256,11 @@ export async function approveAuthorization(request: Request, env: WorkerEnv): Pr
 }
 
 async function readClientGrantIndex(env: WorkerEnv, uid: string, clientId: string): Promise<ClientGrant | null> {
-  return asClientGrant(await getKv(env).get(`user-client:${uid}:${clientId}`, "json"));
+  return asClientGrant(await getOAuthRecordStore(env).get(`user-client:${uid}:${clientId}`, "json"));
 }
 
 async function writeClientGrantIndex(env: WorkerEnv, grant: ClientGrant, tokenHashes: { accessHash: string; refreshHash: string; refreshExpiresAt: number }): Promise<void> {
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   const client = asClient(await kv.get(`client:${grant.clientId}`, "json"));
   const key = `user-client:${grant.uid}:${grant.clientId}`;
   const existing = asRecord(await kv.get(key, "json"));
@@ -271,7 +292,7 @@ function publicClientGrant(record: ClientGrant | null): JsonRecord | null {
 }
 
 export async function listAuthorizedClients(env: WorkerEnv, uid: string): Promise<JsonRecord[]> {
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   const result = await kv.list({ prefix: `user-client:${uid}:` });
   const records = await Promise.all(result.keys.map((item: { name: string }) => readClientGrantIndex(env, uid, item.name.replace(`user-client:${uid}:`, ""))));
   return records.filter((record): record is ClientGrant => Boolean(record)).map(publicClientGrant).filter((record): record is JsonRecord => Boolean(record)).sort((a, b) => String(b.lastUsedAt || "").localeCompare(String(a.lastUsedAt || "")));
@@ -284,16 +305,34 @@ export async function getAuthorizedClient(env: WorkerEnv, uid: string, clientId:
 
 export async function noteAuthorizedClientUse(env: WorkerEnv, identity: AuthIdentity): Promise<void> {
   if (identity?.authType !== "oauth" || !identity.uid || !identity.clientId) return;
-  const kv = getKv(env);
-  const key = `user-client:${identity.uid}:${identity.clientId}`;
-  const record = await readClientGrantIndex(env, identity.uid, identity.clientId);
-  if (!record || record.revokedAt) return;
-  record.lastUsedAt = new Date().toISOString();
-  await kv.put(key, JSON.stringify(record));
+  try {
+    const kv = getOAuthRecordStore(env);
+    const key = `user-client:${identity.uid}:${identity.clientId}`;
+    const record = await readClientGrantIndex(env, identity.uid, identity.clientId);
+    if (!record || record.revokedAt) return;
+    const now = Date.now();
+    const previous = Date.parse(record.lastUsedAt || "");
+    if (Number.isFinite(previous) && now - previous < CLIENT_LAST_USED_WRITE_INTERVAL_MS) return;
+    record.lastUsedAt = new Date(now).toISOString();
+    await kv.put(key, JSON.stringify(record));
+  } catch (error) {
+    // Activity metadata is observability, not authorization state. A quota or
+    // storage outage must not turn a valid MCP request into an authentication
+    // failure. Do not log the user, client id, token, or grant payload.
+    console.error("oauth_client_activity_update_failed", {
+      operation: "oauth.note_client_use",
+      storage: oauthStorageKind(env),
+      storageOperation: "read_or_upsert",
+      reason: storageFailureReason(error),
+      errorCode: logValue(errorProperty(error, "code"), "internal_error"),
+      errorType: logValue(errorProperty(error, "type") || errorProperty(error, "name") || (error instanceof Error ? error.constructor.name : "Error"), "Error"),
+      message: sanitizedErrorMessage(error),
+    });
+  }
 }
 
 export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   const key = `user-client:${uid}:${clientId}`;
   const record = await readClientGrantIndex(env, uid, clientId);
   if (!record) return null;
@@ -312,7 +351,7 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
 type TokenIssueOptions = { refreshToken?: string; refreshHash?: string; refreshExpiresAt?: number };
 
 async function issueTokens(env: WorkerEnv, grant: ClientGrant, options: TokenIssueOptions = {}): Promise<JsonRecord> {
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   const accessToken = randomToken("qf");
   const refreshToken = options.refreshToken || randomToken("qfr");
   const expiresIn = ACCESS_TOKEN_TTL_SECONDS;
@@ -328,9 +367,15 @@ async function issueTokens(env: WorkerEnv, grant: ClientGrant, options: TokenIss
   // concurrent refresh requests idempotent; revocation is represented by the
   // refresh-revoked tombstone instead of deleting a token that another request
   // may already be using.
-  const refreshTtl = Math.max(1, Math.ceil((refreshExpiresAt - now) / 1000));
-  await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, accessHash, refreshHash, refreshExpiresAt }), { expirationTtl: refreshTtl });
-  await writeClientGrantIndex(env, grant, { accessHash, refreshHash, refreshExpiresAt });
+  // A refresh keeps the same refresh credential and absolute expiry. Rewriting
+  // both its record and the grant on every refresh added two writes without
+  // changing authorization. Revocation remains complete because every access
+  // record carries refreshHash and authenticateRequest checks its tombstone.
+  if (!options.refreshToken) {
+    const refreshTtl = Math.max(1, Math.ceil((refreshExpiresAt - now) / 1000));
+    await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, accessHash, refreshHash, refreshExpiresAt }), { expirationTtl: refreshTtl });
+    await writeClientGrantIndex(env, grant, { accessHash, refreshHash, refreshExpiresAt });
+  }
   return { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: expiresIn, scope: grant.scopes.join(" ") };
 }
 
@@ -342,7 +387,7 @@ export async function tokenEndpoint(request: Request, env: WorkerEnv): Promise<R
     return oauthError("invalid_request");
   }
   const grantType = formText(body, "grant_type");
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   if (grantType === "authorization_code") {
     const code = formText(body, "code");
     const clientId = formText(body, "client_id");
@@ -383,7 +428,7 @@ export async function revokeToken(request: Request, env: WorkerEnv): Promise<Res
   const token = formText(body, "token");
   if (!token || token.length > MAX_JWT_LENGTH) return new Response(null, { status: 200 });
   const hash = await sha256(token);
-  const kv = getKv(env);
+  const kv = getOAuthRecordStore(env);
   const [accessRecord, refreshRecord] = await Promise.all([
     kv.get<JsonRecord>(`access:${hash}`, "json"),
     kv.get<JsonRecord>(`refresh:${hash}`, "json"),
@@ -432,6 +477,12 @@ function downstreamStatus(error: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
+function storageFailureReason(error: unknown): string {
+  const message = errorText(error);
+  if (/\bKV\s+put\(\)\s+limit exceeded\b/i.test(message) || /\bquota[_ -]?exceeded\b/i.test(message)) return "quota_exceeded";
+  return "storage_error";
+}
+
 export function oauthOperationForRequest(request: Request): string | null {
   const path = new URL(request.url).pathname;
   const operations: Record<string, string> = {
@@ -444,11 +495,22 @@ export function oauthOperationForRequest(request: Request): string | null {
   return operations[path] || null;
 }
 
-export function logOAuthFailure(operation: string, request: Request, error: unknown): void {
+export async function logOAuthFailure(operation: string, request: Request, error: unknown): Promise<void> {
+  const url = new URL(request.url);
+  const clientId = url.pathname === "/oauth/authorize" ? url.searchParams.get("client_id") || "" : "";
+  const storage = oauthStorageLogContext(error);
+  let clientIdHash: string | null = null;
+  try { clientIdHash = clientId ? (await sha256(clientId)).slice(0, 16) : null; } catch { /* Logging must never replace the original OAuth response. */ }
   console.error("oauth_operation_failed", {
     operation,
     method: request.method,
-    path: new URL(request.url).pathname,
+    path: url.pathname,
+    cfRay: request.headers.get("cf-ray") || null,
+    clientIdHash,
+    oauthStage: storage.oauthStage,
+    storage: storage.storage,
+    storageOperation: storage.storageOperation,
+    reason: storageFailureReason(error),
     downstreamStatus: downstreamStatus(error),
     errorCode: logValue(errorProperty(error, "code"), "internal_error"),
     errorType: logValue(errorProperty(error, "type") || errorProperty(error, "name") || (error instanceof Error ? error.constructor.name : "Error"), "Error"),
