@@ -160,6 +160,7 @@ export interface SettingsCallbacks {
   readonly onSelectConnectionAgent: (clientId: string, agentId: string) => void;
   readonly onLinkAgent: (clientId: string, agentId: string) => void;
   readonly onUnlinkAgent: (clientId: string, agentId: string) => void;
+  readonly onRevokeConnection: (clientId: string) => void;
   readonly canManageAgents: boolean;
   readonly onCreateAgent: () => void;
   readonly onEditAgent: (agentId: string) => void;

@@ -14,7 +14,21 @@ type AuthorizationRequest = {
   uid?: string;
   email?: string;
 };
-type ClientGrant = { uid: string; clientId: string; clientName?: string; scopes: string[]; firstConnectedAt?: string; lastUsedAt?: string; revokedAt?: string; accessHash?: string; refreshHash?: string; email?: string; redirectUri?: string; challenge?: string };
+type ClientGrant = { uid: string; clientId: string; clientName?: string; scopes: string[]; firstConnectedAt?: string; lastUsedAt?: string; revokedAt?: string; accessHash?: string; refreshHash?: string; refreshExpiresAt?: number; email?: string; redirectUri?: string; challenge?: string };
+
+const MAX_CLIENT_ID_LENGTH = 128;
+const MAX_REDIRECT_URI_LENGTH = 2048;
+const MAX_CODE_CHALLENGE_LENGTH = 128;
+const MAX_STATE_LENGTH = 2048;
+const MAX_RESOURCE_LENGTH = 2048;
+const MAX_REQUEST_ID_LENGTH = 128;
+const MAX_JWT_LENGTH = 16384;
+const MAX_SCOPE_LENGTH = 4096;
+const ACCESS_TOKEN_TTL_SECONDS = 3600;
+const REFRESH_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60;
+const OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/;
+const CLIENT_ID_PATTERN = new RegExp(`^[A-Za-z0-9._~-]{1,${MAX_CLIENT_ID_LENGTH}}$`);
+const PKCE_CHALLENGE_PATTERN = new RegExp(`^[A-Za-z0-9._~-]{43,${MAX_CODE_CHALLENGE_LENGTH}}$`);
 
 function asRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
@@ -56,18 +70,42 @@ function json(value: unknown, status = 200, headers: Record<string, string> = {}
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
+function oauthError(code: string, status = 400): Response {
+  return json({ error: code }, status, { "cache-control": "no-store" });
+}
+
+function isSafeClientId(value: unknown): value is string {
+  return typeof value === "string" && CLIENT_ID_PATTERN.test(value);
+}
+
+function isSafeOpaqueValue(value: unknown, maxLength: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= maxLength && OPAQUE_VALUE_PATTERN.test(value);
+}
+
+function isSafePkceChallenge(value: unknown): value is string {
+  return typeof value === "string" && PKCE_CHALLENGE_PATTERN.test(value);
+}
+
+function formText(body: FormData, key: string): string {
+  const value = body.get(key);
+  return typeof value === "string" ? value : "";
+}
+
 function oauthBase(request: Request, env: WorkerEnv): string {
   return mcpOriginForRequest(request, env) || primaryMcpOrigin(env);
 }
 
-function allowedScopes(value: unknown): string[] {
-  const requested = String(value || "").split(/\s+/).filter(Boolean);
-  return (requested.length ? requested : ALL_SCOPES).filter((scope) => ALL_SCOPES.includes(scope));
+function allowedScopes(value: unknown): string[] | null {
+  if (typeof value === "string" && value.length > MAX_SCOPE_LENGTH) return null;
+  const requested = typeof value === "string" ? value.trim().split(/\s+/).filter(Boolean) : [];
+  const scopes = requested.length ? [...new Set(requested)] : [...ALL_SCOPES];
+  return scopes.every((scope) => ALL_SCOPES.includes(scope)) ? scopes : null;
 }
 
 function isAllowedRedirectUri(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_REDIRECT_URI_LENGTH) return false;
   try {
-    const uri = new URL(String(value));
+    const uri = new URL(value);
     if (uri.hash || uri.username || uri.password) return false;
     if (uri.protocol === "https:") return true;
     return uri.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(uri.hostname);
@@ -103,17 +141,24 @@ export function protectedResourceMetadata(request: Request, env: WorkerEnv) {
 }
 
 export async function registerClient(request: Request, env: WorkerEnv): Promise<Response> {
-  const input = asRecord(await request.json());
-  const redirectUris = Array.isArray(input.redirect_uris) ? input.redirect_uris.filter(isAllowedRedirectUri) : [];
-  if (!redirectUris.length) return json({ error: "invalid_redirect_uri" }, 400);
+  let input: JsonRecord;
+  try {
+    input = asRecord(await request.json());
+  } catch {
+    return oauthError("invalid_request");
+  }
+  const redirectValues = Array.isArray(input.redirect_uris) ? input.redirect_uris : [];
+  const redirectUris = [...new Set(redirectValues.filter(isAllowedRedirectUri))];
+  if (!redirectUris.length || redirectUris.length !== redirectValues.length || redirectUris.length > 20) return oauthError("invalid_redirect_uri");
   const clientId = randomToken("qfc");
+  const clientName = typeof input.client_name === "string" && input.client_name.trim() ? input.client_name.trim().slice(0, 100) : "Guilduo MCP client";
   await getKv(env).put(`client:${clientId}`, JSON.stringify({
     clientId,
-    clientName: String(input.client_name || "Guilduo MCP client").slice(0, 100),
+    clientName,
     redirectUris,
     createdAt: Date.now(),
   }));
-  return json({ client_id: clientId, client_name: input.client_name, redirect_uris: redirectUris, token_endpoint_auth_method: "none" }, 201);
+  return json({ client_id: clientId, client_name: clientName, redirect_uris: redirectUris, token_endpoint_auth_method: "none" }, 201);
 }
 
 export async function authorizePage(request: Request, env: WorkerEnv): Promise<Response> {
@@ -137,21 +182,26 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
     connecting: "Connecting to Google...",
     failed: "Could not connect: ",
   };
+  const responseType = url.searchParams.get("response_type") || "";
   const clientId = url.searchParams.get("client_id") || "";
   const redirectUri = url.searchParams.get("redirect_uri") || "";
   const challenge = url.searchParams.get("code_challenge");
+  const state = url.searchParams.get("state") || "";
+  const resource = url.searchParams.get("resource") || "";
+  const scopes = allowedScopes(url.searchParams.get("scope"));
+  if (responseType !== "code" || !isSafeClientId(clientId) || !isAllowedRedirectUri(redirectUri) || !isSafePkceChallenge(challenge) || url.searchParams.get("code_challenge_method") !== "S256" || state.length > MAX_STATE_LENGTH || resource.length > MAX_RESOURCE_LENGTH) return oauthError("invalid_request");
+  if (!scopes) return oauthError("invalid_scope");
   const client = asClient(await getKv(env).get(`client:${clientId}`, "json"));
-  if (!client || !client.redirectUris.includes(redirectUri) || !challenge || url.searchParams.get("code_challenge_method") !== "S256") {
-    return new Response("Invalid OAuth request", { status: 400 });
-  }
+  if (!client) return oauthError("invalid_client");
+  if (!client.redirectUris.includes(redirectUri)) return oauthError("invalid_redirect_uri");
   const requestId = randomToken("req");
   const authorizationRequest = {
     clientId,
     redirectUri,
     challenge,
-    state: url.searchParams.get("state") || "",
-    resource: url.searchParams.get("resource") || "",
-    scopes: allowedScopes(url.searchParams.get("scope")),
+    state,
+    resource,
+    scopes,
   };
   await getKv(env).put(`authorize:${requestId}`, JSON.stringify(authorizationRequest), { expirationTtl: 600 });
   const appwriteEndpoint = String(env.APPWRITE_ENDPOINT || "").replace(/\/$/, "");
@@ -161,9 +211,15 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
 }
 
 export async function approveAuthorization(request: Request, env: WorkerEnv): Promise<Response> {
-  const input = asRecord(await request.json());
+  let input: JsonRecord;
+  try {
+    input = asRecord(await request.json());
+  } catch {
+    return oauthError("invalid_request");
+  }
   const requestId = typeof input.requestId === "string" ? input.requestId : "";
   const jwt = typeof input.jwt === "string" ? input.jwt : "";
+  if (!isSafeOpaqueValue(requestId, MAX_REQUEST_ID_LENGTH) || !jwt || jwt.length > MAX_JWT_LENGTH) return oauthError("invalid_request");
   const kv = getKv(env);
   const pending = asAuthorizationRequest(await kv.get(`authorize:${requestId}`, "json"));
   if (!pending) return json({ error: "authorization_request_expired" }, 400);
@@ -182,7 +238,7 @@ async function readClientGrantIndex(env: WorkerEnv, uid: string, clientId: strin
   return asClientGrant(await getKv(env).get(`user-client:${uid}:${clientId}`, "json"));
 }
 
-async function writeClientGrantIndex(env: WorkerEnv, grant: ClientGrant, tokenHashes: { accessHash: string; refreshHash: string }): Promise<void> {
+async function writeClientGrantIndex(env: WorkerEnv, grant: ClientGrant, tokenHashes: { accessHash: string; refreshHash: string; refreshExpiresAt: number }): Promise<void> {
   const kv = getKv(env);
   const client = asClient(await kv.get(`client:${grant.clientId}`, "json"));
   const key = `user-client:${grant.uid}:${grant.clientId}`;
@@ -198,7 +254,8 @@ async function writeClientGrantIndex(env: WorkerEnv, grant: ClientGrant, tokenHa
     revokedAt: "",
     accessHash: tokenHashes.accessHash,
     refreshHash: tokenHashes.refreshHash,
-  }), { expirationTtl: 2592000 });
+    refreshExpiresAt: tokenHashes.refreshExpiresAt,
+  }));
 }
 
 function publicClientGrant(record: ClientGrant | null): JsonRecord | null {
@@ -232,7 +289,7 @@ export async function noteAuthorizedClientUse(env: WorkerEnv, identity: AuthIden
   const record = await readClientGrantIndex(env, identity.uid, identity.clientId);
   if (!record || record.revokedAt) return;
   record.lastUsedAt = new Date().toISOString();
-  await kv.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
+  await kv.put(key, JSON.stringify(record));
 }
 
 export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
@@ -240,6 +297,7 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
   const key = `user-client:${uid}:${clientId}`;
   const record = await readClientGrantIndex(env, uid, clientId);
   if (!record) return null;
+  if (record.refreshHash) await kv.put(`refresh-revoked:${record.refreshHash}`, "1");
   await Promise.all([
     record.accessHash ? kv.delete(`access:${record.accessHash}`) : Promise.resolve(),
     record.refreshHash ? kv.delete(`refresh:${record.refreshHash}`) : Promise.resolve(),
@@ -247,50 +305,83 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
   record.revokedAt ||= new Date().toISOString();
   record.accessHash = "";
   record.refreshHash = "";
-  await kv.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
+  await kv.put(key, JSON.stringify(record));
   return publicClientGrant(record);
 }
 
-async function issueTokens(env: WorkerEnv, grant: ClientGrant): Promise<JsonRecord> {
+type TokenIssueOptions = { refreshToken?: string; refreshHash?: string; refreshExpiresAt?: number };
+
+async function issueTokens(env: WorkerEnv, grant: ClientGrant, options: TokenIssueOptions = {}): Promise<JsonRecord> {
   const kv = getKv(env);
   const accessToken = randomToken("qf");
-  const refreshToken = randomToken("qfr");
-  const expiresIn = 3600;
+  const refreshToken = options.refreshToken || randomToken("qfr");
+  const expiresIn = ACCESS_TOKEN_TTL_SECONDS;
+  const now = Date.now();
   const accessHash = await sha256(accessToken);
-  const refreshHash = await sha256(refreshToken);
+  const refreshHash = options.refreshHash || await sha256(refreshToken);
+  const refreshExpiresAt = Number.isFinite(options.refreshExpiresAt) && Number(options.refreshExpiresAt) > now
+    ? Number(options.refreshExpiresAt)
+    : now + REFRESH_TOKEN_TTL_SECONDS * 1000;
   const record = { uid: grant.uid, email: grant.email, scopes: grant.scopes, clientId: grant.clientId };
-  await kv.put(`access:${accessHash}`, JSON.stringify({ ...record, refreshHash, expiresAt: Date.now() + expiresIn * 1000 }), { expirationTtl: expiresIn });
-  await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, accessHash }), { expirationTtl: 2592000 });
-  await writeClientGrantIndex(env, grant, { accessHash, refreshHash });
+  await kv.put(`access:${accessHash}`, JSON.stringify({ ...record, refreshHash, expiresAt: now + expiresIn * 1000 }), { expirationTtl: expiresIn });
+  // Keep the refresh credential stable across refreshes. This makes retries and
+  // concurrent refresh requests idempotent; revocation is represented by the
+  // refresh-revoked tombstone instead of deleting a token that another request
+  // may already be using.
+  const refreshTtl = Math.max(1, Math.ceil((refreshExpiresAt - now) / 1000));
+  await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, accessHash, refreshHash, refreshExpiresAt }), { expirationTtl: refreshTtl });
+  await writeClientGrantIndex(env, grant, { accessHash, refreshHash, refreshExpiresAt });
   return { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: expiresIn, scope: grant.scopes.join(" ") };
 }
 
 export async function tokenEndpoint(request: Request, env: WorkerEnv): Promise<Response> {
-  const body = await request.formData();
-  const grantType = body.get("grant_type");
+  let body: FormData;
+  try {
+    body = await request.formData();
+  } catch {
+    return oauthError("invalid_request");
+  }
+  const grantType = formText(body, "grant_type");
   const kv = getKv(env);
   if (grantType === "authorization_code") {
-    const code = String(body.get("code") || "");
-    const pending = asAuthorizationRequest(await kv.get(`code:${await sha256(code)}`, "json"));
-    if (!pending || !pending.uid || pending.clientId !== body.get("client_id") || pending.redirectUri !== body.get("redirect_uri")) return json({ error: "invalid_grant" }, 400);
+    const code = formText(body, "code");
+    const clientId = formText(body, "client_id");
+    const redirectUri = formText(body, "redirect_uri");
+    const codeVerifier = formText(body, "code_verifier");
+    if (!code || !isSafeClientId(clientId) || !isAllowedRedirectUri(redirectUri) || !isSafeOpaqueValue(codeVerifier, MAX_CODE_CHALLENGE_LENGTH)) return oauthError("invalid_grant");
+    const codeHash = await sha256(code);
+    const pending = asAuthorizationRequest(await kv.get(`code:${codeHash}`, "json"));
+    if (!pending || !pending.uid || pending.clientId !== clientId || pending.redirectUri !== redirectUri) return oauthError("invalid_grant");
     const grant: ClientGrant = { ...pending, uid: pending.uid };
-    if (await sha256(String(body.get("code_verifier") || "")) !== grant.challenge) return json({ error: "invalid_grant" }, 400);
-    await kv.delete(`code:${await sha256(code)}`);
+    if (await sha256(codeVerifier) !== grant.challenge) return oauthError("invalid_grant");
+    await kv.delete(`code:${codeHash}`);
     return json(await issueTokens(env, grant), 200, { "cache-control": "no-store" });
   }
   if (grantType === "refresh_token") {
-    const refreshToken = String(body.get("refresh_token") || "");
-    const grant = asClientGrant(await kv.get(`refresh:${await sha256(refreshToken)}`, "json"));
-    if (!grant) return json({ error: "invalid_grant" }, 400);
-    await kv.delete(`refresh:${await sha256(refreshToken)}`);
-    return json(await issueTokens(env, grant), 200, { "cache-control": "no-store" });
+    const refreshToken = formText(body, "refresh_token");
+    if (!refreshToken || refreshToken.length > MAX_JWT_LENGTH) return oauthError("invalid_grant");
+    const refreshHash = await sha256(refreshToken);
+    if (await kv.get(`refresh-revoked:${refreshHash}`)) return oauthError("invalid_grant");
+    const grant = asClientGrant(await kv.get(`refresh:${refreshHash}`, "json"));
+    if (!grant || grant.revokedAt) return oauthError("invalid_grant");
+    const refreshExpiresAt = Number(grant.refreshExpiresAt || 0);
+    if (!Number.isFinite(refreshExpiresAt) || refreshExpiresAt < 0 || (refreshExpiresAt > 0 && refreshExpiresAt <= Date.now())) return oauthError("invalid_grant");
+    const current = await readClientGrantIndex(env, grant.uid, grant.clientId);
+    if (current?.revokedAt || (current?.refreshHash && current.refreshHash !== refreshHash)) return oauthError("invalid_grant");
+    return json(await issueTokens(env, grant, { refreshToken, refreshHash, refreshExpiresAt: refreshExpiresAt || undefined }), 200, { "cache-control": "no-store" });
   }
-  return json({ error: "unsupported_grant_type" }, 400);
+  return oauthError(grantType ? "unsupported_grant_type" : "invalid_request");
 }
 
 export async function revokeToken(request: Request, env: WorkerEnv): Promise<Response> {
-  const body = await request.formData();
-  const token = String(body.get("token") || "");
+  let body: FormData;
+  try {
+    body = await request.formData();
+  } catch {
+    return oauthError("invalid_request");
+  }
+  const token = formText(body, "token");
+  if (!token || token.length > MAX_JWT_LENGTH) return new Response(null, { status: 200 });
   const hash = await sha256(token);
   const kv = getKv(env);
   const [accessRecord, refreshRecord] = await Promise.all([
@@ -308,6 +399,61 @@ export async function revokeToken(request: Request, env: WorkerEnv): Promise<Res
     await revokeAuthorizedClient(env, String(record.uid), String(record.clientId));
   }
   return new Response(null, { status: 200 });
+}
+
+function errorProperty(error: unknown, key: string): unknown {
+  return error && typeof error === "object" && key in error ? (error as JsonRecord)[key] : undefined;
+}
+
+function logValue(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80);
+  return normalized || fallback;
+}
+
+function errorText(error: unknown): string {
+  const value = error instanceof Error ? error.message : errorProperty(error, "message");
+  return typeof value === "string" ? value : "Unknown OAuth failure";
+}
+
+function sanitizedErrorMessage(error: unknown): string {
+  return errorText(error)
+    .replace(/https?:\/\/[^\s'"<>]+/gi, "[redacted-url]")
+    .replace(/(?:bearer|token|secret|password|api[-_ ]?key|authorization)\s*[:=]\s*[^,;\s]+/gi, "$1=[redacted]")
+    .replace(/\bqf(?:r|code)?_[A-Za-z0-9_-]{16,}\b/g, "[redacted-token]")
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[redacted-value]")
+    .slice(0, 240);
+}
+
+function downstreamStatus(error: unknown): number | null {
+  const explicit = errorProperty(error, "status");
+  if (typeof explicit === "number" && Number.isInteger(explicit) && explicit >= 400 && explicit <= 599) return explicit;
+  const match = errorText(error).match(/\b([45]\d{2})\b/);
+  return match ? Number(match[1]) : null;
+}
+
+export function oauthOperationForRequest(request: Request): string | null {
+  const path = new URL(request.url).pathname;
+  const operations: Record<string, string> = {
+    "/oauth/register": "oauth.register_client",
+    "/oauth/authorize": "oauth.authorize",
+    "/oauth/approve": "oauth.approve_authorization",
+    "/oauth/token": "oauth.token",
+    "/oauth/revoke": "oauth.revoke",
+  };
+  return operations[path] || null;
+}
+
+export function logOAuthFailure(operation: string, request: Request, error: unknown): void {
+  console.error("oauth_operation_failed", {
+    operation,
+    method: request.method,
+    path: new URL(request.url).pathname,
+    downstreamStatus: downstreamStatus(error),
+    errorCode: logValue(errorProperty(error, "code"), "internal_error"),
+    errorType: logValue(errorProperty(error, "type") || errorProperty(error, "name") || (error instanceof Error ? error.constructor.name : "Error"), "Error"),
+    message: sanitizedErrorMessage(error),
+  });
 }
 
 function escapeHtml(value: unknown): string {

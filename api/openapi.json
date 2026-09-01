@@ -2257,6 +2257,34 @@
           }
         }
       }
+    },
+    "/v1/agent-connections/{clientId}": {
+      "delete": {
+        "summary": "Revoke one OAuth MCP client grant for the signed-in web user",
+        "description": "Revokes the OAuth grant and its refresh session without deleting the linked Agent. A later OAuth authorization creates a new grant.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OAuth connection revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

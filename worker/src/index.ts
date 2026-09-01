@@ -30,9 +30,11 @@ import {
   approveAuthorization,
   authorizePage,
   getAuthorizedClient,
+  logOAuthFailure,
   listAuthorizedClients,
   noteAuthorizedClientUse,
   oauthMetadata,
+  oauthOperationForRequest,
   protectedResourceMetadata,
   registerClient,
   revokeAuthorizedClient,
@@ -820,6 +822,14 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   if (path === "/v1/agent-connections" && method === "GET") {
     assertAgentRegistryWebMutation(request, env, identity);
     return json({ authorizedClients: await listAuthorizedClients(env, identity.uid), connections: await listAllAgentConnections(env, identity.uid) });
+  }
+  const oauthConnectionMatch = path.match(/^\/v1\/agent-connections\/([^/]+)$/);
+  if (oauthConnectionMatch && method === "DELETE") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const clientId = decodeURIComponent(oauthConnectionMatch[1]);
+    const revoked = await revokeAuthorizedClient(env, identity.uid, clientId);
+    if (!revoked) throw new DomainError(404, "oauth_client_not_found", "An active OAuth MCP client with this ID was not found for the signed-in user.");
+    return json({ authorizedClient: revoked });
   }
   const agentMatch = path.match(/^\/v1\/agents\/([^/]+)$/);
   if (agentMatch && method === "GET") {
@@ -1615,7 +1625,12 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
 export default {
   async fetch(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
     try { return withCors(await handleRequest(request, env, context), request, env); }
-    catch (error) { console.error(error); return withCors(errorResponse(error), request, env); }
+    catch (error) {
+      const operation = oauthOperationForRequest(request);
+      if (operation) logOAuthFailure(operation, request, error);
+      else console.error(error);
+      return withCors(errorResponse(error), request, env);
+    }
   },
   async scheduled(_controller: unknown, env: WorkerEnv, context: WorkerContext): Promise<void> {
     context.waitUntil(retryDeliveries(env));

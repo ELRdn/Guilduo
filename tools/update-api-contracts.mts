@@ -79,6 +79,9 @@ Object.assign(openapi.paths, {
   "/v1/agent-connections": {
     get: { summary: "List OAuth MCP clients and Agent links for the signed-in web user", responses: ok("Agent connections") },
   },
+  "/v1/agent-connections/{clientId}": {
+    delete: { summary: "Revoke one OAuth MCP client grant for the signed-in web user", description: "Revokes the OAuth grant and its refresh session without deleting the linked Agent. A later OAuth authorization creates a new grant.", parameters: [parameter("clientId")], responses: ok("OAuth connection revoked") },
+  },
   "/v1/agents/{agentId}/connections/{clientId}": {
     put: { summary: "Link an OAuth MCP client to one Agent", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Linked connection") },
     delete: { summary: "Unlink an OAuth MCP client from an Agent without revoking its OAuth grant", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Unlinked connection") },

@@ -329,6 +329,7 @@ function connectionRow(
   const activeAgents = model.agents.filter((agent) => agent.status === "active");
   const busy = state.connectionBusyId === row.clientId;
   const canLink = row.authorized && callbacks.canManageAgents && !busy;
+  const canRevoke = row.authorized && !busy;
   const avatar = summary.agent === null
     ? el("span", { class: "rf-set-connection-agent-placeholder", "aria-hidden": "true" }, "—")
     : (() => {
@@ -341,6 +342,12 @@ function connectionRow(
     ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-unlink", disabled: busy ? true : null }, busy ? "処理中…" : "Unlink")
     : null;
   unlink?.addEventListener("click", () => callbacks.onUnlinkAgent(row.clientId, row.linkedAgentId ?? ""));
+  const revoke = canRevoke
+    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-revoke", disabled: busy ? true : null }, busy ? "処理中…" : "Disconnect")
+    : null;
+  revoke?.addEventListener("click", () => {
+    if (window.confirm("このMCP接続を解除しますか？Agent本体は削除されません。")) callbacks.onRevokeConnection(row.clientId);
+  });
   const picker = pickerOpen
     ? el(
       "div",
@@ -391,7 +398,7 @@ function connectionRow(
         el("strong", {}, activeLink ? summary.agent!.displayName : row.linkedAgentId !== null && summary.stale ? "Agentを利用できません" : "No agent linked"),
         el("span", {}, activeLink ? "このMCP接続はこのAgentとして動作します。" : row.linkedAgentId !== null && summary.stale ? "以前のリンク先が削除または無効になっています。" : "接続はAgentなしでも利用できます。"),
       ),
-      el("div", { class: "rf-set-connection-actions" }, openPicker, unlink),
+      el("div", { class: "rf-set-connection-actions" }, openPicker, unlink, revoke),
     ),
     picker,
     state.connectionMessage === "" || state.connectionBusyId !== row.clientId

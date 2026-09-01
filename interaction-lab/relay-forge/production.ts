@@ -42,7 +42,7 @@ export interface RelayForgeRuntime {
   readonly profilePort: Pick<QuestForgeRepository, "getProfile" | "updateProfile">;
   readonly profileAvatarPort: Pick<QuestForgeRepository, "uploadProfileAvatar" | "fetchProfileAvatar" | "deleteProfileAvatar">;
   readonly agentAvatarPort: Pick<QuestForgeRepository, "uploadAgentAvatar" | "fetchAgentAvatar">;
-  readonly agentConnectionPort: Pick<QuestForgeRepository, "listAgentConnections" | "linkAgentConnection" | "unlinkAgentConnection">;
+  readonly agentConnectionPort: Pick<QuestForgeRepository, "listAgentConnections" | "linkAgentConnection" | "unlinkAgentConnection" | "revokeMcpConnection">;
   readonly agentConnections: readonly SettingsMcpConnectionRow[];
   readonly agentConnectionsLoadError: string | null;
   readonly mcpToolsPort: Pick<QuestForgeRepository, "listMcpTools">;
