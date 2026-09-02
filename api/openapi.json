@@ -2260,8 +2260,8 @@
     },
     "/v1/agent-connections/{clientId}": {
       "delete": {
-        "summary": "Revoke one OAuth MCP client grant for the signed-in web user",
-        "description": "Revokes the OAuth grant and its refresh session without deleting the linked Agent. A later OAuth authorization creates a new grant.",
+        "summary": "Disconnect one OAuth MCP client grant (legacy alias)",
+        "description": "Backwards-compatible alias for Disconnect. Revokes the OAuth grant and safely disables the Agent link without deleting the Agent or connection history. Use /permanent only after Disconnect when the history should be removed.",
         "parameters": [
           {
             "name": "clientId",
@@ -2274,7 +2274,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OAuth connection revoked",
+            "description": "OAuth connection disconnected",
             "content": {
               "application/json": {
                 "schema": {
@@ -2282,6 +2282,65 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/agent-connections/{clientId}/disconnect": {
+      "post": {
+        "summary": "Disconnect one OAuth MCP client grant",
+        "description": "Revokes the OAuth grant and safely disables the Agent link while retaining the connection history for reconnect or permanent deletion.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OAuth connection disconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-connections/{clientId}/permanent": {
+      "delete": {
+        "summary": "Permanently delete one disconnected OAuth connection",
+        "description": "Permanently removes the signed-in user's OAuth grant metadata, token records, and Agent connection relation. Active connections must be disconnected first (409). The registered Agent and shared OAuth client registration are not deleted.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OAuth connection deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The OAuth connection is still active; disconnect it first."
           }
         }
       }

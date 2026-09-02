@@ -2601,7 +2601,7 @@
     {
       "name": "get_current_agent_context",
       "title": "Get Current Agent Context",
-      "description": "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes. Requires the agents:read OAuth scope.",
+      "description": "Return the registered Agent profile linked to the current OAuth MCP client, the original connection scopes, the Agent policy scopes, and the effective execution scopes. Requires the agents:read OAuth scope.",
       "inputSchema": {
         "type": "object",
         "properties": {},

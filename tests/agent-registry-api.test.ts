@@ -87,6 +87,51 @@ test("MCP Agent link tools persist, authorize, unlink, and relink the current OA
   assert.equal(unlinked.result.structuredContent.unlinked, true);
   assert.equal(unlinked.result.structuredContent.agent?.agentId, "second");
   assert.equal((await agentStore.getAgentConnection(env, "agent-user", "mcp-link-client"))?.revokedAt !== null, true);
+  const stillAuthenticated = await (await import("../worker/src/security.ts")).authenticateRequest(new Request("http://worker.test/mcp", {
+    headers: { authorization: `Bearer ${token}` },
+  }), env);
+  assert.equal(stillAuthenticated?.clientId, "mcp-link-client", "unlinking must not revoke the OAuth grant");
+});
+
+test("linked Agent control-plane reads use connection scopes while execution uses the scope intersection", async () => {
+  const agentStore = await import("../worker/src/agent-store.ts");
+  await agentStore.createAgent(env, "agent-user", {
+    agentId: "restricted",
+    displayName: "Restricted Agent",
+    allowedScopes: ["quests:read"],
+  });
+  const token = await seedOAuthConnection("mcp-control-scopes", ["agents:read", "agents:write", "quests:read", "quests:write"]);
+  await agentStore.linkAgentConnection(env, "agent-user", "restricted", {
+    clientId: "mcp-control-scopes",
+    clientName: "Test MCP",
+    scopes: ["agents:read", "agents:write", "quests:read", "quests:write"],
+  });
+
+  const contextResponse = await json<{ result: { isError: boolean; structuredContent: {
+    linked: boolean;
+    connectionScopes: string[];
+    agentAllowedScopes: string[];
+    effectiveExecutionScopes: string[];
+    effectiveScopes: string[];
+  } } }>(await mcpOAuthCall(token, "get_current_agent_context"));
+  assert.equal(contextResponse.result.isError, false);
+  assert.equal(contextResponse.result.structuredContent.linked, true);
+  assert.deepEqual(contextResponse.result.structuredContent.connectionScopes, ["agents:read", "agents:write", "quests:read", "quests:write"]);
+  assert.deepEqual(contextResponse.result.structuredContent.agentAllowedScopes, ["quests:read"]);
+  assert.deepEqual(contextResponse.result.structuredContent.effectiveExecutionScopes, ["quests:read"]);
+  assert.deepEqual(contextResponse.result.structuredContent.effectiveScopes, ["quests:read"]);
+
+  const listed = await json<{ result: { isError: boolean; structuredContent: { agents: Array<{ agentId: string }> } } }>(await mcpOAuthCall(token, "list_registered_agents"));
+  assert.equal(listed.result.isError, false);
+  assert.ok(listed.result.structuredContent.agents.some((agent) => agent.agentId === "restricted"));
+
+  const linkInfo = await json<{ result: { isError: boolean; structuredContent: { linked: boolean } } }>(await mcpOAuthCall(token, "get_agent_link"));
+  assert.equal(linkInfo.result.isError, false);
+  assert.equal(linkInfo.result.structuredContent.linked, true);
+
+  const executionDenied = await json<{ result: { isError: boolean; structuredContent: { error: { code: string } } } }>(await mcpOAuthCall(token, "create_quest", { kind: "todo", title: "should be denied" }));
+  assert.equal(executionDenied.result.isError, true);
+  assert.equal(executionDenied.result.structuredContent.error.code, "insufficient_scope");
 });
 
 test("MCP Agent linking rejects foreign or nonexistent Agents and preserves old unlinked connections", async () => {

@@ -399,6 +399,16 @@ export class QuestForgeRepository {
     return this.request(`/v1/agent-connections/${encodeURIComponent(clientId)}`, { method: "DELETE" });
   }
 
+  /** Explicit lifecycle endpoint. The legacy revoke method above remains for
+   * older callers that used DELETE as Disconnect. */
+  async disconnectMcpConnection(clientId: string): Promise<JsonRecord> {
+    return this.request(`/v1/agent-connections/${encodeURIComponent(clientId)}/disconnect`, { method: "POST" });
+  }
+
+  async deleteMcpConnection(clientId: string): Promise<JsonRecord> {
+    return this.request(`/v1/agent-connections/${encodeURIComponent(clientId)}/permanent`, { method: "DELETE" });
+  }
+
   async getProfile(): Promise<JsonRecord> {
     return this.request("/v1/profile");
   }

@@ -80,7 +80,13 @@ Object.assign(openapi.paths, {
     get: { summary: "List OAuth MCP clients and Agent links for the signed-in web user", responses: ok("Agent connections") },
   },
   "/v1/agent-connections/{clientId}": {
-    delete: { summary: "Revoke one OAuth MCP client grant for the signed-in web user", description: "Revokes the OAuth grant and its refresh session without deleting the linked Agent. A later OAuth authorization creates a new grant.", parameters: [parameter("clientId")], responses: ok("OAuth connection revoked") },
+    delete: { summary: "Disconnect one OAuth MCP client grant (legacy alias)", description: "Backwards-compatible alias for Disconnect. Revokes the OAuth grant and safely disables the Agent link without deleting the Agent or connection history. Use /permanent only after Disconnect when the history should be removed.", parameters: [parameter("clientId")], responses: ok("OAuth connection disconnected") },
+  },
+  "/v1/agent-connections/{clientId}/disconnect": {
+    post: { summary: "Disconnect one OAuth MCP client grant", description: "Revokes the OAuth grant and safely disables the Agent link while retaining the connection history for reconnect or permanent deletion.", parameters: [parameter("clientId")], responses: ok("OAuth connection disconnected") },
+  },
+  "/v1/agent-connections/{clientId}/permanent": {
+    delete: { summary: "Permanently delete one disconnected OAuth connection", description: "Permanently removes the signed-in user's OAuth grant metadata, token records, and Agent connection relation. Active connections must be disconnected first (409). The registered Agent and shared OAuth client registration are not deleted.", parameters: [parameter("clientId")], responses: { ...ok("OAuth connection deleted"), "409": { description: "The OAuth connection is still active; disconnect it first." } } },
   },
   "/v1/agents/{agentId}/connections/{clientId}": {
     put: { summary: "Link an OAuth MCP client to one Agent", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Linked connection") },

@@ -83,6 +83,26 @@ export function getOAuthRecordStore(env: WorkerEnv): KvNamespaceLike {
   return env.QUESTFORGE_DB ? new D1OAuthRecordStore(env) : getKv(env);
 }
 
+/**
+ * Permanently removes user-owned OAuth records after a grant has already been
+ * revoked. D1 normally uses tombstones so legacy KV data cannot reappear on a
+ * read-through miss; a hard delete must remove the legacy KV copy first and
+ * only then remove the D1 rows. The revocation tombstone is deliberately not
+ * included by callers, so a replayed refresh credential remains denied.
+ */
+export async function purgeOAuthRecordKeys(env: WorkerEnv, keys: readonly string[]): Promise<void> {
+  const uniqueKeys = [...new Set(keys.filter((key): key is string => typeof key === "string" && key.length > 0))];
+  if (uniqueKeys.length === 0) return;
+
+  const legacy = getKv(env);
+  await Promise.all(uniqueKeys.map((key) => legacy.delete(key)));
+  if (!env.QUESTFORGE_DB) return;
+
+  await env.QUESTFORGE_DB.batch(uniqueKeys.map((key) => env.QUESTFORGE_DB!.prepare(
+    "DELETE FROM oauth_records WHERE record_key = ?",
+  ).bind(key)));
+}
+
 export function oauthStorageKind(env: WorkerEnv): "d1" | "kv" | "ephemeral" {
   if (env.QUESTFORGE_DB) return "d1";
   return env.QUESTFORGE_KV ? "kv" : "ephemeral";

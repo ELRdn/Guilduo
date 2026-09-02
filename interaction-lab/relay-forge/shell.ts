@@ -1833,13 +1833,13 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
   }
 
-  async function copyMcpUrl(url: string): Promise<void> {
+  async function copyMcpUrl(url: string): Promise<boolean> {
     const settings = state.screens.settings;
     if (url === "") {
       settings.mcpCopyTone = "error";
       settings.mcpCopyMessage = "MCP URLを取得できませんでした。";
       render();
-      return;
+      return false;
     }
     try {
       await navigator.clipboard.writeText(url);
@@ -1848,8 +1848,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     } catch {
       settings.mcpCopyTone = "error";
       settings.mcpCopyMessage = "コピーできませんでした。手動で選択してコピーしてください。";
+      render();
+      return false;
     }
     render();
+    return true;
   }
 
   function toolsFromResponse(value: unknown): unknown[] {
@@ -1970,7 +1973,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
   }
 
-  async function revokeMcpConnection(clientId: string): Promise<void> {
+  async function disconnectMcpConnection(clientId: string): Promise<void> {
     const settings = state.screens.settings;
     if (runtime === null || clientId === "" || settings.connectionBusyId !== null) return;
     settings.connectionBusyId = clientId;
@@ -1978,7 +1981,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     settings.connectionTone = null;
     render();
     try {
-      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.revokeMcpConnection(clientId));
+      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.disconnectMcpConnection(clientId));
       await refreshAgentConnections();
       delete settings.connectionDrafts[clientId];
       settings.connectionTone = "success";
@@ -1988,6 +1991,44 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       if (lifecycle.disposed) return;
       settings.connectionTone = "error";
       settings.connectionMessage = profileErrorMessage(error, "MCP接続を解除できませんでした。もう一度お試しください。");
+    } finally {
+      if (lifecycle.disposed) return;
+      settings.connectionBusyId = null;
+      render();
+    }
+  }
+
+  async function reconnectMcpConnection(clientId: string): Promise<void> {
+    if (runtime === null || clientId === "") return;
+    const copied = await copyMcpUrl(deriveMcpUrl(runtime.gatewayUrl));
+    if (lifecycle.disposed) return;
+    const settings = state.screens.settings;
+    settings.connectionTone = copied ? "success" : "error";
+    settings.connectionMessage = copied
+      ? "MCP URLをコピーしました。接続元でOAuth再接続を開始してください。"
+      : "MCP URLをコピーできませんでした。接続元で再接続してください。";
+    announce(copied ? "MCP URLをコピーしました。" : "MCP URLをコピーできませんでした。");
+    render();
+  }
+
+  async function deleteMcpConnection(clientId: string): Promise<void> {
+    const settings = state.screens.settings;
+    if (runtime === null || clientId === "" || settings.connectionBusyId !== null) return;
+    settings.connectionBusyId = clientId;
+    settings.connectionMessage = "";
+    settings.connectionTone = null;
+    render();
+    try {
+      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.deleteMcpConnection(clientId));
+      await refreshAgentConnections();
+      delete settings.connectionDrafts[clientId];
+      settings.connectionTone = "success";
+      settings.connectionMessage = "MCP接続の履歴を削除しました。Agent本体は削除されません。";
+      announce("MCP接続の履歴を削除しました。");
+    } catch (error) {
+      if (lifecycle.disposed) return;
+      settings.connectionTone = "error";
+      settings.connectionMessage = profileErrorMessage(error, "MCP接続を削除できませんでした。先にDisconnectしてください。");
     } finally {
       if (lifecycle.disposed) return;
       settings.connectionBusyId = null;
@@ -2746,7 +2787,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onSelectConnectionAgent: selectConnectionAgent,
         onLinkAgent: (clientId: string, agentId: string) => { void linkAgent(clientId, agentId); },
         onUnlinkAgent: (clientId: string, agentId: string) => { void unlinkAgent(clientId, agentId); },
-        onRevokeConnection: (clientId: string) => { void revokeMcpConnection(clientId); },
+        onDisconnectConnection: (clientId: string) => { void disconnectMcpConnection(clientId); },
+        onReconnectConnection: (clientId: string) => { void reconnectMcpConnection(clientId); },
+        onDeleteConnection: (clientId: string) => { void deleteMcpConnection(clientId); },
         canManageAgents: runtime !== null,
         onCreateAgent: openCreateAgent,
         onEditAgent: openEditAgent,

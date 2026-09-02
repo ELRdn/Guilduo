@@ -691,6 +691,24 @@ export async function unlinkAgentConnection(env: WorkerEnv, uid: string, clientI
   return normalizeConnection({ ...connection, revokedAt, updatedAt: revokedAt });
 }
 
+/** Permanently removes only the owner-scoped connection relation. The Agent
+ * Registry row itself is never touched, and the caller must enforce the
+ * OAuth lifecycle rule before invoking this function. */
+export async function deleteAgentConnection(env: WorkerEnv, uid: string, clientId: string): Promise<AgentConnectionRecord | null> {
+  const connection = normalizeConnection(await getConnectionRow(env, uid, clientId));
+  if (!connection || connection.uid !== uid) return null;
+  if (!connection.revokedAt) {
+    throw agentError(409, "agent_connection_active", "Disconnect the active Agent connection before deleting its history.");
+  }
+  if (env.QUESTFORGE_DB) {
+    await env.QUESTFORGE_DB.prepare("DELETE FROM agent_registry_connections WHERE uid = ? AND client_id = ?")
+      .bind(uid, clientId).run();
+  } else {
+    memory(env).connections.delete(`${uid}:${clientId}`);
+  }
+  return connection;
+}
+
 export async function noteAgentConnectionUse(env: WorkerEnv, uid: string, clientId: string, { at }: { at?: string } = {}): Promise<AgentConnectionRecord | null> {
   const connection = normalizeConnection(await getConnectionRow(env, uid, clientId));
   if (!connection || connection.uid !== uid) {

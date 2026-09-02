@@ -29,6 +29,7 @@ import { authenticateRequest } from "./security.ts";
 import {
   approveAuthorization,
   authorizePage,
+  deleteAuthorizedClient,
   getAuthorizedClient,
   logOAuthFailure,
   listAuthorizedClients,
@@ -45,6 +46,7 @@ import { oauthStorageKind } from "./oauth-record-store.ts";
 import {
   bumpAgentAvatarVersion,
   createAgent,
+  deleteAgentConnection,
   getAgent,
   getAgentConnection,
   getAgentForClient,
@@ -128,7 +130,12 @@ import type { JsonRecord, R2ObjectLike, WorkerEnv, WorkerError } from "./worker-
 import { isQuest } from "../../types/questforge.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 
-type WorkerIdentity = AuthIdentity & { agent?: AgentRecord; connectionScopes?: string[] };
+type WorkerIdentity = AuthIdentity & {
+  agent?: AgentRecord;
+  connectionScopes?: string[];
+  agentAllowedScopes?: string[];
+  effectiveExecutionScopes?: string[];
+};
 type WorkerContext = { waitUntil(promise: Promise<unknown>): void };
 type WorkerArgs = JsonRecord;
 type McpArgs = JsonRecord & {
@@ -458,7 +465,7 @@ const MCP_TOOLS = [
   { name: "get_review_summary", title: "Get Review Summary", description: "Summarize completed work and activity for one day or a rolling seven-day review window.", inputSchema: { type: "object", properties: { period: { type: "string", enum: ["day", "week"], default: "day" }, anchorDate: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: REVIEW_SUMMARY_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned Guilduo handoffs by lifecycle state.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "list_registered_agents", title: "List Registered Agents", description: "List the authenticated user's private Guilduo Agent Registry profiles. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LIST_OUTPUT, annotations: READ_ANNOTATIONS },
-  { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client, the original connection scopes, the Agent policy scopes, and the effective execution scopes. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_agent_link", title: "Get Agent Link", description: "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "link_agent", title: "Link MCP Connection to Agent", description: "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", required: ["agentId"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } }, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "unlink_agent", title: "Unlink MCP Connection", description: "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
@@ -630,6 +637,13 @@ function toPublicAgents(agents: AgentRecord[]): Array<Omit<AgentRecord, "avatarA
   return agents.map(toPublicAgent);
 }
 
+/** Agent Registry reads and connection-link operations are control-plane
+ * actions. Once an Agent is linked, `identity.scopes` is the execution-scope
+ * intersection; these checks must use the original OAuth connection grant. */
+function assertConnectionScope(identity: WorkerIdentity, requiredScope: string): void {
+  assertScope(identity.connectionScopes || identity.scopes, requiredScope);
+}
+
 /** Connection metadata is safe to expose, but the owner uid and every token
  * remain server-side only.  MCP uses this shape for both linked and unlinked
  * current connections. */
@@ -658,8 +672,20 @@ async function requireMcpConnection(env: WorkerEnv, identity: WorkerIdentity, re
   // Agent effective scopes are intentionally narrower than the original
   // OAuth grant. Link management is a connection-level control-plane action,
   // so it must use the unfiltered grant rather than the linked Agent policy.
-  assertScope(identity.connectionScopes || identity.scopes, requiredScope);
+  assertConnectionScope(identity, requiredScope);
   return client;
+}
+
+async function disconnectMcpConnection(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord> {
+  const authorizedClient = await revokeAuthorizedClient(env, uid, clientId);
+  const relation = await getAgentConnection(env, uid, clientId);
+  if (!authorizedClient && !relation) {
+    throw new DomainError(404, "oauth_client_not_found", "An OAuth MCP connection was not found for the signed-in user.");
+  }
+  const connection = relation && !relation.revokedAt
+    ? await unlinkAgentConnection(env, uid, clientId)
+    : relation;
+  return { authorizedClient, connection };
 }
 
 async function currentMcpAgentLink(env: WorkerEnv, identity: WorkerIdentity, client: JsonRecord): Promise<JsonRecord> {
@@ -724,10 +750,19 @@ async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity):
   const connectionScopes = [...(identity.scopes || [])];
   await noteAuthorizedClientUse(env, identity);
   const agent = await getAgentForClient(env, identity.uid, identity.clientId);
-  if (!agent || agent.uid !== identity.uid) return { ...identity, connectionScopes };
+  if (!agent || agent.uid !== identity.uid) {
+    return {
+      ...identity,
+      connectionScopes,
+      agentAllowedScopes: [],
+      effectiveExecutionScopes: connectionScopes,
+    };
+  }
   await noteAgentConnectionUse(env, identity.uid, identity.clientId).catch(() => undefined);
-  const allowed = new Set(agent.allowedScopes || []);
-  return { ...identity, connectionScopes, scopes: (identity.scopes || []).filter((scope) => allowed.has(scope)), agent };
+  const agentAllowedScopes = [...(agent.allowedScopes || [])];
+  const allowed = new Set(agentAllowedScopes);
+  const effectiveExecutionScopes = (identity.scopes || []).filter((scope) => allowed.has(scope));
+  return { ...identity, connectionScopes, agentAllowedScopes, effectiveExecutionScopes, scopes: effectiveExecutionScopes, agent };
 }
 
 async function assignQuestToAgent(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, input: WorkerArgs): Promise<JsonRecord> {
@@ -811,7 +846,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     return json(payload);
   }
   if (path === "/v1/agents" && method === "GET") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     const includeArchived = new URL(request.url).searchParams.get("includeArchived") === "true";
     return json({ agents: toPublicAgents(await listAgents(env, identity.uid, { includeArchived })) });
   }
@@ -824,17 +859,43 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     assertAgentRegistryWebMutation(request, env, identity);
     return json({ authorizedClients: await listAuthorizedClients(env, identity.uid), connections: await listAllAgentConnections(env, identity.uid) });
   }
+  const oauthConnectionDisconnectMatch = path.match(/^\/v1\/agent-connections\/([^/]+)\/disconnect$/);
+  if (oauthConnectionDisconnectMatch && method === "POST") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    return json(await disconnectMcpConnection(env, identity.uid, decodeURIComponent(oauthConnectionDisconnectMatch[1])));
+  }
+  const oauthConnectionDeleteMatch = path.match(/^\/v1\/agent-connections\/([^/]+)\/permanent$/);
+  if (oauthConnectionDeleteMatch && method === "DELETE") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const clientId = decodeURIComponent(oauthConnectionDeleteMatch[1]);
+    const authorizedClient = await getAuthorizedClient(env, identity.uid, clientId);
+    const relation = await getAgentConnection(env, identity.uid, clientId);
+    if (authorizedClient || (relation && !relation.revokedAt)) {
+      throw new DomainError(409, "oauth_connection_active", "Disconnect the active MCP connection before deleting its history.");
+    }
+    const deletedGrant = await deleteAuthorizedClient(env, identity.uid, clientId);
+    const deletedConnection = await deleteAgentConnection(env, identity.uid, clientId);
+    if (!deletedGrant && !deletedConnection) {
+      throw new DomainError(404, "oauth_client_not_found", "An OAuth MCP connection was not found for the signed-in user.");
+    }
+    return json({
+      deleted: true,
+      clientId,
+      oauthGrantDeleted: Boolean(deletedGrant),
+      connectionDeleted: Boolean(deletedConnection),
+    });
+  }
   const oauthConnectionMatch = path.match(/^\/v1\/agent-connections\/([^/]+)$/);
   if (oauthConnectionMatch && method === "DELETE") {
     assertAgentRegistryWebMutation(request, env, identity);
     const clientId = decodeURIComponent(oauthConnectionMatch[1]);
-    const revoked = await revokeAuthorizedClient(env, identity.uid, clientId);
-    if (!revoked) throw new DomainError(404, "oauth_client_not_found", "An active OAuth MCP client with this ID was not found for the signed-in user.");
-    return json({ authorizedClient: revoked });
+    // Legacy REST callers used this DELETE as Disconnect. Keep that alias
+    // working while exposing the irreversible operation at `/permanent`.
+    return json(await disconnectMcpConnection(env, identity.uid, clientId));
   }
   const agentMatch = path.match(/^\/v1\/agents\/([^/]+)$/);
   if (agentMatch && method === "GET") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     const agent = await getAgent(env, identity.uid, decodeURIComponent(agentMatch[1]), { includeArchived: true });
     return json({ agent: toPublicAgent(agent) });
   }
@@ -850,7 +911,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   }
   const agentAvatarMatch = path.match(/^\/v1\/agents\/([^/]+)\/avatar$/);
   if (agentAvatarMatch && method === "GET") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     return serveAgentAvatar(request, env, identity, decodeURIComponent(agentAvatarMatch[1]));
   }
   if (agentAvatarMatch && method === "PUT") {
@@ -1343,15 +1404,23 @@ async function convertCalendarEventWithOverrides(env: WorkerEnv, identity: Worke
 
 async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<unknown> {
   if (name === "list_registered_agents") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     return { agents: toPublicAgents(await listAgents(env, identity.uid)) };
   }
   if (name === "get_current_agent_context") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
+    const connectionScopes = identity.connectionScopes || identity.scopes || [];
+    const agentAllowedScopes = identity.agentAllowedScopes || identity.agent?.allowedScopes || [];
+    const effectiveExecutionScopes = identity.effectiveExecutionScopes || identity.scopes || [];
     return {
       agent: identity.agent ? toPublicAgent(identity.agent) : null,
       clientId: identity.clientId || null,
-      effectiveScopes: identity.scopes || [],
+      connectionScopes,
+      agentAllowedScopes,
+      effectiveExecutionScopes,
+      // Compatibility alias retained for clients that already consume this
+      // field. It continues to describe execution, not the OAuth grant.
+      effectiveScopes: effectiveExecutionScopes,
       linked: Boolean(identity.agent),
     };
   }

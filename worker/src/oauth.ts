@@ -1,4 +1,4 @@
-import { getOAuthRecordStore, oauthStorageKind, oauthStorageLogContext } from "./oauth-record-store.ts";
+import { getOAuthRecordStore, oauthStorageKind, oauthStorageLogContext, purgeOAuthRecordKeys } from "./oauth-record-store.ts";
 import { ALL_SCOPES, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
 import type { AuthIdentity } from "./security.ts";
 import { mcpOriginForRequest, primaryMcpOrigin } from "./mcp-origin.ts";
@@ -401,15 +401,53 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
   const key = `user-client:${uid}:${clientId}`;
   const record = await readClientGrantIndex(env, uid, clientId);
   if (!record) return null;
+  // Keep Disconnect idempotent, but do not treat a legacy revoked marker as
+  // proof that its access/refresh records were cleaned up. Replaying this
+  // explicit lifecycle action must fail closed before returning the history.
   if (record.refreshHash) await kv.put(`refresh-revoked:${record.refreshHash}`, "1");
   await Promise.all([
     record.accessHash ? kv.delete(`access:${record.accessHash}`) : Promise.resolve(),
     record.refreshHash ? kv.delete(`refresh:${record.refreshHash}`) : Promise.resolve(),
   ]);
   record.revokedAt ||= new Date().toISOString();
-  record.accessHash = "";
-  record.refreshHash = "";
+  // Keep the one-way hashes in the private revoked grant record as cleanup
+  // handles. They are never returned by publicClientGrant(), and retaining
+  // them lets a later hard delete remove the corresponding D1/legacy token
+  // metadata while the refresh-revoked tombstone continues to block replay.
   await kv.put(key, JSON.stringify(record));
+  return publicClientGrant(record);
+}
+
+/**
+ * Permanently removes one already-disconnected user's grant and its token
+ * records. The dynamic client registration is intentionally retained: a
+ * client_id can be reused by the same MCP client or by another Guilduo user,
+ * and it is not part of this user's connection history.
+ */
+export async function deleteAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
+  const key = `user-client:${uid}:${clientId}`;
+  const record = await readClientGrantIndex(env, uid, clientId);
+  if (!record) {
+    await purgeOAuthRecordKeys(env, [key]);
+    return null;
+  }
+  if (!record.revokedAt) {
+    throw Object.assign(new Error("Disconnect the active OAuth connection before deleting its history."), {
+      status: 409,
+      code: "oauth_connection_active",
+    });
+  }
+
+  const kv = getOAuthRecordStore(env);
+  // Legacy rows may have been marked revoked by an older build without a
+  // replay tombstone. Establish the fail-closed marker before removing the
+  // token record; it is intentionally retained after the hard delete.
+  if (record.refreshHash) await kv.put(`refresh-revoked:${record.refreshHash}`, "1");
+  await purgeOAuthRecordKeys(env, [
+    key,
+    record.accessHash ? `access:${record.accessHash}` : "",
+    record.refreshHash ? `refresh:${record.refreshHash}` : "",
+  ]);
   return publicClientGrant(record);
 }
 
