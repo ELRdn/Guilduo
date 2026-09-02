@@ -107,6 +107,104 @@ test("OAuth authorize rejects an oversized client_id before it can become an inv
   assert.deepEqual(await response.json(), { error: "invalid_request" });
 });
 
+test("OAuth authorization preserves requested Agent scopes and never silently escalates an existing grant", async () => {
+  const kv = new MemoryKv();
+  const clientId = "scope-client";
+  const redirectUri = "http://127.0.0.1:8989/oauth/callback";
+  const env: WorkerEnv = {
+    ...baseEnv,
+    QUESTFORGE_KV: kv,
+    APPWRITE_ENDPOINT: "https://api.guilduo.com/v1",
+    APPWRITE_PROJECT_ID: "scope-test-project",
+  };
+  await kv.put(`client:${clientId}`, JSON.stringify({
+    clientId,
+    clientName: "Scope test client",
+    redirectUris: [redirectUri],
+    createdAt: Date.now(),
+  }));
+
+  const originalFetch = global.fetch;
+  global.fetch = async (input: string | URL | Request, options?: RequestInit) => {
+    if (String(input) === "https://api.guilduo.com/v1/account") {
+      assert.equal(new Headers(options?.headers).get("x-appwrite-jwt"), "scope-test-jwt");
+      return new Response(JSON.stringify({ $id: "scope-user", email: "scope@example.com" }), { status: 200 });
+    }
+    return originalFetch(input, options);
+  };
+
+  const authorizeAndExchange = async (scope: string, verifier: string) => {
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: await sha256(verifier),
+      code_challenge_method: "S256",
+      scope,
+      lang: "en",
+    });
+    const authorization = await authorizePage(new Request(`https://mcp.guilduo.com/oauth/authorize?${params}`), env);
+    assert.equal(authorization.status, 200);
+    const html = await authorization.text();
+    const requests = await kv.list({ prefix: "authorize:" });
+    assert.equal(requests.keys.length, 1);
+    const requestId = requests.keys[0].name.replace("authorize:", "");
+    const approval = await approveAuthorization(new Request("https://mcp.guilduo.com/oauth/approve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestId, jwt: "scope-test-jwt" }),
+    }), env);
+    assert.equal(approval.status, 200);
+    const redirect = (await approval.json() as { redirect: string }).redirect;
+    const code = new URL(redirect).searchParams.get("code");
+    assert.ok(code);
+    const issued = await tokenEndpoint(formRequest("/oauth/token", {
+      grant_type: "authorization_code",
+      code: code!,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    }), env);
+    assert.equal(issued.status, 200);
+    return { html, tokens: await issued.json() as { access_token: string; refresh_token: string; scope: string } };
+  };
+
+  try {
+    const readOnly = await authorizeAndExchange("agents:read", "scope-verifier-read");
+    assert.match(readOnly.html, /Agent profiles/);
+    assert.match(readOnly.html, /agents:read/);
+    assert.doesNotMatch(readOnly.html, /agents:write/);
+    assert.deepEqual(readOnly.tokens.scope.split(" "), ["agents:read"]);
+    const authEnv = { ...env, APPWRITE_ENDPOINT: "", APPWRITE_PROJECT_ID: "" };
+    const oldIdentity = await authenticateRequest(new Request("https://mcp.guilduo.com/mcp", {
+      headers: { authorization: `Bearer ${readOnly.tokens.access_token}` },
+    }), authEnv);
+    assert.deepEqual(oldIdentity?.scopes, ["agents:read"]);
+
+    const writeEnabled = await authorizeAndExchange("agents:read agents:write", "scope-verifier-write");
+    assert.match(writeEnabled.html, /Agent connection management/);
+    assert.match(writeEnabled.html, /agents:write/);
+    assert.deepEqual(writeEnabled.tokens.scope.split(" "), ["agents:read", "agents:write"]);
+    const oldTokenAfterReauthorization = await authenticateRequest(new Request("https://mcp.guilduo.com/mcp", {
+      headers: { authorization: `Bearer ${readOnly.tokens.access_token}` },
+    }), authEnv);
+    assert.deepEqual(oldTokenAfterReauthorization?.scopes, ["agents:read"], "an existing access token must not gain a new scope");
+
+    const invalid = await authorizePage(new Request(`https://mcp.guilduo.com/oauth/authorize?${new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: await sha256("scope-verifier-invalid"),
+      code_challenge_method: "S256",
+      scope: "agents:read agents:unknown",
+    })}`), env);
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(await invalid.json(), { error: "invalid_scope" });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("OAuth authorize persists through D1 when the production KV write quota is exhausted", async () => {
   const kv = new QuotaBlockedKv();
   const db = new SqliteD1Database();

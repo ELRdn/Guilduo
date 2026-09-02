@@ -2495,7 +2495,7 @@
     {
       "name": "list_registered_agents",
       "title": "List Registered Agents",
-      "description": "List the authenticated user's private Guilduo Agent Registry profiles.",
+      "description": "List the authenticated user's private Guilduo Agent Registry profiles. Requires the agents:read OAuth scope.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2601,7 +2601,7 @@
     {
       "name": "get_current_agent_context",
       "title": "Get Current Agent Context",
-      "description": "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes.",
+      "description": "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes. Requires the agents:read OAuth scope.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2621,7 +2621,7 @@
     {
       "name": "get_agent_link",
       "title": "Get Agent Link",
-      "description": "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata.",
+      "description": "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata. Requires the agents:read OAuth scope.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2780,7 +2780,7 @@
     {
       "name": "link_agent",
       "title": "Link MCP Connection to Agent",
-      "description": "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents.",
+      "description": "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -2947,7 +2947,7 @@
     {
       "name": "unlink_agent",
       "title": "Unlink MCP Connection",
-      "description": "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant.",
+      "description": "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.",
       "inputSchema": {
         "type": "object",
         "properties": {},

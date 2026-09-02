@@ -10,7 +10,7 @@ type ApiBatchResponse = { dryRun: boolean; count: number; quests: Quest[] };
 type ApiScoreResponse = { quest: Quest; rewardGranted: boolean; reward: { gems: number; xp: number; mp: number } };
 type McpStructuredContent = { dryRun: boolean; quest: Quest; quests: Quest[]; summary: unknown };
 type McpCallResponse = { result: { structuredContent: McpStructuredContent; isError?: boolean } };
-type McpTool = { name: string; title?: string; outputSchema?: unknown };
+type McpTool = { name: string; title?: string; description?: string; outputSchema?: unknown };
 type McpListResponse = { result: { tools: McpTool[] } };
 type McpResourcesResponse = { resources: Array<{ uri: string }>; resourceTemplates?: Array<{ uriTemplate: string }> };
 type McpPromptsResponse = { prompts: Array<{ name: string }> };
@@ -131,6 +131,11 @@ test("MCP advertises quest, social, battle, and Toggl Focus tools and calls the 
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_quest_tree"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "transition_quest_handoff"));
   for (const name of ["list_registered_agents", "get_current_agent_context", "assign_quest_to_agent"]) assert.ok(tools.result.tools.some((tool) => tool.name === name), name);
+  const toolByName = new Map(tools.result.tools.map((tool) => [tool.name, tool]));
+  assert.match(toolByName.get("list_registered_agents")?.description || "", /agents:read/);
+  assert.match(toolByName.get("get_agent_link")?.description || "", /agents:read/);
+  assert.match(toolByName.get("link_agent")?.description || "", /agents:write/);
+  assert.match(toolByName.get("unlink_agent")?.description || "", /agents:write/);
   assert.ok(tools.result.tools.some((tool) => tool.name === "find_profile_by_handle"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "get_party"));
   assert.ok(tools.result.tools.some((tool) => tool.name === "battle_command"));
@@ -311,6 +316,11 @@ test("gateway rejects unauthenticated API and publishes OAuth metadata", async (
   const body = await json<{ code_challenge_methods_supported: string[]; scopes_supported: string[] }>(metadata);
   assert.equal(body.code_challenge_methods_supported[0], "S256");
   assert.ok(body.scopes_supported.includes("quests:write"));
+  assert.ok(body.scopes_supported.includes("agents:write"));
+
+  const protectedResource = await worker.fetch(new Request("http://worker.test/.well-known/oauth-protected-resource/mcp"), env, context());
+  const protectedBody = await json<{ scopes_supported: string[] }>(protectedResource);
+  assert.ok(protectedBody.scopes_supported.includes("agents:write"));
 });
 
 test("OAuth tokens carry and persist the delegated Guilduo session until revoke", async () => {

@@ -163,7 +163,7 @@ Token、Client ID、UIDは表示しないでください。
 | 401 inmediatamente después de conectar | Queda información OAuth antigua. Elimina la conexión, registra de nuevo la misma URL `/mcp` y vuelve a autorizarla. |
 | No puedes volver desde la pantalla OAuth | Confirma que has iniciado sesión con la misma cuenta de Appwrite que en la versión Web de Guilduo. Comprueba también las extensiones que puedan bloquear el callback de vuelta al cliente. |
 | `linked: false` | OAuth tuvo éxito. Vincula el Client a un Agent en Relay Forge Connections. |
-| Error de permisos `agents:read` | Vuelve a autorizar la conexión y confirma el permiso de lectura de Agents en la pantalla de consentimiento. La configuración del Agent no puede añadir permisos OAuth. |
+| Error de permisos `agents:write` | Vuelve a autorizar la conexión y confirma el permiso de gestión de conexiones de Agent (`agents:write`) en la pantalla de consentimiento. Los grants OAuth existentes nunca se amplían silenciosamente. |
 | El vínculo del Agent no aparece | Recarga el cliente MCP y ejecuta de nuevo `get_current_agent_context`. |
 
 No pegues Tokens, API Keys ni UIDs completos en la configuración de conexión o en los logs. Después de la autorización OAuth, los Tokens son gestionados por el cliente MCP y Cloudflare KV.

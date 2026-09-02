@@ -163,7 +163,7 @@ Token、Client ID、UIDは表示しないでください。
 | 연결 직후 401 | 오래된 OAuth 정보가 남아 있습니다. 연결을 삭제하고 같은 `/mcp` URL을 다시 등록한 뒤 재인증합니다. |
 | OAuth 화면에서 돌아올 수 없음 | Web 버전 Guilduo와 같은 Appwrite 계정으로 로그인했는지 확인합니다. Client로 돌아가는 callback을 차단할 수 있는 확장 기능도 확인하세요. |
 | `linked: false` | OAuth는 성공했습니다. Relay Forge Connections에서 Client를 Agent에 연결합니다. |
-| `agents:read` 권한 오류 | 연결을 다시 인증하고 동의 화면에서 Agent 읽기 권한을 확인합니다. Agent 쪽에서 OAuth 권한을 추가할 수는 없습니다. |
+| `agents:write` 권한 오류 | 연결을 다시 인증하고 동의 화면에서 Agent 연결 관리(`agents:write`) 권한을 확인합니다. 기존 OAuth grant는 자동으로 승격되지 않습니다. |
 | Agent 연결이 표시되지 않음 | MCP client를 새로고침하고 `get_current_agent_context`를 다시 실행합니다. |
 
 연결 설정이나 log에 Token, API Key, 전체 UID를 붙여 넣지 마세요. OAuth 인증 후 Token은 MCP client와 Cloudflare KV가 관리합니다.

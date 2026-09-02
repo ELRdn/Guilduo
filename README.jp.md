@@ -163,7 +163,7 @@ Token、Client ID、UIDは表示しないでください。
 | 接続直後から401になる | 古いOAuth情報が残っています。接続を削除し、同じ`/mcp` URLを新規登録して認可し直します。 |
 | OAuth画面から戻れない | Web版Guilduoと同じAppwriteアカウントでログインしているか確認します。Clientへ戻るcallbackを遮断する拡張機能も一時的に確認します。 |
 | `linked: false`になる | OAuthは成功しています。Relay ForgeのConnectionsでClientをAgentへリンクします。 |
-| `agents:read`の権限エラーになる | 接続を認可し直し、認可画面でAgent読み取り権限を確認します。Agent側ではOAuth権限を追加できません。 |
+| `agents:write`の権限エラーになる | 接続を再認証し、認可画面でAgent接続管理（`agents:write`）を許可します。既存のOAuth grantは自動昇格しません。 |
 | Agentをリンクしたのに反映されない | MCPクライアントを再読込し、`get_current_agent_context`を再実行します。 |
 
 接続設定やログへToken、API Key、完全なUIDを貼らないでください。OAuth認可後のTokenはMCPクライアントとCloudflare KVが管理します。
