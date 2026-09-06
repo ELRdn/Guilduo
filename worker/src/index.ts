@@ -366,20 +366,31 @@ const AGENT_SCOPES = [
   "friends:read", "friends:write", "parties:read", "parties:write",
   "battle:read", "battle:write", "agents:read",
 ];
-const AGENT_OBJECT = {
+const AGENT_PUBLIC_RESPONSE_SCHEMA = {
   type: "object",
+  required: [
+    "uid", "agentId", "displayName", "provider", "role", "instructions", "status", "allowedScopes",
+    "defaultHandoffState", "reviewRequired", "dryRunDefault", "createdAt", "updatedAt", "avatarVersion", "hasCustomAvatar",
+  ],
   properties: {
     uid: { type: "string" }, agentId: { type: "string" }, displayName: { type: "string" }, provider: { type: "string" },
     role: { type: "string" }, instructions: { type: "string" }, status: { type: "string", enum: ["active", "disabled", "archived"] },
     allowedScopes: { type: "array", items: { type: "string", enum: AGENT_SCOPES } },
     defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" },
     createdAt: { type: "string" }, updatedAt: { type: "string" },
+    avatarVersion: { type: "integer", minimum: 0 }, hasCustomAvatar: { type: "boolean" },
   },
   additionalProperties: false,
 };
-const AGENT_LIST_OUTPUT = { type: "object", properties: { agents: { type: "array", items: AGENT_OBJECT } }, additionalProperties: false };
+const AGENT_LIST_OUTPUT = {
+  type: "object",
+  required: ["agents"],
+  properties: { agents: { type: "array", items: AGENT_PUBLIC_RESPONSE_SCHEMA } },
+  additionalProperties: false,
+};
 const AGENT_CONNECTION_OBJECT = {
   type: "object",
+  required: ["clientId", "clientName", "scopes", "firstConnectedAt", "lastUsedAt", "revokedAt"],
   properties: {
     clientId: { type: "string" }, clientName: { type: "string" }, scopes: { type: "array", items: { type: "string" } },
     firstConnectedAt: { type: "string" }, lastUsedAt: { type: "string" }, revokedAt: { type: ["string", "null"] },
@@ -388,10 +399,25 @@ const AGENT_CONNECTION_OBJECT = {
 };
 const AGENT_LINK_OUTPUT = {
   type: "object",
+  required: ["linked", "stale", "agent", "connection"],
   properties: {
     linked: { type: "boolean" }, relinked: { type: "boolean" }, unlinked: { type: "boolean" }, stale: { type: "boolean" },
-    agent: { anyOf: [AGENT_OBJECT, { type: "null" }] },
+    agent: { anyOf: [AGENT_PUBLIC_RESPONSE_SCHEMA, { type: "null" }] },
     connection: { anyOf: [AGENT_CONNECTION_OBJECT, { type: "null" }] },
+  },
+  additionalProperties: false,
+};
+const AGENT_CONTEXT_OUTPUT = {
+  type: "object",
+  required: ["agent", "clientId", "connectionScopes", "agentAllowedScopes", "effectiveExecutionScopes", "effectiveScopes", "linked"],
+  properties: {
+    agent: { anyOf: [AGENT_PUBLIC_RESPONSE_SCHEMA, { type: "null" }] },
+    clientId: { type: ["string", "null"] },
+    connectionScopes: { type: "array", items: { type: "string" } },
+    agentAllowedScopes: { type: "array", items: { type: "string", enum: AGENT_SCOPES } },
+    effectiveExecutionScopes: { type: "array", items: { type: "string" } },
+    effectiveScopes: { type: "array", items: { type: "string" } },
+    linked: { type: "boolean" },
   },
   additionalProperties: false,
 };
@@ -465,7 +491,7 @@ const MCP_TOOLS = [
   { name: "get_review_summary", title: "Get Review Summary", description: "Summarize completed work and activity for one day or a rolling seven-day review window.", inputSchema: { type: "object", properties: { period: { type: "string", enum: ["day", "week"], default: "day" }, anchorDate: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: REVIEW_SUMMARY_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned Guilduo handoffs by lifecycle state.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
   { name: "list_registered_agents", title: "List Registered Agents", description: "List the authenticated user's private Guilduo Agent Registry profiles. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LIST_OUTPUT, annotations: READ_ANNOTATIONS },
-  { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client, the original connection scopes, the Agent policy scopes, and the effective execution scopes. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client, the original connection scopes, the Agent policy scopes, and the effective execution scopes. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_CONTEXT_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_agent_link", title: "Get Agent Link", description: "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "link_agent", title: "Link MCP Connection to Agent", description: "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", required: ["agentId"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } }, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "unlink_agent", title: "Unlink MCP Connection", description: "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
