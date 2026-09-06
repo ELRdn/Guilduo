@@ -95,3 +95,7 @@ npm test
 - `app.guilduo.com/next/relay-forge/`がcompatibility pathとして引き続き開ける
 
 上記のroutingとactive deploymentは本番で確認済みです。今後Siteを更新するときも、同じactive deploymentへdist全体を公開し、host ruleを変更せずに`guilduo.com/`、`app.guilduo.com/`、英語LP、compatibility path、assetsの相対解決を確認します。`www`のapex redirectは別Ruleであり、DNSが有効になるまで`WAITING FOR DNS`として扱います。
+
+## 2026-09-06 LPv2.1 adoption
+
+公式入口`/lp/`・`/lp/en/`の内容をLPv2.1へ変更。Cloudflareのrewrite先、Appwrite Site、Web Appの入口は従来どおり。`/lpv2/`・`/lpv2-1/`はnoindexの比較用URLとして残す。共有する体験コードは`lpv2/`、追加モーションは`lpv2-1/`で管理する。

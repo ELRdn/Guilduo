@@ -103,6 +103,10 @@ export default defineConfig({
         app: resolve(root, "index.html"),
         landingJa: resolve(root, "lp/index.html"),
         landingEn: resolve(root, "lp/en/index.html"),
+        landingV2Ja: resolve(root, "lpv2/index.html"),
+        landingV2En: resolve(root, "lpv2/en/index.html"),
+        landingV21Ja: resolve(root, "lpv2-1/index.html"),
+        landingV21En: resolve(root, "lpv2-1/en/index.html"),
         next: resolve(root, "interaction-lab/index.html"),
         // Relay Forge successor shell. It builds into dist/interaction-lab/
         // relay-forge and is carried to dist/next/relay-forge by the rename in

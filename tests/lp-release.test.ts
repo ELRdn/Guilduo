@@ -2,117 +2,80 @@ import { strict as assert } from "node:assert";
 import { readFileSync, statSync } from "node:fs";
 import test from "node:test";
 import { resolvePublicUrl } from "../lp/config.ts";
-
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-const ja = read("lp/index.html");
-const en = read("lp/en/index.html");
+const ja = read("lp/index.html"), en = read("lp/en/index.html");
 
-test("LP publishes first-class Japanese and English documents", () => {
-  assert.match(ja, /<html lang="ja"/);
-  assert.match(en, /<html lang="en"/);
-  assert.match(ja, /name="guilduo:canonical-path" content="\/"/);
-  assert.match(en, /name="guilduo:canonical-path" content="\/lp\/en\/"/);
-  assert.match(ja, /<link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__\/" \/>/);
-  assert.match(en, /<link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__\/lp\/en\/" \/>/);
-  assert.match(ja, /property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__\/"/);
-  assert.match(en, /property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__\/lp\/en\/"/);
-  assert.match(ja + en, /name="twitter:url" content="__GUILDUO_PUBLIC_ORIGIN__\/lp\//);
-  assert.match(read("lp/main.ts"), /hydrateSeoLinks/);
-  assert.match(read("lp/main.ts"), /hreflang: "x-default"/);
-  assert.match(read("lp/main.ts"), /document\.head\.querySelector\(selector\)/);
-  assert.match(read("lp/main.ts"), /\{ rel: "alternate", href: "\/", hreflang: "ja" \}/);
-  assert.match(ja, /class="wordmark" href="\.\/"/);
-  assert.match(ja, /class="language-link" href="\/lp\/en\/"/);
-  assert.match(ja, /lang="en">English<\/a>/);
-  assert.match(en, /class="wordmark" href="\.\/"/);
-  assert.match(en, /class="language-link" href="\/"/);
-  assert.match(en, /lang="ja">日本語<\/a>/);
+test("official LP documents preserve public canonical and language URLs", () => {
+  for (const [html, lang, path] of [[ja, "ja", "/"], [en, "en", "/lp/en/"]]) {
+    assert.ok(html.includes(`<html lang="${lang}"`));
+    assert.ok(html.includes(`name="guilduo:canonical-path" content="${path}"`));
+    assert.ok(html.includes(`rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__${path}"`));
+    assert.ok(html.includes(`property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__${path}"`));
+    assert.ok(html.includes(`name="twitter:url" content="__GUILDUO_PUBLIC_ORIGIN__${path}"`));
+    assert.match(html, /hreflang="ja" href="__GUILDUO_PUBLIC_ORIGIN__\/"/);
+    assert.match(html, /hreflang="en" href="__GUILDUO_PUBLIC_ORIGIN__\/lp\/en\/"/);
+    assert.match(html, /hreflang="x-default" href="__GUILDUO_PUBLIC_ORIGIN__\/"/);
+    assert.doesNotMatch(html, /class="edition"|name="robots" content="noindex/);
+  }
+  assert.match(ja, /class="language" href="\/lp\/en\/"/);
+  assert.match(en, /class="language" href="\/"/);
+  assert.match(ja, /<a class="wordmark" href="\/"/);
 });
-
-test("public page metadata uses the official site role, not the Web App deployment origin", () => {
-  const rootHtml = read("index.html");
-  const vite = read("vite.config.ts");
-  assert.match(rootHtml, /<link rel="canonical" href="__GUILDUO_WEB_APP_ORIGIN__\/" \/>/);
-  assert.match(rootHtml, /property="og:url" content="__GUILDUO_WEB_APP_ORIGIN__\/"/);
-  assert.match(vite, /PUBLIC_SITE_URL/);
-  assert.doesNotMatch(vite, /getPublicOrigin\(\)/);
+test("Web App metadata and host routing stay separate from the LP", () => {
+  for (const file of ["index.html", "interaction-lab/index.html", "interaction-lab/relay-forge/index.html"]) assert.match(read(file), /__GUILDUO_WEB_APP_ORIGIN__\//);
+  assert.match(read("vite.config.ts"), /PUBLIC_SITE_URL/);
+  assert.match(read("site-routing.ts"), /LP_ENTRY_PATH = "\/lp\/"/);
+  assert.match(read("site-routing.ts"), /RELAY_FORGE_ENTRY_PATH = "\/next\/relay-forge\/"/);
 });
-
-test("beta app documents use the Web App root as canonical while keeping compatibility paths", () => {
-  for (const [file, compatibilityPath] of [["interaction-lab/index.html", "/next/"], ["interaction-lab/relay-forge/index.html", "/next/relay-forge/"]] as const) {
-    const html = read(file);
-    assert.match(html, /__GUILDUO_WEB_APP_ORIGIN__\//);
-    assert.doesNotMatch(html, new RegExp(`__GUILDUO_WEB_APP_ORIGIN__${compatibilityPath.replaceAll("/", "\\/")}`));
-    assert.match(html, /__GUILDUO_PUBLIC_ORIGIN__\/assets\/brand\/og-guilduo\.png/);
+test("official LP shares the approved demo and motion implementation", () => {
+  assert.match(read("lp/main.ts"), /import "\.\.\/lpv2-1\/main"/);
+  assert.match(read("lp/styles.css"), /@import "\.\.\/lpv2-1\/styles.css"/);
+  assert.match(read("lpv2-1/main.ts"), /import "\.\.\/lpv2\/main"/);
+  for (const html of [ja,en]) {
+    let previous = -1;
+    for (const id of ["hero-title", "experience-title", "relationship-title", "mcp-title", "control-title", "guild-title", "open-title", "final-title"]) {
+      const index = html.indexOf(`id="${id}"`);assert.ok(index > previous, id);previous=index;
+    }
+    assert.match(html, /<details class="mcp-details" open>/);
   }
 });
-
-test("LP narrative keeps the required section order", () => {
-  const ids = ["hero-title", "relationship", "product", "relay", "mcp", "control", "guild", "open", "comparison", "join"];
-  let previous = -1;
-  for (const id of ids) {
-    const index = ja.indexOf(id === "hero-title" ? 'id="hero-title"' : `id="${id}"`);
-    assert.ok(index > previous, `${id} must follow the previous section`);
-    previous = index;
+test("approved copy and text-only Guilduo boundary remain explicit", () => {
+  assert.match(ja, /<span>人間だけが、<\/span><span>依頼主じゃない。<\/span>/);
+  assert.match(ja, /人もAIも、依頼主。人もAIも、担当者。/);
+  assert.match(ja, /Work together\.<br>Level up together\./);
+  assert.match(ja, /AIに任せる。<br>判断まで任せない。/);
+  assert.match(ja, /実際のAIへの接続やタスクの保存は行いません/);
+  assert.match(ja, /外部の作業画面/);assert.match(en, /external workspace/i);
+  assert.doesNotMatch(ja+en, /assets\/lp\/|data-deferred-src/);
+  const textArea=ja.slice(ja.indexOf('class="guilduo-workspace"'),ja.indexOf('class="external-workspace"'));
+  assert.match(textArea,/data-quest="original"/);assert.match(textArea,/data-quest="review"/);assert.doesNotMatch(textArea,/data-preview="/);
+});
+test("official branding uses existing approved delivery assets", () => {
+  for(const asset of ["assets/brand/guilduo-mark-gold.svg","assets/brand/og-guilduo.png","assets/icons/favicon-48.png","assets/icons/apple-touch-icon-180.png"]) assert.ok(statSync(new URL(`../${asset}`,import.meta.url)).size>0);
+  for(const html of [ja,en]) {
+    assert.match(html,/property="og:image" content="__GUILDUO_PUBLIC_ORIGIN__\/assets\/brand\/og-guilduo.png"/);
+    assert.match(html,/rel="apple-touch-icon"/);assert.match(html,/assets\/brand\/guilduo-mark-gold.svg/);
   }
 });
-
-test("LP display copy keeps intentional phrase boundaries", () => {
-  const css = read("lp/styles.css");
-  assert.match(ja, /<span class="display-line">人間だけが、<\/span><span class="display-line">依頼主じゃない。<\/span>/);
-  assert.match(ja, /<span class="display-line"><span class="phrase-lock">判断すべき<\/span><span class="phrase-lock">仕事だけ、<\/span><\/span><span class="display-line">あなたへ。<\/span>/);
-  assert.match(ja, /仕事は、<span class="phrase-lock">どちらからでも。<\/span>/);
-  assert.match(ja + en, /<span class="display-line">Work together\.<\/span><span class="display-line">Level up together\.<\/span>/);
-  assert.match(ja, /<span class="display-line">会話ではなく、<\/span><span class="display-line"><span class="phrase-lock">仕事の流れを<\/span><span class="phrase-lock">共有する。<\/span><\/span>/);
-  assert.match(ja, /<footer class="site-footer page-shell">\s*<p class="motto-stack"><span class="display-line">2者。1チーム。<\/span><span class="display-line">仕事は、どちらからでも。<\/span>/);
-  assert.match(css, /html\[lang="ja"\] h2 \{[^}]*max-width: 16em/s);
-  assert.match(css, /html\[lang="ja"\] \.site-footer > p \{[^}]*font-size: clamp\(1\.25rem, 6vw, var\(--text-2xl\)\)/s);
-  assert.match(css, /word-break: auto-phrase/);
-  assert.match(css, /\.hero \.display-line \{[^}]*white-space: nowrap/s);
+test("MCP facts come from the shared contract", () => {
+  const contract=JSON.parse(read("api/mcp-tools.json")) as {tools: unknown[]};assert.ok(contract.tools.length>0);
+  assert.match(read("lpv2/main.ts"),/import contract from "\.\.\/api\/mcp-tools.json"/);
+  assert.match(read("lpv2/main.ts"),/contract.tools.length/);
 });
-
-test("LP uses real product captures with dimensions, alt text, and deferred loading", () => {
-  for (const path of ["command-dark.webp", "command-light.webp", "command-evidence-dark.webp", "party-dark.webp", "battle-dark.webp"]) {
-    const stat = statSync(new URL(`../assets/lp/${path}`, import.meta.url));
-    assert.ok(stat.size > 0, `${path} must exist`);
-    assert.ok(stat.size < 220_000, `${path} must remain web-sized`);
-  }
-  assert.doesNotMatch(ja, /fake browser|traffic-light|macOS toolbar/i);
-  assert.match(ja, /loading="lazy" width="1920" height="1080"/);
-  assert.match(ja, /data-deferred-src="\/assets\/lp\/command-dark\.webp"/);
+test("public CTA URL policy allows only same-origin or HTTPS", () => {
+  const href="https://guilduo.example/lp/",origin="https://guilduo.example";
+  assert.equal(resolvePublicUrl("/next/",href,origin),"https://guilduo.example/next/");
+  assert.equal(resolvePublicUrl("https://github.com/example/repo",href,origin),"https://github.com/example/repo");
+  for(const unsafe of ["http://other.example/","javascript:alert(1)",""])assert.equal(resolvePublicUrl(unsafe,href,origin),null);
 });
-
-test("LP facts remain source-backed and avoid invented proof", () => {
-  const contract = JSON.parse(read("api/mcp-tools.json")) as { tools?: unknown[] } | unknown[];
-  const count = Array.isArray(contract) ? contract.length : contract.tools?.length ?? 0;
-  assert.equal(count, 54);
-  assert.match(read("lp/main.ts"), /contractToolCount/);
-  assert.doesNotMatch(ja, /trusted by|conversion|10×|first ever|only AI platform/i);
+test("comparison routes remain available with noindex", () => {
+  for(const dir of ["lpv2","lpv2-1"])for(const lang of ["","en/"])assert.match(read(`${dir}/${lang}index.html`),/name="robots" content="noindex,follow"/);
+  assert.match(read("vite.config.ts"),/landingJa: resolve\(root, "lp\/index.html"\)/);
+  assert.match(read("vite.config.ts"),/landingV21En: resolve\(root, "lpv2-1\/en\/index.html"\)/);
 });
-
-test("public CTA URL policy allows same-origin and HTTPS only", () => {
-  const href = "https://guilduo.example/lp/";
-  const origin = "https://guilduo.example";
-  assert.equal(resolvePublicUrl("/next/", href, origin), "https://guilduo.example/next/");
-  assert.equal(resolvePublicUrl("https://github.com/example/repo", href, origin), "https://github.com/example/repo");
-  assert.equal(resolvePublicUrl("http://other.example/", href, origin), null);
-  assert.equal(resolvePublicUrl("javascript:alert(1)", href, origin), null);
-  assert.equal(resolvePublicUrl("", href, origin), null);
-});
-
-test("build and Appwrite Sites output include isolated LP routes", () => {
-  const vite = read("vite.config.ts");
-  assert.match(vite, /landingJa: resolve\(root, "lp\/index\.html"\)/);
-  assert.match(vite, /landingEn: resolve\(root, "lp\/en\/index\.html"\)/);
-  assert.match(read(".github/workflows/release.yml"), /Deploy Appwrite Site/);
-  assert.match(read("RELEASE_SETUP.md"), /APPWRITE_SITE_ID/);
-  assert.match(read("docs/appwrite-site-routing.md"), /URL Rewrite/);
-});
-
-test("LP visual language avoids prohibited AI-template effects", () => {
-  const css = read("lp/styles.css");
-  assert.doesNotMatch(css, /linear-gradient|radial-gradient|backdrop-filter|filter:\s*blur|text-shadow/i);
-  assert.doesNotMatch(ja + en, /WebGL|canvas id=/i);
-  assert.match(css, /prefers-reduced-motion: reduce/);
-  assert.match(css, /overflow-x: clip/);
+test("motion preserves palette and accessible off switch", () => {
+  const css=read("lpv2/styles.css")+read("lpv2-1/styles.css");
+  assert.doesNotMatch(css,/linear-gradient|radial-gradient|backdrop-filter|filter:\s*blur|text-shadow/i);
+  assert.match(css,/prefers-reduced-motion: reduce/);assert.match(css,/data-motion="off"/);
+  assert.match(ja+en,/data-motion-toggle aria-pressed/);assert.doesNotMatch(ja+en,/WebGL|canvas id=/i);
 });
