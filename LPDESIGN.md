@@ -1,112 +1,55 @@
 # Guilduo — LPDESIGN.md
 
-> Status: Brand Landing Page Design Direction
+> Version: 2.0 — Interactive Relay Experience
+> Updated: 2026-09-06
+> Status: LP設計方針合意済み。体験シナリオは設計仕様であり、本体の実装完了を示さない。
 > Product: **Guilduo（ギルデュオ）**
 > Category: **Human × AI Work Platform.**
-> Primary implementation owner: Codex Sol
-> Relationship to Product UI: `NEWDESIGNv2.md` is the visual and interaction DNA for the real product. This document defines how that DNA is translated into the public landing page.
+> Scope: 新規LPv2（/lpv2/・/lpv2/en/）。既存LP（/lp/・/lp/en/）を上書きせず並存させる。
 
----
+## 1. このLPで伝えること
 
-## 0. Purpose
+**人間からAIへ仕事を渡せる。AIから人間へも仕事を渡せる。**
 
-This document defines the design, information architecture, narrative, motion, visual system, and implementation constraints for the official Guilduo landing page.
+訪問者がVibeコーディングの小さな共同作業に参加し、「任せる」「頼まれる」「フィードバックが反映される」を体験する。Guilduoが普段のAIと人間の間に入り、テキストのタスクを通じて仕事をつなぐことを理解してもらう。
 
-The landing page is not a miniature version of the Guilduo application.
+従来のLPは説明文と古い製品キャプチャを見る時間が長く、訪問者が参加するきっかけが少なかった。新LPでは、操作に応じて担当・進捗・通知・外部の成果物が変わる体験を中心にする。楽しさは、自分の操作が共同作業に効いている感覚から生む。
 
-Its purpose is to make a new product category understandable within seconds:
+認識 → 参加 → 役割の交代 → 共同達成 → 仕組みの理解 → 利用開始、の順で構成する。
 
-> Humans and AI agents can both originate work, receive work, execute work, hand work off, and review results.
+### 合意した固定条件
 
-The landing page must move the visitor through four stages:
+- 既存の公式コピー、ブランド名、カラーパレットを保持する。
+- 主役はHuman → AgentとAgent → Humanの両方向のタスク。
+- Agentはユーザーが普段使っている外部AIを登録・接続する。固定人格の公式Agentを前提にしない。
+- Guilduoで共有する作業内容・依頼・FBはテキスト。成果物の閲覧・実行は外部の作業画面で行う。
+- LPのプチ体験はログイン不要の体験用データによるデモとする。
+- LP設計・制作を先に進め、本体とSkillsの改善は後続作業にする。
 
-1. **Stop** — create immediate recognition and curiosity.
-2. **Understand** — explain Human ⇄ Agent work coordination.
-3. **Believe** — prove that Guilduo is a real working product.
-4. **Act** — send the visitor to Guilduo or GitHub.
+## 2. ブランドと公式コピー
 
-The landing page should feel like:
+ブランドの正本は[BRAND.md](BRAND.md)。正式表記は **Guilduo**、日本語読みは **ギルデュオ**。GUILDUOはキャンペーン上の大きなタイポグラフィに限る。
 
-**Apple-like clarity + Linear-like product credibility + a small amount of Guilduo playfulness.**
+| 言葉 | 意味 |
+| --- | --- |
+| Guild | 人間・Agent・仲間が集まる共同体 |
+| Duo | Human × AIという関係 |
+| Relay | Actor間で仕事を受け渡すこと |
+| Quest | 仕事の単位 |
 
-It must not look like a generic AI startup template.
+Human → Human、Agent → Agentもブランド概念として維持する。最初の体験では、人とAIの双方向に集中する。
 
----
+### Official Japanese Copy
 
-# 1. Official Brand
+**Hero**
 
-## Brand Name
+人間だけが、依頼主じゃない。
 
-**Guilduo**
+**Philosophy**
 
-Japanese pronunciation:
+人もAIも、依頼主。人もAIも、担当者。
 
-**ギルデュオ**
-
-Logo casing:
-
-**Guilduo**
-
-Large typographic / campaign treatment may use:
-
-**GUILDUO**
-
-Do not use `GUILDUO` as the default wordmark.
-
----
-
-# 2. Brand Architecture
-
-Guilduo uses four core concepts.
-
-## Guild
-
-**Brand concept**
-
-Humans, AI agents, teammates, and services operate inside the same shared working environment.
-
-## Duo
-
-**Relationship**
-
-Human × AI.
-
-Neither side is defined only as requester or worker.
-
-## Relay
-
-**Movement of work**
-
-Work passes between actors.
-
-Examples:
-
-* Human → Human
-* Human → Agent
-* Agent → Human
-* Agent → Agent
-
-## Quest
-
-**Unit of work**
-
-A task or piece of work inside Guilduo is represented as a Quest.
-
----
-
-# 3. Official Japanese Copy
-
-Do not casually rewrite these lines.
-
-## Hero
-
-# 人間だけが、依頼主じゃない。
-
-## Philosophy
-
-### 人もAIも、依頼主。人もAIも、担当者。
-
-## Supporting Copy
+**Supporting Copy**
 
 人からAIへ。AIから人へ。
 
@@ -116,23 +59,21 @@ Codex、AI Agent、チームメンバー、自分自身。
 
 **Human × AI Work Platform.**
 
-## Motto
+**Motto**
 
-### **2者。1チーム。仕事は、どちらからでも。**
+2者。1チーム。仕事は、どちらからでも。
 
----
+### Official English Copy
 
-# 4. Official English Copy
+**Hero**
 
-## Hero
+Humans aren’t the only ones who delegate.
 
-# Humans aren’t the only ones who delegate.
+**Philosophy**
 
-## Philosophy
+Humans and AI can both delegate. Humans and AI can both take ownership.
 
-### Humans and AI can both delegate. Humans and AI can both take ownership.
-
-## Supporting Copy
+**Supporting Copy**
 
 From humans to AI. From AI to humans.
 
@@ -142,1051 +83,256 @@ A platform for delegating work, sharing progress, and reviewing results.
 
 **Human × AI Work Platform.**
 
-## Motto
+**Motto**
 
-### **2 Sides. 1 Team. Work Goes Both Ways.**
+2 Sides. 1 Team. Work Goes Both Ways.
 
----
+### 既存文言の継承
 
-# 5. Localization
+主要CTAは **Join the Guild**、副CTAは **View on GitHub** を保持する。体験開始・再体験・スキップなどの操作ラベルは別に設け、利用開始CTAを置き換えない。
 
-The official landing page launches with:
+既存の見出しも該当する内容とともに保持する。章の移動・統合は可能だが、コピー変更は今回の目的に含めない。
 
-* Japanese
-* English
+- 判断すべき仕事だけ、あなたへ。 / Know what needs you.
+- 仕事は、どちらからでも。
+- MCP-native. / Bring your agents.
+- AIに任せる。判断まで任せない。
+- Work together. Level up together.
+- Your Guild. Your agents. Your stack.
+- 会話ではなく、仕事の流れを共有する。
 
-Both are first-class versions.
+日本語の「会話ではなく、」「仕事の流れを共有する。」「2者。1チーム。」「仕事は、どちらからでも。」などの意味の区切りを維持する。日英の既存実装の文言を実装時に照合し、翻訳や見出しを無断で言い換えない。デモ内の依頼文・進捗・FBは、操作を説明する新規コンテンツとして追加する。
 
-Do not treat Japanese as a literal translation of the English page or English as a literal translation of Japanese.
+## 3. 製品と体験デモの境界
 
-The information architecture and visual hierarchy should remain consistent, but copy may be adapted where necessary to preserve impact.
+この節は演出・レイアウト・モーションの判断より優先する。
 
-Language switching must not cause layout breakage.
+| 表示する場所 | 内容 | 表示ラベル |
+| --- | --- | --- |
+| Guilduoの体験領域 | タスク本文、依頼主、担当、状態、テキストの進捗・確認依頼・FB | Guilduo · 体験デモ |
+| 外部AIの体験領域 | タスク取得、作業、確認依頼の登録、FB取得を示す短い進行表示 | 外部AI · 体験デモ |
+| 外部の作業画面 | 作成された小さなWebページと、FBを反映したプレビュー | 外部の作業画面 · 体験デモ |
 
-Long English strings and Japanese line breaking must both be considered during implementation.
+Guilduoは仕事の受け渡しをつなぐ。コード編集、Webページの実行、画像・成果物のプレビューをGuilduo内の機能として見せない。テキストの完了報告と、外部の成果物が変化することを区別する。
 
----
+外部プレビューはLP内に用意した独立した体験演出である。Guilduoのパネル、タブ、モーダルの内側へ入れない。画面を切り替えた後も外部である表示を維持し、モバイルや静止画でも所属が分かるようにする。
 
-# 6. Primary Audience
+Guilduo風の領域はタスクの受け渡しを説明する簡略化したデモUIとする。本体画面の完全な複製や、存在しない製品機能の再現として扱わない。
 
-Audience priority:
+### MCPとAgentの役割
 
-1. **AI power users / developers**
-2. **Small Human + Agent teams**
-3. **General productivity users**
-4. **Enterprise teams**
+- 外部AIがMCPを使い、Guilduoのタスクを取得・登録・更新する関係を見せる。
+- Guilduoへの割り当てと外部AIの実行開始は別の出来事。割り当てだけで任意のAIが自動起動するような表示にしない。
+- デモでは、タスクを取得して作業する設定の外部AIを例示する。
+- 人へ何を依頼するかは外部AI側の判断・Skills・運用ルールに依存する。MCP接続自体がその判断を提供するように説明しない。
+- 登録Agentの権限と接続の権限から実行可能な操作が決まる関係を維持する。接続しただけで全操作が許されるように見せない。
+- Agentの作業表示は「タスクを取得」「変更内容を報告」などの短い行動要約とする。架空の内部思考を延々と表示しない。
 
-Examples of primary users include people already using:
+## 4. 中心シナリオ — スマホ用メニューを一緒につくる
 
-* Codex
-* Claude
-* Gemini
-* OpenClaw
-* Hermes
-* MCP-compatible agents
+主対象はVibeコーディング、AIへの作業依頼、フィードバックを日常的に行う人。OpenClawのアップデート管理なども利用例として扱えるが、最初の体験では成果が目に見える一つのシナリオに集中する。
 
-The landing page should therefore be understandable to general users while still containing enough technical proof for developers.
+### 状態と操作
 
-Do not turn the Hero into developer documentation.
+以下の状態名はLPデモ内部の識別子であり、本体APIの状態名ではない。実際の契約と結び付ける際は対応を検証する。
 
-Developer credibility appears later in the page.
+| 状態 | 訪問者の操作／出来事 | Guilduoに表示するテキスト | 外部での変化 |
+| --- | --- | --- | --- |
+| intro | 体験を開始する | 「スマホ用メニューをつくる」という依頼の下書き | 未実装の小さなサンプルページ |
+| delegated | AIへ依頼を渡す | 依頼主: あなた、担当: 体験用Agent。依頼の受け渡しを表示 | 外部AIがMCPでタスクを取得する様子 |
+| first_result | 短い処理演出が終わる | Agentから「メニューを実装しました」という進捗報告 | メニューのあるページが表示される |
+| human_task | AIから人への新しいQuestが届く | 依頼主: 体験用Agent、担当: あなた。「実機でメニューの押しやすさを確認してください」 | 外部プレビューを触れる。LPでは操作感の確認を模擬する |
+| feedback | メニューを操作し、FBを選んで送る | 「ボタンを大きくしてください」というテキストのFBを返す | 外部AIがMCP経由でFBを取得する |
+| revised | 外部AIが修正する | 「ボタンを大きくしました。再確認をお願いします」という報告 | 同じ外部ページでボタンが大きくなる |
+| complete | メニューの確認完了を返し、外部AIが確認結果を受け取る | 人の確認タスクを完了。元の依頼にも完了報告が揃う | 確認済みのページと共同達成の短い反応 |
 
----
+分岐は次のとおり。修正した主経路はrevisedからcompleteへ、変更不要の経路はno_changeからcompleteへ進む。
 
-# 7. Core Landing Page Narrative
+| 分岐状態 | 操作と遷移 | Guilduoに表示するテキスト | 外部での表示 |
+| --- | --- | --- | --- |
+| no_change | human_taskで「今のままでよい」を送る。外部AIの受領表示を経てcompleteへ | 「確認しました。このままで問題ありません」という人のFBと、Agentの「確認ありがとうございます。作業を完了します」という報告 | 最初のメニューを維持し、「変更不要・確認済み」と表示。修正演出を行わない |
+| paused | human_taskで「あとで確認」を選ぶ。自動進行を止める | 「あなたの確認待ち」。タスクは未完了のまま保持 | 現在のプレビューを維持し、外部AIは確認待ちと表示 |
+| human_taskへ再開 | pausedで「確認を再開」を選ぶ | 同じ確認タスクを再表示し、FBの選択を有効にする。新しいタスクや到着通知を重複生成しない | 既存のメニューを再び操作できる。AIの実装演出をやり直さない |
 
-The page follows this story:
+AI → Humanでは、AIが依頼主となる独立したタスクが届くことを必ず見せる。「承認ボタンが出た」だけで済ませない。元の依頼と人への確認タスクの関係は短い関連表示で追えるようにする。
 
-```text
-Human and AI are introduced as two actors
-        ↓
-A Quest can move between them
-        ↓
-Either side can originate work
-        ↓
-Guilduo coordinates the Relay
-        ↓
-Real product UI proves this exists
-        ↓
-Human review / Evidence proves control
-        ↓
-MCP proves external agents can participate
-        ↓
-Quest / Guild / Party add identity and fun
-        ↓
-Open Source proves ownership and extensibility
-        ↓
-Join the Guild
-```
+人の確認タスクの完了と元の実装タスクの完了は、デモ内でも別々の出来事として示す。確認だけで実製品のタスクが連鎖的に完了する機能を暗示しない。
 
----
+### 初期実装の操作範囲
 
-# 8. Global Visual Direction
+- 所要時間の設計目標は30〜60秒。デモの目標であり、実際のAIの所要時間の主張ではない。
+- 初期版は依頼文を用意し、FBは選択式にする。自由入力や実AIへの送信は必要としない。
+- 主経路は「ボタンを大きくして」。別の選択として「今のままでよい」を用意し、その場合は修正を捏造せず確認完了へ進む。
+- 確認依頼を「あとで確認」にして保留できる。保留時は人の確認待ちで停止し、共同完了にはしない。
+- スキップ、再開、最初からの再体験を提供する。再体験はLP内のデモ状態だけを初期化する。
+- 操作しない訪問者も、各場面の短い説明から双方向の関係を理解できるようにする。
+- サンプルのメニューは最初からアクセシブルにする。改善の演出のために本当に押せないボタンや不正なフォーカス順を作らない。
 
-Primary visual direction:
+## 5. Agentの見せ方
 
-**Modern SaaS + Slightly Futuristic**
+Guilduoが一律の人格を配るという構図にはしない。名前・役割・利用するAI環境はユーザーが選べるという関係を保つ。
 
-Default theme:
+- LPの標準表示は「あなたのAgent / Your agent」。特定ユーザーの登録名、アバター、タスクを公開デモへ転載しない。
+- 体験用Agentには、仕事の状況が分かる簡潔なリアクションを付ける。
+- 公式マスコット、常設のキャラクター会話、音声、人格選択は初期版の必須要件にしない。
+- Agent名のカスタマイズは将来の任意拡張。初回操作の必須ステップにしない。
+- 外部AIのブランド名・ロゴは、現時点のサポートまたは接続手順を確認できるものに限る。ユーザーの個別登録情報を互換性全体の証明にしない。
 
-**Dark**
+## 6. ページ全体の構成
 
-Theme behavior:
+LPv2では旧版の10セクションを6つのまとまりへ組み直す。既存LPはそのまま保持し、新規ページ内で内容と既存コピーを継承して関連する説明を統合する。
 
-* Dark
-* Light
-* System
+| 順序 | 内容 | 訪問者に残す理解 |
+| --- | --- | --- |
+| 01 Hero | 公式Hero・Philosophy、体験の入口、既存CTA | 人とAIの両方が依頼主になれる |
+| 02 Interactive Relay | 第4節の連続体験。Human → AgentとAgent → Humanを一度ずつ経験 | 自分が任せる側にも頼まれる側にもなる |
+| 03 MCP-native / Bring your agents. | 体験の出来事を振り返り、外部AI・MCP・Guilduoの関係を説明 | 普段のAIと同じ仕事の流れに参加できる |
+| 04 Evidence & Human Control / Guild | テキストの報告・FB・人の判断を説明し、Quest・Party等の協働や継続の楽しさへつなぐ | 人の判断と役割が見える |
+| 05 Why Guilduo / Open Source | 違いの説明、維持できる比較、ライセンス、開発者向け根拠 | 仕事の受け渡しを自分の環境へ組み込める |
+| 06 Final CTA | 公式HeroとMottoを再掲し、Join the Guild / View on GitHubへ | 自分のAgentと使い始める |
 
-System theme should follow user preference.
+「判断すべき仕事だけ、あなたへ。」「仕事は、どちらからでも。」は、人への確認タスクが届く場面と体験の振り返りへ配置する。「Work together. Level up together.」は共同達成とGuildの説明へつなぐ。
 
-Dark is the default presentation for screenshots, campaign visuals, and the first impression unless product requirements dictate otherwise.
+### Heroと体験への入口
 
----
+PCでは公式コピーに隣接して、依頼の下書きと最初の操作が見える体験領域を置く。大きな抽象ノード図だけで画面を使い切らない。開始後も同じ体験領域が続き、別の長い導入を挟まない。
 
-# 9. Product Visual DNA
+Heroの体験開始ボタンと利用開始CTAは目的を分ける。局所的な主操作は「体験を始める / Try the demo」。Join the GuildとView on GitHubはヘッダー・Hero・最終CTAで見つけられるようにする。
 
-The landing page inherits its visual DNA from Guilduo's real product UI.
+スクロールによる強制進行、スクロールの乗っ取り、体験を終えるまで次へ進めない仕組みは使わない。余白は場面の転換に使い、空白だけの画面を続けない。
 
-Important traits:
+### 開発者向けの深掘り
 
-* high information density without visual clutter
-* clear hierarchy
-* restrained semantic colors
-* fine dividers
-* structured surfaces
-* Human / Agent distinction
-* Relay and dependency visualization
-* evidence-based decision surfaces
-* compact geometry
-* intentional typography
-* subtle state-driven motion
+「接続のしくみ / How it connects」は初期表示から開いておき、体験で行った取得・登録・更新とMCPの関係を示す。閲覧者は任意で閉じたり、再び開いたりできる。本文では仕事の意味を説明し、技術的な内容はこの領域に置く。
 
-The landing page may simplify these patterns, but must not replace them with generic AI visual tropes.
+実際のツール名や要求例は現行契約から確認した最小限の例にする。疑似通信を本物の通信ログとして表示しない。ツール数・バージョン・ライセンスは設定または契約から取得し、設計書の古い数値を固定表示しない。
 
----
+比較は「何を共有し、誰が仕事を受け取るか」を中心にする。一般カテゴリにも未検証の断定をしない。製品名を出す比較は公開前に最新の一次情報で確認する。
 
-# 10. Prohibited Visual Language
+## 7. ビジュアルとモーション
 
-Do not use:
+### パレットとタイポグラフィの保持
 
-* generic purple-blue AI gradients
-* glassmorphism as the dominant style
-* neon glow
-* ambient particles
-* giant floating 3D AI spheres
-* meaningless network diagrams
-* excessive rounded cards
-* nested cards
-* giant KPI tiles
-* crypto-style visual language
-* sci-fi HUD imitation
-* monitoring-console imitation
-* permanent glowing borders
-* infinite connector animations
-* text smaller than necessary to create artificial density
+現在のLPは[tokens.css](tokens.css)から[interaction-lab/relay-forge/tokens.css](interaction-lab/relay-forge/tokens.css)を参照する。この継承関係と既存の色の値を保持する。別Surfaceの配色や記憶した色の値に置き換えない。
 
-The page may feel futuristic.
+Human・Agent・Reviewには、それぞれ既存の --color-human・--color-agent・--color-review を使う。背景・文字・境界・CTAも現在の意味トークンを継承する。新しいアクセントカラーは追加しない。
 
-It must not feel like fictional software.
+Darkを初期表示とし、Light / Systemと選択の保存を維持する。フォントも既存の継承を使う。楽しさは色の変更ではなく、構成、操作、反応、タイミングで出す。
 
----
+### 楽しさの具体的な表現
 
-# 11. Hero Section
+| きっかけ | 動き | 伝える意味 |
+| --- | --- | --- |
+| 依頼を渡す | タスクが受け渡され、担当表示が切り替わる | 誰が仕事を持つか変わった |
+| MCPで取得・更新する | 所属の異なる領域の間を短い線やテキストの印が一度移動 | 外部AIとGuilduoがやり取りした |
+| AIから人に依頼が届く | 人の一覧へタスクが入り、短い通知が出る | 今度はあなたが担当者になった |
+| FBを送る | テキストが送信済みになり、外部AI側に取得結果が現れる | 人の意見が作業へ届いた |
+| 修正結果が出る | 外部プレビューの該当ボタンだけが変化 | 自分のFBが成果物へ反映された |
+| 共同完了 | 状態が順に揃い、一度だけ短い達成演出 | 二者で一つの仕事を終えた |
 
-## Objective
+操作直後に反応する。動きの目安は操作反応100〜180ms、受け渡し250〜500ms、場面変化400〜700ms。既存のモーショントークンを優先し、新しい値が必要ならLP内の実装判断として記録する。
 
-The Hero exists to create recognition before explaining features.
+架空の待ち時間を長く置かない。画面外では進行演出を休止し、再表示時には現在の段階が分かるようにする。永続する点滅・発光・粒子・コネクターのループは使わない。音は初期版で必須にしない。
 
-The first impression must communicate:
+従来の「HeroからProduct Proofへの変化だけが主要motion」という制約を、操作に応じた一連のRelay体験へ置き換える。静的な説明セクションの動きは控えめに保つ。
 
-**Human ⇄ Agent**
+紫青の汎用AIグラデーション、強いglassmorphism、巨大な3D球体、過度な角丸カード、SFの監視画面、意味のないノード図は採用しない。既存の境界線、面、タイポグラフィを活かす。
 
-before:
+## 8. PC・スマホ・アクセシビリティ
 
-MCP / Quest / Party / Battle / API / integrations.
+- PCではGuilduoと外部の作業環境を隣接させる。外部AIの進行表示と外部プレビューは同じ外部領域へまとめられる。
+- スマホでは一つの操作領域を読みやすいサイズで見せ、Guilduo／外部の作業画面の切り替えを明示する。細い3列やPC画面の単純縮小はしない。
+- 新しいタスクや更新は通知し、該当画面へ移る操作を提供する。入力中のフォーカスや表示を突然奪わない。
+- プレビュー操作中も「外部の作業画面」の表示を残す。
+- タップ対象は原則44px以上。横はみ出し、CTAの重なり、長い英文による欠けを防ぐ。
+- 日本語・英語を同格で提供し、依頼文・進行表示・通知・ARIA名も翻訳する。
+- ドラッグを必須操作にしない。ネイティブbutton・linkとキーボードで全経路を操作できるようにする。
+- フォーカスを明示し、必要な状態更新をaria-live="polite"等で通知する。装飾の各フレームを読み上げない。
+- 色や動きだけで方向・完了を伝えない。依頼主・担当・状態のテキストを常に持つ。
+- prefers-reduced-motionでは移動・拡縮を停止するが、同じ操作・状態遷移・結果を提供する。動きなしでも双方向の意味が分かるようにする。
+- JavaScriptが利用できない場合も、公式コピー、静的な手順説明、利用開始の導線を残す。
 
----
+## 9. デモの実装境界と性能
 
-## Hero Composition
+- 初期版はブラウザ内の決定的な状態遷移で完結する。本物のAgent接続、OAuth、MCP書き込み、外部AI呼び出しを開始しない。
+- 実ユーザーのタスク・Agent・接続情報を使わず、合成した体験用テキストを使う。入力や操作を実製品へ保存しない。
+- LP内でのみ使う状態・スタイルとして実装し、本体のタスク状態やテーマへ混入させない。
+- 再クリック・連打・戻る・再体験でタスクやタイマーを二重生成しない。再体験時には保留中の演出も解除する。
+- 外部プレビューは固定された安全なサンプルUIとし、任意コードの入力・実行を提供しない。
+- HTML / CSS / SVGと軽量なJavaScriptを優先する。WebGLや大型動画を体験の前提にしない。
+- ファーストビューを先に表示し、体験に必要な処理を遅延初期化できる構成にする。読み込み待ちでもCTAと説明は使えるようにする。
+- プレビューの表示領域を確保し、状態更新による大きなレイアウトの跳ねを抑える。
 
-Primary content:
+## 10. 製品キャプチャ・実装の根拠
 
-**Guilduo**
+古いキャプチャを主役にしたProduct Proofは取りやめる。同じCommand画面を複数の大きなセクションへ繰り返し置かない。補助的な実画面は現在の製品と一致するキャプチャだけを使う。
 
-# 人間だけが、依頼主じゃない。
+- キャプチャ元、取得日、対象バージョン、説明する機能を記録する。
+- 使用場所は[design/ASSET_MANIFEST.md](design/ASSET_MANIFEST.md)で確認する。
+- 古いEvidence previewの画像を、Guilduoが成果物を閲覧・実行できる証拠として使わない。
+- Party / Battle / Rewardは現在の本体で確認した機能だけを補助的に紹介する。LPデモ完了により本体のMPや報酬が得られるように見せない。
+- 簡略デモUIと実製品のキャプチャを区別する。デモだけで現在の製品実装が証明されたとは扱わない。
 
-### 人もAIも、依頼主。人もAIも、担当者。
+## 11. CTA・公開ルート・SEO
 
-**Human × AI Work Platform.**
+Join the GuildとView on GitHubのURLは公開設定から取得する。LP内に実装用の「Runtime Configから設定」等の説明を残さない。URL未設定時は利用できないことを訪問者向けに短く説明し、架空の遷移先を作らない。
 
-### 2者。1チーム。仕事は、どちらからでも。
+新規ソースは /lpv2/・/lpv2/en/ とする。既存の /lp/・/lp/en/、本体の /next/、開発用 /interaction-lab/ は保持する。LPv2への公開ルートの切り替えやリダイレクトは別作業とし、今回自動で行わない。canonical・hreflang・OG画像は公開先の実ルーティングと一致させる。
 
-Primary CTA:
+日英の公式HeroとHuman / AI Agent協働をmetadataへ継承する。主要metadataは静的HTMLへ出力できる構成にし、体験の実行を検索・共有の前提にしない。
 
-**Join the Guild**
+## 12. 現状と後続作業
 
-Secondary CTA:
+| 区分 | 扱い |
+| --- | --- |
+| 現在の製品の境界 | ユーザー確認: Guilduoで渡す依頼・FBはテキスト。成果物確認は外部で行う |
+| 接続・操作の根拠 | 本セッションでAgent Registryと接続コンテキストを読み取り確認済み。書き込みの実行検証はしていない |
+| LPで設計する体験 | Vibeコーディングの依頼、AI起点の確認タスク、テキストFB、外部画面の修正という模擬体験 |
+| 後続の本体改善 | この使い方を実製品で再現するための担当・関連タスク・通知・FB導線の不足を確認し、必要な箇所を改善 |
+| 後続のSkills改善 | 人の判断・実機操作・利用者の感想が必要な場面をAIが見分け、人に適切なQuestを依頼するルールを整備 |
 
-**View on GitHub**
+Skillsでは、何を人へ頼むか、依頼理由、完了条件、回答待ちの停止、FBを受け取った後の再開を定める。今後の設計課題であり、本書の作成をもって本体やSkillsを変更したことにはしない。
 
----
+公開時は各操作を本体・接続先・Skillsのどこが担うか照合する。未実装の流れを載せる場合は、その場面が目指す使い方のデモであると明示し、現在すぐ使える標準機能とは表現しない。
 
-# 12. Hero Brand Visual
+## 13. 受入条件
 
-The Hero visual is not a screenshot.
+### 今回の設計文書
 
-It must be implemented using HTML/CSS/SVG or equivalent web-native elements.
+- 公式コピーとパレットの継承元が明確である。
+- 双方向のタスクに、依頼主・担当・操作・結果が定義されている。
+- Guilduoのテキストと外部の成果物プレビューの境界が全場面で一貫している。
+- LPデモ、現在の製品、後続の本体・Skills改善を区別している。
+- npm run design:checkとgit diff --checkを実行する。文書の合格をLP実装の合格と取り違えない。
 
-Concept:
+### LP実装時の検証
 
-**Quest Loom × Human/Agent Nodes**
+- 日英で、主経路・変更不要・確認保留・再開・スキップ・再体験を操作できる。
+- 320 / 375 / 390 / 414 / 768 / 1024 / 1440 / 1920pxを確認し、代表的なPC・スマホ幅で外部プレビューとタスク本文を目視する。
+- Dark / Light / System、テーマ保存、Reduced Motion、キーボード操作、画面外からの復帰を確認する。
+- 実タスクやAgentの変更、実AIへの呼び出しが発生しないことを通信と状態から確認する。
+- Guilduo内で成果物を確認できるという誤解が生じないか、未見の人に場所と役割を説明してもらう。
+- AIから人への独立したタスクが届いたこと、自分のFBで外部画面が変わったことが理解できるか確認する。
+- 初見の人が数秒でHuman ⇄ Agentの関係を捉えられるか評価する。成功目標であり、未実施のユーザーテストを合格扱いしない。
+- 既存LPのテストと検証ツールを保持し、tests/lpv2-demo.test.tsとtools/verify-lpv2.mtsに独立した状態遷移・ブラウザ検証を追加する。
+- LPv2のCTAは現在の設定URLを検証し、旧 /next/ 固定判定を持ち込まない。ツール数も契約と照合し、古い数値の固定判定へ依存しない。
+- 該当するテスト・型検査・build・デザイン検査・ブラウザ検証を通し、公開サイトの実際のルートとリンクを確認する。
 
-Use a simplified visual language derived from the real product.
+## 14. 関連文書と旧方針からの変更
 
-Elements:
+[DESIGN.md](DESIGN.md)は全体の視覚方針、[BRAND.md](BRAND.md)はブランド、[PROJECT_SPEC.md](PROJECT_SPEC.md)は本体の振る舞い・API契約を扱う。LPの体験と情報構成は本書、LP以外の画面は各Surfaceの設計を参照する。旧版が参照した[NEWDESIGNv2.md](NEWDESIGNv2.md)等を理由に、LPへ古い画面を転載したり、本体のレイアウトを変更したりしない。
 
-* Human node
-* Agent node
-* Quest
-* Relay path
-* dependency / timeline hints
-* restrained grid
-* subtle Guild / tactical-map motif
+| 旧LP方針 | この版での方針 |
+| --- | --- |
+| 実製品の大きなスクリーンショットが中心 | 操作できるRelay体験が中心。実画面は検証済みの補助素材 |
+| 抽象HeroからCommandへスクロール変形 | 依頼・担当交代・FB・外部の変化へ連続する操作体験 |
+| 10セクションを独立して配置 | 既存コピーと内容を6つのまとまりへ統合 |
+| Hero以外の主要motionを制限 | 仕事の受け渡しに伴う意味のあるmotionを各操作で使用 |
+| 本体UIの再描画を一律に避ける | 明示された簡略デモUIを許容。本体機能の誤表示は不可 |
+| Evidence画面を成果物確認の証拠にする | Guilduoのテキスト報告・判断と外部の成果物確認を分離 |
 
-The Hero must not look like a generic node graph.
+既存の文言と色を保持しながら、**自分のAgentと仕事を渡し合う体験**へLPの中心を移す。
 
----
+## 公式LPへの採用
 
-## Hero Motion
-
-A Quest should visibly Relay between Human and Agent.
-
-The Motion communicates meaning.
-
-Example sequence:
-
-```text
-Human
-  │
-  ├──── Quest ───→ Agent
-  │                 │
-  │                 │ work
-  │                 ↓
-  ←──── Review ─────┘
-```
-
-The visual may later demonstrate the opposite direction:
-
-```text
-Agent ─── Quest ───→ Human
-```
-
-Do not animate continuously for decoration.
-
-Motion must pause or settle.
-
-Respect:
-
-`prefers-reduced-motion`.
-
----
-
-# 13. Background Language
-
-Base:
-
-* dark/light product surfaces
-* subtle grid
-* fine dividers
-* restrained depth
-* product-like spacing
-
-Secondary Guild motif may include extremely subtle references to:
-
-* tactical maps
-* guild emblems
-* mission routing
-* connected territories
-* relay paths
-
-These must remain abstract.
-
-Do not turn the landing page into fantasy artwork.
-
----
-
-# 14. Scroll Experience
-
-Most sections use restrained motion.
-
-Allowed:
-
-* fade
-* short translate
-* reveal
-* line drawing
-* state transition
-
-Special scroll-linked animation is reserved primarily for:
-
-**Hero → Relay Concept → Product Proof**
-
-This transition should feel like:
-
-```text
-abstract Guilduo concept
-        ↓
-same visual grammar becomes real software
-```
-
-The visitor should feel that the abstract Human ⇄ Agent model transforms into the real Guilduo Command UI.
-
----
-
-# 15. Section 01 — Hero
-
-Purpose:
-
-Recognition.
-
-Primary message:
-
-# 人間だけが、依頼主じゃない。
-
-Show Human ⇄ Agent.
-
-Do not explain every feature.
-
-CTA:
-
-**Join the Guild**
-
-**View on GitHub**
-
----
-
-# 16. Section 02 — The New Work Relationship
-
-Primary message:
-
-# 人もAIも、依頼主。
-
-# 人もAIも、担当者。
-
-Show the four supported relationship directions as a conceptual model:
-
-```text
-Human → Human
-Human → Agent
-Agent → Human
-Agent → Agent
-```
-
-The section should visually emphasize:
-
-**ANY ACTOR → ANY ACTOR**
-
-without necessarily using that exact phrase publicly.
-
----
-
-## Human Agency
-
-Agent → Human does not mean automatic control over the human.
-
-When a Quest is relayed from an Agent to a Human, the Human may:
-
-* accept
-* decline
-* review
-* request changes where applicable
-
-Preferred framing:
-
-> **AIから人へQuestをRelayできる。**
-
-Do not claim that Guilduo automatically allows AI systems to employ, command, or legally hire humans.
-
----
-
-# 17. Section 03 — Product Proof / Command
-
-This is the first major real product screenshot section.
-
-Use the real Guilduo Command UI as the visual source of truth.
-
-Preferred presentation:
-
-* very large screenshot
-* high-resolution
-* minimal decorative frame
-* no fake browser chrome unless useful
-* no perspective distortion that harms readability
-
-Screenshot / recording is the source of truth.
-
-Do not redraw the full production UI as fake LP-only HTML unless there is a specific need.
-
----
-
-## Product Narrative
-
-Suggested headline:
-
-# 判断すべき仕事だけ、あなたへ。
-
-Possible English:
-
-# Know what needs you.
-
-Show how the user can understand:
-
-* which Quest needs attention
-* where the Relay stopped
-* who owns the work
-* what Evidence exists
-* why Human judgment is required
-* what action comes next
-
-Explain product concepts such as:
-
-* Attention Shelf
-* Quest Loom
-* Responsibility Relay
-* Evidence
-* Intervention Lens
-* Decision
-
-Do not turn the section into a feature checklist.
-
-Show the workflow.
-
----
-
-# 18. Section 04 — Relay
-
-Primary message:
-
-# 仕事は、どちらからでも。
-
-Visualize the movement of work.
-
-Human → Agent is not special-cased as the only valid direction.
-
-Show:
-
-* Human → Agent
-* Agent → Human
-* Agent → Agent
-* Human → Human
-
-Use actor identity and Relay lines.
-
-Prefer a continuous visual explanation over four disconnected cards.
-
----
-
-# 19. Section 05 — Developer / MCP-native
-
-This section targets developers without making the entire landing page developer-first.
-
-Primary headline direction:
-
-# MCP-native.
-
-Supporting direction:
-
-# Bring your agents.
-
-Show that existing AI environments can participate in the Guild.
-
-Examples may include supported or documented integrations such as:
-
-* Codex
-* Claude
-* Gemini
-* OpenClaw
-* Hermes
-
-Only show integrations that are actually supported or documented at publication time.
-
----
-
-## Numbers
-
-Numbers may be used only when they represent real, currently verified product facts.
-
-Examples:
-
-**51 MCP tools**
-
-Other numerical claims must be verified before publication.
-
-Do not invent impressive numbers.
-
-Do not hardcode a number into the design in a way that makes future updates difficult.
-
-Numbers should come from a configurable content source where practical.
-
----
-
-## Developer Proof
-
-Possible elements:
-
-* MCP
-* REST / OpenAPI
-* CLI
-* Agent Registry
-* Remote MCP
-* Open Source
-
-This section may become visually denser than the Hero.
-
-It should still remain readable.
-
----
-
-# 20. Section 06 — Evidence & Human Control
-
-Primary direction:
-
-# AIに任せる。
-
-# 判断まで任せない。
-
-This section explains that Agent collaboration does not require blind autonomy.
-
-Show concepts such as:
-
-* Evidence
-* Review
-* Handoff
-* Dry-run
-* Permission
-* Conflict detection
-* Human decision
-
-This section is important for trust.
-
-Avoid fear-driven safety messaging.
-
-The tone should be:
-
-**capable, transparent, controllable.**
-
----
-
-# 21. Section 07 — Guild / Quest / Party
-
-This section introduces the RPG / motivation layer.
-
-Primary direction:
-
-# Work together. Level up together.
-
-Show real product UI for:
-
-* Quest
-* Guild
-* Party
-* Battle
-* MP / rewards where applicable
-
-This section may be more playful.
-
-However:
-
-RPG is not positioned as the core technical identity of Guilduo.
-
-It is the layer that makes coordination more human, motivating, and memorable.
-
----
-
-# 22. Official Character / Mascot
-
-Status:
-
-**TBD**
-
-Do not design the Hero around a mascot that has not been formally selected.
-
-The landing page architecture should leave room for:
-
-* official Guilduo Agent
-* official mascot
-* user-created Agent
-* character-driven reminder experiences
-
-Character personality may later affect reminder / notification tone.
-
-The current LP must remain valid even without an official character.
-
----
-
-# 23. Section 08 — Open Source
-
-Primary direction:
-
-# Your Guild. Your agents. Your stack.
-
-Show:
-
-* GitHub
-* Open Source
-* MCP
-* API
-* extensibility
-* self-controlled workflows where applicable
-
-Do not imply deployment options that the current project does not yet support.
-
-License and current technical status should come from the repository source of truth.
-
----
-
-# 24. Section 09 — Competitor Comparison
-
-A competitor comparison section is required.
-
-Its purpose is not to insult competitors.
-
-Its purpose is to explain Guilduo's category.
-
-Recommended structure:
-
-| Capability                  | Traditional Task Manager | AI Chat / Copilot | Guilduo    |
-| --------------------------- | ------------------------ | ----------------- | ---------- |
-| Humans as actors            | ✓                        | limited           | ✓          |
-| AI Agents as actors         | limited                  | ✓                 | ✓          |
-| Human → Agent work          | limited                  | ✓                 | ✓          |
-| Agent → Human work          | — / varies               | — / varies        | ✓          |
-| Human review                | varies                   | varies            | ✓          |
-| Relay / handoff model       | varies                   | limited           | ✓          |
-| External Agent connectivity | varies                   | varies            | MCP-native |
-| Quest / Party layer         | —                        | —                 | ✓          |
-
-This table is a design placeholder.
-
-Before publication, every factual comparison must be verified against current competitor behavior.
-
-Named competitor comparisons require fresh research immediately before launch.
-
-Do not publish stale or unverified claims.
-
-If a factual named comparison cannot be maintained safely, use category-based comparison instead.
-
----
-
-# 25. Competitor Comparison Tone
-
-Do not use:
-
-* "Everyone else is broken"
-* "The only AI platform"
-* "First ever"
-* "No competitor can..."
-* unsupported superiority claims
-
-Prefer:
-
-> Traditional task tools were designed primarily around human teams.
-
-> AI assistants were designed primarily around user → AI interaction.
-
-> Guilduo is designed around work moving between both.
-
-The comparison should clarify architecture, not manufacture drama.
-
----
-
-# 26. Section 10 — Final CTA
-
-Return to a quieter visual environment.
-
-Reuse the Hero concept.
-
-Primary:
-
-# 人間だけが、依頼主じゃない。
-
-Supporting:
-
-### 2者。1チーム。
-
-### 仕事は、どちらからでも。
-
-CTA:
-
-# **Join the Guild**
-
-Secondary:
-
-**View on GitHub**
-
-The page should end where the idea began.
-
----
-
-# 27. CTA Rules
-
-Primary CTA:
-
-**Join the Guild**
-
-Use consistently.
-
-Do not alternate between:
-
-* Start Now
-* Try Free
-* Get Started
-* Join
-* Launch App
-
-without a specific reason.
-
-Secondary CTA:
-
-**View on GitHub**
-
-CTA URLs must be configurable.
-
----
-
-# 28. Screenshot / Recording Rules
-
-Real UI Screenshot / Recording is the product proof source of truth.
-
-Requirements:
-
-* use production-quality fixture data
-* no personal data
-* no credentials
-* no secrets
-* no broken states unless demonstrating those states
-* consistent viewport
-* high resolution
-* Dark default
-* Light variant where relevant
-
-Do not fake product capabilities for marketing visuals.
-
-LP recordings may use deterministic demo data.
-
----
-
-# 29. Theme Behavior
-
-Supported:
-
-* Dark
-* Light
-* System
-
-Default brand presentation:
-
-**Dark**
-
-If no persisted or system preference is available, Dark may be used as the Guilduo marketing default.
-
-Theme transitions must be subtle.
-
-Do not animate the entire page aggressively when changing theme.
-
----
-
-# 30. Typography
-
-Typography should feel:
-
-* modern
-* confident
-* technical
-* readable
-* slightly distinctive
-
-Hero type may be significantly larger than Product UI typography.
-
-Body copy must remain comfortable in both Japanese and English.
-
-Avoid extremely condensed display fonts for Japanese.
-
-Do not add external fonts casually if repository policy disallows them.
-
----
-
-# 31. Motion Principles
-
-Motion exists to explain:
-
-* Relay
-* ownership
-* transition
-* handoff
-* selection
-* transformation from concept → product
-
-Motion does not exist merely to make the page feel expensive.
-
-Preferred durations:
-
-* micro interaction: ~100–180ms
-* small reveal: ~180–300ms
-* major section transition: ~300–700ms where appropriate
-* Hero scroll-linked sequence may be longer because it follows user scroll
-
-Avoid:
-
-* continuous floating
-* infinite pulsing
-* random parallax
-* constant decorative motion
-* motion necessary to understand static content
-
-Respect reduced motion.
-
----
-
-# 32. Creative Freedom for Codex Sol
-
-Target balance:
-
-**70% fixed direction / 30% creative freedom**
-
-## Fixed
-
-Sol must preserve:
-
-* section narrative
-* official copy
-* brand hierarchy
-* Human ⇄ Agent concept
-* Guild / Duo / Relay / Quest language
-* CTA
-* real Product UI
-* Product Visual DNA
-* theme requirements
-* comparison section
-* prohibited styles
-
-## Sol may decide
-
-* exact Hero composition
-* typography scale
-* spacing rhythm
-* exact animation timing
-* section pacing
-* abstract Guild motif
-* visual transitions
-* Product screenshot framing
-* local responsive composition
-
-Sol should improve the execution, not redefine the brand.
-
----
-
-# 33. Responsive Design
-
-The landing page must work at minimum across:
-
-* desktop
-* laptop
-* tablet
-* mobile
-
-Do not create a desktop-only cinematic experience.
-
-On mobile:
-
-* Human ⇄ Agent concept must remain understandable
-* Hero copy remains dominant
-* Relay animation may simplify
-* Product screenshot may become horizontally contained or selectively cropped
-* comparison tables may transform into structured rows/cards
-* CTA remains visible and accessible
-* no horizontal page overflow
-
-Do not simply scale desktop artwork down.
-
----
-
-# 34. Accessibility
-
-Required:
-
-* semantic HTML
-* keyboard navigation
-* visible focus states
-* sufficient contrast
-* reduced motion
-* alt text for meaningful product imagery
-* accessible language switcher
-* accessible theme control
-* buttons and links have clear names
-* decorative graphics hidden appropriately from screen readers
-
-Animation must never be the only way to communicate Relay direction.
-
----
-
-# 35. Performance
-
-Avoid turning the Guilduo marketing page into a heavy showcase.
-
-Prefer:
-
-* HTML
-* CSS
-* SVG
-* lightweight JavaScript
-
-Use heavier rendering only when it provides meaningful value.
-
-Hero abstract visual should not require a large WebGL scene.
-
-Real product videos should use optimized loading and poster images.
-
-Above-the-fold content should remain fast.
-
----
-
-# 36. SEO / Metadata
-
-Use Guilduo consistently.
-
-Primary category language:
-
-**Human × AI Work Platform**
-
-Japanese metadata should communicate Human / AI Agent collaboration without relying only on RPG terminology.
-
-English metadata should include relevant concepts such as:
-
-* AI agents
-* human-AI collaboration
-* work coordination
-* MCP
-* task management
-
-Do not keyword-stuff.
-
----
-
-# 37. Brand Do / Don't
-
-## Do
-
-* show Human and Agent as actors
-* show work moving between them
-* use real product proof
-* use Quest / Guild / Party intentionally
-* make technical credibility visible
-* use actual numbers
-* emphasize Human agency
-* keep UI and LP visually related
-
-## Don't
-
-* reduce Guilduo to "AI Todo"
-* reduce Guilduo to "Habitica with AI"
-* imply AI automatically controls humans
-* make RPG the entire brand
-* make the Hero a feature grid
-* invent integration support
-* invent metrics
-* use fake UI
-* use generic AI gradients
-* turn every section into cards
-
----
-
-# 38. Final Landing Page Order
-
-```text
-01 Hero
-   ↓
-02 Human ⇄ Agent / New Work Relationship
-   ↓
-03 Command Product Proof
-   ↓
-04 Relay
-   ↓
-05 MCP-native / Developer
-   ↓
-06 Evidence & Human Control
-   ↓
-07 Guild / Quest / Party / Battle
-   ↓
-08 Open Source
-   ↓
-09 Competitor Comparison
-   ↓
-10 Final CTA
-```
-
-The exact placement of Open Source and Comparison may be swapped by Sol if the narrative improves, but Hero → Relationship → Product Proof must remain intact.
-
----
-
-# 39. Relationship to Product Design
-
-`NEWDESIGNv2.md` remains the source of truth for the real Guilduo Web UI.
-
-This document does not authorize Sol to redesign the product itself.
-
-Landing-page abstractions may borrow from:
-
-* Quest Loom
-* Relay
-* Actor identity
-* Evidence
-* Intervention
-* dependency lines
-* tactical spatial organization
-
-But they must remain abstractions.
-
-Real Product UI shown on the LP must come from the real application.
-
----
-
-# 40. Success Criteria
-
-A visitor who has never heard of Guilduo should understand within approximately five seconds that:
-
-1. Guilduo involves Humans and AI Agents.
-2. Work can move between them.
-3. Guilduo is not merely an AI chat interface.
-
-After scrolling through Product Proof, they should understand that:
-
-4. Guilduo manages real Quest ownership and Relay.
-5. Humans retain review and decision control.
-6. External agents can connect through technologies such as MCP.
-7. Quest / Guild / Party add a distinctive experience layer.
-8. Guilduo is a real product, not only a concept.
-
-The final desired reaction is:
-
-> **「AI付きTodoじゃなくて、人とAIが同じ仕事の流れに入るためのプラットフォームなんだ。」**
-
-If that is not clear, the LP has failed regardless of visual polish.
-
----
-
-# 41. Final Creative Principle
-
-The landing page should not explain the future with science-fiction imagery.
-
-It should show that the future already works.
-
-**Human ⇄ Agent**
-
-becomes:
-
-**Guild → Relay → Quest → Review**
-
-and ends with:
-
-# **Join the Guild.**
+2026-09-06: LPv2.1を公式LPへ採用。`/lp/`と`/lp/en/`は`lpv2-1`のスタイル・モーションと`lpv2`の体験ロジックを共有する。公式日本語URLは`https://guilduo.com/`、英語は`https://guilduo.com/lp/en/`。比較用URLはnoindexで保持し、本体・MCP・host rewriteは変更しない。

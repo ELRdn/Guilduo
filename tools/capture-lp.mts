@@ -34,17 +34,17 @@ try {
       reducedMotion: frame.reduced ? "reduce" : "no-preference",
       deviceScaleFactor: 1,
     });
-    await context.addInitScript((theme) => localStorage.setItem("guilduo-lp-theme", theme), frame.theme);
+    await context.addInitScript((theme) => localStorage.setItem("guilduo-lpv2-theme", theme), frame.theme);
     const page = await context.newPage();
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
     await page.goto(`${baseUrl}${frame.path}`, { waitUntil: "networkidle" });
-    await page.waitForSelector(".hero-loom");
+    await page.waitForSelector("[data-relay-stage]");
     if (frame.id === "ja-390-dark" || frame.id === "ja-1440-dark" || frame.id === "ja-1920-dark") {
       await page.screenshot({ path: join(outputDir, `${frame.id}-hero.png`), fullPage: false });
     }
-    for (const selector of ["#relationship", "#product", "#control", "#guild", "#comparison", "#join"]) {
+    for (const selector of [".relationship", "#experience", ".control-section", ".guild-section", ".open-section", ".final-cta"]) {
       await page.locator(selector).scrollIntoViewIfNeeded();
       await page.waitForTimeout(80);
     }
@@ -65,10 +65,10 @@ try {
     await page.screenshot({ path: join(outputDir, `${frame.id}.png`), fullPage: true });
     if (frame.id === "ja-1920-dark") {
       for (const [name, selector] of [
-        ["command-heading", "#product .section-heading"],
-        ["relay-heading", "#relay .section-heading"],
-        ["guild-heading", "#guild .section-heading"],
-        ["comparison-heading", "#comparison .section-heading"],
+        ["command-heading", ".experience-heading"],
+        ["relay-heading", ".relationship h2"],
+        ["guild-heading", ".guild-section h2"],
+        ["comparison-heading", ".open-section h2"],
         ["footer", ".site-footer"],
       ] as const) {
         await page.locator(selector).screenshot({ path: join(outputDir, `${frame.id}-${name}.png`) });

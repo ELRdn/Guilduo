@@ -99,3 +99,7 @@ LP用captureは決定的fixtureだけを使い、個人情報、認証情報、�
 3. 透過、縦横比、暗部の視認性を確認する。
 4. 9言語UI、Dark mode、Reduced Motionで表示を確認する。
 5. Golden Referenceに影響する場合は変更理由を記録する。
+
+## Interactive LP variants
+
+公式`/lp/`・`/lp/en/`、比較版`/lpv2/`・`/lpv2-1/`と各英語版は、承認済み`assets/brand/guilduo-mark-gold.svg`をヘッダー、Hero、体験、MCP図、フッターで使用できる。透過と縦横比を維持する。比較版用`assets/brand/guilduo-favicon-48.png`は、既存`assets/icons/favicon-48.png`の未改変コピー。公式LPは既存のfavicon、Apple touch、OG素材を継続使用する。

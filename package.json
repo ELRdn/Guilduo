@@ -38,7 +38,9 @@
     "typecheck:battle": "tsc -p tsconfig.battle.json --noEmit",
     "typecheck:refresh": "npm run generate-types && tsc -b",
     "typecheck:watch": "tsc -b --watch",
-    "generate-types": "wrangler types"
+    "generate-types": "wrangler types",
+    "lpv2:verify": "tsx tools/verify-lpv2.mts",
+    "lpv21:verify": "tsx tools/verify-lpv21.mts"
   },
   "bin": {
     "questforge": "cli/questforge.ts"
