@@ -18,6 +18,7 @@
  */
 
 import type { HandoffState, Quest } from "../../types/questforge.ts";
+import { relayText } from "./relay-copy.ts";
 import { explainFailure, type HandoffOutcome, type HandoffPort, runHandoff } from "./adapter.ts";
 
 export type DecisionKind = "approve" | "revise";
@@ -25,7 +26,7 @@ export type DecisionKind = "approve" | "revise";
 export type DecisionPhase = "idle" | "submitting" | "succeeded" | "failed";
 
 export interface DecisionGate {
-  /** True when the reviewer has opened the Primary Evidence preview. */
+  /** Explicit human check of the external work. Opening a preview never sets this. */
   readonly evidenceReviewed: boolean;
   readonly writeLocked: boolean;
   readonly permissionMissing: string | null;
@@ -68,7 +69,7 @@ export function blockingReason(gate: DecisionGate, phase: DecisionPhase): string
   if (gate.conflict !== null) return gate.conflict;
   if (gate.writeLocked) return "再接続まで書き込みは保留中です";
   if (phase === "submitting") return "送信中です";
-  if (!gate.evidenceReviewed) return "Evidence を確認してから承認できます";
+  if (!gate.evidenceReviewed) return relayText("checked");
   return null;
 }
 

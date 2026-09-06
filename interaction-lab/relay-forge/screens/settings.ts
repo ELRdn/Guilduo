@@ -17,6 +17,7 @@
 
 import { actorAvatar } from "../primitives/avatar.ts";
 import { el } from "../primitives/dom.ts";
+import { relayOnboarding, relayPreferences } from "./relay-onboarding.ts";
 import type { ThemePreference } from "../theme.ts";
 import {
   type SettingsAgentRow,
@@ -255,6 +256,7 @@ function appearanceRegion(model: SettingsModel, callbacks: SettingsCallbacks): H
       "div",
       { class: "rf-set-appearance" },
       themeControl(model, callbacks),
+      relayPreferences(),
       el(
         "p",
         { class: "rf-set-theme-status" },
@@ -427,6 +429,7 @@ function mcpRegion(model: SettingsModel, state: SettingsState, context: ScreenCo
     el(
       "div",
       { class: "rf-set-mcp" },
+      relayOnboarding(model, callbacks),
       el(
         "div",
         { class: "rf-set-mcp-row" },

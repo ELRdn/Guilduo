@@ -58,11 +58,19 @@ export function initialSettingsState(): SettingsState {
 }
 
 export interface SettingsAgentRow {
+  readonly allowedScopes?: readonly string[];
   readonly agentId: string;
   readonly displayName: string;
   readonly provider: string;
   readonly role: string;
   readonly status: string;
+}
+
+/** Execution scopes and the OAuth connection grant are separate capabilities. */
+export function effectiveConnectionScopes(model: Pick<SettingsModel, "agents">, row: SettingsMcpConnectionRow): readonly string[] {
+  if (!row.authorized || row.revokedAt || row.linkRevokedAt || !row.linkedAgentId) return [];
+  const agent = model.agents.find((item) => item.agentId === row.linkedAgentId && item.status === "active");
+  return agent ? row.scopes.filter((scope) => agent.allowedScopes?.includes(scope)) : [];
 }
 
 export interface SettingsMcpConnectionRow {

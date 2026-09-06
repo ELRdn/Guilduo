@@ -21,6 +21,8 @@ import {
 } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el } from "./dom.ts";
+import { externalCheck } from "./external-check.ts";
+import { relayText } from "../relay-copy.ts";
 import type { QuestActionId, QuestActionState } from "../quest-actions.ts";
 
 export type LensState = "closed" | "peek" | "open" | "pinned";
@@ -32,6 +34,8 @@ export interface LensContent {
 }
 
 export interface LensOptions {
+  readonly externalChecked?: boolean;
+  readonly onExternalChecked?: (value: boolean) => void;
   readonly state: LensState;
   readonly writeLocked: boolean;
   /** `null` when the decision may run; otherwise the reason it may not. */
@@ -214,7 +218,7 @@ export function interventionLens(
     {
       type: "button",
       class: "rf-revision-submit",
-      disabled: options.submitting ? true : null,
+      disabled: options.submitting || blockedReason !== null ? true : null,
       "aria-busy": options.submitting ? "true" : null,
     },
     options.submitting ? "送信中…" : "Send revision request",
@@ -241,7 +245,7 @@ export function interventionLens(
   );
 
   const taskLabels: Readonly<Record<QuestActionId, string>> = {
-    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive",
+    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive", reply: relayText("inbox"),
   };
   const taskFooter = el(
     "footer",
@@ -329,6 +333,7 @@ export function interventionLens(
         el("span", { class: "rf-decision-info", "aria-hidden": "true" }),
       ),
       el("p", { class: "rf-decision-status" }, view.decision.statusLabel),
+      externalCheck(options.externalChecked === true, options.submitting || options.writeLocked, options.onExternalChecked),
       // Verification summary only appears when a real Evidence result says so.
       blockedReason === null && options.verification !== null
         ? el("p", { class: "rf-decision-verified" }, options.verification)

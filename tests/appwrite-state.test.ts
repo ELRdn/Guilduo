@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { createQuest } from "../server/questforge-domain.ts";
+import { writeState } from "../worker/src/appwrite-store.ts";
 import type { QuestForgeState } from "../types/questforge.ts";
 import { asQuestForgeState, json, required, type TestContext } from "./test-helpers.ts";
 import type { WorkerEnv } from "../worker/src/worker-types.ts";
@@ -49,6 +52,22 @@ function initialState(): QuestForgeState {
 
 function response(value: unknown, status: number): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
+}
+
+function largeState(): QuestForgeState {
+  const state = initialState();
+  state.tasks[0].lastCompletedDate = "";
+  state.tasks[0].lastRolledOverDate = "";
+  // Synthetic migration history must survive as Quest data grows beyond 60,000 encoded characters.
+  const history = Array.from({ length: 2400 }, (_, index) => createHash("sha256").update(`state-history-${index}`).digest("hex")).join("");
+  state.migrationSnapshots = { schema6To7: { schemaVersion: 6, tasks: [], history } };
+  state.taskEvents.push({ id: "retained-event", type: "test-history", text: "Keep this event" });
+  state.rewardClaims = { "retained-claim": "2026-08-30" };
+  return state;
+}
+
+function compressedState(state: QuestForgeState): string {
+  return `gzip:${gzipSync(JSON.stringify(state)).toString("base64")}`;
 }
 
 class FakeAppwriteStateApi {
@@ -186,7 +205,8 @@ test("existing state read and Start Quest PATCH persist through Appwrite transac
 });
 
 test("Appwrite state write failure maps to generic 500 and logs only sanitized downstream metadata", async () => {
-  const api = new FakeAppwriteStateApi(initialState());
+  const state = largeState();
+  const api = new FakeAppwriteStateApi(state);
   api.failStage = true;
   const logs: unknown[][] = [];
   const originalError = console.error;
@@ -221,4 +241,57 @@ test("Appwrite state write failure maps to generic 500 and logs only sanitized d
   const persisted = (await api.persistedState()).tasks[0];
   assert.equal(persisted.assignee.handoffState, "none");
   assert.equal(api.row.revision, 4);
+  assert.deepEqual(await api.persistedState(), state);
+});
+
+for (const encoding of ["json", "gzip"] as const) {
+  test(`large ${encoding} state accepts a new Quest and subsequent edit without discarding retained data`, async () => {
+    const state = largeState();
+    const encoded = compressedState(state);
+    assert.ok(encoded.length > 60_000, "fixture must exceed the obsolete string-column limit");
+    const api = new FakeAppwriteStateApi(state);
+    if (encoding === "gzip") api.row.stateJson = encoded;
+
+    const result = await withFakeAppwrite(api, async () => {
+      const worker = (await import("../worker/src/index.ts")).default;
+      const pending: Promise<unknown>[] = [];
+      const created = await worker.fetch(new Request("http://worker.test/v1/quests", {
+        method: "POST",
+        headers: { authorization: "Bearer state-test-token", "content-type": "application/json" },
+        body: JSON.stringify({ kind: "todo", title: "Capacity regression child", parentQuestId: state.tasks[0].id, planningState: "backlog" }),
+      }), env, context(pending));
+      await Promise.allSettled(pending);
+      return created;
+    });
+    assert.equal(result.status, 201);
+    const { quest } = await json<{ quest: { id: string } }>(result);
+    const updated = await patchQuest(api, { notes: "Saved after creating the child" }, quest.id);
+    assert.equal(updated.status, 200);
+
+    const persisted = await api.persistedState();
+    assert.equal(persisted.tasks.length, state.tasks.length + 1);
+    assert.deepEqual(persisted.tasks.filter((item) => item.id !== quest.id), state.tasks);
+    const child = required(persisted.tasks.find((item) => item.id === quest.id));
+    assert.equal(child.parentQuestId, state.tasks[0].id);
+    assert.equal(child.notes, "Saved after creating the child");
+    for (const key of ["migrationSnapshots", "rewardClaims", "character", "battle", "boss"] as const) {
+      assert.deepEqual(persisted[key], state[key], `${key} must survive both saves`);
+    }
+    for (const event of state.taskEvents) assert.ok(persisted.taskEvents.some((item) => JSON.stringify(item) === JSON.stringify(event)));
+    assert.ok(String(api.row.stateJson).startsWith("gzip:"));
+    assert.ok(String(api.row.stateJson).length > 60_000);
+    assert.equal(api.row.revision, 6);
+  });
+}
+
+test("large state still rejects a stale revision without overwriting the stored row", async () => {
+  const state = largeState();
+  const api = new FakeAppwriteStateApi(state);
+  api.row.stateJson = compressedState(state);
+  const before = structuredClone(api.row);
+  const saved = await withFakeAppwrite(api, () => writeState(env, "owner-1", { state }, "3"));
+  assert.equal(saved, false);
+  assert.deepEqual(api.row, before);
+  assert.ok(api.requests.some((request) => request.method === "DELETE" && request.url.endsWith("/transactions/tx-1")));
+  assert.equal(api.requests.some((request) => request.method === "PATCH"), false);
 });

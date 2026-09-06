@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+import { Validator } from "@cfworker/json-schema";
 import { getKv, sha256 } from "../worker/src/security.ts";
 import type { AuthIdentity } from "../worker/src/security.ts";
 import type { D1DatabaseLike, D1StatementLike, WorkerEnv } from "../worker/src/worker-types.ts";
@@ -40,12 +41,25 @@ async function seedOAuthConnection(clientId: string, scopes: string[], token = `
 }
 
 async function mcpOAuthCall(token: string, name: string, args: Record<string, unknown> = {}): Promise<Response> {
+  return mcpOAuthRequest(token, "tools/call", { name, arguments: args });
+}
+
+async function mcpOAuthRequest(token: string, method: string, params: Record<string, unknown> = {}): Promise<Response> {
   const worker = (await import("../worker/src/index.ts")).default;
   return worker.fetch(new Request("http://worker.test/mcp", {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, origin: "http://localhost:5173", "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method: "tools/call", params: { name, arguments: args } }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
   }), env, context);
+}
+
+type McpToolContract = { name: string; outputSchema?: Record<string, unknown> };
+type McpToolResult = { result: { isError?: boolean; structuredContent: unknown } };
+
+function assertMatchesDeclaredOutput(tool: McpToolContract, response: McpToolResult): void {
+  if (!tool.outputSchema) throw new Error(`${tool.name} must declare an outputSchema`);
+  const validation = new Validator(tool.outputSchema).validate(response.result.structuredContent);
+  assert.equal(validation.valid, true, `${tool.name} structuredContent must match outputSchema: ${JSON.stringify(validation.errors)}`);
 }
 
 const WEBP_MAGIC = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0, 0, 0, 0]);
@@ -87,6 +101,89 @@ test("MCP Agent link tools persist, authorize, unlink, and relink the current OA
   assert.equal(unlinked.result.structuredContent.unlinked, true);
   assert.equal(unlinked.result.structuredContent.agent?.agentId, "second");
   assert.equal((await agentStore.getAgentConnection(env, "agent-user", "mcp-link-client"))?.revokedAt !== null, true);
+  const stillAuthenticated = await (await import("../worker/src/security.ts")).authenticateRequest(new Request("http://worker.test/mcp", {
+    headers: { authorization: `Bearer ${token}` },
+  }), env);
+  assert.equal(stillAuthenticated?.clientId, "mcp-link-client", "unlinking must not revoke the OAuth grant");
+});
+
+test("Agent-link MCP structuredContent passes strict declared outputSchema validation", async () => {
+  const agentStore = await import("../worker/src/agent-store.ts");
+  await agentStore.createAgent(env, "agent-user", {
+    agentId: "openclaw",
+    displayName: "OpenClaw",
+    provider: "openclaw",
+    allowedScopes: ["quests:read"],
+  });
+  const token = await seedOAuthConnection("openclaw-client", ["agents:read", "agents:write", "quests:read", "quests:write"]);
+  const listedTools = await json<{ result: { tools: McpToolContract[] } }>(await mcpOAuthRequest(token, "tools/list"));
+  const contracts = new Map(listedTools.result.tools.map((tool) => [tool.name, tool]));
+  const callAndValidate = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await json<McpToolResult>(await mcpOAuthCall(token, name, args));
+    assert.equal(response.result.isError, false, `${name} should succeed`);
+    const contract = contracts.get(name);
+    if (!contract) throw new Error(`${name} must be listed`);
+    assertMatchesDeclaredOutput(contract, response);
+    return response.result.structuredContent as Record<string, unknown>;
+  };
+
+  const before = await callAndValidate("get_current_agent_context");
+  assert.deepEqual(before.connectionScopes, ["agents:read", "agents:write", "quests:read", "quests:write"]);
+  assert.deepEqual(before.effectiveExecutionScopes, before.connectionScopes);
+  assert.equal(before.linked, false);
+
+  await callAndValidate("list_registered_agents");
+  await callAndValidate("link_agent", { agentId: "openclaw" });
+  await callAndValidate("get_agent_link");
+  const after = await callAndValidate("get_current_agent_context");
+  assert.deepEqual(after.connectionScopes, before.connectionScopes, "linking must not mutate the OAuth connection grant");
+  assert.deepEqual(after.agentAllowedScopes, ["quests:read"]);
+  assert.deepEqual(after.effectiveExecutionScopes, ["quests:read"]);
+  assert.equal((after.effectiveExecutionScopes as string[]).includes("agents:write"), false);
+
+  await callAndValidate("link_agent", { agentId: "openclaw" });
+  await callAndValidate("unlink_agent");
+});
+
+test("linked Agent control-plane reads use connection scopes while execution uses the scope intersection", async () => {
+  const agentStore = await import("../worker/src/agent-store.ts");
+  await agentStore.createAgent(env, "agent-user", {
+    agentId: "restricted",
+    displayName: "Restricted Agent",
+    allowedScopes: ["quests:read"],
+  });
+  const token = await seedOAuthConnection("mcp-control-scopes", ["agents:read", "agents:write", "quests:read", "quests:write"]);
+  await agentStore.linkAgentConnection(env, "agent-user", "restricted", {
+    clientId: "mcp-control-scopes",
+    clientName: "Test MCP",
+    scopes: ["agents:read", "agents:write", "quests:read", "quests:write"],
+  });
+
+  const contextResponse = await json<{ result: { isError: boolean; structuredContent: {
+    linked: boolean;
+    connectionScopes: string[];
+    agentAllowedScopes: string[];
+    effectiveExecutionScopes: string[];
+    effectiveScopes: string[];
+  } } }>(await mcpOAuthCall(token, "get_current_agent_context"));
+  assert.equal(contextResponse.result.isError, false);
+  assert.equal(contextResponse.result.structuredContent.linked, true);
+  assert.deepEqual(contextResponse.result.structuredContent.connectionScopes, ["agents:read", "agents:write", "quests:read", "quests:write"]);
+  assert.deepEqual(contextResponse.result.structuredContent.agentAllowedScopes, ["quests:read"]);
+  assert.deepEqual(contextResponse.result.structuredContent.effectiveExecutionScopes, ["quests:read"]);
+  assert.deepEqual(contextResponse.result.structuredContent.effectiveScopes, ["quests:read"]);
+
+  const listed = await json<{ result: { isError: boolean; structuredContent: { agents: Array<{ agentId: string }> } } }>(await mcpOAuthCall(token, "list_registered_agents"));
+  assert.equal(listed.result.isError, false);
+  assert.ok(listed.result.structuredContent.agents.some((agent) => agent.agentId === "restricted"));
+
+  const linkInfo = await json<{ result: { isError: boolean; structuredContent: { linked: boolean } } }>(await mcpOAuthCall(token, "get_agent_link"));
+  assert.equal(linkInfo.result.isError, false);
+  assert.equal(linkInfo.result.structuredContent.linked, true);
+
+  const executionDenied = await json<{ result: { isError: boolean; structuredContent: { error: { code: string } } } }>(await mcpOAuthCall(token, "create_quest", { kind: "todo", title: "should be denied" }));
+  assert.equal(executionDenied.result.isError, true);
+  assert.equal(executionDenied.result.structuredContent.error.code, "insufficient_scope");
 });
 
 test("MCP Agent linking rejects foreign or nonexistent Agents and preserves old unlinked connections", async () => {

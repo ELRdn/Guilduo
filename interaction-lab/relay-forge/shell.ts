@@ -1,3 +1,6 @@
+import { humanInbox } from "./human-inbox.ts";
+import { relayText } from "./relay-copy.ts";
+import { relaySuccess } from "./relay-motion.ts";
 /**
  * Relay Forge App Shell and the Command Golden Screen.
  *
@@ -617,6 +620,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function openEdit(quest: Quest): void {
+    if (quest.humanRequest) { inbox.open(undefined, quest.id); return; }
     editingQuestId = quest.id;
     createKicker.textContent = "EDIT QUEST";
     createHeading.textContent = "Questを編集";
@@ -1273,6 +1277,54 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     liveRegion,
   );
   replaceChildren(root, shell);
+  let checkedReview: string | null = null;
+  let humanPending = 0;
+  let humanUnread = 0;
+  let inboxInitialized = false;
+  const inbox = humanInbox({
+    quests: sharedQuests,
+    port: runtime?.humanRequestPort ?? null,
+    onQuest: (quest) => { applyQuestRecord(quest); render(); },
+    onSource: (questId) => { void openSourceQuest(questId); },
+    onCount: (pending, unread) => {
+      const previousUnread = humanUnread;
+      humanPending = pending; humanUnread = unread;
+      for (const button of shell.querySelectorAll<HTMLElement>(".rf-human-inbox-trigger")) {
+        button.textContent = inboxLabel();
+        button.setAttribute("aria-label", inboxLabel());
+      }
+      if (inboxInitialized && unread > previousUnread) announce(inboxLabel());
+      inboxInitialized = true;
+    },
+  });
+  shell.append(inbox.element);
+  async function openSourceQuest(questId: string): Promise<void> {
+    try {
+      if (runtime?.humanRequestPort) {
+        const response = await runtime.humanRequestPort.getQuest(questId);
+        const quest = response.quest;
+        if (!quest || typeof quest !== "object" || !("id" in quest) || quest.id !== questId) throw new Error("Invalid Quest response");
+        applyQuestRecord(quest as Quest);
+      }
+      checkedReview = null;
+      state.domain = "command";
+      state.selectedQuestId = questId;
+      state.lensState = "closed";
+      render();
+      const heading = shell.querySelector<HTMLElement>(isMobile() ? ".rf-m-quest-title" : ".rf-selected-title");
+      if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+    } catch { announce(relayText("loadFailed")); }
+  }
+  function inboxLabel(): string { return relayText("inbox") + " · " + humanPending + (humanUnread ? " / " + relayText("new") + " " + humanUnread : ""); }
+  function reviewVersion(): string | null {
+    const quest = selectedRawQuest();
+    return quest ? quest.id + ":" + quest.updatedAt : null;
+  }
+  function setExternalChecked(checked: boolean): void {
+    checkedReview = checked ? reviewVersion() : null;
+    render();
+    (isMobile() ? mobileDecision : lensRegion).querySelector<HTMLInputElement>(".rf-external-check input")?.focus();
+  }
 
   /* ---------------------------------------------------------------- *
    * Derivations from the single selection state (section 10)
@@ -1294,7 +1346,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function applyQuestRecord(quest: Quest): void {
-    sharedQuests = sharedQuests.map((entry) => entry.id === quest.id ? quest : entry);
+    sharedQuests = sharedQuests.some((entry) => entry.id === quest.id) ? sharedQuests.map((entry) => entry.id === quest.id ? quest : entry) : [quest, ...sharedQuests];
     rawHandoffStates.set(quest.id, quest.assignee.handoffState);
     if (runtime === null) return;
     const normalized = normalizeCommandModel({
@@ -1311,6 +1363,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   async function runQuestAction(action: QuestActionId): Promise<void> {
     const quest = selectedRawQuest();
+    if (action === "reply" && quest?.humanRequest) { inbox.open(undefined, quest.id); return; }
     if (quest === null || runtime === null || state.taskSubmitting) return;
     if (action === "edit") { openEdit(quest); return; }
     if (action === "archive" && !window.confirm(`「${quest.title}」をアーカイブしますか？`)) return;
@@ -1386,6 +1439,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
             ? trigger.getBoundingClientRect().top - previousLoom.getBoundingClientRect().top
             : null,
         };
+    checkedReview = null;
     state.selectedQuestId = questId;
     // Mobile has no Lens panel — the decision lives in the fixed bar — so
     // selection must not open one behind the page.
@@ -1448,10 +1502,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   /** Gate inputs shared by the Lens and the mobile bar. */
   function decisionGate() {
     return {
-      evidenceReviewed: isMobile() ? state.mobileEvidenceOpen : state.previewArtifactId !== null,
+      evidenceReviewed: checkedReview !== null && checkedReview === reviewVersion(),
       writeLocked: state.stale,
       permissionMissing: forcedState === "permission"
-        ? "handoff:write スコープが不足しています。Connections で権限を追加してください。"
+        ? "quests:write スコープが不足しています。Connections で接続権限とAgentの許可設定を確認してください。"
         : null,
       conflict: forcedState === "conflict"
         ? "他の Actor が先に状態を更新しました。最新の内容を確認してから再実行してください。"
@@ -1496,6 +1550,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
     render();
     announce(result.message);
+    if (result.phase === "succeeded") relaySuccess(isMobile() ? mobileDecision : lensRegion);
     // Focus returns to the control that started the decision.
     const target = state.revisionOpen
       ? shell.querySelector<HTMLElement>(".rf-revision-submit")
@@ -1508,41 +1563,21 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
    * Capacity Band all re-derive from this one update; nothing is written
    * optimistically before the result arrives.
    */
-  function applyHandoffResult(result: DecisionResult, kind: DecisionKind): void {
+  function applyHandoffResult(result: DecisionResult, _kind: DecisionKind): void {
     const quest = result.quest;
     if (quest === null) return;
     rawHandoffStates.set(quest.id, quest.assignee.handoffState);
     sharedQuests = sharedQuests.map((entry) => entry.id === quest.id ? quest : entry);
-    const updated = state.model.quests.map((row) => row.id !== quest.id ? row : {
-      ...row,
-      state: kind === "approve" ? "completed" as const : "working" as const,
-      stateLabel: kind === "approve" ? "Hironao accepted the output" : "Forge Runner is executing",
-      needsIntervention: false,
+    const normalized = normalizeCommandModel({
+      profile: sharedProfile ?? (runtime ? { uid: runtime.selfUid, displayName: "Human" } : null),
+      agents: sharedAgents,
+      quests: sharedQuests,
+      syncLabel: state.model.lastSyncLabel,
     });
-    const chronicle = [
-      {
-        id: `ev-${quest.id}-${result.code}`,
-        timeLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-        actorId: "u-hironao",
-        kind: kind === "approve" ? "review_result" as const : "handoff" as const,
-        verb: kind === "approve" ? "accepted" : "requested revision on",
-        object: `${quest.id.replace("q-", "QF-")} ${quest.title}`,
-        detail: kind === "approve" ? "handoff accepted" : state.revisionReason.trim().slice(0, 60),
-      },
-      ...state.model.chronicle,
-    ];
-    const remaining = state.model.interventions.filter((item) => item.questId !== quest.id);
-    const capacity = state.model.capacity.map((slot) => slot.id !== "attention" ? slot : {
-      ...slot,
-      value: `${remaining.filter((item) => item.severity === "review").length} review · ${remaining.filter((item) => item.severity === "waiting").length} waiting`,
-    });
-    /* The curated intervention view described the pre-decision state, so it is
-     * dropped: `selectedView()` then derives the workspace from the Quest the
-     * server just returned, keeping centre, Relay, Lens and Chronicle in
-     * agreement instead of leaving a stale "review required" behind. */
-    const selectedViews = new Map(state.model.selectedViews);
-    selectedViews.delete(quest.id);
-    state.model = { ...state.model, quests: updated, chronicle, interventions: remaining, capacity, selectedViews };
+    state.model = { ...normalized, chronicle: state.model.chronicle };
+    checkedReview = null;
+    state.taskTone = "success";
+    state.taskMessage = result.message;
     state.revisionOpen = false;
     state.revisionReason = "";
     state.previewArtifactId = null;
@@ -2222,24 +2257,26 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         ),
         el(
           "button",
-          { type: "button", class: "rf-quiet-button rf-alerts", title: "Notifications" },
+          { type: "button", class: "rf-quiet-button rf-alerts rf-human-inbox-trigger", title: relayText("inbox") },
           el("span", { class: "rf-bell-mark", "aria-hidden": "true" }),
-          `Alerts ${state.model.interventions.length}`,
+          inboxLabel(),
         ),
         accountMenuHost,
       ),
     );
+    operationBar.querySelector<HTMLButtonElement>(".rf-alerts")?.addEventListener("click", (event) => inbox.open(event.currentTarget as HTMLElement));
     renderAccountMenu();
   }
 
   function renderBand(): void {
-    const slots = state.stale ? fixtureCapacityStale : fixtureCapacity;
+    const slots = runtime ? state.model.capacity : state.stale ? fixtureCapacityStale : fixtureCapacity;
     replaceChildren(
       bandRegion,
       capacityBand(slots, {
         expandHealth: state.stale,
         onSelect: (slot: CapacitySlot) => {
           if (slot.filter === "health") {
+            if (runtime) { openSettings("mcp"); return; }
             state.stale = !state.stale;
             render();
             return;
@@ -2339,7 +2376,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     replaceChildren(
       chronicleRegion,
       chronicleStrip(chronicleForSelection(), state.model.actors, {
-        newCount: 5,
+        newCount: runtime ? 0 : 5,
         expanded: state.chronicleExpanded,
         onToggle: () => {
           state.chronicleExpanded = !state.chronicleExpanded;
@@ -2380,6 +2417,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           state.lensState = state.lensState === "pinned" ? "open" : "pinned";
           render();
         },
+        externalChecked: decisionGate().evidenceReviewed,
+        onExternalChecked: setExternalChecked,
         onApprove: () => { void runDecision("approve"); },
         onOpenRevision: () => {
           state.revisionOpen = true;
@@ -2404,6 +2443,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   function mobileState() {
     return {
+      externalChecked: decisionGate().evidenceReviewed,
+      humanPending,
       model: state.model,
       selectedQuestId: state.selectedQuestId,
       view: selectedView(),
@@ -2426,7 +2467,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       resultMessage: selectedQuestActions().mode === "handoff-decision" ? state.decision.message : state.taskMessage,
       submitting: selectedQuestActions().mode === "handoff-decision" ? state.decision.phase === "submitting" : state.taskSubmitting,
       permissionMissing: forcedState === "permission"
-        ? "handoff:write スコープが不足しています。Connections で権限を追加してください。"
+        ? "quests:write スコープが不足しています。Connections で接続権限とAgentの許可設定を確認してください。"
         : null,
       conflict: forcedState === "conflict"
         ? "他の Actor が 10:58 に状態を更新しました。最新の内容を確認してから再実行してください。"
@@ -2489,6 +2530,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         state.mobileChronicleOpen = !state.mobileChronicleOpen;
         render();
       },
+      onExternalChecked: setExternalChecked,
+      onInbox: (trigger: HTMLElement) => inbox.open(trigger),
       onApprove: () => { void runDecision("approve"); },
       onRequestRevision: () => {
         state.revisionOpen = true;
@@ -2581,7 +2624,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           const quest = sharedQuests.find((entry) => entry.id === questId);
           if (quest !== undefined) openEdit(quest);
         },
-        onSendToCommand: (questId: string) => context.onNavigate("command", questId),
+        onSendToCommand: (questId: string) => {
+          if (sharedQuests.some((quest) => quest.id === questId && quest.humanRequest)) inbox.open(undefined, questId);
+          else context.onNavigate("command", questId);
+        },
         onInspectNetwork: (questId: string) => context.onNavigate("network", questId),
       };
       return isMobile()
@@ -2728,6 +2774,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           provider: agent.provider ?? "",
           role: agent.role || "assistant",
           status: agent.status ?? "active",
+          allowedScopes: agent.allowedScopes,
         })),
         mcpConnections: sharedAgentConnections,
         mcpConnectionLoadError: agentConnectionsLoadError,
@@ -2827,16 +2874,20 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
   }
   document.addEventListener("keydown", handleLensKeydown);
+  window.addEventListener("questforge:locale-changed", render);
 
   render();
   refreshAgentAvatars();
   refreshProfileAvatar();
+  void inbox.refresh();
 
   return function unmountRelayForge(): void {
     // First, so every in-flight avatar fetch's continuation (however many
     // microtask hops away it still is) observes disposal before it can
     // create a Blob URL, mutate shared state, or render.
     lifecycle.dispose();
+    window.removeEventListener("questforge:locale-changed", render);
+    inbox.destroy();
     document.removeEventListener("click", handleAccountMenuOutsideClick);
     document.removeEventListener("keydown", handleAccountMenuKeydown);
     lensAsSheet.removeEventListener("change", handleLensAsSheetChange);

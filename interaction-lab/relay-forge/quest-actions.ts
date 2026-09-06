@@ -1,6 +1,7 @@
 import type { Quest } from "../../types/questforge.ts";
+import { relayText } from "./relay-copy.ts";
 
-export type QuestActionId = "start" | "edit" | "complete" | "stop" | "archive";
+export type QuestActionId = "start" | "edit" | "complete" | "stop" | "archive" | "reply";
 
 export interface QuestActionState {
   readonly mode: "handoff-decision" | "self-task" | "read-only";
@@ -11,6 +12,7 @@ export interface QuestActionState {
 /** Selects the command surface from the real Quest owner and lifecycle. */
 export function questActionState(quest: Quest | null): QuestActionState {
   if (quest === null) return { mode: "read-only", statusLabel: "Quest を選択してください", actions: [] };
+  if (quest.humanRequest) return { mode: "read-only", statusLabel: relayText("replyHint"), actions: ["reply"] };
   if (quest.assignee.type === "agent" && quest.assignee.handoffState === "review_required") {
     return { mode: "handoff-decision", statusLabel: "Human decision required", actions: [] };
   }

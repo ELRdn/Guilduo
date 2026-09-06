@@ -79,11 +79,11 @@ test("Skills: duplicate or malformed protocol entries never inflate the catalogu
 test("Skills: the checked-in MCP contract is fully catalogued without an unknown bucket", () => {
   const contract = JSON.parse(readFileSync(new URL("../api/mcp-tools.json", import.meta.url), "utf8")) as { tools?: unknown[] };
   const model = normalizeSkillsModel({ tools: contract.tools ?? [], sourceUrl: "https://mcp.guilduo.com/mcp" });
-  assert.equal(model.totalToolCount, 54);
+  assert.equal(model.totalToolCount, 56);
   assert.equal(model.status, "ready");
   assert.equal(model.groups.some((group) => group.id === "other"), false);
   assert.deepEqual(
     model.groups.map((group) => group.id),
-    ["quest-management", "agent-relay", "connections-sync", "profile-social", "battle-rewards", "review-activity"],
+    ["quest-management", "agent-relay", "connections-sync", "profile-social", "party", "toggl-focus", "character", "battle-rewards", "review-activity"],
   );
 });

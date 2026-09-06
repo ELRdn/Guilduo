@@ -19,6 +19,8 @@ import type {
   QuestRepeat,
 } from "../types/questforge.ts";
 import { isQuestKind } from "../types/questforge.ts";
+import type { QuestRequester } from "../types/questforge.ts";
+import { normalizeHumanRequest, normalizeRequester } from "../shared/relay.ts";
 
 export interface DomainRecord {
   quest?: Quest;
@@ -102,16 +104,18 @@ export interface DomainInput extends DomainRecord {
   rootOnly?: boolean | string;
 }
 
-interface DomainContext extends DomainRecord {
+export interface DomainContext extends DomainRecord {
   date?: string;
   source?: string;
   returnEvent?: boolean;
   countRollover?: boolean;
   reviewedBy?: string;
   allowManagedFocus?: boolean;
+  requester?: QuestRequester | null;
+  allowHumanResponse?: boolean;
 }
 
-interface DomainEvent extends DomainRecord {
+export interface DomainEvent extends DomainRecord {
   id: string;
   type: string;
   taskId: string;
@@ -422,6 +426,8 @@ function normalizeQuest(task: RawQuest, index: number, previousVersion: number, 
     archivedAt: String(task.archivedAt || (lifecycleState === "archived" ? (previousVersion < 7 && kind === "todo" && repeat === "none" ? new Date().toISOString() : task.updatedAt || createdAt) : "")),
     externalLinks,
     assignee: normalizeAssignee(task.assignee),
+    requester: normalizeRequester(task.requester),
+    humanRequest: normalizeHumanRequest(task.humanRequest),
     handoff: normalizeHandoff(task.handoff),
     assignmentReadyFor: String(task.assignmentReadyFor || "").slice(0, 240),
     createdAt,
@@ -592,6 +598,9 @@ function validateString(input: DomainInput, key: string, maxLength: number): str
 function validateQuestInput(input: unknown, partial = false): ValidatedQuestInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new DomainError(400, "invalid_body", "A JSON object is required.");
   const body = input as DomainInput;
+  if (Object.hasOwn(body, "requester") || Object.hasOwn(body, "humanRequest")) {
+    throw new DomainError(400, "relay_metadata_readonly", "Requester and human request metadata are managed by the server.");
+  }
   const next: ValidatedQuestInput = {};
   const nextRecord = next as DomainRecord;
   if (!partial || Object.hasOwn(body, "kind")) {
@@ -928,6 +937,8 @@ export function createQuest(state: QuestForgeState, input: unknown, context: Dom
     parentQuestId: clean.parentQuestId || "",
     completedAt: "", archivedAt: "", externalLinks: [], createdAt: now, updatedAt: now,
     assignee: clean.assignee || { type: "self", id: "self", label: "自分", handoffState: "none" },
+    requester: normalizeRequester(context.requester),
+    humanRequest: null,
     handoff: normalizeHandoff(clean.handoff),
     assignmentReadyFor: "",
     done: false,
@@ -961,6 +972,9 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
   const quest = state.tasks.find((item) => item.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
   const clean = validateQuestInput(input, true);
+  if (quest.humanRequest) {
+    throw new DomainError(409, "human_request_managed", "Use the human request response action to change this confirmation Quest.");
+  }
   if (clean.dependencyIds) validateDependencies(state, questId, clean.dependencyIds);
   if (clean.parentQuestId !== undefined) validateParentQuest(state, questId, clean.parentQuestId);
   if (clean.assignee) validateHandoffPatch(quest, clean.assignee);
@@ -1151,6 +1165,7 @@ export function scoreQuest(state: QuestForgeState, questId: string, direction: "
   if (!["up", "down"].includes(direction)) throw new DomainError(400, "invalid_direction", "direction must be up or down.");
   const quest = state.tasks.find((item) => item.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
+  if (quest.humanRequest && !context.allowHumanResponse) throw new DomainError(409, "human_response_required", "Respond to this human request before completing it.");
   if (quest.kind === "reward") return buyReward(state, questId, context) as unknown as ScoreResult;
   const positive = direction === "up";
   const scale = difficultyScale(quest.difficulty);

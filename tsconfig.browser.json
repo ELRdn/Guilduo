@@ -20,7 +20,9 @@
     "ui/**/*.ts",
     "ui/**/*.tsx",
     "lpv2/**/*.ts",
-    "lpv2-1/**/*.ts"
+    "lpv2-1/**/*.ts",
+    "tests/browser/human-relay.ts",
+    "tests/browser/production-relay.ts"
   ],
   "exclude": ["dist", "node_modules", "unity-battle-prototype"]
 }

@@ -29,9 +29,14 @@ import {
 } from "./model.ts";
 import { actorAvatar } from "./primitives/avatar.ts";
 import { el } from "./primitives/dom.ts";
+import { externalCheck } from "./primitives/external-check.ts";
+import { questContext } from "./primitives/quest-context.ts";
+import { relayText } from "./relay-copy.ts";
 import type { QuestActionId, QuestActionState } from "./quest-actions.ts";
 
 export interface MobileCallbacks {
+  readonly onExternalChecked?: (value: boolean) => void;
+  readonly onInbox?: (trigger: HTMLElement) => void;
   readonly onSelect: (questId: string, trigger: HTMLElement) => void;
   readonly onOpenQuestFlow: (trigger: HTMLElement) => void;
   readonly onToggleEvidence: () => void;
@@ -46,6 +51,8 @@ export interface MobileCallbacks {
 }
 
 export interface MobileState {
+  readonly externalChecked?: boolean;
+  readonly humanPending?: number;
   readonly model: CommandModel;
   readonly selectedQuestId: string | null;
   readonly view: SelectedQuestView | null;
@@ -81,12 +88,15 @@ const SEVERITY_LABEL: Readonly<Record<Intervention["severity"], string>> = {
  * Header
  * ------------------------------------------------------------------ */
 
-function mobileHeader(state: MobileState): HTMLElement {
+function mobileHeader(state: MobileState, callbacks: MobileCallbacks): HTMLElement {
   const attention = state.model.interventions.length;
+  const inbox = el("button", { type: "button", class: "rf-quiet-button rf-human-inbox-trigger" }, `${relayText("inbox")} · ${state.humanPending || 0}`);
+  inbox.addEventListener("click", () => callbacks.onInbox?.(inbox));
   return el(
     "header",
     { class: "rf-m-header" },
     el("h1", { class: "rf-m-title" }, "Command"),
+    inbox,
     el(
       "div",
       { class: "rf-m-status" },
@@ -205,7 +215,7 @@ function mobileSelected(
   state: MobileState,
   callbacks: MobileCallbacks,
 ): HTMLElement {
-  const holder = view.responsibility.find((step) => step.state === "review" || step.state === "blocked")
+  const holder = view.responsibility.find((step) => step.state === "review" || step.state === "blocked" || step.state === "executing")
     ?? view.responsibility[view.responsibility.length - 1];
   const holderActor = state.model.actors.get(holder?.actorId ?? "");
 
@@ -246,7 +256,7 @@ function mobileSelected(
         el("span", { class: "rf-m-holder-state" }, holder?.stateLabel ?? ""),
       ),
     ),
-    el("div", { class: "rf-m-actions" }, reviewOutput, questFlow),
+    el("div", { class: "rf-m-actions" }, view.externalReview ? null : reviewOutput, questFlow),
   );
 }
 
@@ -503,7 +513,7 @@ export function mobileDecisionBar(
 
   if (state.questActions.mode !== "handoff-decision") {
     const labels: Readonly<Record<QuestActionId, string>> = {
-      start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive",
+      start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive", reply: relayText("inbox"),
     };
     const buttons = state.questActions.actions.map((action, index) => {
       const button = el("button", {
@@ -541,7 +551,7 @@ export function mobileDecisionBar(
       {
         type: "button",
         class: "rf-revision-submit",
-        disabled: state.submitting ? true : null,
+        disabled: state.submitting || reason !== null ? true : null,
         "aria-busy": state.submitting ? "true" : null,
       },
       state.submitting ? "送信中…" : "Send revision request",
@@ -554,6 +564,7 @@ export function mobileDecisionBar(
     return el(
       "div",
       { class: "rf-m-decision", "data-shape": "revision", role: "region", "aria-label": "Decision" },
+      externalCheck(state.externalChecked === true, state.submitting || state.writeLocked, callbacks.onExternalChecked),
       el("label", { class: "rf-revision-label", for: "rf-m-revision-reason" }, "修正内容"),
       field,
       state.revisionError === null
@@ -575,7 +586,7 @@ export function mobileDecisionBar(
     jump.addEventListener("click", callbacks.onToggleEvidence);
     return el(
       "div",
-      { class: "rf-m-decision", "data-shape": "compact", role: "region", "aria-label": "Decision" },
+      { class: "rf-m-decision", "data-shape": "checking", role: "region", "aria-label": "Decision" },
       el(
         "div",
         { class: "rf-m-decision-copy" },
@@ -583,7 +594,7 @@ export function mobileDecisionBar(
         el("p", { class: "rf-decision-blocked", role: "status" }, reason),
       ),
       result,
-      jump,
+      externalCheck(state.externalChecked === true, state.submitting || state.writeLocked, callbacks.onExternalChecked),
     );
   }
 
@@ -610,6 +621,7 @@ export function mobileDecisionBar(
   return el(
     "div",
     { class: "rf-m-decision", "data-shape": "ready", role: "region", "aria-label": "Decision" },
+    externalCheck(state.externalChecked === true, state.submitting || state.writeLocked, callbacks.onExternalChecked),
     el(
       "div",
       { class: "rf-m-decision-copy" },
@@ -628,7 +640,7 @@ export function mobileDecisionBar(
  * ------------------------------------------------------------------ */
 
 export function mobileCommand(state: MobileState, callbacks: MobileCallbacks): HTMLElement {
-  const body: (HTMLElement | null)[] = [mobileHeader(state), mobileShelf(state, callbacks)];
+  const body: (HTMLElement | null)[] = [mobileHeader(state, callbacks), mobileShelf(state, callbacks)];
 
   if (state.loading) {
     body.push(el(
@@ -649,7 +661,8 @@ export function mobileCommand(state: MobileState, callbacks: MobileCallbacks): H
   } else if (state.view !== null) {
     body.push(mobileSelected(state.view, state, callbacks));
     body.push(mobileRelay(state.view, state.model.actors));
-    body.push(mobileEvidence(state.view, state, callbacks));
+    const context = questContext(state.view);
+    body.push(context || mobileEvidence(state.view, state, callbacks));
   }
 
   body.push(mobileChronicle(state, callbacks));

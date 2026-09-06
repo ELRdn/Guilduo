@@ -172,6 +172,8 @@ function statusBody(model: SkillsModel, callbacks: SkillsCallbacks): HTMLElement
 function renderSkillsMain(model: SkillsModel, state: SkillsState, context: ScreenContext, callbacks: SkillsCallbacks): HTMLElement {
   void context;
   const groups = model.groups.map((group) => group.id);
+  // Show matching tools immediately while preserving an explicit collapse.
+  if (model.query) for (const id of groups) state.expandedGroups[id] ??= true;
   const body = model.status === "ready" && model.groups.length > 0
     ? el(
       "div",

@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 import { authenticateRequest, sha256 } from "../worker/src/security.ts";
 import { approveAuthorization, authorizePage, noteAuthorizedClientUse, registerClient, revokeToken, tokenEndpoint } from "../worker/src/oauth.ts";
+import { getOAuthRecordStore } from "../worker/src/oauth-record-store.ts";
 import type { KvNamespaceLike, WorkerEnv } from "../worker/src/worker-types.ts";
 import { SqliteD1Database } from "./test-helpers.ts";
 
@@ -105,6 +106,104 @@ test("OAuth authorize rejects an oversized client_id before it can become an inv
   const response = await worker.fetch(new Request(`http://worker.test/oauth/authorize?${params}`), env, context());
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "invalid_request" });
+});
+
+test("OAuth authorization preserves requested Agent scopes and never silently escalates an existing grant", async () => {
+  const kv = new MemoryKv();
+  const clientId = "scope-client";
+  const redirectUri = "http://127.0.0.1:8989/oauth/callback";
+  const env: WorkerEnv = {
+    ...baseEnv,
+    QUESTFORGE_KV: kv,
+    APPWRITE_ENDPOINT: "https://api.guilduo.com/v1",
+    APPWRITE_PROJECT_ID: "scope-test-project",
+  };
+  await kv.put(`client:${clientId}`, JSON.stringify({
+    clientId,
+    clientName: "Scope test client",
+    redirectUris: [redirectUri],
+    createdAt: Date.now(),
+  }));
+
+  const originalFetch = global.fetch;
+  global.fetch = async (input: string | URL | Request, options?: RequestInit) => {
+    if (String(input) === "https://api.guilduo.com/v1/account") {
+      assert.equal(new Headers(options?.headers).get("x-appwrite-jwt"), "scope-test-jwt");
+      return new Response(JSON.stringify({ $id: "scope-user", email: "scope@example.com" }), { status: 200 });
+    }
+    return originalFetch(input, options);
+  };
+
+  const authorizeAndExchange = async (scope: string, verifier: string) => {
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: await sha256(verifier),
+      code_challenge_method: "S256",
+      scope,
+      lang: "en",
+    });
+    const authorization = await authorizePage(new Request(`https://mcp.guilduo.com/oauth/authorize?${params}`), env);
+    assert.equal(authorization.status, 200);
+    const html = await authorization.text();
+    const requests = await kv.list({ prefix: "authorize:" });
+    assert.equal(requests.keys.length, 1);
+    const requestId = requests.keys[0].name.replace("authorize:", "");
+    const approval = await approveAuthorization(new Request("https://mcp.guilduo.com/oauth/approve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestId, jwt: "scope-test-jwt" }),
+    }), env);
+    assert.equal(approval.status, 200);
+    const redirect = (await approval.json() as { redirect: string }).redirect;
+    const code = new URL(redirect).searchParams.get("code");
+    assert.ok(code);
+    const issued = await tokenEndpoint(formRequest("/oauth/token", {
+      grant_type: "authorization_code",
+      code: code!,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    }), env);
+    assert.equal(issued.status, 200);
+    return { html, tokens: await issued.json() as { access_token: string; refresh_token: string; scope: string } };
+  };
+
+  try {
+    const readOnly = await authorizeAndExchange("agents:read", "scope-verifier-read");
+    assert.match(readOnly.html, /Agent profiles/);
+    assert.match(readOnly.html, /agents:read/);
+    assert.doesNotMatch(readOnly.html, /agents:write/);
+    assert.deepEqual(readOnly.tokens.scope.split(" "), ["agents:read"]);
+    const authEnv = { ...env, APPWRITE_ENDPOINT: "", APPWRITE_PROJECT_ID: "" };
+    const oldIdentity = await authenticateRequest(new Request("https://mcp.guilduo.com/mcp", {
+      headers: { authorization: `Bearer ${readOnly.tokens.access_token}` },
+    }), authEnv);
+    assert.deepEqual(oldIdentity?.scopes, ["agents:read"]);
+
+    const writeEnabled = await authorizeAndExchange("agents:read agents:write", "scope-verifier-write");
+    assert.match(writeEnabled.html, /Agent connection management/);
+    assert.match(writeEnabled.html, /agents:write/);
+    assert.deepEqual(writeEnabled.tokens.scope.split(" "), ["agents:read", "agents:write"]);
+    const oldTokenAfterReauthorization = await authenticateRequest(new Request("https://mcp.guilduo.com/mcp", {
+      headers: { authorization: `Bearer ${readOnly.tokens.access_token}` },
+    }), authEnv);
+    assert.deepEqual(oldTokenAfterReauthorization?.scopes, ["agents:read"], "an existing access token must not gain a new scope");
+
+    const invalid = await authorizePage(new Request(`https://mcp.guilduo.com/oauth/authorize?${new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: await sha256("scope-verifier-invalid"),
+      code_challenge_method: "S256",
+      scope: "agents:read agents:unknown",
+    })}`), env);
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(await invalid.json(), { error: "invalid_scope" });
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("OAuth authorize persists through D1 when the production KV write quota is exhausted", async () => {
@@ -615,4 +714,110 @@ test("the web Connection revoke route is owner-scoped and does not delete the Ag
   assert.equal(foreign.status, 404);
   const unauthenticated = await worker.fetch(new Request("http://worker.test/v1/agent-connections/client-1", { method: "DELETE", headers: { origin: "http://localhost:5173" } }), env, context());
   assert.equal(unauthenticated.status, 401);
+});
+
+test("Disconnect repairs legacy revoked grants before returning idempotently", async () => {
+  const kv = new MemoryKv();
+  const env: WorkerEnv = { ...baseEnv, DEV_BEARER_TOKEN: "legacy-revoked-owner-token", DEV_USER_ID: "legacy-revoked-owner", QUESTFORGE_KV: kv };
+  const clientId = "legacy-revoked-client";
+  const accessHash = "legacy-access-hash";
+  const refreshHash = "legacy-refresh-hash";
+  const grantKey = `user-client:legacy-revoked-owner:${clientId}`;
+  await kv.put(grantKey, JSON.stringify({
+    uid: "legacy-revoked-owner",
+    clientId,
+    clientName: "Legacy MCP",
+    scopes: ["agents:read"],
+    revokedAt: "2026-08-01T00:00:00.000Z",
+    accessHash,
+    refreshHash,
+  }));
+  await kv.put(`access:${accessHash}`, JSON.stringify({ uid: "legacy-revoked-owner", clientId, refreshHash, expiresAt: Date.now() + 60_000 }));
+  await kv.put(`refresh:${refreshHash}`, JSON.stringify({ uid: "legacy-revoked-owner", clientId, refreshHash, accessHash, refreshExpiresAt: Date.now() + 60_000 }));
+
+  const worker = (await import("../worker/src/index.ts")).default;
+  const response = await worker.fetch(new Request(`http://worker.test/v1/agent-connections/${clientId}`, {
+    method: "DELETE",
+    headers: { authorization: "Bearer legacy-revoked-owner-token", origin: "http://localhost:5173" },
+  }), env, context());
+  assert.equal(response.status, 200);
+  assert.equal(await kv.get(`access:${accessHash}`), null);
+  assert.equal(await kv.get(`refresh:${refreshHash}`), null);
+  assert.ok(await kv.get(`refresh-revoked:${refreshHash}`));
+  assert.equal((await kv.get<Record<string, unknown>>(grantKey, "json"))?.revokedAt, "2026-08-01T00:00:00.000Z");
+});
+
+test("MCP connection lifecycle requires Disconnect before hard delete and preserves the Agent Registry row", async () => {
+  const db = new SqliteD1Database();
+  const kv = new MemoryKv();
+  const env: WorkerEnv = {
+    ...baseEnv,
+    DEV_BEARER_TOKEN: "lifecycle-owner-token",
+    DEV_USER_ID: "lifecycle-owner",
+    QUESTFORGE_DB: db,
+    QUESTFORGE_KV: kv,
+  };
+  const clientId = "lifecycle-client";
+  const accessToken = "lifecycle-access-token";
+  const refreshToken = "lifecycle-refresh-token";
+  const accessHash = await sha256(accessToken);
+  const refreshHash = await sha256(refreshToken);
+  const grantKey = `user-client:lifecycle-owner:${clientId}`;
+  const store = getOAuthRecordStore(env);
+  const agents = await import("../worker/src/agent-store.ts");
+  const worker = (await import("../worker/src/index.ts")).default;
+
+  try {
+    await agents.createAgent(env, "lifecycle-owner", { agentId: "keeper", displayName: "Keeper Agent" });
+    await store.put(`client:${clientId}`, JSON.stringify({ clientId, clientName: "Lifecycle MCP", redirectUris: ["http://localhost:8787/callback"], createdAt: Date.now() }));
+    await store.put(grantKey, JSON.stringify({
+      uid: "lifecycle-owner",
+      email: "lifecycle@example.com",
+      clientId,
+      clientName: "Lifecycle MCP",
+      scopes: ["agents:read", "agents:write"],
+      firstConnectedAt: "2026-09-01T00:00:00.000Z",
+      lastUsedAt: "2026-09-01T00:00:00.000Z",
+      revokedAt: "",
+      accessHash,
+      refreshHash,
+      refreshExpiresAt: Date.now() + 60 * 60 * 1000,
+    }));
+    await store.put(`access:${accessHash}`, JSON.stringify({ uid: "lifecycle-owner", clientId, refreshHash, expiresAt: Date.now() + 60 * 60 * 1000 }));
+    await store.put(`refresh:${refreshHash}`, JSON.stringify({ uid: "lifecycle-owner", clientId, accessHash, refreshHash, scopes: ["agents:read", "agents:write"], refreshExpiresAt: Date.now() + 60 * 60 * 1000 }));
+    await agents.linkAgentConnection(env, "lifecycle-owner", "keeper", { clientId, clientName: "Lifecycle MCP", scopes: ["agents:read", "agents:write"] });
+
+    const headers = { authorization: "Bearer lifecycle-owner-token", origin: "http://localhost:5173" };
+    const activeDelete = await worker.fetch(new Request(`http://worker.test/v1/agent-connections/${clientId}/permanent`, { method: "DELETE", headers }), env, context());
+    assert.equal(activeDelete.status, 409);
+    assert.equal((await activeDelete.json() as { error: { code: string } }).error.code, "oauth_connection_active");
+
+    const disconnected = await worker.fetch(new Request(`http://worker.test/v1/agent-connections/${clientId}/disconnect`, { method: "POST", headers }), env, context());
+    assert.equal(disconnected.status, 200);
+    const disconnectedBody = await disconnected.json() as { authorizedClient: { revokedAt: string }; connection: { revokedAt: string } };
+    assert.ok(disconnectedBody.authorizedClient.revokedAt);
+    assert.ok(disconnectedBody.connection.revokedAt);
+
+    const hardDelete = await worker.fetch(new Request(`http://worker.test/v1/agent-connections/${clientId}/permanent`, { method: "DELETE", headers }), env, context());
+    assert.equal(hardDelete.status, 200);
+    assert.deepEqual(await hardDelete.json(), {
+      deleted: true,
+      clientId,
+      oauthGrantDeleted: true,
+      connectionDeleted: true,
+    });
+    assert.equal((await agents.getAgent(env, "lifecycle-owner", "keeper")).displayName, "Keeper Agent");
+    assert.equal((db.raw.prepare("SELECT record_key FROM oauth_records WHERE record_key = ?").get(grantKey) as unknown), undefined);
+    assert.equal((db.raw.prepare("SELECT record_key FROM oauth_records WHERE record_key = ?").get(`access:${accessHash}`) as unknown), undefined);
+    assert.equal((db.raw.prepare("SELECT record_key FROM oauth_records WHERE record_key = ?").get(`refresh:${refreshHash}`) as unknown), undefined);
+    assert.ok(db.raw.prepare("SELECT record_key FROM oauth_records WHERE record_key = ? AND is_deleted = 0").get(`refresh-revoked:${refreshHash}`));
+    assert.ok(db.raw.prepare("SELECT record_key FROM oauth_records WHERE record_key = ?").get(`client:${clientId}`));
+    assert.equal(await agents.getAgentConnection(env, "lifecycle-owner", clientId), null);
+    assert.equal((await tokenEndpoint(formRequest("/oauth/token", { grant_type: "refresh_token", refresh_token: refreshToken }), env)).status, 400);
+
+    const foreign = await worker.fetch(new Request(`http://worker.test/v1/agent-connections/${clientId}/permanent`, { method: "DELETE", headers }), { ...env, DEV_USER_ID: "other-user" }, context());
+    assert.equal(foreign.status, 404);
+  } finally {
+    db.close();
+  }
 });

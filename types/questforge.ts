@@ -8,6 +8,26 @@ export type Impact = "low" | "medium" | "high";
 export type AssigneeType = "self" | "human" | "agent";
 export type HandoffState = "none" | "ready" | "working" | "blocked" | "review_required" | "accepted";
 
+export interface QuestRequester {
+  type: "human" | "agent";
+  id: string;
+  label: string;
+}
+
+export interface HumanRequest {
+  sourceQuestId: string;
+  requestKey: string;
+  recipientId: string;
+  reason: string;
+  checkTarget: string;
+  artifactUrl: string;
+  status: "pending" | "deferred" | "answered";
+  seenAt: string;
+  respondedAt: string;
+  response: string;
+  outcome: "" | "approved" | "changes_requested";
+}
+
 export interface HandoffDetails {
   note: string;
   blockedReason: string;
@@ -77,6 +97,8 @@ export interface Quest {
   createdAt: string;
   updatedAt: string;
   done: boolean;
+  requester?: QuestRequester | null;
+  humanRequest?: HumanRequest | null;
   negativeOnly?: boolean;
   assignee: QuestAssignee;
   handoff: HandoffDetails;

@@ -187,6 +187,15 @@ test("an archived Quest is excluded from the operational Command model", () => {
   assert.equal(model.quests.length, 0);
   assert.equal(model.interventions.length, 0);
 });
+
+test("accepting a Handoff keeps unfinished work open and uses the registered identities", () => {
+  const quest = buildQuest({ id: "q-open", title: "Still needs final delivery", assignee: { type: "agent", id: "my-codex", label: "My Codex", handoffState: "accepted" }, done: false, lifecycleState: "active" });
+  const model = normalizeCommandModel({ profile: { uid: "real-user", displayName: "My Name" }, agents: [{ agentId: "my-codex", displayName: "My Codex" }], quests: [quest], syncLabel: "Now" });
+  assert.equal(model.quests[0]?.state, "ready");
+  assert.notEqual(model.quests[0]?.relay.legs.at(-1)?.nodeState, "completed");
+  assert.ok([...model.actors.values()].some((actor) => actor.name === "My Name"));
+  assert.ok([...model.actors.values()].some((actor) => actor.name === "My Codex"));
+});
 test("a self-owned planned Quest exposes task actions instead of Handoff decisions", () => {
   const quest = buildQuest({
     id: "q-self",
@@ -324,7 +333,7 @@ test("an empty revision reason never reaches the domain", async () => {
 test("every gate blocks a write, in the documented precedence", async () => {
   const base = { evidenceReviewed: true, writeLocked: false, permissionMissing: null, conflict: null };
   assert.equal(blockingReason(base, "idle"), null);
-  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /Evidence/);
+  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /確認|checked/);
   assert.match(String(blockingReason({ ...base, writeLocked: true }, "idle")), /再接続/);
   assert.match(String(blockingReason({ ...base, conflict: "conflict" }, "idle")), /conflict/);
   assert.equal(blockingReason({ ...base, permissionMissing: "scope" }, "idle"), "scope");

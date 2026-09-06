@@ -35,6 +35,7 @@ export interface QuestRelayView {
 }
 
 export interface QuestRow {
+  readonly humanRequest?: boolean;
   readonly id: string;
   readonly ref: string;
   readonly title: string;
@@ -189,6 +190,7 @@ export function normalizeQuestsModel(options: NormalizeQuestsOptions): QuestsMod
     const started = quest.handoff.startedAt !== "" ? quest.handoff.startedAt : quest.updatedAt;
     return {
       id: quest.id,
+      humanRequest: Boolean(quest.humanRequest),
       ref: quest.id.toUpperCase().startsWith("QF-") ? quest.id.toUpperCase() : `QF-${quest.id.replace(/^q-/i, "").toUpperCase()}`,
       title: quest.title,
       bucket,

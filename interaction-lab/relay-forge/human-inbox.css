@@ -1,0 +1,45 @@
+.rf-human-inbox {
+  width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px;
+  color: var(--qf-color-fg-default); background: var(--qf-color-surface);
+  border: 1px solid var(--qf-color-border-default); border-radius: 8px; overflow: auto;
+}
+.rf-human-inbox::backdrop { background: var(--qf-color-scrim); }
+.rf-human-inbox header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.rf-human-inbox h2 { margin: 0; color: var(--qf-color-fg-strong); font-size: 22px; }
+.rf-human-inbox h3 { margin: 16px 0 4px; font-size: 14px; color: var(--qf-color-fg-strong); }
+.rf-human-inbox p { line-height: 1.6; overflow-wrap: anywhere; }
+.rf-human-inbox button, .rf-human-external { min-height: 44px; padding: 8px 12px; border: 1px solid var(--qf-color-border-default); border-radius: 4px; background: var(--qf-color-field); color: var(--qf-color-fg-default); font: inherit; cursor: pointer; }
+.rf-human-inbox button:disabled { cursor: not-allowed; opacity: .55; }
+.rf-human-inbox button:focus-visible, .rf-human-inbox summary:focus-visible, .rf-human-inbox textarea:focus-visible, .rf-human-inbox input:focus-visible, .rf-human-external:focus-visible { outline: 3px solid var(--qf-color-focus); outline-offset: 2px; }
+.rf-human-inbox-filters, .rf-human-request-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.rf-human-inbox [aria-pressed="true"] { color: var(--qf-color-human); border-color: var(--qf-color-human); background: var(--qf-color-selected); }
+.rf-human-request { border-top: 1px solid var(--qf-color-border-default); }
+.rf-human-request summary { min-height: 52px; padding: 12px 4px; cursor: pointer; overflow-wrap: anywhere; }
+.rf-human-request summary strong { color: var(--qf-color-fg-strong); }
+.rf-human-request-state { display: inline-block; margin-inline-start: 12px; font-size: 12px; color: var(--qf-color-review); }
+.rf-human-request-body { padding: 0 4px 16px; }
+.rf-human-request-author { color: var(--qf-color-agent); }
+.rf-human-request-text { white-space: pre-wrap; }
+.rf-human-external { display: inline-flex; align-items: center; margin: 8px; text-decoration: underline; color: var(--qf-color-agent); }
+.rf-human-request-check { display: flex; align-items: center; gap: 12px; min-height: 44px; margin-top: 16px; }
+.rf-human-request-check input { width: 20px; height: 20px; accent-color: var(--qf-color-human); flex: 0 0 auto; }
+.rf-human-request-feedback { display: grid; gap: 8px; margin-top: 12px; }
+.rf-human-request-feedback textarea { resize: vertical; width: 100%; box-sizing: border-box; min-height: 110px; border: 1px solid var(--qf-color-border-default); border-radius: 4px; background: var(--qf-color-inset); color: var(--qf-color-fg-default); padding: 12px; font: inherit; }
+.rf-human-inbox-notice { min-height: 24px; color: var(--qf-color-human); }
+.rf-human-request-separate { color: var(--qf-color-fg-muted); font-size: 13px; }
+.rf-relay-onboarding { border-bottom: 1px solid var(--qf-color-border-default); padding-bottom: 16px; margin-bottom: 16px; }
+.rf-relay-onboarding-steps { padding-inline-start: 24px; display: grid; gap: 16px; }
+.rf-relay-onboarding-steps li { line-height: 1.6; }
+.rf-relay-onboarding-steps button { display: block; margin-top: 8px; }
+.rf-relay-onboarding code { white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
+.rf-relay-step-status { margin-inline-start: 12px; font-size: 12px; color: var(--qf-color-human); }
+.rf-relay-preferences { display: grid; gap: 12px; margin-top: 16px; }
+.rf-relay-preferences select { display: block; min-height: 44px; margin-top: 8px; }
+.rf-human-inbox-trigger { min-height: 44px; }
+.rf-quest-context { padding: 16px; border-top: 1px solid var(--qf-color-border-default); }
+.rf-quest-context p { line-height: 1.6; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .rf-human-inbox { padding: 16px; width: calc(100vw - 24px); max-height: calc(100dvh - 24px); box-sizing: border-box; }
+  .rf-human-request-actions > button { flex: 1 1 45%; }
+  .rf-human-external { margin: 8px 0; }
+}

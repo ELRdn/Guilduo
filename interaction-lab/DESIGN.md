@@ -17,11 +17,11 @@ colors:
   accent: "#4F8A6D"
 omitted:
   - section: typography
-reason: "Inherited from the root Guilduo DESIGN.md."
+    reason: "Inherited from the root Guilduo DESIGN.md."
   - section: rounded
-reason: "Inherited from the root Guilduo DESIGN.md."
+    reason: "Inherited from the root Guilduo DESIGN.md."
   - section: spacing
-reason: "Inherited from the root Guilduo DESIGN.md."
+    reason: "Inherited from the root Guilduo DESIGN.md."
 components:
   next-page-shell:
     backgroundColor: "{colors.neutral}"
@@ -82,6 +82,17 @@ components:
 対象: `/next/relay-forge/`（開発元は`/interaction-lab/`、正式入口は`https://app.guilduo.com/`） / `0.6.0-beta.8`候補 / REST・MCP `2.7.0` / Schema `7`
 親文書: [Guilduo Visual Constitution](../DESIGN.md)
 技術仕様: [PROJECT_SPEC.md](../PROJECT_SPEC.md)
+
+## Human ⇄ Agent Relay（2026-09-07）
+
+- Commandに「自分への依頼」を設ける。未対応・保留・回答済みを文字と件数で分け、既読と完了を別状態として表示する。更新失敗時は一覧と入力を保持する。
+- 確認依頼には実際の依頼元、元Quest、理由、確認対象、完了条件を示す。旧Questの不明な依頼主は推測しない。
+- 成果物は外部の作業画面で確認する。HTTPSリンクは別タブで開く。リンクを開いたことやEvidenceのプレビューを承認条件にせず、「依頼された内容を確認した」の明示チェックを使う。
+- 人は「修正あり」「修正なし」「あとで確認」を選ぶ。修正ありにはテキストFBを必須にし、保留は再開できる。回答済みの履歴は書き換えず、再確認は新しい依頼として表示する。
+- 人への確認Quest完了、Handoff承認、元Quest完了を別々に表示する。受け渡し線も承認だけで完了表示にしない。
+- 設定のMCP接続は、自分のAgent登録、OAuth接続、Agentリンクと実効権限、最初のタスク受け渡しの順に案内する。ユーザーのAgentを自動起動しない。
+- 確定済みの受け渡し・回答に限り180ms程度の短い境界線/不透明度変化と読み上げ通知を使う。失敗・保留・再試行を成功演出にしない。既存色と正式アイコンを維持し、reduced motionではアニメーションを止める。
+- 新しい操作は9言語、キーボード、390px幅に対応する。Pixel 9実機とデスクトップブラウザの検証記録を混同しない。
 
 ## 1. 差分の扱い
 

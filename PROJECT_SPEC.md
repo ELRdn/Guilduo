@@ -103,6 +103,7 @@ flowchart LR
 - APIの入力・出力は`api/openapi.json`、MCPのツール契約は`api/mcp-tools.json`を正本にする。
 - `/`と`/next/`はAppwrite Authで本人を識別し、Worker RESTから本体スナップショットを取得する。ブラウザへAppwrite API Keyを渡さない。
 - Workerは短命なAppwrite JWTを検証し、サーバー専用API KeyでTablesDBを読み書きする。`user_states`の行IDはAppwrite UIDとし、直接クライアント権限を付けない。
+- `user_states`と`legacy_states`の`stateJson`は必須の`longtext`列とする。スナップショットはgzip＋Base64で保存し、旧形式のJSONも読み込める状態を維持する。旧string列を想定した60,000文字制限で通常の保存・移行を拒否しない。容量対策としてQuest、履歴、報酬、移行スナップショットを間引かず、revisionによる競合検知とトランザクションを維持する。
 - Firebase移行データは`legacy_states`へ暗号学的メールハッシュをキーとして一時格納し、同じメールでの初回Appwriteログイン時に`user_states`へ一度だけ移管する。移行元は検証期間中だけロールバック用に保持する。
 - Next版のローカル保存はゲスト利用、表示設定、前回スナップショットのためだけに使う。ログイン済みユーザーの本体データを別ユーザーへ表示しない。
 - API、MCP、外部連携から受け取るJSONは未検証の外部入力として扱い、ドメイン境界で正規化する。
@@ -116,6 +117,15 @@ flowchart LR
 - AvatarのPUT/DELETEはAppwrite Authまたは開発用認証のWeb mutationに限定し、PNG/JPEG/WebPの実バイト判定、300KB上限、ストリーミング上限をWorkerで再検証する。クライアントのリサイズはUX最適化であり、セキュリティ境界ではない。
 
 ## 4. ドメイン不変条件
+
+### 4.0 双方向Relayの追加契約（2026-09-07）
+
+- Questの`requester`は認証済みの作成主体（Human/登録Agentの安定IDと表示名）。既存Questは`null`のままにし、担当者や現在の接続から作成者を推測しない。汎用create/patch入力から作成者を指定・変更できない。
+- `humanRequest`は独立したHuman確認Questのメタデータ。`sourceQuestId`で元のAgent作業へ結び、親子の集計・依存関係とは役割を分ける。`requestKey`によって同じ依頼の再送を冪等にする。`pending / deferred / answered`、確認対象、理由、既読時刻、回答・回答時刻・結果を保存する。
+- Agentは自分の担当Questから確認を依頼できる。人の回答は本人のWeb認証を必要とし、Agentや通常のQuest更新で代筆・完了できない。確認先は外部の環境で、回答はテキスト。外部リンクを開くこと自体を確認・承認と判定しない。
+- 作成・回答はdry-runと`expectedUpdatedAt`で現在状態を照合する。保留・再開・既読は確認Questのみを更新する。回答による確認Quest完了、Handoffのaccepted、元Questの完了はそれぞれ別の明示操作とし、親完了・報酬を連鎖させない。
+- 同じrequestKeyの再送は元の依頼を返し、異なる内容への再利用は拒否する。回答済みの同一回答の再送は報酬を再付与しない。再確認は新しいrequestKeyの独立Questとして過去の回答を保持する。
+- Schema 7へ任意フィールドを追加し、既存JSON/gzipを読み続ける。旧クライアントの全状態保存でも、サーバーが保持する依頼主・確認Questを消去/改変させない。API/MCPへ確認依頼の作成・一覧を追加し、回答はWeb用RESTから行う。既存のAgent/OAuth権限分離と保存容量修正を維持する。
 
 ### 4.1 Quest
 
