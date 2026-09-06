@@ -18,7 +18,9 @@
     "shared/**/*.ts",
     "interaction-lab/**/*.ts",
     "ui/**/*.ts",
-    "ui/**/*.tsx"
+    "ui/**/*.tsx",
+    "lpv2/**/*.ts",
+    "lpv2-1/**/*.ts"
   ],
   "exclude": ["dist", "node_modules", "unity-battle-prototype"]
 }

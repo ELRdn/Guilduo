@@ -40,6 +40,18 @@
 
 `chroma-source`と`cutout`は本番UIへ直接参照しない。黒い部分が背景除去で消える問題を避けるため、透過済みの完成版だけを使用する。
 
+## LPv2ブランド識別
+
+| Path | 役割 | 許可Surface | 表示条件 |
+| --- | --- | --- | --- |
+| `assets/brand/guilduo-mark-master.svg` | Guilduo E2の正本 | 開発・レビュー | 既存の承認済みブランド素材を改変せず保存 |
+| `assets/brand/guilduo-mark-gold.svg` | Antique Gold単色マーク | LPv2の日英ヘッダー、体験エリア、MCP図、フッター | 透明背景、縦横比を維持、40px〜54px高 |
+| `assets/brand/guilduo-favicon-48.png` | 正式エンブレムのfavicon | LPv2の日英ブラウザタブ | 48×48、既存のフルカラー版を使用 |
+
+取得元と由来は`ASSETS.md`に記録する。LPv2のパレットは維持し、マークへ枠や色変換を加えない。
+
+LPv2.1 (`/lpv2-1/`、`/lpv2-1/en/`) も同じ素材を使用できる。Heroの往復図にはGold単色マークを追加し、周囲のタスクだけを動かす。エンブレム自体の形状・色・縦横比は変更しない。
+
 ## PWA・アプリ識別
 
 | Path | 役割 | 許可Surface | 推奨表示 |

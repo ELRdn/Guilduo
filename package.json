@@ -25,6 +25,8 @@
     "visual:check": "tsx tools/visual-regression.mts check",
     "visual:matrix": "tsx tools/visual-regression.mts matrix",
     "lp:verify": "tsx tools/verify-lp.mts",
+    "lpv2:verify": "tsx tools/verify-lpv2.mts",
+    "lpv21:verify": "tsx tools/verify-lpv21.mts",
     "lp:capture": "tsx tools/capture-lp.mts",
     "cli": "tsx cli/questforge.ts",
     "generate-release-config": "tsx tools/generate-release-config.mts",
