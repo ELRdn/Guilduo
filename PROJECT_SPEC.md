@@ -109,6 +109,8 @@ flowchart LR
 - API、MCP、外部連携から受け取るJSONは未検証の外部入力として扱い、ドメイン境界で正規化する。
 - GUIの遅延は保存確定までを測り、保存前の表示だけで成功と扱わない。認証付きREST/MCPにはリクエストごとに分離した処理時間を`Server-Timing`と`guilduo_request_timing`ログへ出力する。固定の処理名・経路分類、HTTP method/status、時間と回数のみを記録し、URL、クエリ、UID、Quest本文、認証情報、例外本文は含めない。並列・入れ子の区間は合計時間と重なるため、単純加算しない。
 
+- Workerの実行配置は任意の`WORKER_PLACEMENT_REGION`（`provider:region`）でAppwriteの保存地域付近へ指定できる。未指定ならCloudflareの既定配置を維持する。配置調整はデータ移行ではなく、認証・保存先endpoint・トランザクション・revision照合を変更しない。対象環境の設定を空にして再配備すると元の配置へ戻せる。
+
 ### 3.3 プロフィール画像の正本と境界
 
 

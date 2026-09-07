@@ -19,6 +19,7 @@ const scriptPath = path.join(root, "tools", "generate-release-config.mts");
 const tsxCli = require.resolve("tsx/cli");
 
 const BASE_ENV = {
+  WORKER_PLACEMENT_REGION: "",
   APPWRITE_ENDPOINT: "https://example.cloud.appwrite.io/v1",
   APPWRITE_PROJECT_ID: "example-project",
   APPWRITE_DATABASE_ID: "guilduo",
@@ -48,6 +49,22 @@ function runGenerator(dir: string, env: NodeJS.ProcessEnv): string {
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
+
+test("release placement is optional, validated and never changes the Appwrite endpoint", () => {
+  for (const region of ["", "aws:ap-southeast-1"]) {
+    withTempDir((dir) => {
+      runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", WORKER_PLACEMENT_REGION: region });
+      const config = JSON.parse(readFileSync(path.join(dir, "wrangler.jsonc"), "utf8"));
+      assert.deepEqual(config.placement, region ? { region } : undefined);
+      assert.equal(config.vars.APPWRITE_ENDPOINT, BASE_ENV.APPWRITE_ENDPOINT);
+      assert.deepEqual(config.compatibility_flags, ["nodejs_compat"]);
+    });
+  }
+  withTempDir((dir) => {
+    assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", WORKER_PLACEMENT_REGION: "https://untrusted.invalid" }));
+    assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
+  });
+});
 
 test("release config generation wires the AGENT_AVATARS R2 binding from R2_BUCKET_NAME", () => {
   withTempDir((dir) => {

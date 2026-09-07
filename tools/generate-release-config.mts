@@ -27,6 +27,10 @@ const webAppUrl = normalizeBaseUrl(process.env.WEB_APP_URL || "", "WEB_APP_URL")
 const publicSiteUrl = normalizeBaseUrl(process.env.PUBLIC_SITE_URL || OFFICIAL_SITE_ORIGIN, "PUBLIC_SITE_URL");
 const mcpAllowedOrigins = String(process.env.MCP_ALLOWED_ORIGINS || `${workerBaseUrl},${mcpBaseUrl}`).trim();
 const allowedWebOrigins = [...new Set([webAppUrl, publicSiteUrl, "http://localhost:5173", "http://127.0.0.1:5173"])].join(",");
+const placementRegion = String(process.env.WORKER_PLACEMENT_REGION || "").trim();
+if (placementRegion && !/^(aws|gcp|azure):[a-z][a-z0-9-]{1,63}$/.test(placementRegion)) {
+  throw new Error("Invalid WORKER_PLACEMENT_REGION: expected provider:region");
+}
 const appwrite = {
   endpoint: process.env.APPWRITE_ENDPOINT,
   projectId: process.env.APPWRITE_PROJECT_ID,
@@ -47,6 +51,7 @@ const wrangler = {
   compatibility_date: "2026-07-31",
   compatibility_flags: ["nodejs_compat"],
   workers_dev: true,
+  ...(placementRegion ? { placement: { region: placementRegion } } : {}),
   routes: [{ pattern: new URL(mcpBaseUrl).hostname, custom_domain: true }],
   vars: {
     APPWRITE_ENDPOINT: process.env.APPWRITE_ENDPOINT,
