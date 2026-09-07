@@ -1,4 +1,5 @@
 import { humanInbox } from "./human-inbox.ts";
+import { reportGuiTiming } from "./gui-timing.ts";
 import { relayText } from "./relay-copy.ts";
 import { relaySuccess } from "./relay-motion.ts";
 /**
@@ -722,6 +723,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         label: selectedAgent.displayName,
         handoffState: selectedAgent.defaultHandoffState || "ready",
       };
+    const saveStarted = performance.now();
     createSubmit.disabled = true;
     createSubmit.textContent = editingQuestId === null ? "作成しています…" : "変更を保存しています…";
     createError.hidden = true;
@@ -770,6 +772,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       closeCreate();
       render();
       announce(editing ? `${created.title}を更新しました。` : `${created.title}を作成しました。`);
+      reportGuiTiming(editing ? "edit" : "create", saveStarted, () => shell.isConnected);
     } catch (error) {
       createError.textContent = error instanceof Error ? error.message : "Questを作成できませんでした。もう一度お試しください。";
       createError.hidden = false;
@@ -1408,6 +1411,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           assignee: { ...quest.assignee, handoffState: action === "start" ? "working" : "none" },
           ...(action === "start" ? { handoff: { ...quest.handoff, startedAt: quest.handoff.startedAt || new Date().toISOString() } } : {}),
         };
+    const actionStarted = performance.now();
     state.taskSubmitting = true;
     state.taskMessage = action === "complete" ? "完了を保存しています…" : "変更を保存しています…";
     state.taskTone = null;
@@ -1430,6 +1434,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     } finally {
       state.taskSubmitting = false;
       render();
+      if (action === "complete" && state.taskTone === "success") reportGuiTiming("complete", actionStarted, () => shell.isConnected);
     }
   }
   /**

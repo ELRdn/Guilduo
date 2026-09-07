@@ -25,12 +25,14 @@ import { mountRelayForge } from "./shell.ts";
 import { dismissOAuthFailure, observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
 import { QuestForgeApiError, QuestForgeRepository } from "../repository.ts";
 import { createProductionRuntime } from "./production.ts";
+import { reportGuiTiming } from "./gui-timing.ts";
 
 const root = requireElement<HTMLElement>(document, "#relay-forge-root");
 const params = new URLSearchParams(window.location.search);
 const fixtureMode = params.has("state") || params.has("fixture") || params.has("variant");
 let demoRequested = fixtureMode;
 let loadSequence = 0;
+let initialProductionLoad = true;
 
 /**
  * Tears down whatever mounted UI currently owns `root` — the Shell's own
@@ -99,6 +101,8 @@ function bootstrap(
 }
 
 async function mountProduction(uid: string, email: string): Promise<void> {
+  const timingAction = initialProductionLoad ? "reload" : "connect";
+  const loadStarted = initialProductionLoad ? 0 : performance.now();
   const sequence = ++loadSequence;
   bootstrap("Workspaceを読み込んでいます", "Quest、Actor、Relay、Connectionを安全に同期しています。");
   try {
@@ -117,6 +121,8 @@ async function mountProduction(uid: string, email: string): Promise<void> {
         checkAuth();
       },
     });
+    initialProductionLoad = false;
+    reportGuiTiming(timingAction, loadStarted, () => sequence === loadSequence && !demoRequested && root.isConnected);
   } catch (error) {
     if (sequence !== loadSequence || demoRequested) return;
     const diagnostic = error instanceof QuestForgeApiError
@@ -156,6 +162,7 @@ function beginSignIn(): void {
 }
 
 function showSignedOut(): void {
+  initialProductionLoad = false;
   bootstrap(
     "Guilduoへサインイン",
     "実際のQuest、Agent、Handoffを表示するにはGoogleでサインインしてください。",

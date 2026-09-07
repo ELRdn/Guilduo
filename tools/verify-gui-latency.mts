@@ -36,6 +36,8 @@ try {
     await page.close();
   }
   const page = await browser.newPage({ viewport: { width: 1440, height: 915 } });
+  const guiTimings: string[] = [];
+  page.on("console", message => { if (message.text().startsWith("guilduo_gui_timing")) guiTimings.push(message.text()); });
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`${base}/tests/browser/latency-relay.html?failure`);
   await page.getByRole("button", { name: "Close Lens", exact: true }).click();
@@ -61,12 +63,20 @@ try {
   results.push("late auxiliary response preserves the open editor draft");
 
   await page.goto(`${base}/tests/browser/latency-relay.html?saving`);
+  guiTimings.length = 0;
   await page.getByRole("button", { name: "Complete", exact: true }).last().click();
   await page.getByText("完了を保存しています…", { exact: true }).last().waitFor();
   assert.equal(await page.getByRole("button", { name: "Complete", exact: true }).first().isDisabled(), true);
   assert.equal((await page.locator("body").innerText()).includes("Questを完了しました"), false);
+  assert.deepEqual(guiTimings, [], "no completed latency before the durable save response");
+  const timingLogged = page.waitForEvent("console", { predicate: message => message.text().startsWith("guilduo_gui_timing") });
   await page.locator("#release-save").evaluate((button: { click(): void }) => button.click());
   await page.getByText("Questを完了しました", { exact: true }).first().waitFor();
+  const timingMessage = await timingLogged;
+  const timing = await timingMessage.args()[1].jsonValue();
+  assert.equal(timing.action, "complete");
+  assert.equal(typeof timing.durationMs, "number");
+  assert.deepEqual(Object.keys(timing).sort(), ["action", "durationMs"]);
   results.push("completion shows pending state, blocks duplicate submit, confirms only after response");
 
   await page.goto(`${base}/tests/browser/latency-relay.html`);
