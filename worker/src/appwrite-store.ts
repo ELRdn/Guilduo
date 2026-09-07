@@ -1,4 +1,5 @@
 import type { AuthIdentity } from "./security.ts";
+import { timePhase } from "./request-timing.ts";
 import { sha256 } from "./security.ts";
 import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
 import type { QuestForgeState } from "../../types/questforge.ts";
@@ -86,10 +87,10 @@ function transactionsUrl(env: WorkerEnv, transactionId = ""): string {
 }
 
 async function createStateTransaction(env: WorkerEnv): Promise<string> {
-  const response = await fetch(transactionsUrl(env), {
+  const response = await timePhase("tx_begin", () => fetch(transactionsUrl(env), {
     method: "POST", headers: appwriteHeaders(env),
     body: JSON.stringify({ ttl: APPWRITE_TRANSACTION_TTL_SECONDS }),
-  });
+  }));
   if (!response.ok) return throwAppwritePersistenceFailure(response, "create_state_transaction");
   const transaction = await response.json() as JsonRecord;
   const id = String(transaction.$id || "");
@@ -99,7 +100,7 @@ async function createStateTransaction(env: WorkerEnv): Promise<string> {
 
 async function discardStateTransaction(env: WorkerEnv, id: string): Promise<void> {
   // Cleanup must not hide the original error; the bounded transaction TTL is a fallback.
-  try { await fetch(transactionsUrl(env, id), { method: "DELETE", headers: appwriteHeaders(env) }); } catch { /* expires */ }
+  try { await timePhase("tx_discard", () => fetch(transactionsUrl(env, id), { method: "DELETE", headers: appwriteHeaders(env) })); } catch { /* expires */ }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -131,7 +132,7 @@ async function decodeState(value: string): Promise<QuestForgeState | null> {
 
 async function payloadFromRow(row: AppwriteRow): Promise<StatePayload> {
   let state: QuestForgeState | null = null;
-  try { state = await decodeState(String(row.stateJson || "null")); } catch { state = null; }
+  try { state = await timePhase("state_decode", () => decodeState(String(row.stateJson || "null"))); } catch { state = null; }
   return { schemaVersion: Number(row.schemaVersion || state?.schemaVersion || 3), clientUpdatedAt: String(row.clientUpdatedAt || state?.updatedAt || ""), deviceId: String(row.deviceId || ""), state };
 }
 
@@ -141,7 +142,7 @@ export async function readState(env: WorkerEnv, identity: Identity): Promise<{ p
     const local = localPayload(uid);
     return { payload: structuredClone(local.value), etag: String(local.revision) };
   }
-  const response = await fetch(rowUrl(env, uid), { headers: appwriteHeaders(env) });
+  const response = await timePhase("state_read", () => fetch(rowUrl(env, uid), { headers: appwriteHeaders(env) }));
   if (response.status === 404) {
     const email = typeof identity === "string" ? "" : identity.email;
     if (email && env.APPWRITE_LEGACY_TABLE_ID) {
@@ -180,14 +181,14 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
     revision: currentRevision + 1,
     clientUpdatedAt: String(payload.clientUpdatedAt || payload.state?.updatedAt || new Date().toISOString()),
     deviceId: String(payload.deviceId || "unknown"),
-    stateJson: await encodeState(payload.state || null),
+    stateJson: await timePhase("state_encode", () => encodeState(payload.state || null)),
   };
   const create = etag === null || etag === undefined;
   if (!create) {
     const transactionId = preparedTransactionId ?? await createStateTransaction(env);
     const transactionalRow = new URL(rowUrl(env, uid));
     transactionalRow.searchParams.set("transactionId", transactionId);
-    const current = await fetch(transactionalRow, { headers: appwriteHeaders(env) });
+    const current = await timePhase("tx_read", () => fetch(transactionalRow, { headers: appwriteHeaders(env) }));
     if (current.status === 404) {
       if (!preparedTransactionId) await discardStateTransaction(env, transactionId);
       return false;
@@ -198,26 +199,26 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
       if (!preparedTransactionId) await discardStateTransaction(env, transactionId);
       return false;
     }
-    const staged = await fetch(rowUrl(env, uid), {
+    const staged = await timePhase("tx_stage", () => fetch(rowUrl(env, uid), {
       method: "PATCH",
       headers: appwriteHeaders(env),
       body: JSON.stringify({ data, transactionId }),
-    });
+    }));
     if (!staged.ok) return throwAppwritePersistenceFailure(staged, "stage_state_update");
-    const committed = await fetch(transactionsUrl(env, transactionId), {
+    const committed = await timePhase("tx_commit", () => fetch(transactionsUrl(env, transactionId), {
       method: "PATCH",
       headers: appwriteHeaders(env),
       body: JSON.stringify({ commit: true }),
-    });
+    }));
     if (committed.status === 409) return false;
     if (!committed.ok) return throwAppwritePersistenceFailure(committed, "commit_state_transaction");
     return true;
   }
-  const response = await fetch(create ? rowsUrl(env) : rowUrl(env, uid), {
+  const response = await timePhase("state_create", () => fetch(create ? rowsUrl(env) : rowUrl(env, uid), {
     method: "POST",
     headers: appwriteHeaders(env),
     body: JSON.stringify({ rowId: uid, data }),
-  });
+  }));
   if (response.status === 409) return false;
   if (!response.ok) return throwAppwritePersistenceFailure(response, create ? "create_state_row" : "upsert_state_row");
   return true;
@@ -240,7 +241,7 @@ export async function mutateState(env: WorkerEnv, identity: Identity, mutator: S
       const state = asState(payload.state);
       if (!state) throw Object.assign(new Error("Guilduo state has not been synchronized yet."), { status: 409, code: "state_unavailable" });
       const nextState = structuredClone(state);
-      const result = await mutator(nextState);
+      const result = await timePhase("domain", async () => mutator(nextState));
       const nextPayload: StatePayload = { ...payload, schemaVersion: nextState.schemaVersion || 3, clientUpdatedAt: nextState.updatedAt || new Date().toISOString(), deviceId: "guilduo-worker", state: nextState };
       if (await writeState(env, identity, nextPayload, etag, transactionId)) {
         committed = true;

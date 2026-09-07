@@ -107,8 +107,10 @@ flowchart LR
 - Firebase移行データは`legacy_states`へ暗号学的メールハッシュをキーとして一時格納し、同じメールでの初回Appwriteログイン時に`user_states`へ一度だけ移管する。移行元は検証期間中だけロールバック用に保持する。
 - Next版のローカル保存はゲスト利用、表示設定、前回スナップショットのためだけに使う。ログイン済みユーザーの本体データを別ユーザーへ表示しない。
 - API、MCP、外部連携から受け取るJSONは未検証の外部入力として扱い、ドメイン境界で正規化する。
+- GUIの遅延は保存確定までを測り、保存前の表示だけで成功と扱わない。認証付きREST/MCPにはリクエストごとに分離した処理時間を`Server-Timing`と`guilduo_request_timing`ログへ出力する。固定の処理名・経路分類、HTTP method/status、時間と回数のみを記録し、URL、クエリ、UID、Quest本文、認証情報、例外本文は含めない。並列・入れ子の区間は合計時間と重なるため、単純加算しない。
 
 ### 3.3 プロフィール画像の正本と境界
+
 
 - プロフィールの表示名、handle、bio、既定のキャラクター表示、現在の画像asset参照、`avatarVersion`はCloudflare D1の`social_profiles`を正本にする。Web UIとMCPの`get_my_profile` / `update_profile`は同じ行を読む・更新する。
 - Appwrite Authのemailはアカウント情報として読み取り専用で表示する。プロフィールの公開情報やMCP出力へemailを混在させない。

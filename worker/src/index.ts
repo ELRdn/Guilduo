@@ -1,3 +1,4 @@
+import { timePhase, withRequestTiming } from "./request-timing.ts";
 import {
   DomainError,
   archiveQuests,
@@ -1762,24 +1763,26 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
   if (path === "/openapi.json") return fetch(new URL("/api/openapi.json", env.WEB_APP_URL || "http://localhost:5173"));
 
   if ((path === "/mcp" || path === "/mcp-next") && !mcpOrigin) return rejectUntrustedMcpHost();
-  const authenticated = await authenticateRequest(request, env);
+  const authenticated = await timePhase("auth", () => authenticateRequest(request, env));
   if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${mcpOrigin || primaryMcpOrigin(env)}/.well-known/oauth-protected-resource/mcp"` });
-  const identity = await identityWithAgentContext(env, authenticated);
-  if (path === "/mcp") return handleMcp(request, env, context, identity);
-  if (path === "/mcp-next") return handleMcpNext(request, env, context, identity);
-  if (path.startsWith("/v1/")) return routeApi(request, env, context, identity, path);
+  const identity = await timePhase("agent_context", () => identityWithAgentContext(env, authenticated));
+  if (path === "/mcp") return timePhase("route", () => handleMcp(request, env, context, identity));
+  if (path === "/mcp-next") return timePhase("route", () => handleMcpNext(request, env, context, identity));
+  if (path.startsWith("/v1/")) return timePhase("route", () => routeApi(request, env, context, identity, path));
   return json({ error: { code: "not_found", message: "Route not found." } }, 404);
 }
 
 export default {
   async fetch(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
-    try { return withCors(await handleRequest(request, env, context), request, env); }
-    catch (error) {
-      const operation = oauthOperationForRequest(request);
-      if (operation) await logOAuthFailure(operation, request, error);
-      else console.error(error);
-      return withCors(errorResponse(error), request, env);
-    }
+    return withRequestTiming(request, async () => {
+      try { return withCors(await handleRequest(request, env, context), request, env); }
+      catch (error) {
+        const operation = oauthOperationForRequest(request);
+        if (operation) await logOAuthFailure(operation, request, error);
+        else console.error(error);
+        return withCors(errorResponse(error), request, env);
+      }
+    });
   },
   async scheduled(_controller: unknown, env: WorkerEnv, context: WorkerContext): Promise<void> {
     context.waitUntil(retryDeliveries(env));
