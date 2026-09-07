@@ -21,6 +21,8 @@ type JsonRecord = Record<string, unknown>;
 
 export interface RelayForgeRuntime {
   readonly mode: "production";
+  readonly loadDeferred?: () => Promise<RelayForgeRuntime>;
+  readonly panelErrors?: readonly { index: number; message: string }[];
   readonly model: CommandModel;
   readonly profile: ProfileRecord | null;
   readonly email: string;
@@ -221,7 +223,10 @@ export async function createProductionRuntime(
   selfUid: string,
   email = "",
 ): Promise<RelayForgeRuntime> {
-  const snapshot = await repository.loadSnapshot();
+  return runtimeFromSnapshot(await repository.loadSnapshot({ deferPanels: true }), repository, selfUid, email);
+}
+
+function runtimeFromSnapshot(snapshot: Awaited<ReturnType<QuestForgeRepository["loadSnapshot"]>>, repository: QuestForgeRepository, selfUid: string, email: string): RelayForgeRuntime {
   const quests = snapshot.quests as Quest[];
   const profile = normalizeProfileRecord(snapshot.profile);
   const effectiveProfile: ProfileRecord = profile ?? { uid: selfUid, displayName: "あなた" };
@@ -237,6 +242,8 @@ export async function createProductionRuntime(
 
   return {
     mode: "production",
+    ...(snapshot.loadDeferred ? { loadDeferred: async () => runtimeFromSnapshot(await snapshot.loadDeferred!(), repository, selfUid, email) } : {}),
+    panelErrors: snapshot.panelErrors,
     model,
     profile,
     email: email.trim(),

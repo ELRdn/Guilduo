@@ -10,7 +10,7 @@ type LabState = JsonRecord & {
   remoteMode?: boolean;
   remoteIntegrations?: unknown[];
 };
-type RequestOptions = { method?: string; body?: string; headers?: Record<string, string> };
+type RequestOptions = { method?: string; body?: string; headers?: Record<string, string>; readOnly?: boolean };
 type TokenProvider = (forceRefresh?: boolean) => Promise<string>;
 type UploadProgressEvent = { readonly lengthComputable: boolean; readonly loaded: number; readonly total: number };
 type UploadTarget = { addEventListener(type: "progress", listener: (event: UploadProgressEvent) => void): void };
@@ -42,6 +42,7 @@ type Snapshot = JsonRecord & {
   agentConnections: JsonRecord;
   mcpTools: unknown[];
   panelErrors: Array<{ index: number; message: string }>;
+  loadDeferred?: () => Promise<Snapshot>;
 };
 
 export const LAB_STATE_KEY = "questforge-interaction-lab-state";
@@ -208,6 +209,8 @@ export class QuestForgeRepository {
     if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
     const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
         ...options,
+        // A timed-out mutation may already have committed: never abort/retry it here.
+        ...(!options.method || options.method === "GET" || options.readOnly ? { signal: AbortSignal.timeout(15_000) } : {}),
         headers: {
           accept: "application/json",
           ...(options.body ? { "content-type": "application/json" } : {}),
@@ -237,18 +240,32 @@ export class QuestForgeRepository {
     return this.request("/health");
   }
 
-  async loadSnapshot(): Promise<Snapshot> {
-    const questPage = await this.request<JsonRecord>("/v1/quests?view=all&limit=200");
-    const optionalEntries = await Promise.allSettled([
-      this.request("/v1/character"),
-      this.request("/v1/battle/session"),
-      this.request("/v1/integrations"),
-      this.request("/v1/profile"),
-      this.request("/v1/party"),
-      this.request("/v1/agents?includeArchived=true"),
-      this.request("/v1/agent-connections"),
-      this.listMcpTools(),
+  async loadSnapshot(options: { deferPanels?: boolean } = {}): Promise<Snapshot> {
+    const loaders = [
+      () => this.request("/v1/character"),
+      () => this.request("/v1/battle/session"),
+      () => this.request("/v1/integrations"),
+      () => this.request("/v1/profile"),
+      () => this.request("/v1/party"),
+      () => this.request("/v1/agents?includeArchived=true"),
+      () => this.request("/v1/agent-connections"),
+      () => this.listMcpTools(),
+    ];
+    const [questPage, optionalEntries] = await Promise.all([
+      this.request<JsonRecord>("/v1/quests?view=all&limit=200"),
+      Promise.allSettled(loaders.map((load, index) => options.deferPanels && index !== 3 && index !== 5 ? Promise.resolve({}) : load())),
     ]);
+    const snapshot = this.snapshotFromEntries(questPage, optionalEntries);
+    if (options.deferPanels) snapshot.loadDeferred = async () => {
+      const entries = await Promise.allSettled(loaders.map((load, index) => index === 3 || index === 5
+        ? optionalEntries[index].status === "fulfilled" ? Promise.resolve(optionalEntries[index].value) : Promise.reject(optionalEntries[index].reason)
+        : load()));
+      return this.snapshotFromEntries(questPage, entries);
+    };
+    return snapshot;
+  }
+
+  private snapshotFromEntries(questPage: JsonRecord, optionalEntries: PromiseSettledResult<JsonRecord>[]): Snapshot {
     const value = (index: number, fallback: JsonRecord): JsonRecord => {
       const entry = optionalEntries[index];
       return entry?.status === "fulfilled" && entry.value && typeof entry.value === "object" && !Array.isArray(entry.value)
@@ -285,6 +302,7 @@ export class QuestForgeRepository {
   async listMcpTools(): Promise<JsonRecord> {
     const response = await this.request<JsonRecord>("/mcp", {
       method: "POST",
+      readOnly: true,
       body: JSON.stringify({ jsonrpc: "2.0", id: "relay-forge-tools", method: "tools/list", params: {} }),
     });
     const rpcError = response.error && typeof response.error === "object" && !Array.isArray(response.error)

@@ -538,6 +538,9 @@ function withCors(response: Response, request: Request, env: WorkerEnv): Respons
   Object.entries(corsHeaders(request, env)).forEach(([key, value]) => next.headers.set(key, value));
   next.headers.set("access-control-allow-headers", "authorization,content-type,mcp-protocol-version");
   next.headers.set("access-control-allow-methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
+  if (request.method === "OPTIONS" && next.headers.has("access-control-allow-origin")) {
+    next.headers.set("access-control-max-age", "600");
+  }
   return next;
 }
 

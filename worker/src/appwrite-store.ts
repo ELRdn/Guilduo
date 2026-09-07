@@ -85,6 +85,23 @@ function transactionsUrl(env: WorkerEnv, transactionId = ""): string {
   return transactionId ? `${base}/${encodeURIComponent(transactionId)}` : base;
 }
 
+async function createStateTransaction(env: WorkerEnv): Promise<string> {
+  const response = await fetch(transactionsUrl(env), {
+    method: "POST", headers: appwriteHeaders(env),
+    body: JSON.stringify({ ttl: APPWRITE_TRANSACTION_TTL_SECONDS }),
+  });
+  if (!response.ok) return throwAppwritePersistenceFailure(response, "create_state_transaction");
+  const transaction = await response.json() as JsonRecord;
+  const id = String(transaction.$id || "");
+  if (!id) throw new Error("Appwrite transaction did not return an ID.");
+  return id;
+}
+
+async function discardStateTransaction(env: WorkerEnv, id: string): Promise<void> {
+  // Cleanup must not hide the original error; the bounded transaction TTL is a fallback.
+  try { await fetch(transactionsUrl(env, id), { method: "DELETE", headers: appwriteHeaders(env) }); } catch { /* expires */ }
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
@@ -147,7 +164,7 @@ export async function readState(env: WorkerEnv, identity: Identity): Promise<{ p
   return { payload: await payloadFromRow(row), etag: String(Number(row.revision || 0)) };
 }
 
-export async function writeState(env: WorkerEnv, identity: Identity, payload: StatePayload, etag?: string | null): Promise<boolean> {
+export async function writeState(env: WorkerEnv, identity: Identity, payload: StatePayload, etag?: string | null, preparedTransactionId?: string): Promise<boolean> {
   const uid = uidOf(identity);
   if (!configured(env)) {
     const local = localPayload(uid);
@@ -167,26 +184,18 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
   };
   const create = etag === null || etag === undefined;
   if (!create) {
-    const transactionResponse = await fetch(transactionsUrl(env), {
-      method: "POST",
-      headers: appwriteHeaders(env),
-      body: JSON.stringify({ ttl: APPWRITE_TRANSACTION_TTL_SECONDS }),
-    });
-    if (!transactionResponse.ok) return throwAppwritePersistenceFailure(transactionResponse, "create_state_transaction");
-    const transaction = await transactionResponse.json() as JsonRecord;
-    const transactionId = String(transaction.$id || "");
-    if (!transactionId) throw new Error("Appwrite transaction did not return an ID.");
+    const transactionId = preparedTransactionId ?? await createStateTransaction(env);
     const transactionalRow = new URL(rowUrl(env, uid));
     transactionalRow.searchParams.set("transactionId", transactionId);
     const current = await fetch(transactionalRow, { headers: appwriteHeaders(env) });
     if (current.status === 404) {
-      await fetch(transactionsUrl(env, transactionId), { method: "DELETE", headers: appwriteHeaders(env) });
+      if (!preparedTransactionId) await discardStateTransaction(env, transactionId);
       return false;
     }
     if (!current.ok) return throwAppwritePersistenceFailure(current, "read_state_transaction_row");
     const currentRow = await current.json() as AppwriteRow;
     if (String(Number(currentRow.revision || 0)) !== String(etag)) {
-      await fetch(transactionsUrl(env, transactionId), { method: "DELETE", headers: appwriteHeaders(env) });
+      if (!preparedTransactionId) await discardStateTransaction(env, transactionId);
       return false;
     }
     const staged = await fetch(rowUrl(env, uid), {
@@ -216,13 +225,30 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
 
 export async function mutateState(env: WorkerEnv, identity: Identity, mutator: StateMutation): Promise<{ state: QuestForgeState; result: unknown }> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const { payload, etag } = await readState(env, identity);
-    const state = asState(payload.state);
-    if (!state) throw Object.assign(new Error("Guilduo state has not been synchronized yet."), { status: 409, code: "state_unavailable" });
-    const nextState = structuredClone(state);
-    const result = await mutator(nextState);
-    const nextPayload: StatePayload = { ...payload, schemaVersion: nextState.schemaVersion || 3, clientUpdatedAt: nextState.updatedAt || new Date().toISOString(), deviceId: "guilduo-worker", state: nextState };
-    if (await writeState(env, identity, nextPayload, etag)) return { state: nextState, result };
+    // Neither operation depends on the other. Keep the transactional revision
+    // recheck below: a concurrent update between these reads must still conflict.
+    const [read, transaction] = await Promise.allSettled([
+      readState(env, identity),
+      configured(env) ? createStateTransaction(env) : Promise.resolve(undefined),
+    ]);
+    const transactionId = transaction.status === "fulfilled" ? transaction.value : undefined;
+    let committed = false;
+    try {
+      if (read.status === "rejected") throw read.reason;
+      if (transaction.status === "rejected") throw transaction.reason;
+      const { payload, etag } = read.value;
+      const state = asState(payload.state);
+      if (!state) throw Object.assign(new Error("Guilduo state has not been synchronized yet."), { status: 409, code: "state_unavailable" });
+      const nextState = structuredClone(state);
+      const result = await mutator(nextState);
+      const nextPayload: StatePayload = { ...payload, schemaVersion: nextState.schemaVersion || 3, clientUpdatedAt: nextState.updatedAt || new Date().toISOString(), deviceId: "guilduo-worker", state: nextState };
+      if (await writeState(env, identity, nextPayload, etag, transactionId)) {
+        committed = true;
+        return { state: nextState, result };
+      }
+    } finally {
+      if (transactionId && !committed) await discardStateTransaction(env, transactionId);
+    }
   }
   throw Object.assign(new Error("The state changed on another device. Retry the request."), { status: 409, code: "state_conflict" });
 }

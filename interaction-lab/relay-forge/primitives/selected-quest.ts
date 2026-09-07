@@ -33,6 +33,7 @@ import { relayText } from "../relay-copy.ts";
 
 export interface SelectedQuestOptions {
   readonly writeLocked: boolean;
+  readonly pendingMessage?: string;
   /** Artifact whose preview is open, or `null` while the preview is closed. */
   readonly previewArtifactId: string | null;
   readonly onReviewOutput: (artifactId: string) => void;
@@ -324,6 +325,7 @@ export function selectedQuestWorkspace(
       ),
     ),
     el("p", { class: "rf-selected-reason" }, `理由: ${view.reason}`),
+    options.pendingMessage ? el("p", { class: "rf-decision-result", role: "status" }, options.pendingMessage) : null,
   );
 
   const details = el(

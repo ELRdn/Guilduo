@@ -83,6 +83,8 @@ export function createGuilduoAuth(options: AuthOptions) {
   let cachedUser: GuilduoUser | null = null;
   let cachedJwt = "";
   let jwtExpiresAt = 0;
+  let jwtInFlight: Promise<string> | null = null;
+  let authGeneration = 0;
 
   async function refreshAccount(): Promise<GuilduoUser> {
     cachedUser = normalizeAccount(await options.account.get());
@@ -122,10 +124,17 @@ export function createGuilduoAuth(options: AuthOptions) {
       const state = await resolveAuthState();
       if (state.status !== "authenticated") return "";
     }
+    if (jwtInFlight) return jwtInFlight;
     if (!forceRefresh && cachedJwt && jwtExpiresAt > now() + 30_000) return cachedJwt;
-    cachedJwt = String((await options.account.createJWT({ duration: 900 })).jwt || "");
-    jwtExpiresAt = now() + 14 * 60 * 1000;
-    return cachedJwt;
+    const generation = authGeneration;
+    const pending = options.account.createJWT({ duration: 900 }).then((result) => {
+      if (generation !== authGeneration) return "";
+      cachedJwt = String(result.jwt || "");
+      jwtExpiresAt = now() + 14 * 60 * 1000;
+      return cachedJwt;
+    });
+    jwtInFlight = pending;
+    try { return await pending; } finally { if (jwtInFlight === pending) jwtInFlight = null; }
   }
 
   function beginGoogleSignIn(): void {
@@ -138,6 +147,8 @@ export function createGuilduoAuth(options: AuthOptions) {
   }
 
   async function signOutAccount(): Promise<void> {
+    authGeneration += 1;
+    jwtInFlight = null;
     try {
       await options.account.deleteSession({ sessionId: "current" });
     } catch (error) {

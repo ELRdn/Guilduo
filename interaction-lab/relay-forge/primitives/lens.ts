@@ -255,7 +255,7 @@ export function interventionLens(
       el("span", { class: "rf-decision-info", "aria-hidden": "true" }),
     ),
     el("p", { class: "rf-decision-status" }, options.questActions.statusLabel),
-    options.resultTone === null ? null : el("p", {
+    options.resultTone === null && !options.submitting ? null : el("p", {
       class: "rf-decision-result", "data-tone": options.resultTone,
       role: options.resultTone === "error" ? "alert" : "status",
     }, options.resultMessage),

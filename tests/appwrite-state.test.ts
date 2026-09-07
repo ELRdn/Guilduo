@@ -237,6 +237,7 @@ test("Appwrite state write failure maps to generic 500 and logs only sanitized d
   });
   assert.equal(JSON.stringify(logs).includes("test-api-key"), false);
   assert.equal(JSON.stringify(logs).includes("stateJson"), false);
+  assert.equal(api.requests.filter((request) => request.method === "DELETE" && request.url.endsWith("/transactions/tx-1")).length, 1);
 
   const persisted = (await api.persistedState()).tasks[0];
   assert.equal(persisted.assignee.handoffState, "none");
@@ -294,4 +295,46 @@ test("large state still rejects a stale revision without overwriting the stored 
   assert.deepEqual(api.row, before);
   assert.ok(api.requests.some((request) => request.method === "DELETE" && request.url.endsWith("/transactions/tx-1")));
   assert.equal(api.requests.some((request) => request.method === "PATCH"), false);
+});
+
+test("mutation starts transaction while the independent state read is still pending", async () => {
+  const api = new FakeAppwriteStateApi(initialState());
+  const fetch = api.fetch.bind(api);
+  let releaseRead!: () => void;
+  const readGate = new Promise<void>(resolve => { releaseRead = resolve; });
+  let transactionStarted = false;
+  api.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/transactions") && init?.method === "POST") transactionStarted = true;
+    if (url.pathname.endsWith("/rows/owner-1") && (!init?.method || init.method === "GET") && !url.searchParams.has("transactionId")) await readGate;
+    return fetch(input, init);
+  };
+  const pending = patchQuest(api, { nextAction: "parallel save" });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(transactionStarted, true, "transaction creation must not wait for the first state read");
+  } finally { releaseRead(); }
+  assert.equal((await pending).status, 200);
+});
+
+test("concurrent state change is retried without losing the other writer's data", async () => {
+  const api = new FakeAppwriteStateApi(initialState());
+  const fetch = api.fetch.bind(api);
+  let changed = false;
+  api.fetch = async (input, init) => {
+    if (String(input).includes("transactionId=") && !changed) {
+      changed = true;
+      const concurrent = await api.persistedState();
+      concurrent.tasks[0].notes = "Another writer's data";
+      api.row.stateJson = JSON.stringify(concurrent);
+      api.row.revision = 5;
+    }
+    return fetch(input, init);
+  };
+  assert.equal((await patchQuest(api, { nextAction: "Our update" })).status, 200);
+  const saved = (await api.persistedState()).tasks[0];
+  assert.equal(saved.notes, "Another writer's data");
+  assert.equal(saved.nextAction, "Our update");
+  assert.equal(api.row.revision, 6);
+  assert.equal(api.requests.filter((request) => request.method === "DELETE" && request.url.endsWith("/transactions/tx-1")).length, 1);
 });
