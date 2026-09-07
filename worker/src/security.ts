@@ -96,6 +96,11 @@ export async function authenticateRequest(request: Request, env: WorkerEnv): Pro
   if (env.DEV_BEARER_TOKEN && token === env.DEV_BEARER_TOKEN) {
     return { uid: env.DEV_USER_ID || "local-dev", email: "local@questforge.dev", scopes: [...ALL_SCOPES], authType: "dev" };
   }
+  // Shape selects a verifier only; identity and scopes still require Appwrite.
+  // Guilduo OAuth tokens are opaque (qf_...), never compact JWTs.
+  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
+    try { return await verifyAppwriteJwt(token, env); } catch { return null; }
+  }
   const kv = getOAuthRecordStore(env);
   const record = await kv.get<JsonRecord>(`access:${await sha256(token)}`, "json");
   const oauth = asAuthIdentity(record);

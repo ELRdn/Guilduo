@@ -935,6 +935,15 @@
   background: var(--qf-color-raised);
 }
 
+.rf-deferred-panel {
+  padding: var(--qf-space-4);
+  font: var(--qf-text-body);
+}
+
+.rf-deferred-panel h2 {
+  font: var(--qf-text-section);
+}
+
 .rf-create-header {
   justify-content: space-between;
   border-bottom: var(--qf-border-width) solid var(--qf-color-border-default);

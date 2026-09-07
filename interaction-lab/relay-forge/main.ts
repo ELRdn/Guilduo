@@ -102,7 +102,7 @@ async function mountProduction(uid: string, email: string): Promise<void> {
   const sequence = ++loadSequence;
   bootstrap("Workspaceを読み込んでいます", "Quest、Actor、Relay、Connectionを安全に同期しています。");
   try {
-    const repository = new QuestForgeRepository({ getToken: () => getIdToken() });
+    const repository = new QuestForgeRepository({ getToken: (forceRefresh) => getIdToken(forceRefresh) });
     const runtime = await createProductionRuntime(repository, uid, email);
     if (sequence !== loadSequence || demoRequested) return;
     // Injected here, not imported by the shell: Appwrite Auth stays a

@@ -224,6 +224,14 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 
 ## 7. 開発・変更・リリースルール
 
+### GUI latency repair (2026-09-07)
+
+- Relay Forge boots from Quests, profile and Agent identity; auxiliary panels load after mount and expose loading/error/retry without replacing edited Quests.
+- Appwrite JWT-shaped credentials go directly to Appwrite verification; opaque OAuth credentials retain the D1/KV and revocation path. Token shape never grants identity or scopes. Authentication refresh is forwarded and concurrent JWT issuance is shared.
+- State mutations overlap the independent initial state read and transaction creation. Transactional revision recheck, staging, commit and conflict retry remain mandatory; failed attempts release the transaction. No state/Quest schema migration.
+- CORS preflight reuse is bounded and origin-specific. Read requests have a deadline; writes are never automatically retried on timeout.
+
+
 - 共有ドメイン、API、MCP、Appwrite Schemaを変更する前に、この文書を更新する。
 - API/MCPの契約変更は、互換性、dry-run、認証、ユーザー分離、既存クライアントへの影響を確認する。
 - UIの見た目、コンポーネント、レイアウト、モーションを変更する場合は[`DESIGN.md`](DESIGN.md)を先に更新する。

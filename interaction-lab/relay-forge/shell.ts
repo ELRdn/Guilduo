@@ -248,6 +248,38 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   let sharedMcpTools = [...(runtime?.mcpTools ?? [])];
   let mcpToolsLoadError = runtime?.mcpToolsLoadError ?? null;
   let mcpToolsLoading = false;
+  let sharedIntegrations = runtime?.integrations;
+  let sharedMembers = runtime?.members;
+  let sharedPartyName = runtime?.partyName;
+  let deferredLoading = Boolean(runtime?.loadDeferred);
+  let deferredError: string | null = null;
+  let deferredPanelErrors = runtime?.panelErrors ?? [];
+
+  async function loadDeferredPanels(): Promise<void> {
+    if (!runtime?.loadDeferred || lifecycle.disposed) return;
+    deferredLoading = true;
+    deferredError = null;
+    render();
+    try {
+      const panels = await runtime.loadDeferred();
+      if (lifecycle.disposed) return;
+      // Never replace Quests, profile or Agents: the user may have edited them
+      // while auxiliary requests were pending.
+      sharedIntegrations = panels.integrations;
+      sharedMembers = panels.members;
+      sharedPartyName = panels.partyName;
+      battleSession = panels.battleSession;
+      sharedAgentConnections = [...panels.agentConnections];
+      agentConnectionsLoadError = panels.agentConnectionsLoadError;
+      sharedMcpTools = [...panels.mcpTools];
+      mcpToolsLoadError = panels.mcpToolsLoadError;
+      deferredPanelErrors = panels.panelErrors ?? [];
+    } catch (error) {
+      if (!lifecycle.disposed) deferredError = error instanceof Error ? error.message : "読み込みに失敗しました。";
+    } finally {
+      if (!lifecycle.disposed) { deferredLoading = false; render(); }
+    }
+  }
 
   /*
    * Agent avatar images. The server never hands out a usable URL — every
@@ -482,9 +514,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   const screenQuests = () => production ? sharedQuests : fixtureQuestsFor(state.variant);
   const screenAgents = () => production ? sharedAgents : fixtureAgentsFor(state.variant);
-  const screenIntegrations = () => runtime?.integrations ?? fixtureIntegrationsFor(state.variant);
-  const screenMembers = () => runtime?.members ?? fixturePartyMembersFor(state.variant);
-  const screenPartyName = () => runtime?.partyName ?? fixturePartyNameFor(state.variant);
+  const screenIntegrations = () => sharedIntegrations ?? fixtureIntegrationsFor(state.variant);
+  const screenMembers = () => sharedMembers ?? fixturePartyMembersFor(state.variant);
+  const screenPartyName = () => sharedPartyName ?? fixturePartyNameFor(state.variant);
   const screenNotices = (label: string, retry: () => void) => production ? [] : noticesFor(state.variant, label, retry);
   const screenWriteHeld = () => production ? state.stale : writeHeldFor(state.variant);
   const screenNow = () => production ? Date.now() : FIXTURE_NOW;
@@ -691,7 +723,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         handoffState: selectedAgent.defaultHandoffState || "ready",
       };
     createSubmit.disabled = true;
-    createSubmit.textContent = "作成しています…";
+    createSubmit.textContent = editingQuestId === null ? "作成しています…" : "変更を保存しています…";
     createError.hidden = true;
 
     try {
@@ -1377,7 +1409,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           ...(action === "start" ? { handoff: { ...quest.handoff, startedAt: quest.handoff.startedAt || new Date().toISOString() } } : {}),
         };
     state.taskSubmitting = true;
-    state.taskMessage = "";
+    state.taskMessage = action === "complete" ? "完了を保存しています…" : "変更を保存しています…";
     state.taskTone = null;
     render();
     try {
@@ -2342,7 +2374,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         ),
       )
       : selectedQuestWorkspace(view, state.model.actors, {
-        writeLocked: state.stale,
+        writeLocked: state.stale || state.taskSubmitting,
+        pendingMessage: state.taskSubmitting ? state.taskMessage : undefined,
         previewArtifactId: state.previewArtifactId,
         /* Evidence inspection only. The final decision lives in the Lens
          * Decision Bar (v2 section 7.4), so these never share a command. */
@@ -2604,6 +2637,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function renderScreen(): ScreenRender | null {
+    const panelIndices: Partial<Record<NavId, readonly number[]>> = { network: [2], party: [4], battle: [1], connections: [2], skills: [7], settings: [6] };
+    const indices = panelIndices[state.domain];
+    const panelError = deferredError ?? deferredPanelErrors.find((entry) => indices?.includes(entry.index))?.message;
+    if (runtime?.loadDeferred && indices && (deferredLoading || panelError)) {
+      const retry = el("button", { type: "button" }, "再試行");
+      retry.addEventListener("click", () => { if (!deferredLoading) void loadDeferredPanels(); });
+      return { main: el("section", { class: "rf-deferred-panel", "aria-busy": String(deferredLoading) },
+        el("h2", {}, domainLabel(state.domain)),
+        el("p", { role: deferredLoading ? "status" : "alert" }, deferredLoading ? "この画面の情報を読み込んでいます。タスクはそのまま操作できます。" : panelError || "読み込みに失敗しました。"),
+        ...(deferredLoading ? [] : [retry])), sticky: null };
+    }
     const context = screenContext();
     const retry = () => {
       state.variant = "default";
@@ -2879,6 +2923,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   render();
   refreshAgentAvatars();
   refreshProfileAvatar();
+  void loadDeferredPanels();
   void inbox.refresh();
 
   return function unmountRelayForge(): void {

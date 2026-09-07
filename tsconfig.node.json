@@ -16,5 +16,5 @@
     "tests/**/*.ts",
     "vite.config.ts"
   ],
-  "exclude": ["dist", "node_modules", "unity-battle-prototype", "tests/browser/human-relay.ts", "tests/browser/production-relay.ts"]
+  "exclude": ["dist", "node_modules", "unity-battle-prototype", "tests/browser/human-relay.ts", "tests/browser/production-relay.ts", "tests/browser/latency-relay.ts"]
 }

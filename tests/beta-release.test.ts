@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+import { QuestForgeRepository } from "../interaction-lab/repository.ts";
 
 const root = path.join(__dirname, "..");
 const read = (file: string): string => fs.readFileSync(path.join(root, file), "utf8");
@@ -38,12 +39,25 @@ test("Today scroll boundary is desktop-only and keeps mobile page scrolling", ()
   assert.match(css, /@media \(max-width: 900px\)[\s\S]*?body\.is-today-view \.quest-list[\s\S]*?overflow:\s*visible/);
 });
 
-test("beta repository keeps Quest loading independent from optional panels", () => {
+test("beta repository keeps Quest loading independent from optional panels", async () => {
   const repository = read("interaction-lab/repository.ts");
   const relayForge = read("interaction-lab/relay-forge/main.ts");
-  assert.match(repository, /const questPage = await this\.request/);
-  assert.match(repository, /Promise\.allSettled/);
-  assert.match(repository, /panelErrors/);
+  const originalFetch = globalThis.fetch;
+  let questsFail = false;
+  globalThis.fetch = async (input) => {
+    const isQuests = new URL(String(input)).pathname === "/v1/quests";
+    return isQuests && !questsFail
+      ? Response.json({ quests: [], total: 0 })
+      : Response.json({ error: "unavailable" }, { status: 503 });
+  };
+  try {
+    const repo = new QuestForgeRepository({ baseUrl: "https://fake.invalid", getToken: async () => "fake" });
+    const snapshot = await repo.loadSnapshot();
+    assert.deepEqual(snapshot.quests, []);
+    assert.equal(snapshot.panelErrors.length, 8);
+    questsFail = true;
+    await assert.rejects(() => repo.loadSnapshot(), { status: 503 });
+  } finally { globalThis.fetch = originalFetch; }
   assert.match(repository, /getToken\(true\)/);
   assert.match(relayForge, /API \$\{error\.status\} \/ \$\{error\.code\}/);
 });

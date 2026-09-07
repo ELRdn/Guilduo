@@ -11,6 +11,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
     "relay:verify": "tsx tools/verify-human-relay.mts",
+    "latency:verify": "tsx tools/verify-gui-latency.mts",
     "check": "npm run typecheck",
     "deploy": "npm run build",
     "worker:dev": "wrangler dev --port 8787",
