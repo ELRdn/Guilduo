@@ -9,7 +9,18 @@ import {
 import {
   deriveMcpUrl,
   normalizeSettingsModel,
+  effectiveConnectionScopes,
+  type SettingsMcpConnectionRow,
 } from "../interaction-lab/relay-forge/screens/settings-model.ts";
+
+test("Settings: execution scopes intersect active Agent permissions without losing the control-plane grant", () => {
+  const connection: SettingsMcpConnectionRow = { clientId: "client", clientName: "My client", scopes: ["quests:read", "quests:write", "agents:write"], linkedAgentId: "my-agent", authorized: true, revokedAt: null, linkRevokedAt: null, firstConnectedAt: "", lastUsedAt: "" };
+  const model = { agents: [{ agentId: "my-agent", displayName: "My Agent", status: "active", provider: "mine", role: "assistant", allowedScopes: ["quests:read", "agents:read"] }] };
+  assert.deepEqual(effectiveConnectionScopes(model, connection), ["quests:read"]);
+  assert.ok(connection.scopes.includes("agents:write"));
+  for (const patch of [{ authorized: false }, { revokedAt: "now" }, { linkRevokedAt: "now" }, { linkedAgentId: "missing" }]) assert.deepEqual(effectiveConnectionScopes(model, { ...connection, ...patch }), []);
+  assert.deepEqual(effectiveConnectionScopes({ agents: [{ ...model.agents[0], status: "disabled" }] }, connection), []);
+});
 
 /* ------------------------------------------------------------------ *
  * Theme — the fix for the Rail quick-toggle no-op bug.

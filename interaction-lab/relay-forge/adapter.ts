@@ -219,7 +219,7 @@ function spineFor(quest: Quest, selfActorId: string): RelaySpine {
       return {
         legs: [
           { actorId: agentId, connector: "completed", nodeState: "completed" },
-          { actorId: selfActorId, connector: null, nodeState: "completed" },
+          { actorId: selfActorId, connector: null, nodeState: quest.done ? "completed" : "current" },
         ],
         currentIndex: 1,
         hiddenBefore: 0,
@@ -296,7 +296,21 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
     }
   }
 
-  const selectedViews = new Map(loomQuests.map((quest) => [quest.id, deriveSelectedQuestView(quest)]));
+  const records = new Map(options.quests.map((quest) => [quest.id, quest]));
+  const selectedViews = new Map(loomQuests.map((quest) => {
+    const record = records.get(quest.id)!;
+    return [quest.id, {
+      ...deriveSelectedQuestView(quest),
+      requester: record.requester ?? null,
+      // Production Quests always show their actual text/link context, even when
+      // empty. Evidence previews belong to the separate fixture surface.
+      externalReview: {
+        url: record.humanRequest?.artifactUrl || record.handoff.artifactUrl,
+        note: record.humanRequest?.checkTarget || record.handoff.note || record.notes,
+        criteria: record.completionCriteria,
+      },
+    }];
+  }));
 
   return {
     actors: known,

@@ -24,11 +24,13 @@ import {
   transitionQuestHandoff,
 } from "../../server/questforge-domain.ts";
 import type { DomainInput, DomainRecord } from "../../server/questforge-domain.ts";
+import { listHumanRequests, preserveRelayState, requestHumanReview, respondHumanReview, type RelayContext } from "../../server/human-requests.ts";
 import { mutateState, readState, writeState } from "./appwrite-store.ts";
 import { authenticateRequest } from "./security.ts";
 import {
   approveAuthorization,
   authorizePage,
+  deleteAuthorizedClient,
   getAuthorizedClient,
   logOAuthFailure,
   listAuthorizedClients,
@@ -45,6 +47,7 @@ import { oauthStorageKind } from "./oauth-record-store.ts";
 import {
   bumpAgentAvatarVersion,
   createAgent,
+  deleteAgentConnection,
   getAgent,
   getAgentConnection,
   getAgentForClient,
@@ -128,7 +131,12 @@ import type { JsonRecord, R2ObjectLike, WorkerEnv, WorkerError } from "./worker-
 import { isQuest } from "../../types/questforge.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 
-type WorkerIdentity = AuthIdentity & { agent?: AgentRecord; connectionScopes?: string[] };
+type WorkerIdentity = AuthIdentity & {
+  agent?: AgentRecord;
+  connectionScopes?: string[];
+  agentAllowedScopes?: string[];
+  effectiveExecutionScopes?: string[];
+};
 type WorkerContext = { waitUntil(promise: Promise<unknown>): void };
 type WorkerArgs = JsonRecord;
 type McpArgs = JsonRecord & {
@@ -270,6 +278,13 @@ const OPEN_WORLD_IDEMPOTENT_ANNOTATIONS = { readOnlyHint: false, destructiveHint
 const TELEMETRY_EVENT_NAMES = new Set(["web_vitals", "js_error", "sync_success", "sync_failure", "first_quest_complete", "mcp_connection_success", "agent_assignment_success"]);
 
 const QUEST_OBJECT = { type: "object" };
+const HUMAN_REVIEW_INPUT = {
+  questId: { type: "string", minLength: 1 }, requestKey: { type: "string", minLength: 1, maxLength: 120 },
+  title: { type: "string", minLength: 1, maxLength: 80 }, reason: { type: "string", minLength: 1, maxLength: 1000 },
+  checkTarget: { type: "string", minLength: 1, maxLength: 1000 }, completionCriteria: { type: "string", minLength: 1, maxLength: 300 },
+  artifactUrl: { type: "string", maxLength: 500 }, expectedUpdatedAt: { type: "string" }, dryRun: { type: "boolean", default: true },
+};
+const HUMAN_REVIEW_OUTPUT = { type: "object", properties: { dryRun: { type: "boolean" }, reused: { type: "boolean" }, quest: QUEST_OBJECT, events: { type: "array", items: QUEST_OBJECT } }, required: ["dryRun", "reused", "quest", "events"], additionalProperties: false };
 const QUEST_LIST_PAGE_OUTPUT = {
   type: "object",
   properties: { quests: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } },
@@ -359,20 +374,31 @@ const AGENT_SCOPES = [
   "friends:read", "friends:write", "parties:read", "parties:write",
   "battle:read", "battle:write", "agents:read",
 ];
-const AGENT_OBJECT = {
+const AGENT_PUBLIC_RESPONSE_SCHEMA = {
   type: "object",
+  required: [
+    "uid", "agentId", "displayName", "provider", "role", "instructions", "status", "allowedScopes",
+    "defaultHandoffState", "reviewRequired", "dryRunDefault", "createdAt", "updatedAt", "avatarVersion", "hasCustomAvatar",
+  ],
   properties: {
     uid: { type: "string" }, agentId: { type: "string" }, displayName: { type: "string" }, provider: { type: "string" },
     role: { type: "string" }, instructions: { type: "string" }, status: { type: "string", enum: ["active", "disabled", "archived"] },
     allowedScopes: { type: "array", items: { type: "string", enum: AGENT_SCOPES } },
     defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" },
     createdAt: { type: "string" }, updatedAt: { type: "string" },
+    avatarVersion: { type: "integer", minimum: 0 }, hasCustomAvatar: { type: "boolean" },
   },
   additionalProperties: false,
 };
-const AGENT_LIST_OUTPUT = { type: "object", properties: { agents: { type: "array", items: AGENT_OBJECT } }, additionalProperties: false };
+const AGENT_LIST_OUTPUT = {
+  type: "object",
+  required: ["agents"],
+  properties: { agents: { type: "array", items: AGENT_PUBLIC_RESPONSE_SCHEMA } },
+  additionalProperties: false,
+};
 const AGENT_CONNECTION_OBJECT = {
   type: "object",
+  required: ["clientId", "clientName", "scopes", "firstConnectedAt", "lastUsedAt", "revokedAt"],
   properties: {
     clientId: { type: "string" }, clientName: { type: "string" }, scopes: { type: "array", items: { type: "string" } },
     firstConnectedAt: { type: "string" }, lastUsedAt: { type: "string" }, revokedAt: { type: ["string", "null"] },
@@ -381,10 +407,25 @@ const AGENT_CONNECTION_OBJECT = {
 };
 const AGENT_LINK_OUTPUT = {
   type: "object",
+  required: ["linked", "stale", "agent", "connection"],
   properties: {
     linked: { type: "boolean" }, relinked: { type: "boolean" }, unlinked: { type: "boolean" }, stale: { type: "boolean" },
-    agent: { anyOf: [AGENT_OBJECT, { type: "null" }] },
+    agent: { anyOf: [AGENT_PUBLIC_RESPONSE_SCHEMA, { type: "null" }] },
     connection: { anyOf: [AGENT_CONNECTION_OBJECT, { type: "null" }] },
+  },
+  additionalProperties: false,
+};
+const AGENT_CONTEXT_OUTPUT = {
+  type: "object",
+  required: ["agent", "clientId", "connectionScopes", "agentAllowedScopes", "effectiveExecutionScopes", "effectiveScopes", "linked"],
+  properties: {
+    agent: { anyOf: [AGENT_PUBLIC_RESPONSE_SCHEMA, { type: "null" }] },
+    clientId: { type: ["string", "null"] },
+    connectionScopes: { type: "array", items: { type: "string" } },
+    agentAllowedScopes: { type: "array", items: { type: "string", enum: AGENT_SCOPES } },
+    effectiveExecutionScopes: { type: "array", items: { type: "string" } },
+    effectiveScopes: { type: "array", items: { type: "string" } },
+    linked: { type: "boolean" },
   },
   additionalProperties: false,
 };
@@ -413,6 +454,8 @@ const TOGGL_FOCUS_ENTRY_PROPERTIES = {
 };
 
 const MCP_TOOLS = [
+  { name: "request_human_review", title: "Ask a Human", description: "Create a separate human confirmation Quest for Agent-assigned work. Describe what to check externally and return as text. Preview first; execute with the source Quest expectedUpdatedAt. Reuse requestKey only for the same request. Never launches an Agent or completes original work.", inputSchema: { type: "object", required: ["questId", "requestKey", "title", "reason", "checkTarget", "completionCriteria"], properties: HUMAN_REVIEW_INPUT, additionalProperties: false }, outputSchema: HUMAN_REVIEW_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "list_human_requests", title: "Read Human Requests", description: "Read pending, deferred, or answered human confirmation Quests and their text feedback. Read answered requests before resuming Agent work. Never fabricate a human answer.", inputSchema: { type: "object", properties: { status: { type: "string", enum: ["pending", "deferred", "answered", "all"], default: "pending" }, sourceQuestId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 50 }, cursor: { type: "string" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_today_quests", title: "List Today's Quests", description: "List active scheduled Guilduo quests visible today, including overdue work.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_quests", title: "List Quests", description: "List Guilduo quests by today, week, future, backlog, completed, archive, or all views.", inputSchema: { type: "object", properties: LIST_QUEST_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "create_quest", title: "Create Quest", description: "Create a Guilduo habit, daily, todo, or reward with planning and priority details.", inputSchema: { type: "object", required: ["kind", "title"], properties: QUEST_INPUT_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: WRITE_ANNOTATIONS },
@@ -457,11 +500,11 @@ const MCP_TOOLS = [
   { name: "get_daily_brief", title: "Get Daily Brief", description: "Return today's quests, character state, and an optional cached Calendar schedule.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" }, includeCalendar: { type: "boolean", default: false } }, additionalProperties: false }, outputSchema: DAILY_BRIEF_OUTPUT, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "get_review_summary", title: "Get Review Summary", description: "Summarize completed work and activity for one day or a rolling seven-day review window.", inputSchema: { type: "object", properties: { period: { type: "string", enum: ["day", "week"], default: "day" }, anchorDate: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: REVIEW_SUMMARY_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_agent_handoffs", title: "List Agent Handoffs", description: "List agent-assigned Guilduo handoffs by lifecycle state.", inputSchema: { type: "object", properties: { assigneeId: { type: "string", maxLength: 120 }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted", "pending", "all"], default: "all" }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 25 } }, additionalProperties: false }, outputSchema: { type: "object", properties: { handoffs: { type: "array", items: QUEST_OBJECT }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
-  { name: "list_registered_agents", title: "List Registered Agents", description: "List the authenticated user's private Guilduo Agent Registry profiles.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LIST_OUTPUT, annotations: READ_ANNOTATIONS },
-  { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: GENERIC_OBJECT_OUTPUT, annotations: READ_ANNOTATIONS },
-  { name: "get_agent_link", title: "Get Agent Link", description: "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: READ_ANNOTATIONS },
-  { name: "link_agent", title: "Link MCP Connection to Agent", description: "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents.", inputSchema: { type: "object", required: ["agentId"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } }, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
-  { name: "unlink_agent", title: "Unlink MCP Connection", description: "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "list_registered_agents", title: "List Registered Agents", description: "List the authenticated user's private Guilduo Agent Registry profiles. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LIST_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "get_current_agent_context", title: "Get Current Agent Context", description: "Return the registered Agent profile linked to the current OAuth MCP client, the original connection scopes, the Agent policy scopes, and the effective execution scopes. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_CONTEXT_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "get_agent_link", title: "Get Agent Link", description: "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: READ_ANNOTATIONS },
+  { name: "link_agent", title: "Link MCP Connection to Agent", description: "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", required: ["agentId"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } }, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "unlink_agent", title: "Unlink MCP Connection", description: "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "assign_quest_to_agent", title: "Assign Quest to Agent", description: "Preview or assign one Quest to a registered Agent. Execution requires the Quest's current updatedAt value.", inputSchema: { type: "object", required: ["questId", "agentId"], properties: { questId: { type: "string" }, agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" }, expectedUpdatedAt: { type: "string" }, handoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: AGENT_ASSIGNMENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "transition_quest_handoff", title: "Transition Quest Handoff", description: "Preview or transition an agent-assigned Quest between none, ready, working, blocked, review_required, and accepted.", inputSchema: { type: "object", required: ["questId", "state"], properties: { questId: { type: "string" }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, expectedState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, blockedReason: { type: "string", maxLength: 500 }, artifactUrl: { type: "string", format: "uri" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: HANDOFF_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate Guilduo activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
@@ -630,6 +673,13 @@ function toPublicAgents(agents: AgentRecord[]): Array<Omit<AgentRecord, "avatarA
   return agents.map(toPublicAgent);
 }
 
+/** Agent Registry reads and connection-link operations are control-plane
+ * actions. Once an Agent is linked, `identity.scopes` is the execution-scope
+ * intersection; these checks must use the original OAuth connection grant. */
+function assertConnectionScope(identity: WorkerIdentity, requiredScope: string): void {
+  assertScope(identity.connectionScopes || identity.scopes, requiredScope);
+}
+
 /** Connection metadata is safe to expose, but the owner uid and every token
  * remain server-side only.  MCP uses this shape for both linked and unlinked
  * current connections. */
@@ -658,8 +708,20 @@ async function requireMcpConnection(env: WorkerEnv, identity: WorkerIdentity, re
   // Agent effective scopes are intentionally narrower than the original
   // OAuth grant. Link management is a connection-level control-plane action,
   // so it must use the unfiltered grant rather than the linked Agent policy.
-  assertScope(identity.connectionScopes || identity.scopes, requiredScope);
+  assertConnectionScope(identity, requiredScope);
   return client;
+}
+
+async function disconnectMcpConnection(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord> {
+  const authorizedClient = await revokeAuthorizedClient(env, uid, clientId);
+  const relation = await getAgentConnection(env, uid, clientId);
+  if (!authorizedClient && !relation) {
+    throw new DomainError(404, "oauth_client_not_found", "An OAuth MCP connection was not found for the signed-in user.");
+  }
+  const connection = relation && !relation.revokedAt
+    ? await unlinkAgentConnection(env, uid, clientId)
+    : relation;
+  return { authorizedClient, connection };
 }
 
 async function currentMcpAgentLink(env: WorkerEnv, identity: WorkerIdentity, client: JsonRecord): Promise<JsonRecord> {
@@ -724,10 +786,19 @@ async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity):
   const connectionScopes = [...(identity.scopes || [])];
   await noteAuthorizedClientUse(env, identity);
   const agent = await getAgentForClient(env, identity.uid, identity.clientId);
-  if (!agent || agent.uid !== identity.uid) return { ...identity, connectionScopes };
+  if (!agent || agent.uid !== identity.uid) {
+    return {
+      ...identity,
+      connectionScopes,
+      agentAllowedScopes: [],
+      effectiveExecutionScopes: connectionScopes,
+    };
+  }
   await noteAgentConnectionUse(env, identity.uid, identity.clientId).catch(() => undefined);
-  const allowed = new Set(agent.allowedScopes || []);
-  return { ...identity, connectionScopes, scopes: (identity.scopes || []).filter((scope) => allowed.has(scope)), agent };
+  const agentAllowedScopes = [...(agent.allowedScopes || [])];
+  const allowed = new Set(agentAllowedScopes);
+  const effectiveExecutionScopes = (identity.scopes || []).filter((scope) => allowed.has(scope));
+  return { ...identity, connectionScopes, agentAllowedScopes, effectiveExecutionScopes, scopes: effectiveExecutionScopes, agent };
 }
 
 async function assignQuestToAgent(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, input: WorkerArgs): Promise<JsonRecord> {
@@ -753,6 +824,19 @@ async function assignQuestToAgent(env: WorkerEnv, identity: WorkerIdentity, cont
     if (latest.updatedAt !== input.expectedUpdatedAt) throw new DomainError(409, "stale_quest", "The Quest changed before this assignment was applied.", { expectedUpdatedAt: input.expectedUpdatedAt, actualUpdatedAt: latest.updatedAt });
     return patchQuest(next, String(input.questId), patch, { source: "mcp", returnEvent: true });
   }) };
+}
+
+async function relayContext(env: WorkerEnv, identity: WorkerIdentity, source: string): Promise<RelayContext> {
+  if (identity.authType === "oauth") return { ownerId: identity.uid, source, requester: identity.agent ? { type: "agent", id: identity.agent.agentId, label: identity.agent.displayName } : null };
+  const profile = await getOwnProfile(env, identity.uid);
+  return { ownerId: identity.uid, source, requester: { type: "human", id: identity.uid, label: profile?.displayName || "Human" } };
+}
+
+async function requestReview(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, questId: string, input: WorkerArgs, source: string) {
+  assertScope(identity.scopes, "quests:write");
+  const actor = await relayContext(env, identity, source);
+  if (input.dryRun !== false) return requestHumanReview(await stateFor(env, identity), questId, asDomainInput(input), actor);
+  return mutateAndNotify(env, identity, context, (state) => requestHumanReview(state, questId, asDomainInput(input), actor));
 }
 
 function validDateValue(value: unknown): string {
@@ -789,11 +873,14 @@ async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context
 async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
   const method = request.method;
   if (path === "/v1/state" && method === "GET") {
+    assertScope(identity.scopes, "quests:read");
     const { payload } = await readState(env, identity);
     if (!payload.state) return json({ error: { code: "state_not_found", message: "No synchronized Guilduo state exists." } }, 404);
     return json(payload);
   }
   if (path === "/v1/state" && method === "PUT") {
+    assertScope(identity.scopes, "quests:write");
+    if (identity.authType === "oauth") throw new DomainError(403, "state_snapshot_web_only", "MCP clients must use Quest commands instead of replacing a human's full snapshot.");
     const input = await requestRecord(request);
     if (!input.state || typeof input.state !== "object" || Array.isArray(input.state)) {
       throw new DomainError(400, "invalid_state", "state must be a Guilduo state object.");
@@ -803,7 +890,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
       schemaVersion: Number(asRecord(input.state).schemaVersion || input.schemaVersion || 3),
       clientUpdatedAt: String(input.clientUpdatedAt || asRecord(input.state).updatedAt || new Date().toISOString()),
       deviceId: String(input.deviceId || "guilduo-web"),
-      state: input.state as unknown as QuestForgeState,
+      state: preserveRelayState(input.state as unknown as QuestForgeState, current.payload.state || null),
     };
     if (!await writeState(env, identity, payload, current.etag)) {
       throw new DomainError(409, "state_conflict", "The Guilduo state changed on another device.");
@@ -811,7 +898,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     return json(payload);
   }
   if (path === "/v1/agents" && method === "GET") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     const includeArchived = new URL(request.url).searchParams.get("includeArchived") === "true";
     return json({ agents: toPublicAgents(await listAgents(env, identity.uid, { includeArchived })) });
   }
@@ -824,17 +911,43 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     assertAgentRegistryWebMutation(request, env, identity);
     return json({ authorizedClients: await listAuthorizedClients(env, identity.uid), connections: await listAllAgentConnections(env, identity.uid) });
   }
+  const oauthConnectionDisconnectMatch = path.match(/^\/v1\/agent-connections\/([^/]+)\/disconnect$/);
+  if (oauthConnectionDisconnectMatch && method === "POST") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    return json(await disconnectMcpConnection(env, identity.uid, decodeURIComponent(oauthConnectionDisconnectMatch[1])));
+  }
+  const oauthConnectionDeleteMatch = path.match(/^\/v1\/agent-connections\/([^/]+)\/permanent$/);
+  if (oauthConnectionDeleteMatch && method === "DELETE") {
+    assertAgentRegistryWebMutation(request, env, identity);
+    const clientId = decodeURIComponent(oauthConnectionDeleteMatch[1]);
+    const authorizedClient = await getAuthorizedClient(env, identity.uid, clientId);
+    const relation = await getAgentConnection(env, identity.uid, clientId);
+    if (authorizedClient || (relation && !relation.revokedAt)) {
+      throw new DomainError(409, "oauth_connection_active", "Disconnect the active MCP connection before deleting its history.");
+    }
+    const deletedGrant = await deleteAuthorizedClient(env, identity.uid, clientId);
+    const deletedConnection = await deleteAgentConnection(env, identity.uid, clientId);
+    if (!deletedGrant && !deletedConnection) {
+      throw new DomainError(404, "oauth_client_not_found", "An OAuth MCP connection was not found for the signed-in user.");
+    }
+    return json({
+      deleted: true,
+      clientId,
+      oauthGrantDeleted: Boolean(deletedGrant),
+      connectionDeleted: Boolean(deletedConnection),
+    });
+  }
   const oauthConnectionMatch = path.match(/^\/v1\/agent-connections\/([^/]+)$/);
   if (oauthConnectionMatch && method === "DELETE") {
     assertAgentRegistryWebMutation(request, env, identity);
     const clientId = decodeURIComponent(oauthConnectionMatch[1]);
-    const revoked = await revokeAuthorizedClient(env, identity.uid, clientId);
-    if (!revoked) throw new DomainError(404, "oauth_client_not_found", "An active OAuth MCP client with this ID was not found for the signed-in user.");
-    return json({ authorizedClient: revoked });
+    // Legacy REST callers used this DELETE as Disconnect. Keep that alias
+    // working while exposing the irreversible operation at `/permanent`.
+    return json(await disconnectMcpConnection(env, identity.uid, clientId));
   }
   const agentMatch = path.match(/^\/v1\/agents\/([^/]+)$/);
   if (agentMatch && method === "GET") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     const agent = await getAgent(env, identity.uid, decodeURIComponent(agentMatch[1]), { includeArchived: true });
     return json({ agent: toPublicAgent(agent) });
   }
@@ -850,7 +963,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   }
   const agentAvatarMatch = path.match(/^\/v1\/agents\/([^/]+)\/avatar$/);
   if (agentAvatarMatch && method === "GET") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     return serveAgentAvatar(request, env, identity, decodeURIComponent(agentAvatarMatch[1]));
   }
   if (agentAvatarMatch && method === "PUT") {
@@ -1067,10 +1180,27 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const query = Object.fromEntries(new URL(request.url).searchParams);
     return json(listQuestPage(await stateFor(env, identity), query));
   }
+  if (path === "/v1/human-requests" && method === "GET") {
+    assertScope(identity.scopes, "quests:read");
+    return json(listHumanRequests(await stateFor(env, identity), Object.fromEntries(new URL(request.url).searchParams)));
+  }
+  const reviewRequestMatch = path.match(/^\/v1\/quests\/([^/]+)\/review-requests$/);
+  if (reviewRequestMatch && method === "POST") return json(await requestReview(env, identity, context, decodeURIComponent(reviewRequestMatch[1]), await requestRecord(request), "api"));
+  const reviewResponseMatch = path.match(/^\/v1\/quests\/([^/]+)\/review-response$/);
+  if (reviewResponseMatch && method === "POST") {
+    assertScope(identity.scopes, "quests:write");
+    if (identity.authType === "oauth") throw new DomainError(403, "human_response_required", "The human must answer in Guilduo; an Agent cannot submit their answer.");
+    const input = await requestRecord(request);
+    const actor = await relayContext(env, identity, "api");
+    const questId = decodeURIComponent(reviewResponseMatch[1]);
+    if (input.dryRun !== false) return json(respondHumanReview(await stateFor(env, identity), questId, asDomainInput(input), actor));
+    return json(await mutateAndNotify(env, identity, context, (state) => respondHumanReview(state, questId, asDomainInput(input), actor)));
+  }
   if (path === "/v1/quests" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
-    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { source: "api", returnEvent: true }));
+    const actor = await relayContext(env, identity, "api");
+    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { ...actor, returnEvent: true }));
     const createdQuest = created.quest;
     if (createdQuest && await isTogglFocusAutoCreateEnabled(env, identity)) {
       try {
@@ -1125,6 +1255,10 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     return json(await mutateAndNotify(env, identity, context, (state) => syncQuestToTogglFocus(env, identity, state, questId, input)), 201);
   }
   const questMatch = path.match(/^\/v1\/quests\/([^/]+)$/);
+  if (questMatch && method === "GET") {
+    assertScope(identity.scopes, "quests:read");
+    return json(getQuest(await stateFor(env, identity), decodeURIComponent(questMatch[1])));
+  }
   if (questMatch && method === "PATCH") {
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
@@ -1343,15 +1477,23 @@ async function convertCalendarEventWithOverrides(env: WorkerEnv, identity: Worke
 
 async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<unknown> {
   if (name === "list_registered_agents") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
     return { agents: toPublicAgents(await listAgents(env, identity.uid)) };
   }
   if (name === "get_current_agent_context") {
-    assertScope(identity.scopes, "agents:read");
+    assertConnectionScope(identity, "agents:read");
+    const connectionScopes = identity.connectionScopes || identity.scopes || [];
+    const agentAllowedScopes = identity.agentAllowedScopes || identity.agent?.allowedScopes || [];
+    const effectiveExecutionScopes = identity.effectiveExecutionScopes || identity.scopes || [];
     return {
       agent: identity.agent ? toPublicAgent(identity.agent) : null,
       clientId: identity.clientId || null,
-      effectiveScopes: identity.scopes || [],
+      connectionScopes,
+      agentAllowedScopes,
+      effectiveExecutionScopes,
+      // Compatibility alias retained for clients that already consume this
+      // field. It continues to describe execution, not the OAuth grant.
+      effectiveScopes: effectiveExecutionScopes,
       linked: Boolean(identity.agent),
     };
   }
@@ -1416,10 +1558,13 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
     return mutateAndNotify(env, identity, context, (state) => battleCommand(state, asDomainInput(args), { source: "mcp" }));
   }
   if (name === "list_today_quests") { assertScope(identity.scopes, "quests:read"); return listQuestPage(await stateFor(env, identity), { view: "today", date: args.date }); }
+  if (name === "request_human_review") return requestReview(env, identity, context, requiredString(args.questId, "questId"), args, "mcp");
+  if (name === "list_human_requests") { assertScope(identity.scopes, "quests:read"); return listHumanRequests(await stateFor(env, identity), asDomainInput(args)); }
   if (name === "list_quests") { assertScope(identity.scopes, "quests:read"); return listQuestPage(await stateFor(env, identity), asDomainInput(args)); }
   if (name === "create_quest") {
     assertScope(identity.scopes, "quests:write");
-    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, asDomainInput(args), { source: "mcp", returnEvent: true }));
+    const actor = await relayContext(env, identity, "mcp");
+    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, asDomainInput(args), { ...actor, returnEvent: true }));
     const createdQuest = created.quest;
     if (createdQuest && await isTogglFocusAutoCreateEnabled(env, identity)) {
       try {

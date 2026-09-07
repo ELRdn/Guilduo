@@ -64,6 +64,15 @@ openapi.servers = [
 ];
 
 Object.assign(openapi.paths, {
+  "/v1/human-requests": {
+    get: { summary: "List human confirmation Quests", parameters: [{ name: "status", in: "query", schema: { type: "string", enum: ["pending", "deferred", "answered", "all"], default: "pending" } }, { name: "sourceQuestId", in: "query", schema: { type: "string" } }, { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } }, { name: "cursor", in: "query", schema: { type: "string" } }], responses: ok("Human request page", { $ref: "#/components/schemas/HumanRequestPage" }) },
+  },
+  "/v1/quests/{questId}/review-requests": {
+    post: { summary: "Preview or request a human confirmation of Agent work", description: "The assigned registered Agent or authenticated web user may create an independent confirmation Quest. Reusing the same requestKey and content returns the existing Quest; changed content conflicts. No external artifact is fetched or embedded.", parameters: [parameter("questId")], requestBody: body({ $ref: "#/components/schemas/HumanReviewInput" }), responses: { ...ok("Human confirmation request", { $ref: "#/components/schemas/HumanReviewResult" }), "403": { description: "Agent missing or not the assignee" }, "409": { description: "Stale Quest, conflicting requestKey, or an unanswered request already exists" } } },
+  },
+  "/v1/quests/{questId}/review-response": {
+    post: { summary: "Read, defer, resume, or answer a human confirmation", description: "Authenticated web user only; OAuth/MCP Agents cannot answer. An explicit confirmed checkbox is required for approve/revise, and revise requires text feedback. Answering completes only this confirmation Quest, once. Original work and Handoff remain unchanged.", parameters: [parameter("questId")], requestBody: body({ $ref: "#/components/schemas/HumanReviewResponse" }), responses: { ...ok("Human response", { $ref: "#/components/schemas/HumanReviewResult" }), "403": { description: "Only the intended authenticated human may respond" }, "409": { description: "Stale or already answered request" } } },
+  },
   "/v1/agents": {
     get: { summary: "List the signed-in user's private Agent Registry", parameters: [{ name: "includeArchived", in: "query", schema: { type: "boolean", default: false } }], responses: ok("Agent list", { type: "object", properties: { agents: { type: "array", items: { $ref: "#/components/schemas/RegisteredAgent" } } } }) },
     post: { summary: "Register an Agent from the Appwrite-authenticated web app", requestBody: body({ $ref: "#/components/schemas/RegisteredAgentInput" }), responses: { "201": { description: "Agent registered" } } },
@@ -197,6 +206,9 @@ Object.assign(openapi.paths, {
   },
 });
 
+openapi.paths["/v1/quests/{questId}"] ||= {};
+openapi.paths["/v1/quests/{questId}"].get = { summary: "Read one Quest with requester and human confirmation metadata", parameters: [parameter("questId")], responses: ok("Quest", { type: "object", properties: { quest: { $ref: "#/components/schemas/Quest" } } }) };
+
 const oauth2 = openapi.components.securitySchemes.oauth2 as OpenApiSchema;
 const bearerAuth = openapi.components.securitySchemes.bearerAuth as OpenApiSchema;
 bearerAuth.bearerFormat = "Appwrite JWT";
@@ -252,7 +264,13 @@ schemas.QuestInput.properties ||= {};
 schemas.QuestInput.properties.assignee = { $ref: "#/components/schemas/Assignee" };
 schemas.QuestInput.properties.parentQuestId = { type: "string", maxLength: 120 };
 schemas.QuestInput.properties.handoff = { $ref: "#/components/schemas/Handoff" };
-const questOutputProperties = { handoff: { $ref: "#/components/schemas/Handoff" }, childrenSummary: { type: "object" } };
+schemas.QuestRequester = { type: ["object", "null"], readOnly: true, required: ["type", "id", "label"], properties: { type: { type: "string", enum: ["human", "agent"] }, id: { type: "string" }, label: { type: "string" } }, additionalProperties: false, description: "Trusted creator identity. null means the legacy or unlinked creator is unknown." };
+schemas.HumanRequest = { type: ["object", "null"], readOnly: true, required: ["sourceQuestId", "requestKey", "recipientId", "reason", "checkTarget", "artifactUrl", "status", "seenAt", "respondedAt", "response", "outcome"], properties: { sourceQuestId: { type: "string" }, requestKey: { type: "string" }, recipientId: { type: "string" }, reason: { type: "string" }, checkTarget: { type: "string" }, artifactUrl: { type: "string" }, status: { type: "string", enum: ["pending", "deferred", "answered"] }, seenAt: { type: "string" }, respondedAt: { type: "string" }, response: { type: "string" }, outcome: { type: "string", enum: ["", "approved", "changes_requested"] } }, additionalProperties: false };
+schemas.HumanReviewInput = { ...(MCP_TOOLS.find((tool) => tool.name === "request_human_review")!.inputSchema as OpenApiSchema), required: ["requestKey", "title", "reason", "checkTarget", "completionCriteria"] };
+schemas.HumanReviewResponse = { type: "object", required: ["action"], properties: { action: { type: "string", enum: ["seen", "defer", "resume", "approve", "revise"] }, expectedUpdatedAt: { type: "string", description: "Required for execution; use the latest Quest timestamp." }, response: { type: "string", maxLength: 2000 }, confirmed: { type: "boolean", default: false }, dryRun: { type: "boolean", default: true } }, additionalProperties: false };
+schemas.HumanReviewResult = { type: "object", required: ["dryRun", "reused", "quest", "events"], properties: { dryRun: { type: "boolean" }, reused: { type: "boolean" }, quest: { $ref: "#/components/schemas/Quest" }, events: { type: "array", items: { type: "object" } } }, additionalProperties: false };
+schemas.HumanRequestPage = { type: "object", required: ["quests", "total", "limit", "nextCursor"], properties: { quests: { type: "array", items: { $ref: "#/components/schemas/Quest" } }, total: { type: "integer" }, limit: { type: "integer" }, nextCursor: { type: ["string", "null"] } }, additionalProperties: false };
+const questOutputProperties = { handoff: { $ref: "#/components/schemas/Handoff" }, childrenSummary: { type: "object" }, requester: { $ref: "#/components/schemas/QuestRequester" }, humanRequest: { $ref: "#/components/schemas/HumanRequest" } };
 if (Array.isArray(schemas.Quest.allOf)) {
   const outputPart = schemas.Quest.allOf.find((part: OpenApiSchema) => part.properties?.id && part.properties?.createdAt) || schemas.Quest.allOf[schemas.Quest.allOf.length - 1];
   outputPart.properties = { ...(outputPart.properties || {}), ...questOutputProperties };

@@ -19,6 +19,7 @@
  */
 
 import type { Actor } from "../model.ts";
+import { relayText } from "../relay-copy.ts";
 import { actorAvatar } from "../primitives/avatar.ts";
 import { el } from "../primitives/dom.ts";
 import type { Impact } from "../../../types/questforge.ts";
@@ -280,13 +281,14 @@ function detailRail(
   const sendToCommand = el(
     "button",
     { type: "button", class: "rf-primary-button rf-q-send" },
-    "Commandで判断する",
+    row.humanRequest ? relayText("inbox") : "Commandで判断する",
   );
   sendToCommand.addEventListener("click", () => callbacks.onSendToCommand(row.id));
 
   const inspect = el("button", { type: "button", class: "rf-secondary-button" }, "依存を追跡");
   inspect.addEventListener("click", () => callbacks.onInspectNetwork(row.id));
   const edit = el("button", { type: "button", class: "rf-secondary-button" }, "Questを編集");
+  edit.hidden = row.humanRequest === true;
   if (callbacks.onEdit !== undefined) edit.addEventListener("click", () => callbacks.onEdit?.(row.id));
 
   return screenRegion(

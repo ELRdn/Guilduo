@@ -100,9 +100,8 @@ async function encodeState(state: QuestForgeState | null): Promise<string> {
   const raw = new TextEncoder().encode(JSON.stringify(state));
   const rawBuffer = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
   const compressed = await new Response(new Blob([rawBuffer]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
-  const encoded = `gzip:${bytesToBase64(new Uint8Array(compressed))}`;
-  if (encoded.length > 60_000) throw Object.assign(new Error("Guilduo state exceeds the Appwrite row limit."), { status: 413, code: "state_too_large" });
-  return encoded;
+  // stateJson is a required longtext column; the former 60,000-character string cap does not apply.
+  return `gzip:${bytesToBase64(new Uint8Array(compressed))}`;
 }
 
 async function decodeState(value: string): Promise<QuestForgeState | null> {

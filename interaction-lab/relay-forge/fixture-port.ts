@@ -55,7 +55,7 @@ export class FixtureHandoffPort implements HandoffPort {
       throw new FixtureApiError(0, "network_error", "ネットワークに接続できませんでした。");
     }
     if (this.options.failure === "permission") {
-      throw new FixtureApiError(403, "insufficient_scope", "handoff:write スコープが不足しています。");
+      throw new FixtureApiError(403, "insufficient_scope", "quests:write スコープが不足しています。");
     }
 
     const quest = this.quests.get(questId);

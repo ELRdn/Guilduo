@@ -28,6 +28,8 @@ import {
 import { actorAvatar } from "./avatar.ts";
 import { el, svg } from "./dom.ts";
 import type { QuestActionId, QuestActionState } from "../quest-actions.ts";
+import { questContext } from "./quest-context.ts";
+import { relayText } from "../relay-copy.ts";
 
 export interface SelectedQuestOptions {
   readonly writeLocked: boolean;
@@ -283,7 +285,7 @@ export function selectedQuestWorkspace(
   );
   requestRevision.addEventListener("click", options.onRequestRevision);
   const actionLabels: Readonly<Record<QuestActionId, string>> = {
-    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive",
+    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive", reply: relayText("inbox"),
   };
   const taskActions = options.questActions.actions.map((action, index) => {
     const button = el("button", {
@@ -312,7 +314,7 @@ export function selectedQuestWorkspace(
       el(
         "div",
         { class: "rf-selected-actions" },
-        ...(options.questActions.mode === "handoff-decision" ? [reviewOutput, requestRevision] : taskActions),
+        ...(options.questActions.mode === "handoff-decision" ? [view.externalReview ? null : reviewOutput, requestRevision] : taskActions),
         el(
           "button",
           { type: "button", class: "rf-icon-button", title: "More actions" },
@@ -373,7 +375,7 @@ export function selectedQuestWorkspace(
       "div",
       { class: "rf-selected-scroll" },
       responsibilityRelay(view.responsibility, actors),
-      el("div", { class: "rf-selected-lower" }, details, evidence),
+      view.externalReview ? questContext(view) : el("div", { class: "rf-selected-lower" }, details, evidence),
       previewArtifact === null || previewArtifact.preview === undefined
         ? null
         : evidencePreview(previewArtifact, previewArtifact.preview, options),

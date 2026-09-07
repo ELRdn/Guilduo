@@ -303,6 +303,29 @@ export class QuestForgeRepository {
     return this.request("/v1/quests", { method: "POST", body: JSON.stringify(input) });
   }
 
+  async getQuest(questId: string): Promise<JsonRecord> {
+    return this.request(`/v1/quests/${encodeURIComponent(questId)}`);
+  }
+
+  async listHumanRequests(status = "all"): Promise<JsonRecord> {
+    const quests: unknown[] = [];
+    let cursor = "";
+    do {
+      const page = await this.request<JsonRecord>(`/v1/human-requests?status=${encodeURIComponent(status)}&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      if (Array.isArray(page.quests)) quests.push(...page.quests);
+      cursor = typeof page.nextCursor === "string" ? page.nextCursor : "";
+    } while (cursor);
+    return { quests, total: quests.length };
+  }
+
+  async respondHumanReview(questId: string, input: JsonRecord): Promise<JsonRecord> {
+    return this.request(`/v1/quests/${encodeURIComponent(questId)}/review-response`, { method: "POST", body: JSON.stringify(input) });
+  }
+
+  async requestHumanReview(questId: string, input: JsonRecord): Promise<JsonRecord> {
+    return this.request(`/v1/quests/${encodeURIComponent(questId)}/review-requests`, { method: "POST", body: JSON.stringify(input) });
+  }
+
   async updateQuest(questId: string, patch: JsonRecord): Promise<JsonRecord> {
     return this.request(`/v1/quests/${encodeURIComponent(questId)}`, { method: "PATCH", body: JSON.stringify(patch) });
   }

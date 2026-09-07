@@ -8,6 +8,7 @@ Guilduo `v0.6.0-beta.1`は、認証・ユーザー状態・Web配信をFirebase�
 - Database: `guilduo`
 - `user_states`: Appwrite UIDを行IDにした現行状態。直接クライアント権限は付けず、Workerだけが読み書きする
 - `legacy_states`: Firebase Authのメールアドレスを正規化してSHA-256化した行ID。初回Appwriteログイン時にWorkerが本人へ移管する
+- 両テーブルの`stateJson`列は`longtext`、`required: true`、`status: available`とする。gzip＋Base64のスナップショットを保存し、旧JSON形式の読み込みも維持する。旧string列向けの60,000文字制限は適用しない。[Appwriteの文字列型](https://appwrite.io/docs/products/databases/tablesdb/tables)
 - Sites: `guilduo-web`
 
 Appwrite API KeyはWorker Secretだけに保存します。Webへ公開するのはendpointとproject IDだけです。
@@ -37,6 +38,7 @@ npm run migrate:appwrite -- --state-export ./private/firebase-rtdb.json --users-
 
 ## Cutover gates
 
+- `user_states`・`legacy_states`の`stateJson`が上記の`longtext`契約を満たすことを確認する。旧string列の環境では、バックアップ後にデータを保持して移行し、件数とchecksumを照合してから書き込みを切り替える
 - Appwrite Google OAuthが有効で、本番SiteとWorker callbackがPlatform/redirect先として登録済み
 - 新規ユーザーのログイン、作成、更新、サインアウト、再ログインが成功
 - 既存ユーザーの初回ログインで`legacy_states`から`user_states`へ一度だけ移管

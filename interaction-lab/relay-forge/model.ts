@@ -232,6 +232,8 @@ export interface DecisionState {
 
 /** Everything the centre workspace renders for the selected Quest. */
 export interface SelectedQuestView {
+  readonly requester?: Quest["requester"];
+  readonly externalReview?: { readonly url: string; readonly note: string; readonly criteria: string };
   readonly questId: string;
   readonly ref: string;
   readonly title: string;

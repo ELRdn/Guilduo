@@ -1,4 +1,4 @@
-import { getOAuthRecordStore, oauthStorageKind, oauthStorageLogContext } from "./oauth-record-store.ts";
+import { getOAuthRecordStore, oauthStorageKind, oauthStorageLogContext, purgeOAuthRecordKeys } from "./oauth-record-store.ts";
 import { ALL_SCOPES, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
 import type { AuthIdentity } from "./security.ts";
 import { mcpOriginForRequest, primaryMcpOrigin } from "./mcp-origin.ts";
@@ -31,6 +31,31 @@ const CLIENT_LAST_USED_WRITE_INTERVAL_MS = 15 * 60 * 1000;
 const OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/;
 const CLIENT_ID_PATTERN = new RegExp(`^[A-Za-z0-9._~-]{1,${MAX_CLIENT_ID_LENGTH}}$`);
 const PKCE_CHALLENGE_PATTERN = new RegExp(`^[A-Za-z0-9._~-]{43,${MAX_CODE_CHALLENGE_LENGTH}}$`);
+
+type OAuthScopeCopy = { label: string; description: string };
+type OAuthScopePresentation = { en: OAuthScopeCopy; ja: OAuthScopeCopy };
+
+const OAUTH_SCOPE_PRESENTATION: Readonly<Record<string, OAuthScopePresentation>> = {
+  "quests:read": { en: { label: "Quest data", description: "Read your quests and progress." }, ja: { label: "Questの閲覧", description: "Questと進捗を読み取ります。" } },
+  "quests:write": { en: { label: "Quest management", description: "Create, update, and progress quests." }, ja: { label: "Questの管理", description: "Questの作成・更新・進行を行います。" } },
+  "character:read": { en: { label: "Character state", description: "Read character, MP, equipment, and boss state." }, ja: { label: "キャラクター情報", description: "キャラクター、MP、装備、ボス状態を読み取ります。" } },
+  "rewards:write": { en: { label: "Reward redemption", description: "Redeem reward quests using Gems." }, ja: { label: "報酬の利用", description: "Gemを使って報酬を引き換えます。" } },
+  "integrations:read": { en: { label: "Integration data", description: "Read connected service settings and data." }, ja: { label: "連携データの閲覧", description: "接続済みサービスの設定とデータを読み取ります。" } },
+  "integrations:sync": { en: { label: "Integration sync", description: "Run synchronization with connected services." }, ja: { label: "連携の同期", description: "外部サービスとの同期を実行します。" } },
+  "events:read": { en: { label: "Activity history", description: "Read Quest and activity event history." }, ja: { label: "アクティビティ履歴", description: "Questや操作のイベント履歴を読み取ります。" } },
+  "webhooks:manage": { en: { label: "Webhook management", description: "Manage Guilduo webhook registrations." }, ja: { label: "Webhook管理", description: "GuilduoのWebhook登録を管理します。" } },
+  "plugins:manage": { en: { label: "Plugin management", description: "Manage Guilduo Plugin settings." }, ja: { label: "Plugin管理", description: "Guilduo Pluginの設定を管理します。" } },
+  "profiles:read": { en: { label: "Profile data", description: "Read Guilduo profile information." }, ja: { label: "プロフィールの閲覧", description: "Guilduoのプロフィール情報を読み取ります。" } },
+  "profiles:write": { en: { label: "Profile management", description: "Create and update Guilduo profile information." }, ja: { label: "プロフィールの管理", description: "Guilduoのプロフィールを作成・更新します。" } },
+  "friends:read": { en: { label: "Friends", description: "Read friends and friend requests." }, ja: { label: "フレンドの閲覧", description: "フレンドと申請情報を読み取ります。" } },
+  "friends:write": { en: { label: "Friend management", description: "Change friend requests and relationships." }, ja: { label: "フレンドの管理", description: "フレンド申請と関係を変更します。" } },
+  "parties:read": { en: { label: "Party data", description: "Read your Party and its members." }, ja: { label: "Partyの閲覧", description: "所属Partyとメンバーを読み取ります。" } },
+  "parties:write": { en: { label: "Party management", description: "Change your Party and its members." }, ja: { label: "Partyの管理", description: "Partyとメンバーを変更します。" } },
+  "battle:read": { en: { label: "Battle state", description: "Read the current Battle state." }, ja: { label: "Battleの閲覧", description: "Battle状態を読み取ります。" } },
+  "battle:write": { en: { label: "Battle actions", description: "Execute Battle commands." }, ja: { label: "Battleの操作", description: "Battleコマンドを実行します。" } },
+  "agents:read": { en: { label: "Agent profiles", description: "Read registered Agents and the current Agent context." }, ja: { label: "Agentプロフィールの閲覧", description: "登録済みAgentと現在のAgent contextを読み取ります。" } },
+  "agents:write": { en: { label: "Agent connection management", description: "Link, unlink, or relink this MCP connection to a registered Agent." }, ja: { label: "Agent接続の管理", description: "このMCP接続をAgentへlink、unlink、relinkします。" } },
+};
 
 function asRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
@@ -118,8 +143,22 @@ function oauthBase(request: Request, env: WorkerEnv): string {
 function allowedScopes(value: unknown): string[] | null {
   if (typeof value === "string" && value.length > MAX_SCOPE_LENGTH) return null;
   const requested = typeof value === "string" ? value.trim().split(/\s+/).filter(Boolean) : [];
+  // An explicit scope is the snapshot for this authorization request. Never
+  // merge it with an existing grant: OAuth permissions are not escalated
+  // silently. Missing scope keeps the backwards-compatible full-scope default
+  // for a new authorization request.
   const scopes = requested.length ? [...new Set(requested)] : [...ALL_SCOPES];
   return scopes.every((scope) => ALL_SCOPES.includes(scope)) ? scopes : null;
+}
+
+function scopeConsentRows(scopes: string[], locale: "ja" | "en"): string {
+  return scopes.map((scope) => {
+    const presentation = OAUTH_SCOPE_PRESENTATION[scope]?.[locale] || {
+      label: locale === "ja" ? `権限: ${scope}` : `Permission: ${scope}`,
+      description: locale === "ja" ? "このMCPクライアントが要求する権限です。" : "Permission requested by this MCP client.",
+    };
+    return `<div class="scope-row"><strong>${escapeHtml(presentation.label)}</strong><span class="scope-description">${escapeHtml(presentation.description)}</span><code>${escapeHtml(scope)}</code></div>`;
+  }).join("");
 }
 
 function isAllowedRedirectUri(value: unknown): value is string {
@@ -189,7 +228,9 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
     title: "Guilduo 接続許可",
     heading: "Guilduoへ接続",
     request: "が次の操作を要求しています。",
+    permissions: "要求された権限",
     privacy: "Googleログイン後に許可します。パスワードはAIクライアントへ共有されません。",
+    reauthorize: "追加の権限が必要な場合は、この接続を再認証してください。既存のOAuth権限は自動で拡張されません。",
     approve: "Googleでログインして許可",
     connecting: "Googleへ接続中...",
     failed: "接続できませんでした: ",
@@ -197,7 +238,9 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
     title: "Authorize Guilduo",
     heading: "Connect to Guilduo",
     request: "is requesting the following permissions.",
+    permissions: "Requested permissions",
     privacy: "You will approve after Google sign-in. Your password is never shared with the AI client.",
+    reauthorize: "If you need additional permissions, re-authorize this connection. Existing OAuth grants are never upgraded automatically.",
     approve: "Sign in with Google and approve",
     connecting: "Connecting to Google...",
     failed: "Could not connect: ",
@@ -227,7 +270,29 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
   await atOAuthStage("authorization_request_persist", env, "put", () => store.put(`authorize:${requestId}`, JSON.stringify(authorizationRequest), { expirationTtl: 600 }));
   const appwriteEndpoint = String(env.APPWRITE_ENDPOINT || "").replace(/\/$/, "");
   const appwriteProjectId = env.APPWRITE_PROJECT_ID || "";
-  const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(copy.title)}</title><style>body{font-family:system-ui;margin:0;background:#eef1ed;color:#202a32}.box{max-width:520px;margin:8vh auto;background:white;border:1px solid #d7ddd8;padding:24px;border-radius:8px;box-shadow:0 18px 45px #20302a20}button{width:100%;padding:13px;border:0;border-radius:7px;background:#526b5c;color:white;font-weight:800}.scopes{padding:12px;background:#f4f6f3;border-radius:7px;line-height:1.8}small{color:#66716b}@media(prefers-color-scheme:dark){body{background:#171c1a;color:#edf2ee}.box{background:#222a26;border-color:#3b4741}.scopes{background:#18201c}small{color:#b7c2bb}}</style></head><body><main class="box"><h1>${escapeHtml(copy.heading)}</h1><p><strong>${escapeHtml(client.clientName)}</strong> ${escapeHtml(copy.request)}</p><div class="scopes">${authorizationRequest.scopes.map(escapeHtml).join("<br>")}</div><p><small>${escapeHtml(copy.privacy)}</small></p><button id="approve">${escapeHtml(copy.approve)}</button><p id="status" role="status"></p></main><script>const endpoint=${JSON.stringify(appwriteEndpoint)},project=${JSON.stringify(appwriteProjectId)};const headers={'content-type':'application/json','x-appwrite-project':project};document.querySelector('#approve').onclick=async()=>{const status=document.querySelector('#status');status.textContent=${JSON.stringify(copy.connecting)};try{const account=await fetch(endpoint+'/account',{credentials:'include',headers});if(account.status===401){const oauth=new URL(endpoint+'/account/sessions/oauth2/google');oauth.searchParams.set('project',project);oauth.searchParams.set('success',location.href);oauth.searchParams.set('failure',location.href);location.href=oauth.toString();return;}if(!account.ok)throw new Error('account_'+account.status);const jwtResponse=await fetch(endpoint+'/account/jwts',{method:'POST',credentials:'include',headers,body:'{}'});if(!jwtResponse.ok)throw new Error('jwt_'+jwtResponse.status);const jwt=(await jwtResponse.json()).jwt;const response=await fetch('/oauth/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:${JSON.stringify(requestId)},jwt})});const data=await response.json();if(!response.ok)throw new Error(data.error||'authorization_failed');location.href=data.redirect;}catch(error){status.textContent=${JSON.stringify(copy.failed)}+error.message;}};</script></body></html>`;
+  const scopeRows = scopeConsentRows(scopes, locale);
+  const html = `<!doctype html>
+<html lang="${locale}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${escapeHtml(copy.title)}</title>
+  <style>body{font-family:system-ui;margin:0;background:#eef1ed;color:#202a32}.box{max-width:520px;margin:8vh auto;background:white;border:1px solid #d7ddd8;padding:24px;border-radius:8px;box-shadow:0 18px 45px #20302a20}button{width:100%;padding:13px;border:0;border-radius:7px;background:#526b5c;color:white;font-weight:800}.scopes{padding:12px;background:#f4f6f3;border-radius:7px}.scope-row{padding:10px 0;border-bottom:1px solid #d7ddd8}.scope-row:last-child{border-bottom:0}.scope-row strong,.scope-description{display:block}.scope-description{color:#66716b;font-size:.92rem;line-height:1.4;margin:.15rem 0}.scope-row code{font-size:.82rem;color:#526b5c}small{color:#66716b;line-height:1.5}@media(prefers-color-scheme:dark){body{background:#171c1a;color:#edf2ee}.box{background:#222a26;border-color:#3b4741}.scopes{background:#18201c}.scope-row{border-color:#3b4741}.scope-description,small{color:#b7c2bb}.scope-row code{color:#b8d2bf}}</style>
+</head>
+<body>
+  <main class="box">
+    <h1>${escapeHtml(copy.heading)}</h1>
+    <p><strong>${escapeHtml(client.clientName)}</strong> ${escapeHtml(copy.request)}</p>
+    <h2>${escapeHtml(copy.permissions)}</h2>
+    <div class="scopes">${scopeRows}</div>
+    <p><small>${escapeHtml(copy.privacy)}</small></p>
+    <p><small>${escapeHtml(copy.reauthorize)}</small></p>
+    <button id="approve">${escapeHtml(copy.approve)}</button>
+    <p id="status" role="status"></p>
+  </main>
+  <script>const endpoint=${JSON.stringify(appwriteEndpoint)},project=${JSON.stringify(appwriteProjectId)};const headers={'content-type':'application/json','x-appwrite-project':project};document.querySelector('#approve').onclick=async()=>{const status=document.querySelector('#status');status.textContent=${JSON.stringify(copy.connecting)};try{const account=await fetch(endpoint+'/account',{credentials:'include',headers});if(account.status===401){const oauth=new URL(endpoint+'/account/sessions/oauth2/google');oauth.searchParams.set('project',project);oauth.searchParams.set('success',location.href);oauth.searchParams.set('failure',location.href);location.href=oauth.toString();return;}if(!account.ok)throw new Error('account_'+account.status);const jwtResponse=await fetch(endpoint+'/account/jwts',{method:'POST',credentials:'include',headers,body:'{}'});if(!jwtResponse.ok)throw new Error('jwt_'+jwtResponse.status);const jwt=(await jwtResponse.json()).jwt;const response=await fetch('/oauth/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:${JSON.stringify(requestId)},jwt})});const data=await response.json();if(!response.ok)throw new Error(data.error||'authorization_failed');location.href=data.redirect;}catch(error){status.textContent=${JSON.stringify(copy.failed)}+error.message;}};</script>
+</body>
+</html>`;
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
@@ -336,15 +401,53 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
   const key = `user-client:${uid}:${clientId}`;
   const record = await readClientGrantIndex(env, uid, clientId);
   if (!record) return null;
+  // Keep Disconnect idempotent, but do not treat a legacy revoked marker as
+  // proof that its access/refresh records were cleaned up. Replaying this
+  // explicit lifecycle action must fail closed before returning the history.
   if (record.refreshHash) await kv.put(`refresh-revoked:${record.refreshHash}`, "1");
   await Promise.all([
     record.accessHash ? kv.delete(`access:${record.accessHash}`) : Promise.resolve(),
     record.refreshHash ? kv.delete(`refresh:${record.refreshHash}`) : Promise.resolve(),
   ]);
   record.revokedAt ||= new Date().toISOString();
-  record.accessHash = "";
-  record.refreshHash = "";
+  // Keep the one-way hashes in the private revoked grant record as cleanup
+  // handles. They are never returned by publicClientGrant(), and retaining
+  // them lets a later hard delete remove the corresponding D1/legacy token
+  // metadata while the refresh-revoked tombstone continues to block replay.
   await kv.put(key, JSON.stringify(record));
+  return publicClientGrant(record);
+}
+
+/**
+ * Permanently removes one already-disconnected user's grant and its token
+ * records. The dynamic client registration is intentionally retained: a
+ * client_id can be reused by the same MCP client or by another Guilduo user,
+ * and it is not part of this user's connection history.
+ */
+export async function deleteAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
+  const key = `user-client:${uid}:${clientId}`;
+  const record = await readClientGrantIndex(env, uid, clientId);
+  if (!record) {
+    await purgeOAuthRecordKeys(env, [key]);
+    return null;
+  }
+  if (!record.revokedAt) {
+    throw Object.assign(new Error("Disconnect the active OAuth connection before deleting its history."), {
+      status: 409,
+      code: "oauth_connection_active",
+    });
+  }
+
+  const kv = getOAuthRecordStore(env);
+  // Legacy rows may have been marked revoked by an older build without a
+  // replay tombstone. Establish the fail-closed marker before removing the
+  // token record; it is intentionally retained after the hard delete.
+  if (record.refreshHash) await kv.put(`refresh-revoked:${record.refreshHash}`, "1");
+  await purgeOAuthRecordKeys(env, [
+    key,
+    record.accessHash ? `access:${record.accessHash}` : "",
+    record.refreshHash ? `refresh:${record.refreshHash}` : "",
+  ]);
   return publicClientGrant(record);
 }
 

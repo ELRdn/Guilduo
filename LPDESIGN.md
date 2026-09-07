@@ -283,6 +283,8 @@ Join the GuildとView on GitHubのURLは公開設定から取得する。LP内�
 
 ## 12. 現状と後続作業
 
+2026-09-06追記: LP制作で合意した本体・Skillsの後続改善は[ROADMAP.md](ROADMAP.md)と[実行計画・完了条件](docs/lp-product-followups.md)のLP-R01〜LP-R08へ移管した。LPv2.1の公式公開と、本体の双方向Relayの実装・受入は別の完了として管理する。
+
 | 区分 | 扱い |
 | --- | --- |
 | 現在の製品の境界 | ユーザー確認: Guilduoで渡す依頼・FBはテキスト。成果物確認は外部で行う |
@@ -336,3 +338,5 @@ Skillsでは、何を人へ頼むか、依頼理由、完了条件、回答待�
 ## 公式LPへの採用
 
 2026-09-06: LPv2.1を公式LPへ採用。`/lp/`と`/lp/en/`は`lpv2-1`のスタイル・モーションと`lpv2`の体験ロジックを共有する。公式日本語URLは`https://guilduo.com/`、英語は`https://guilduo.com/lp/en/`。比較用URLはnoindexで保持し、本体・MCP・host rewriteは変更しない。
+
+2026-09-07追記: LP-R01〜R06・R08を本体/MCP/Skillsへ実装し、HTTP結合・9言語・スマホ幅の自動受入を用意した。新機能は本番未配備で、実Codex/OpenClaw・Pixel 9の受入はLP-R07へ残す。[実装・受入記録](docs/human-relay-acceptance.md)。LPの体験デモ表示と製品境界は維持する。

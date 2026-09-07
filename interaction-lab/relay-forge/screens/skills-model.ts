@@ -93,13 +93,16 @@ export const SKILL_CATEGORIES: readonly CategoryDefinition[] = [
     id: "profile-social",
     title: "Profile & Social",
     description: "プロフィール、Friends、Partyを管理します。",
-    aliases: ["profile", "social", "friends", "party"],
+    aliases: ["profile", "social", "friends"],
   },
+  { id: "party", title: "Party", description: "チームへの参加とメンバーを管理します。", aliases: ["party", "party-management"] },
+  { id: "toggl-focus", title: "Toggl Focus", description: "タイマー、作業時間、見積もりをつなぎます。", aliases: ["toggl", "focus"] },
+  { id: "character", title: "Character & Rewards", description: "成長、MP、報酬を確認します。", aliases: ["character", "character-growth"] },
   {
     id: "battle-rewards",
     title: "Battle & Rewards",
     description: "Character、Battle、Rewardの状態を扱います。",
-    aliases: ["battle", "rewards", "reward", "character"],
+    aliases: ["battle", "rewards", "reward"],
   },
   {
     id: "review-activity",
@@ -169,6 +172,10 @@ function metadataCategory(source: JsonRecord): string | null {
 
 /** Existing tool names are a compatibility fallback until metadata is added. */
 function nameCategory(name: string): string {
+  if (/^(request_human_review|list_human_requests)$/.test(name)) return "agent-relay";
+  if (/toggl/.test(name)) return "toggl-focus";
+  if (/^(get_party|create_party|invite_party_member|accept_party_invite|leave_party|remove_party_member)$/.test(name)) return "party";
+  if (/^(get_character_state|buy_reward)$/.test(name)) return "character";
   if (/^(list_today_quests|list_quests|create_quest|update_quest|batch_.*_quests?|archive_quests|link_external_record|score_quest|get_quest(?:_tree)?|get_calendar_schedule|convert_calendar_event_to_quest)$/.test(name)) return "quest-management";
   if (/^(list_agent_handoffs|list_registered_agents|get_current_agent_context|get_agent_link|link_agent|unlink_agent|assign_quest_to_agent|transition_quest_handoff)$/.test(name)) return "agent-relay";
   if (/^(list_integrations|.*toggl.*|preview_external_sync|sync_external_service)$/.test(name)) return "connections-sync";

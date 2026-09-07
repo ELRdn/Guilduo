@@ -3,6 +3,161 @@
   "version": "2.7.0",
   "tools": [
     {
+      "name": "request_human_review",
+      "title": "Ask a Human",
+      "description": "Create a separate human confirmation Quest for Agent-assigned work. Describe what to check externally and return as text. Preview first; execute with the source Quest expectedUpdatedAt. Reuse requestKey only for the same request. Never launches an Agent or completes original work.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "questId",
+          "requestKey",
+          "title",
+          "reason",
+          "checkTarget",
+          "completionCriteria"
+        ],
+        "properties": {
+          "questId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requestKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "checkTarget": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "completionCriteria": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "artifactUrl": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "expectedUpdatedAt": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "reused": {
+            "type": "boolean"
+          },
+          "quest": {
+            "type": "object"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "dryRun",
+          "reused",
+          "quest",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_human_requests",
+      "title": "Read Human Requests",
+      "description": "Read pending, deferred, or answered human confirmation Quests and their text feedback. Read answered requests before resuming Agent work. Never fabricate a human answer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "deferred",
+              "answered",
+              "all"
+            ],
+            "default": "pending"
+          },
+          "sourceQuestId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "cursor": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "quests": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "list_today_quests",
       "title": "List Today's Quests",
       "description": "List active scheduled Guilduo quests visible today, including overdue work.",
@@ -2495,7 +2650,7 @@
     {
       "name": "list_registered_agents",
       "title": "List Registered Agents",
-      "description": "List the authenticated user's private Guilduo Agent Registry profiles.",
+      "description": "List the authenticated user's private Guilduo Agent Registry profiles. Requires the agents:read OAuth scope.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2503,11 +2658,31 @@
       },
       "outputSchema": {
         "type": "object",
+        "required": [
+          "agents"
+        ],
         "properties": {
           "agents": {
             "type": "array",
             "items": {
               "type": "object",
+              "required": [
+                "uid",
+                "agentId",
+                "displayName",
+                "provider",
+                "role",
+                "instructions",
+                "status",
+                "allowedScopes",
+                "defaultHandoffState",
+                "reviewRequired",
+                "dryRunDefault",
+                "createdAt",
+                "updatedAt",
+                "avatarVersion",
+                "hasCustomAvatar"
+              ],
               "properties": {
                 "uid": {
                   "type": "string"
@@ -2583,6 +2758,13 @@
                 },
                 "updatedAt": {
                   "type": "string"
+                },
+                "avatarVersion": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "hasCustomAvatar": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false
@@ -2601,7 +2783,7 @@
     {
       "name": "get_current_agent_context",
       "title": "Get Current Agent Context",
-      "description": "Return the registered Agent profile linked to the current OAuth MCP client and its effective scopes.",
+      "description": "Return the registered Agent profile linked to the current OAuth MCP client, the original connection scopes, the Agent policy scopes, and the effective execution scopes. Requires the agents:read OAuth scope.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2609,43 +2791,37 @@
       },
       "outputSchema": {
         "type": "object",
-        "additionalProperties": true
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false
-      }
-    },
-    {
-      "name": "get_agent_link",
-      "title": "Get Agent Link",
-      "description": "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "outputSchema": {
-        "type": "object",
+        "required": [
+          "agent",
+          "clientId",
+          "connectionScopes",
+          "agentAllowedScopes",
+          "effectiveExecutionScopes",
+          "effectiveScopes",
+          "linked"
+        ],
         "properties": {
-          "linked": {
-            "type": "boolean"
-          },
-          "relinked": {
-            "type": "boolean"
-          },
-          "unlinked": {
-            "type": "boolean"
-          },
-          "stale": {
-            "type": "boolean"
-          },
           "agent": {
             "anyOf": [
               {
                 "type": "object",
+                "required": [
+                  "uid",
+                  "agentId",
+                  "displayName",
+                  "provider",
+                  "role",
+                  "instructions",
+                  "status",
+                  "allowedScopes",
+                  "defaultHandoffState",
+                  "reviewRequired",
+                  "dryRunDefault",
+                  "createdAt",
+                  "updatedAt",
+                  "avatarVersion",
+                  "hasCustomAvatar"
+                ],
                 "properties": {
                   "uid": {
                     "type": "string"
@@ -2721,6 +2897,218 @@
                   },
                   "updatedAt": {
                     "type": "string"
+                  },
+                  "avatarVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "hasCustomAvatar": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clientId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connectionScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "agentAllowedScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quests:read",
+                "quests:write",
+                "character:read",
+                "rewards:write",
+                "integrations:read",
+                "integrations:sync",
+                "events:read",
+                "webhooks:manage",
+                "plugins:manage",
+                "profiles:read",
+                "profiles:write",
+                "friends:read",
+                "friends:write",
+                "parties:read",
+                "parties:write",
+                "battle:read",
+                "battle:write",
+                "agents:read"
+              ]
+            }
+          },
+          "effectiveExecutionScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effectiveScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "linked": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_agent_link",
+      "title": "Get Agent Link",
+      "description": "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata. Requires the agents:read OAuth scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "linked",
+          "stale",
+          "agent",
+          "connection"
+        ],
+        "properties": {
+          "linked": {
+            "type": "boolean"
+          },
+          "relinked": {
+            "type": "boolean"
+          },
+          "unlinked": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "uid",
+                  "agentId",
+                  "displayName",
+                  "provider",
+                  "role",
+                  "instructions",
+                  "status",
+                  "allowedScopes",
+                  "defaultHandoffState",
+                  "reviewRequired",
+                  "dryRunDefault",
+                  "createdAt",
+                  "updatedAt",
+                  "avatarVersion",
+                  "hasCustomAvatar"
+                ],
+                "properties": {
+                  "uid": {
+                    "type": "string"
+                  },
+                  "agentId": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "archived"
+                    ]
+                  },
+                  "allowedScopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "quests:read",
+                        "quests:write",
+                        "character:read",
+                        "rewards:write",
+                        "integrations:read",
+                        "integrations:sync",
+                        "events:read",
+                        "webhooks:manage",
+                        "plugins:manage",
+                        "profiles:read",
+                        "profiles:write",
+                        "friends:read",
+                        "friends:write",
+                        "parties:read",
+                        "parties:write",
+                        "battle:read",
+                        "battle:write",
+                        "agents:read"
+                      ]
+                    }
+                  },
+                  "defaultHandoffState": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "ready",
+                      "working",
+                      "blocked",
+                      "review_required",
+                      "accepted"
+                    ]
+                  },
+                  "reviewRequired": {
+                    "type": "boolean"
+                  },
+                  "dryRunDefault": {
+                    "type": "boolean"
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  },
+                  "avatarVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "hasCustomAvatar": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -2734,6 +3122,14 @@
             "anyOf": [
               {
                 "type": "object",
+                "required": [
+                  "clientId",
+                  "clientName",
+                  "scopes",
+                  "firstConnectedAt",
+                  "lastUsedAt",
+                  "revokedAt"
+                ],
                 "properties": {
                   "clientId": {
                     "type": "string"
@@ -2780,7 +3176,7 @@
     {
       "name": "link_agent",
       "title": "Link MCP Connection to Agent",
-      "description": "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents.",
+      "description": "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -2796,6 +3192,12 @@
       },
       "outputSchema": {
         "type": "object",
+        "required": [
+          "linked",
+          "stale",
+          "agent",
+          "connection"
+        ],
         "properties": {
           "linked": {
             "type": "boolean"
@@ -2813,6 +3215,23 @@
             "anyOf": [
               {
                 "type": "object",
+                "required": [
+                  "uid",
+                  "agentId",
+                  "displayName",
+                  "provider",
+                  "role",
+                  "instructions",
+                  "status",
+                  "allowedScopes",
+                  "defaultHandoffState",
+                  "reviewRequired",
+                  "dryRunDefault",
+                  "createdAt",
+                  "updatedAt",
+                  "avatarVersion",
+                  "hasCustomAvatar"
+                ],
                 "properties": {
                   "uid": {
                     "type": "string"
@@ -2888,6 +3307,13 @@
                   },
                   "updatedAt": {
                     "type": "string"
+                  },
+                  "avatarVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "hasCustomAvatar": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -2901,6 +3327,14 @@
             "anyOf": [
               {
                 "type": "object",
+                "required": [
+                  "clientId",
+                  "clientName",
+                  "scopes",
+                  "firstConnectedAt",
+                  "lastUsedAt",
+                  "revokedAt"
+                ],
                 "properties": {
                   "clientId": {
                     "type": "string"
@@ -2947,7 +3381,7 @@
     {
       "name": "unlink_agent",
       "title": "Unlink MCP Connection",
-      "description": "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant.",
+      "description": "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -2955,6 +3389,12 @@
       },
       "outputSchema": {
         "type": "object",
+        "required": [
+          "linked",
+          "stale",
+          "agent",
+          "connection"
+        ],
         "properties": {
           "linked": {
             "type": "boolean"
@@ -2972,6 +3412,23 @@
             "anyOf": [
               {
                 "type": "object",
+                "required": [
+                  "uid",
+                  "agentId",
+                  "displayName",
+                  "provider",
+                  "role",
+                  "instructions",
+                  "status",
+                  "allowedScopes",
+                  "defaultHandoffState",
+                  "reviewRequired",
+                  "dryRunDefault",
+                  "createdAt",
+                  "updatedAt",
+                  "avatarVersion",
+                  "hasCustomAvatar"
+                ],
                 "properties": {
                   "uid": {
                     "type": "string"
@@ -3047,6 +3504,13 @@
                   },
                   "updatedAt": {
                     "type": "string"
+                  },
+                  "avatarVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "hasCustomAvatar": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -3060,6 +3524,14 @@
             "anyOf": [
               {
                 "type": "object",
+                "required": [
+                  "clientId",
+                  "clientName",
+                  "scopes",
+                  "firstConnectedAt",
+                  "lastUsedAt",
+                  "revokedAt"
+                ],
                 "properties": {
                   "clientId": {
                     "type": "string"

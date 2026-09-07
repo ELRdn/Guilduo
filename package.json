@@ -10,6 +10,7 @@
     "brand:assets": "tsx tools/generate-brand-assets.mts",
     "preview": "vite preview --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
+    "relay:verify": "tsx tools/verify-human-relay.mts",
     "check": "npm run typecheck",
     "deploy": "npm run build",
     "worker:dev": "wrangler dev --port 8787",
@@ -57,6 +58,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@cfworker/json-schema": "^4.1.1",
     "@types/node": "^26.2.0",
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.18",

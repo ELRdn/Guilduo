@@ -32,6 +32,7 @@ export interface RelayForgeRuntime {
   readonly integrations: readonly IntegrationRecord[];
   readonly partyName: string;
   readonly questPort: Pick<QuestForgeRepository, "createQuest" | "updateQuest">;
+  readonly humanRequestPort?: Pick<QuestForgeRepository, "getQuest" | "listHumanRequests" | "respondHumanReview" | "requestHumanReview">;
   readonly agentPort: Pick<QuestForgeRepository, "createAgent" | "updateAgent">;
   readonly handoffPort: HandoffPort;
   readonly battlePort: BattlePort;
@@ -247,6 +248,7 @@ export async function createProductionRuntime(
     integrations,
     partyName: text(party.name) || "Guild Party",
     questPort: repository,
+    humanRequestPort: repository,
     agentPort: repository,
     handoffPort: repository,
     battlePort: new RepositoryBattlePort(repository),

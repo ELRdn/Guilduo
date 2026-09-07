@@ -1,11 +1,13 @@
 # Guilduo 公開βロードマップ
 
-最終更新: 2026-08-30
+最終更新: 2026-09-07
 
 ## 設計書の正本
 
 - [`DESIGN.md`](DESIGN.md)：現行版`/`の視覚設計、UI操作、コンポーネント、レスポンシブ、アクセシビリティ
 - [`PROJECT_SPEC.md`](PROJECT_SPEC.md)：共通アーキテクチャ、データ契約、ドメイン不変条件、認証、安全性、公開運用
+- [`LPDESIGN.md`](LPDESIGN.md)：LPの合意済み体験・コピー・本体との境界
+- [`docs/lp-product-followups.md`](docs/lp-product-followups.md)：LP制作で見つかった本体・Skillsの改善と完了条件
 - [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)：`/next/`のUI実験、同期状態、レスポンシブ設計、昇格ゲート
 - [`design/TOKENS.json`](design/TOKENS.json)：3テーマ×ライト／ダークの機械可読トークン
 - [`design/COMPONENTS.md`](design/COMPONENTS.md)：共通部品の構造、状態、アクセシビリティ
@@ -49,13 +51,16 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 
 ### 実装済み
 
+- Human確認Quest、依頼主、外部確認とテキストFB、受信箱、Agent初回接続案内、成功時の反応を一括実装（2026-09-07、ローカル検証済み・本番未配備）。既存Agentリンク修正も統合し、Skillsを56ツール/9カテゴリに整理。[実装・受入記録](docs/human-relay-acceptance.md)
+
+- LPv2.1のプチ体験とモーションを日英の公式LPへ反映（2026-09-06、`aa884c1`、PR #21）。LPv2/LPv2.1の比較ルートは維持。本体の協働機能の受入とは別に管理
 - 公式サイト`guilduo.com/`、正式Web App`app.guilduo.com/`、英語LPを同じAppwrite Sites成果物へビルドし、rootをhost-based rewriteで分離
 - Appwrite Authの復元、Worker経由のユーザー単位TablesDB同期、再接続、同期中スケルトン、書き込みロック
 - TodayのPC・タブレット固定レイアウトと中央Quest欄の独立スクロール
 - スマホのページスクロール、下部Quest詳細、ポップアップ詳細切替
 - Questの完了・保管・復元、Shift範囲選択、Ctrl／⌘個別選択
 - Agent Registry、MCPクライアント紐付け、Handoff、Astraと本人アカウントの分離
-- REST 2.7.0、Schema 7、MCP 51ツール、OpenAPI 52パス
+- 現在のソース: REST/MCP 2.7.0、Schema 7、MCP 56ツール、OpenAPI 60パス。新しいHuman確認API・UIは本番未配備
 - /mcp の安定レーンと /mcp-next の検証レーン
 - Guilduo Workflow Skill（legacy technical ID: questforge-workflows）、ローカルCLI、Codex Plugin/MCP App登録準備パッケージ
 - 日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語
@@ -65,6 +70,10 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 - Unity Battle Labはペンディングのまま本体リリースから分離
 
 ## 検証結果
+
+2026-09-07の本体改善は全344テストとブラウザ32シナリオが成功し、API生成・型・デザイン・ビルドも成功。HTTP Worker/MCPと本体UIの往復、9言語・3画面幅、エラーと再取得を確認した。関連12件へ反映し、実装9件を完了・保管。新機能の本番配備、実Codex/OpenClaw・物理Pixel 9受入、GitHub公開・X告知は未完了。[検証範囲](docs/human-relay-acceptance.md)
+
+2026-09-06のLP公式化では、型・デザイン・ブランド・ビルドと全322テストが成功。公式URLでも日英切替、PC/スマホ、模擬体験完了、アニメーションの二周目以降と停止を確認した。この結果はLPの検証であり、実AgentによるAI→Human依頼・待機・再開の完了を意味しない。
 
 2026-08-14時点のローカル検証（歴史的ベースライン）:
 
@@ -131,6 +140,37 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 
 ## 次の改善
 
+### LP制作から本体へ戻す改善（2026-09-06）
+
+LPv2.1で合意した「人がAIへ任せ、AIが人へ確認を頼み、テキストFBで再開する」を次の本体改善の軸にする。既存の担当者選択・Agent Registry・Handoff・親子Questを土台とし、不足する依頼主の記録、独立したHuman確認Quest、受信・再開、Skillsの運用を補う。
+
+Guilduoは依頼・進捗・FBをテキストでつなぐ。成果物の閲覧・実行・編集は外部環境で行う。Agentはユーザーが登録・接続した外部AIであり、割り当てだけで起動する機能や固定の公式人格を追加する計画ではない。公式コピー・パレット・アイコンは継承する。
+
+| 計画ID | 優先度 | 実行単位 | 前提 |
+| --- | --- | --- | --- |
+| LP-R01 | P1 | 依頼主と担当者を区別し、確認Questとの関連を残す | なし |
+| LP-R02 | P1 | AIから人への確認依頼とテキストFBの往復を本体で完結させる | LP-R01 |
+| LP-R03 | P1 | 成果物確認を外部へ案内し、Guilduoには確認結果をテキストで戻す | LP-R02 |
+| LP-R04 | P1 | AIから届いた人向けの依頼と確認待ちを見つけやすくする | LP-R02 |
+| LP-R05 | P1 | AIが人へ頼む判断・待機・再開をWorkflow Skillに教える | LP-R01、LP-R02 |
+| LP-R06 | P1 | 自分のAgentを登録・接続して最初の仕事を渡す導線を整える | なし |
+| LP-R07 | P1 | 実際のMCPクライアントでHuman ⇄ Agentの往復を受け入れ検証する | LP-R03、LP-R04、LP-R05、LP-R06 |
+| LP-R08 | P2 | 仕事の受け渡しと共同達成が伝わる本体の反応を加える | LP-R03、LP-R04 |
+
+各項目の発見根拠、既存機能との差、完了条件、Guilduo登録IDは[本体改善計画](docs/lp-product-followups.md)で管理する。P1を次の本体改善、P2を操作体験の磨き込みとし、日付は未設定のバックログとする。LP-R01とLP-R06から着手し、LP-R07の実MCP受入まで完了した範囲だけを本体の標準動作と案内する。
+
+- [x] LPの壁打ちと現行ソースから改善案を抽出し、依存関係・完了条件を定義
+- [x] Guilduoへ親Questを登録: `quest-5e093615-e0ba-4713-b941-e24df707d618`
+- [x] 子8件を依存関係つきで登録し、親子9件の本文・完了条件・登録IDを再取得して照合（2026-09-06、全件バックログ）
+- [x] LP-R01〜LP-R06を本体・MCP・Skillsへ一括実装し、ローカルで検証
+- [x] LP-R07のHTTP Worker/MCP・本体UI結合テストと実機受入手順を作成
+- [ ] 新機能を配備し、LP-R07の実Codex/OpenClaw・Pixel 9受入を完了
+- [x] LP-R08の短い反応とReduced Motion/設定OFFを実装・ローカル検証
+
+既存タスク「MCPでAgentリンクできるように修正」「SkillsでMCPツールを分かりやすく整理」は関連として照合済み。2026-09-07の一括依頼で、リンク修正のソース統合と56ツール/9カテゴリの整理も実装・検証した。GitHub公開・X告知タスクは文案を準備し、公開と投稿は未実施。LPの成功を本体改善の完了へ読み替えない。同期・認証・公開受入の残存ゲートも維持する。
+
+**LP-B01 / P0 — 保存容量の障害は復旧済み（2026-09-06）:** Appwriteの`stateJson`は既に`longtext`だったが、Workerと移行ツールに残る60,000文字制限が保存を拒否していた。旧制限を除去し、gzip・旧JSON読み込み・revision競合検知・トランザクションを維持して本番Workerへ反映。子8件の作成と親の案内更新に成功し、既存67件のQuest・162件の履歴・移行スナップショットなどの保持を照合した。データの削除やテーブル・権限の変更による回避は行っていない。[原因・修正・検証記録](docs/storage-capacity-fix.md)
+
 ### Design System強化
 
 - MP／Reward／BattleをOrange・Gold、Agent／MCPをBlue、Human／成功をGreenへ統一する
@@ -144,11 +184,14 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 2. 1280×720では右サイドバーが内部スクロールするため、初見ユーザー向けにスクロール可能な視覚的サインを追加する。
 3. 実アカウント受入では、認証復元中のスケルトンから同期済みへの遷移をPixel 9で確認する。
 4. Agent台帳は接続済みクライアントがない場合の空状態を、接続手順付きの案内へさらに改善する。
+   この項目はLP-R06の初回接続導線へ統合して進め、別の同内容タスクを増やさない。
 5. 外部サービスはOAuthが再開されるまで、モックを実データと誤認しないEarly Access表示を維持する。
 6. LCP、INP、CLSの匿名計測は同意制の実装済み。公開後に `TELEMETRY_ENDPOINT` と D1 migration 0006 を本番環境へ設定し、実測を開始する。
 7. Unity、ネイティブAndroid/iOS、Agent自動実行、外部OAuth正式公開は公開βの範囲に戻さない。
 
 ## 公開後の順序
+
+既存の運用・連携改善と並行し、プロダクト改善は上記LP-R01〜LP-R07の双方向Relayを優先する。外部OAuthの再開やAgent自動起動を、この流れの前提条件にはしない。
 
 1. 同期エラー、MCP接続、初回Quest完了率を匿名同意制で監視
 2. 9言語の長文・日付・複数形を実ユーザー環境で補正
