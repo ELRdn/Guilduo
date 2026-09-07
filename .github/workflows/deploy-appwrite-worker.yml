@@ -42,6 +42,7 @@ jobs:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
       - run: npm run check
       - run: npm test

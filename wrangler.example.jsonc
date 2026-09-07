@@ -5,6 +5,9 @@
 	"compatibility_date": "2026-07-31",
 	"compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  // Optional: run near a single-region Appwrite backend. Match your own backend region.
+  // Production release config reads WORKER_PLACEMENT_REGION (for Singapore: aws:ap-southeast-1).
+  // "placement": { "region": "aws:ap-southeast-1" },
   "vars": {
     "APPWRITE_ENDPOINT": "https://api.guilduo.com/v1",
     "APPWRITE_PROJECT_ID": "your-appwrite-project-id",
