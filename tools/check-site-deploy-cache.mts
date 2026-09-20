@@ -13,7 +13,7 @@ export async function assertSiteDeployCacheSafe(siteUrl: string, fetcher: typeof
     if (!response.ok) throw new Error(`Public shell check failed with HTTP ${response.status}; deployment not started.`);
     const status = response.headers.get("cf-cache-status")?.trim().toUpperCase();
     if (status && status !== "DYNAMIC" && status !== "BYPASS") {
-      throw new Error("Public HTML is CDN-cacheable. Disable the Guilduo public app shell Cache Rule, wait for propagation, and retry. Re-enable it after verifying the deployment. See docs/appwrite-site-routing.md.");
+      throw new Error("Public HTML is CDN-cacheable. Disable both Guilduo public app shell Cache and Cache Response Rules, wait for propagation, and retry. Re-enable them after verifying the deployment and shell expiry. See docs/appwrite-site-routing.md.");
     }
   }
 }
@@ -23,7 +23,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     console.log("Public HTML cache deployment guard passed.");
   }).catch(() => {
     // Do not emit fetch errors or response bodies that may contain upstream data.
-    console.error("Site deployment blocked: public HTML must be reachable and uncached before replacing assets. Disable the public app shell Cache Rule and retry after propagation. See docs/appwrite-site-routing.md.");
+    console.error("Site deployment blocked: public HTML must be reachable and uncached before replacing assets. Disable both public app shell Cache and Cache Response Rules and retry after propagation. See docs/appwrite-site-routing.md.");
     process.exitCode = 1;
   });
 }
