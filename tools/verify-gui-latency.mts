@@ -73,7 +73,7 @@ try {
   await page.locator("#release-save").evaluate((button: { click(): void }) => button.click());
   await page.getByText("Questを完了しました", { exact: true }).first().waitFor();
   const timingMessage = await timingLogged;
-  const timing = await timingMessage.args()[1].jsonValue();
+  const timing = JSON.parse(timingMessage.text().slice("guilduo_gui_timing ".length));
   assert.equal(timing.action, "complete");
   assert.equal(typeof timing.durationMs, "number");
   assert.deepEqual(Object.keys(timing).sort(), ["action", "durationMs"]);

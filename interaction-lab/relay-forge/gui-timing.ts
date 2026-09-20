@@ -5,6 +5,6 @@ export function reportGuiTiming(action: "reload" | "connect" | "create" | "edit"
   // paint opportunity, without putting measurement in the operation's await chain.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (!isCurrent() || document.visibilityState !== "visible") return;
-    console.info("guilduo_gui_timing", { action, durationMs: Math.round(performance.now() - start) });
+    console.info("guilduo_gui_timing", JSON.stringify({ action, durationMs: Math.round(performance.now() - start) }));
   }));
 }
