@@ -108,7 +108,13 @@ Buildは従来どおり`dist/`全体をAppwrite Siteへuploadします。`dist/l
 
 初回だけは現在の本番と同じフロントエンドbuildを使い、手動workflowの `retention_bootstrap=true` でmanifestを作る。既存の公開HTMLが参照するJS/CSSとbuildの実バイトを比較し、不一致ならseedを拒否する。以後manifest欠落時の自動再初期化はしない。準備済みdistへの再実行も拒否するので、再試行時はbuildからやり直す。
 
-**この追加だけではHTMLのTTL/SWRを延長しない。** 本番で初回seedと次の配備による旧asset保持・旧HTMLの起動を検証し、archive自体の保持検査とrollback手順を整えるまでは、両キャッシュルール停止・240秒の既存手順を維持する。配備済みのmanifestを削除したり、旧archiveをそのまま配備して保持履歴を捨てたりしない。
+初回seedは2026-09-21のSite配備（Actions run `35525282430`、main `ec8f7a74`）で完了した。公開manifestは63 assetを記録し、Relay ForgeのJS/CSSはサイズ・SHA-256・Content-Typeが一致した。認証済み画面の起動と、配備後の両キャッシュルール復旧も確認した。
+
+公開originを指定したuploadでは `tools/check-site-archive.mts` が実際のtar.gzを検査する。Python 3標準のtarfileで展開せずに全ファイルのハッシュを計算し、manifestとの一致、公開中の旧asset保持、新旧HTMLの参照先を確認する。リンク・パス逸脱・重複・欠落・改変・上限超過・1時間以上古い準備結果・配備履歴の逆行はupload前に停止する。CI runnerにはPython 3が必要。ディレクトリの準備だけ成功しても、異なるarchiveをuploadすることはできない。
+
+rollbackも旧archiveの直接再配備やAppwriteの旧deployment再activationではなく、戻したいソースから新しいdistをbuildし、**現在本番のmanifestと旧assetを追加してから**新しいarchiveを作る。現行のキャッシュ停止・確認・240秒経過の手順を使う。緊急時に旧deploymentを直接有効化した場合は両ルールを停止したままにし、保持付きbuildへ復旧するまで再有効化しない。
+
+**この追加だけではHTMLのTTL/SWRを延長しない。** 次のフロントエンド配備による旧asset保持・旧HTMLの起動を本番で検証するまでは、両キャッシュルール停止・240秒の既存手順を維持する。配備済みのmanifestを削除したり、旧archiveをそのまま配備して保持履歴を捨てたりしない。
 
 productionのGitHub Environmentでは次を指定します。
 

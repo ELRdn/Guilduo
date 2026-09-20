@@ -13,7 +13,7 @@ type Asset = { name: string; sha256: string; size: number; retiredAt: number | n
 type Manifest = { version: 1; generatedAt: number; assets: Asset[] };
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-async function boundedBody(response: Response, max: number): Promise<Buffer> {
+export async function boundedBody(response: Response, max: number): Promise<Buffer> {
   if (Number(response.headers.get("content-length")) > max) {
     await response.body?.cancel().catch(() => {});
     throw new Error("Public asset exceeds retention limit.");
@@ -34,7 +34,7 @@ async function boundedBody(response: Response, max: number): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function parseManifest(bytes: Buffer, now: number): Manifest {
+export function parseManifest(bytes: Buffer, now: number): Manifest {
   const value = JSON.parse(bytes.toString("utf8")) as Manifest;
   if (value.version !== 1 || !Number.isSafeInteger(value.generatedAt) || value.generatedAt < 0 || value.generatedAt > now + 60_000
     || !Array.isArray(value.assets) || value.assets.length > 10_000) throw new Error("Invalid retained asset manifest.");
