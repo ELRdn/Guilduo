@@ -35,8 +35,24 @@
 ## 有効化前に必要な確認
 
 - 実Appwriteの独立した一時テスト行で正常commit、stale拒否、future拒否時の途中増加rollback、同一revisionでの同時commitを確認し、行を削除する。
-- 2026-09-21 JSTのprobeは行作成時にHTTP 401 `general_unauthorized_scope`。行は作成されず、transactionも開始していない。ローカルAPIキーの権限不足であり、アルゴリズムの失敗・成功のどちらとも扱わない。アプリ内ブラウザのAppwriteログインを依頼中。
+- 2026-09-21 JSTのローカルprobeは行作成時にHTTP 401 `general_unauthorized_scope`。その試行では行もtransactionも作成されていない。その後Appwrite管理画面へのログインを確認し、下記の実サービス検証を実施した。
 - source上、3操作それぞれに最終行のupdateイベントを発行するため、外部webhook/realtime連携の重複処理とcommit時間の増加を確認する。ブラウザの既存state同期はWorker経由のpollだが、外部連携の不存在までは証明していない。
 - 同じ計測対象・条件でGUIの編集・完了・F5・永続化を再測定する。transaction stage/commit増加が再読込削減を上回る場合は採用しない。
 
 診断スクリプトと秘匿情報を含まない結果はGit対象外の `.qa-artifacts/latency-investigation/` に置く。現在の本番設定・本番ユーザーstate・計測Questはこの候補の検証では変更していない。
+
+## 実サービス検証: 2026-09-21 JST
+
+Appwrite管理画面の公式組み込みCLIを、ログイン済みconsole sessionで利用した。APIキーの取得・表示・権限変更はしていない。対象は `guilduo/user_states` の独立した一時行 `latency-probe-20260921-cyan` のみ。ownerIdも同じ合成ID、permissionsは空、stateJsonは文字列 `null`。
+
+| ケース | 実際の結果 |
+| --- | --- |
+| revision=4で期待値4 | 3操作commit成功。読み戻しでrevision=5、指定したdeviceIdを確認 |
+| revision=5で期待値4 | 上限5のエラー。revision=5、deviceId、updatedAtが変化しないことを確認 |
+| revision=5で期待値6 | 2操作目で下限6のエラー。先の増加を含めrollbackされ、revision=5、deviceId、updatedAtが変化しないことを確認 |
+| 期待値5の2本を先にstageしてからcommit | 片方のみ成功。読み戻しでrevision=6、成功側deviceIdを確認。ただし下記理由で同時commitの証拠にはしない |
+| 後片付け | 自分で作成した5 transactionのDELETEはいずれも204。一時行DELETE=204、その後GET=404 |
+
+2つのterminalから連続実行したが、ネットワーク記録では2本目のcommitは1本目の応答後に開始していた。console CLIが直列化するため、**重なった要求での同時commit検証は未完了**。
+
+正常commit 1件の応答ヘッダー待ちは3,066ms、後続の競合拒否は2,084msだった。console session・経路・小さな合成payloadでの値であり、Worker経由のGUI保存や既存方式との比較として扱わない。性能改善は引き続き未証明。既存の本番CI接続を使い、独立行で実際の同時commitと同条件の既存方式比較を行う診断が次の候補になる。
