@@ -9,6 +9,8 @@
   // Production release config reads WORKER_PLACEMENT_REGION (for Singapore: aws:ap-southeast-1).
   // "placement": { "region": "aws:ap-southeast-1" },
   "vars": {
+    // Enable only together with a narrow HTTPS Web App /api/v1/* Worker Route.
+    "WEB_API_ENABLED": "false",
     "APPWRITE_ENDPOINT": "https://api.guilduo.com/v1",
     "APPWRITE_PROJECT_ID": "your-appwrite-project-id",
     "APPWRITE_DATABASE_ID": "guilduo",

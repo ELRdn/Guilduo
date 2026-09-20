@@ -19,6 +19,8 @@ const scriptPath = path.join(root, "tools", "generate-release-config.mts");
 const tsxCli = require.resolve("tsx/cli");
 
 const BASE_ENV = {
+  WEB_API_ROUTE_ZONE_ID: "",
+  WEB_API_BROWSER_ENABLED: "false",
   APPWRITE_REVISION_BATCH: "",
   WORKER_PLACEMENT_REGION: "",
   APPWRITE_ENDPOINT: "https://example.cloud.appwrite.io/v1",
@@ -50,6 +52,25 @@ function runGenerator(dir: string, env: NodeJS.ProcessEnv): string {
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
+
+test("Web API route and browser rollout are separate and leave MCP/static URLs intact", () => {
+  for (const enabled of ["false", "true"]) withTempDir(dir => {
+    runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", WEB_APP_URL: "https://app.example.test", WEB_API_ROUTE_ZONE_ID: "a".repeat(32), WEB_API_BROWSER_ENABLED: enabled });
+    const wrangler = JSON.parse(readFileSync(path.join(dir, "wrangler.jsonc"), "utf8"));
+    const runtime = JSON.parse(readFileSync(path.join(dir, "runtime-config.js"), "utf8").replace(/^const runtimeConfig = /, "").replace(/;\nglobalThis[\s\S]+$/, ""));
+    assert.deepEqual(wrangler.routes, [{ pattern: "mcp.guilduo.com", custom_domain: true }, { pattern: "https://app.example.test/api/v1/*", zone_id: "a".repeat(32) }]);
+    assert.equal(wrangler.vars.WEB_API_ENABLED, "true");
+    assert.equal(runtime.gatewayUrl, "https://mcp.guilduo.com");
+    assert.equal(runtime.webApiBaseUrl, enabled === "true" ? "https://app.example.test/api" : "");
+  });
+  for (const extra of [
+    { WEB_API_ROUTE_ZONE_ID: "invalid" }, { WEB_API_BROWSER_ENABLED: "true" },
+    { WEB_API_BROWSER_ENABLED: "typo" }, { WEB_API_ROUTE_ZONE_ID: "a".repeat(32), WEB_APP_URL: "http://app.example.test" },
+  ]) withTempDir(dir => {
+    assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", ...extra }));
+    assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
+  });
+});
 
 test("release placement is optional, validated and never changes the Appwrite endpoint", () => {
   for (const region of ["", "aws:ap-southeast-1"]) {

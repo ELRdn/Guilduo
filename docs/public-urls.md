@@ -44,6 +44,7 @@ rootのhost-based rewrite、compatibility path、assetの相対解決は [docs/a
 - https://app.guilduo.com/ はブラウザで使うWeb Appである。
 - https://mcp.guilduo.com/mcp はAIクライアントがOAuthで接続するMCP endpointである。
 - https://api.guilduo.com/v1 はAppwrite APIであり、ブラウザで開くWeb AppやMCP endpointではない。
+- `https://app.guilduo.com/api/v1/*` は段階的に有効化するWeb専用の内部REST経路。既存Workerへ直接配送し、MCPの公開URL・Appwrite SDKの接続先は変更しない。利用者の接続設定には案内しない。
 - APPWRITE_ENDPOINTは通常 https://api.guilduo.com/v1 を指す。
 - APPWRITE_SITE_ENDPOINTはAppwrite Sitesのdeployment・Web Platform管理APIに使うリージョナルendpointであり、ユーザー向けURLではない。
 

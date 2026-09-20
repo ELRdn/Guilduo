@@ -87,6 +87,7 @@ interface QuestForgeCoreApi {
 declare global {
   interface QuestForgeRuntimeConfig {
     gatewayUrl?: string;
+    webApiBaseUrl?: string;
     joinGuildUrl?: string;
     sourceUrl?: string;
     externalOAuthEnabled?: boolean;

@@ -45,6 +45,8 @@ jobs:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          WEB_API_ROUTE_ZONE_ID: ${{ vars.WEB_API_ROUTE_ZONE_ID }}
+          WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
           WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
           APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
@@ -165,6 +167,8 @@ jobs:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          WEB_API_ROUTE_ZONE_ID: ${{ vars.WEB_API_ROUTE_ZONE_ID }}
+          WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
           WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
           APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
       - name: Publish Appwrite Worker secret

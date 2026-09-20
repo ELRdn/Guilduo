@@ -77,6 +77,7 @@ export interface WorkerEnv {
   /** Comma/space separated exact origins allowed to identify the MCP server. */
   MCP_ALLOWED_ORIGINS?: string;
   WEB_APP_URL?: string;
+  WEB_API_ENABLED?: string;
   ALLOWED_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

@@ -178,6 +178,18 @@ export function gatewayDefaultUrl(): string {
   return cleanUrl(globalThis.QuestForgeConfig?.gatewayUrl || defaultGatewayUrl);
 }
 
+/** Keep the displayed MCP URL and custom Gateways separate from Web transport. */
+export function repositoryRequestUrl(baseUrl: string, path: string, config: { gatewayUrl?: string; webApiBaseUrl?: string } | undefined, browserOrigin: string): string {
+  const fallback = `${baseUrl}${path}`;
+  if (!path.startsWith("/v1/") || !config?.webApiBaseUrl || cleanUrl(config.gatewayUrl) !== cleanUrl(baseUrl)) return fallback;
+  try {
+    const api = new URL(config.webApiBaseUrl);
+    if (api.protocol !== "https:" || api.origin !== browserOrigin || api.pathname !== "/api" || api.search || api.hash || api.username || api.password) return fallback;
+    const target = new URL(`${api.href}${path}`);
+    return target.origin === browserOrigin && target.pathname.startsWith("/api/v1/") ? target.href : fallback;
+  } catch { return fallback; }
+}
+
 export class QuestForgeApiError extends Error {
   status: number;
   code: string;
@@ -207,8 +219,11 @@ export class QuestForgeRepository {
 
   async request<T = JsonRecord>(path: string, options: RequestOptions = {}): Promise<T> {
     if (!this.baseUrl) throw new QuestForgeApiError(0, "gateway_url_missing", "API Gateway URLを設定してください。すぐにローカルモードへ戻せます。");
-    const send = (token: string): Promise<Response> => fetch(`${this.baseUrl}${path}`, {
+    const browser = globalThis as unknown as { location?: { origin?: string } };
+    const url = repositoryRequestUrl(this.baseUrl, path, globalThis.QuestForgeConfig, browser.location?.origin ?? "");
+    const send = (token: string): Promise<Response> => fetch(url, {
         ...options,
+        ...(url !== `${this.baseUrl}${path}` ? { redirect: "error" as const, credentials: "omit" as const } : {}),
         // A timed-out mutation may already have committed: never abort/retry it here.
         ...(!options.method || options.method === "GET" || options.readOnly ? { signal: AbortSignal.timeout(15_000) } : {}),
         headers: {

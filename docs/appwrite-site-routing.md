@@ -140,6 +140,16 @@ Cloudflare Speed → Settings → Protocol Optimizationの **HTTP/3 (with QUIC)*
 
 ## ローカル検証
 
+### Web RESTの同一origin経路
+
+`WEB_API_ROUTE_ZONE_ID` にWeb AppのCloudflare zone IDを指定すると、release configは既存Workerに `https://app.guilduo.com/api/v1/*` のRouteを追加する。既存のproxied DNS上でRESTだけを処理し、Appwrite Siteのhost rewriteは変更しない。`/api/*` 全体を割り当ててはいけない。`/api/openapi.json` は既存の静的ファイルである。MCP・OAuth・認証SDKは従来のhostを使う。
+
+先にWorkerだけを配備し、実際のRoute登録、未認証401と `Cache-Control: no-store`、既存HTMLと静的ファイルの配信を確認する。その後、production変数 `WEB_API_BROWSER_ENABLED=true` を設定してSiteを配備する。ブラウザは公式originかつ標準Gatewayの場合だけ新経路を選ぶ。カスタムGateway・ローカルpreviewは従来の接続先を使う。Bearer認証と保存の確定処理は共通で、失敗した書き込みを別hostへ再送しない。
+
+同一originのGETはOriginヘッダーを省くため、Web専用設定APIは明示Originがない場合に限り、正しいWeb API URLとブラウザの `Sec-Fetch-Site: same-origin` を確認する。Bearer認証やWebユーザー権限の代わりにはしない。明示された不正Originは引き続き拒否する。
+
+rollbackは `WEB_API_BROWSER_ENABLED=false` でSiteを再配備する。既に開かれた画面や保持中の旧bundleが新経路を使うため、RouteとWorkerの対応はすぐには削除しない。Site配備時は上記のHTMLキャッシュ停止・旧asset保持・復旧手順を使う。これらの変数を指定しなければ従来の経路を維持する。
+
 ```powershell
 npm run site:routing:check
 npm run build

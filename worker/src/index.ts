@@ -534,6 +534,22 @@ function corsHeaders(request: Request, env: WorkerEnv): JsonHeaders {
     : {};
 }
 
+function isWebApiRequest(request: Request, env: WorkerEnv): boolean {
+  if (env.WEB_API_ENABLED !== "true") return false;
+  try {
+    const url = new URL(request.url);
+    return url.protocol === "https:" && url.origin === new URL(String(env.WEB_APP_URL || "")).origin
+      && url.pathname.startsWith("/api/v1/");
+  } catch { return false; }
+}
+
+function hasTrustedWebOrigin(request: Request, env: WorkerEnv): boolean {
+  if (corsHeaders(request, env)["access-control-allow-origin"]) return true;
+  // Browsers omit Origin on same-origin GETs. Fetch Metadata is browser-set;
+  // never replace a supplied, untrusted Origin with this inferred origin.
+  return !request.headers.has("origin") && request.headers.get("sec-fetch-site") === "same-origin" && isWebApiRequest(request, env);
+}
+
 function withCors(response: Response, request: Request, env: WorkerEnv): Response {
   const next = new Response(response.body, response);
   Object.entries(corsHeaders(request, env)).forEach(([key, value]) => next.headers.set(key, value));
@@ -580,7 +596,7 @@ function assertTogglFocusWebConnection(request: Request, env: WorkerEnv, identit
   if (!identity || !["appwrite", "dev"].includes(identity.authType)) {
     throw new DomainError(403, "focus_web_connection_required", "Toggl Focus API keys can only be connected from the Guilduo web app.");
   }
-  if (identity.authType === "appwrite" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+  if (identity.authType === "appwrite" && !hasTrustedWebOrigin(request, env)) {
     throw new DomainError(403, "focus_web_origin_required", "Open Guilduo in an approved browser origin to connect Toggl Focus.");
   }
 }
@@ -589,7 +605,7 @@ function assertAgentRegistryWebMutation(request: Request, env: WorkerEnv, identi
   if (!identity || !["appwrite", "dev"].includes(identity.authType)) {
     throw new DomainError(403, "agent_registry_web_required", "Agent Registry settings can only be changed from the Guilduo web app.");
   }
-  if (identity.authType === "appwrite" && !corsHeaders(request, env)["access-control-allow-origin"]) {
+  if (identity.authType === "appwrite" && !hasTrustedWebOrigin(request, env)) {
     throw new DomainError(403, "agent_registry_origin_required", "Open Guilduo in an approved browser origin to change Agent Registry settings.");
   }
 }
@@ -1763,7 +1779,16 @@ async function handleMcp(request: Request, env: WorkerEnv, context: WorkerContex
 }
 
 async function handleRequest(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
-  const url = new URL(request.url); const path = url.pathname;
+  const url = new URL(request.url); let path = url.pathname;
+  if (path.startsWith("/api/")) {
+    if (!isWebApiRequest(request, env)) {
+      return json({ error: { code: "not_found", message: "Route not found." } }, 404);
+    }
+    // Only dispatch the REST prefix locally. Keep the original request body,
+    // headers and origin for the existing authentication/mutation checks.
+    // No proxy fetch, redirect, OAuth/MCP alias, or static-file catch-all.
+    path = path.slice(4);
+  }
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.7.0", schemaVersion: 7, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: oauthStorageKind(env), integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
   const mcpOrigin = mcpOriginForRequest(request, env);
@@ -1794,7 +1819,7 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
 
 export default {
   async fetch(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
-    return withRequestTiming(request, async () => {
+    const response = await withRequestTiming(request, async () => {
       try { return withCors(await handleRequest(request, env, context), request, env); }
       catch (error) {
         const operation = oauthOperationForRequest(request);
@@ -1803,6 +1828,8 @@ export default {
         return withCors(errorResponse(error), request, env);
       }
     });
+    if (new URL(request.url).pathname.startsWith("/api/v1/")) response.headers.set("cache-control", "no-store");
+    return response;
   },
   async scheduled(_controller: unknown, env: WorkerEnv, context: WorkerContext): Promise<void> {
     context.waitUntil(retryDeliveries(env));
