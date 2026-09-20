@@ -381,3 +381,17 @@ Route登録用APIはDashboard登録後の再配備でも拒否された。後続
 初回描画時に、既存の `guilduo_gui_timing` に加えて `guilduo_gui_resource_timing` をローカルconsoleへ出す。Navigation TimingのHTML応答完了時刻、Resource Timingのaccount・JWT・workspace要求の開始時刻と所要時間、同一originのJS/CSS応答が最後に終わった時刻を記録する。並列要求の時間を足して全体時間と解釈しない。認証通信の値はpreflightを含む取得全体であり、CORSの制限で内部のDNS/TLS内訳を読めない場合もある。
 
 URL・クエリ・ユーザーID・Quest本文・認証情報は記録せず、各API種別は最大5件。サーバーへ送信しない。CDPはメモリキャッシュ応答に過去のrequestTime/receiveHeadersEndを再掲する場合があるため、今回のnavigation開始時刻と照合し、古い値を今回の待ち時間へ足さない。この計測は新しいnavigationに属するResource Timingを使う。
+
+### 2026-09-21: 旧HTMLの本番起動と長い裏側更新猶予
+
+PR #41（main `89580b9562bbc3ca86e266b7f41f010975ffd25d`、CI `35529602837`）は413テスト・型検査・build・LP検証に成功。Site run `35529717689` を配備し、旧HTMLの検証URLから新規起動した。旧 `relayForge-W-qZEHbT.js` とCSSが200・正しいMIMEで取得され、認証済みCommandとQuest一覧（16件、アーカイブ69件）が描画された。ブラウザ例外なし。正式rootでは新 `relayForge-DojrYnmJ.js` も正常起動した。
+
+旧76 asset（16,513,234 bytes）は全件サイズ・SHA-256・MIME一致、新manifestは77 asset。配備前に保存したHTMLのhashと公開された検証メタデータのsource hash、実際の検証HTMLとprobe hashも一致。従来未実施だった「旧HTMLを新しいnavigationで起動する」検証を完了した。Taskの書き込みは行っていない。
+
+この結果を根拠に、Cache Response RuleのCloudflare onlyのSWRを120秒から3600秒へ変更した。TTL120秒、ブラウザ側max-age=0/must-revalidate、公開HTMLだけの対象範囲は維持。両ルールは配備中だけ停止し、元の240秒以上経過と新旧起動確認後に復旧した。旧asset保持48時間は最大HTML保持3720秒より長い。今後の配備条件とrollbackは `appwrite-site-routing.md` の現行契約を参照する。
+
+変更後、最初の再読み込みは2,014ms（HTML EXPIRED約494ms）。新しい計測でHTML応答完了496ms、accountは開始522ms/所要140ms、JWTは開始522ms/所要377ms、workspaceは開始900ms/所要1099ms、JS/CSSの最終応答503msと確認できた。初回の配信元待ちとAPI全体の転送に揺れがある。設定を変えただけで速くなったとは判断せず、元の240秒を超える間隔のGUI再読み込みを続けて検証する。
+
+約4分40秒間、正式rootへアクセスせずに再読み込みした結果、HTMLは `UPDATING`・Age290秒・約141ms、cfOrigin=0だった。変更前の最大240秒を超えても配信元の更新完了を待たずに返せたことを確認。ブラウザ側Cache-Controlは元のまま。GUI全体は1,503msで、HTML応答完了143ms、JS/CSS最終応答150ms、account開始169ms/所要339ms、JWT開始169ms/所要309ms、workspace開始479ms/所要1006ms。workspaceのWorker内部162ms、応答ヘッダーまで約499msで、残りは取得完了までの待ちだった。
+
+HTMLの期限切れ待ちは改善したが、全体の安定した約1秒は未達。初期APIは表示中16件とアーカイブ69件を一緒に取得しているため、次は必要なデータを先に返す方式を検討する。アーカイブ・検索・依存関係・更新中のデータ保持を壊さないことを条件とし、この記録時点ではまだ実装していない。
