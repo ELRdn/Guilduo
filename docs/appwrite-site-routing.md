@@ -100,6 +100,16 @@ Siteは古いhashed assetを保持しない。旧JSのURLがHTTP 200でもHTML f
 
 Buildは従来どおり`dist/`全体をAppwrite Siteへuploadします。`dist/lp/`、`dist/lp/en/`、`dist/next/`、`dist/next/relay-forge/`を削除したり、生成HTMLを手で編集したりしません。
 
+#### 次の配備からの旧asset保持
+
+`tools/retain-site-assets.mts` は新しいbuildに、前回までの公開hashed assetを追加する。`/assets/retained-releases.json` にファイル名・SHA-256・サイズ・退役時刻を保存し、新buildで使われなくなってから48時間保持する。最後のbuild日時から48時間ではないため、長期間更新していなかったアプリも保護する。現行buildのファイルと旧assetの同名・内容違い、取得失敗、HTML fallback、ハッシュ不一致、パス逸脱は配備を停止する。API、認証情報、ユーザーデータは取得しない。
+
+手動Site配備とTagged Releaseの両workflowは、公開HTMLの非キャッシュ確認→新鮮なdistへの旧asset追加→archive作成→既存uploadガードの順で実行する。同じconcurrency groupを使い、前回manifestを読んだ二つの配備が互いの保持履歴を消すことを防ぐ。manifestとassetの破損や256MiBの保持上限に達した場合は、旧assetを勝手に間引かず配備を止める。
+
+初回だけは現在の本番と同じフロントエンドbuildを使い、手動workflowの `retention_bootstrap=true` でmanifestを作る。既存の公開HTMLが参照するJS/CSSとbuildの実バイトを比較し、不一致ならseedを拒否する。以後manifest欠落時の自動再初期化はしない。準備済みdistへの再実行も拒否するので、再試行時はbuildからやり直す。
+
+**この追加だけではHTMLのTTL/SWRを延長しない。** 本番で初回seedと次の配備による旧asset保持・旧HTMLの起動を検証し、archive自体の保持検査とrollback手順を整えるまでは、両キャッシュルール停止・240秒の既存手順を維持する。配備済みのmanifestを削除したり、旧archiveをそのまま配備して保持履歴を捨てたりしない。
+
 productionのGitHub Environmentでは次を指定します。
 
 ```text
