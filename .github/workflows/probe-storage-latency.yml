@@ -1,0 +1,30 @@
+name: Probe Appwrite storage latency
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-storage-latency-production
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify diagnostic safety offline
+        run: npx tsx --test tests/storage-latency-probe.test.ts
+      - name: Probe only an isolated temporary row and clean up
+        run: npx tsx tools/probe-storage-latency.mts --execute
+        env:
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
