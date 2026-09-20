@@ -314,3 +314,11 @@ Cloudflare管理画面でTiered Cacheが無効（switchの `aria-checked=false`�
 続くGUIは1,334ms（HIT / HTML 197ms / Age 45秒）、971ms（HIT / HTML 157ms / Age 11秒）。いずれもSJC。別途、約20秒間隔の公開HTTP確認6件はSEA・SJC・LAXでHIT 5件とUPDATING 1件、本文受信まで731/436/408/465/402/386msだった。最後はAge 138秒で裏側更新。MISS/EXPIREDはこの6件では出ていないが、少数標本であり、上位キャッシュの利用を示す `CacheTieredFill` ログまでは未取得。GUI測定と公開HTTP測定を混ぜて平均を出さない。
 
 設定変更後も認証・保存方式を維持し、通常の操作は約1〜1.4秒に近づいた。長い未アクセス後や異なるネットワーク、保存先のばらつきを含めた「安定して約1秒」は引き続き未達。次のSite配備ではキャッシュ安全手順を省略しない。
+
+### 2026-09-21: 初期workspace読み取りの集約
+
+`GET /v1/workspace/bootstrap` はWebの初期表示で必要なQuest一覧（all / limit 200）、本人プロフィール、公開Agentレコード（archivedを含む）を1回の認証と応答で返す。保存先への読み取りは並列に行い、既存3 endpointと同じ本人のデータを使う。プロフィールやAgentの取得に失敗した場合は既存panelErrorsへ渡し、Quest一覧を隠さない。認証失敗やQuest取得失敗を空データの成功に変えない。
+
+OAuth Agentからの呼び出しは403。応答はno-storeで、HTMLキャッシュの対象外。UIの本人確認・UID照合・遅延panelの読み込みは維持する。Workerを先に配備し、その後にSiteを配備する。旧Workerの404に限り従来の3 endpointへ戻るため、配備のずれでも起動できる。通信失敗・401・403・409・503ではfallbackしない。
+
+これは初期通信の本数を減らす変更で、保存処理やAppwrite commitの待ち時間は変えない。実際のGUI効果は配備後に測定する。直前のGUIは1,818ms（HTML HIT708ms）、2,226ms（UPDATING649ms / Age146秒）、1,582ms。HITでもネットワーク待ちに揺れがあるため、最速値だけを比較しない。

@@ -36,6 +36,7 @@ test("boot snapshot does not start or wait for auxiliary panels", async () => {
   const paths: string[] = [];
   globalThis.fetch = async (input) => {
     const path = new URL(String(input)).pathname; paths.push(path);
+    if (path === "/v1/workspace/bootstrap") return Response.json({ quests: [], total: 0, profile: { uid: "owner" }, agents: [], panelErrors: [] });
     if (path === "/v1/quests") return Response.json({ quests: [], total: 0 });
     if (path === "/v1/profile") return Response.json({ profile: { uid: "owner" } });
     if (path === "/v1/agents") return Response.json({ agents: [] });
@@ -44,10 +45,10 @@ test("boot snapshot does not start or wait for auxiliary panels", async () => {
   try {
     const repo = new QuestForgeRepository({ baseUrl: "https://fake.invalid", getToken: async () => "fake" });
     const snapshot = await repo.loadSnapshot({ deferPanels: true });
-    assert.deepEqual(paths.sort(), ["/v1/agents", "/v1/profile", "/v1/quests"]);
+    assert.deepEqual(paths, ["/v1/workspace/bootstrap"]);
     assert.ok(snapshot.loadDeferred);
     await snapshot.loadDeferred!();
-    assert.equal(paths.length, 9);
+    assert.equal(paths.length, 7);
     assert.equal(snapshot.quests.length, 0);
   } finally { globalThis.fetch = original; }
 });

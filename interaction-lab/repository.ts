@@ -251,10 +251,17 @@ export class QuestForgeRepository {
       () => this.request("/v1/agent-connections"),
       () => this.listMcpTools(),
     ];
-    const [questPage, optionalEntries] = await Promise.all([
+    const legacyLoad = () => Promise.all([
       this.request<JsonRecord>("/v1/quests?view=all&limit=200"),
       Promise.allSettled(loaders.map((load, index) => options.deferPanels && index !== 3 && index !== 5 ? Promise.resolve({}) : load())),
     ]);
+    const [questPage, optionalEntries] = options.deferPanels
+      ? await this.loadWorkspaceBootstrap().catch(error => {
+        // A frontend may reach an older Worker during rollout. Only a missing
+        // route falls back; auth, timeout and server errors remain visible.
+        if (error instanceof QuestForgeApiError && error.status === 404) return legacyLoad();
+        throw error;
+      }) : await legacyLoad();
     const snapshot = this.snapshotFromEntries(questPage, optionalEntries);
     if (options.deferPanels) snapshot.loadDeferred = async () => {
       const entries = await Promise.allSettled(loaders.map((load, index) => index === 3 || index === 5
@@ -263,6 +270,26 @@ export class QuestForgeRepository {
       return this.snapshotFromEntries(questPage, entries);
     };
     return snapshot;
+  }
+
+  private async loadWorkspaceBootstrap(): Promise<[JsonRecord, PromiseSettledResult<JsonRecord>[]]> {
+    const result = await this.request<JsonRecord>("/v1/workspace/bootstrap");
+    if (!result || !Array.isArray(result.quests) || !Number.isSafeInteger(result.total) || Number(result.total) < 0
+      || !Array.isArray(result.agents) || !(result.profile === null || (typeof result.profile === "object" && !Array.isArray(result.profile)))
+      || !Array.isArray(result.panelErrors)) {
+      throw new QuestForgeApiError(502, "invalid_workspace_bootstrap", "初期データの形式を確認できませんでした。");
+    }
+    const entries: PromiseSettledResult<JsonRecord>[] = Array.from({ length: 8 }, () => ({ status: "fulfilled", value: {} }));
+    entries[3] = { status: "fulfilled", value: { profile: result.profile } };
+    entries[5] = { status: "fulfilled", value: { agents: result.agents } };
+    for (const raw of result.panelErrors) {
+      const error = raw as { index?: unknown; message?: unknown } | null;
+      if (!error || (error.index !== 3 && error.index !== 5) || typeof error.message !== "string") {
+        throw new QuestForgeApiError(502, "invalid_workspace_bootstrap", "初期データの形式を確認できませんでした。");
+      }
+      entries[error.index] = { status: "rejected", reason: new Error(error.message) };
+    }
+    return [result, entries];
   }
 
   private snapshotFromEntries(questPage: JsonRecord, optionalEntries: PromiseSettledResult<JsonRecord>[]): Snapshot {
