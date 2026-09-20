@@ -23,6 +23,7 @@ type AuthOptions = {
   getOAuthCallback?: () => { userId: string; secret: string } | null;
   clearOAuthCallback?: () => void;
   now?: () => number;
+  prepareAccessToken?: boolean;
 };
 type BrowserLocation = { origin: string; pathname: string; search: string; hash: string; href: string };
 type BrowserHistory = { state: unknown; replaceState: (data: unknown, unused: string, url?: string | URL | null) => void };
@@ -87,7 +88,10 @@ export function createGuilduoAuth(options: AuthOptions) {
   let authGeneration = 0;
 
   async function refreshAccount(): Promise<GuilduoUser> {
-    cachedUser = normalizeAccount(await options.account.get());
+    const generation = authGeneration;
+    const account = await options.account.get();
+    if (generation !== authGeneration) throw { code: 401 };
+    cachedUser = normalizeAccount(account);
     return cachedUser;
   }
 
@@ -105,8 +109,13 @@ export function createGuilduoAuth(options: AuthOptions) {
     }
 
     try {
+      // Both endpoints verify the same session. The token stays behind the
+      // verified-account gate in getAccessToken, even if issuance finishes first.
+      if (options.prepareAccessToken) void issueAccessToken().catch(() => {});
       return { status: "authenticated", user: await refreshAccount() };
     } catch (error) {
+      authGeneration += 1;
+      jwtInFlight = null;
       cachedUser = null;
       cachedJwt = "";
       jwtExpiresAt = 0;
@@ -124,6 +133,10 @@ export function createGuilduoAuth(options: AuthOptions) {
       const state = await resolveAuthState();
       if (state.status !== "authenticated") return "";
     }
+    return issueAccessToken(forceRefresh);
+  }
+
+  async function issueAccessToken(forceRefresh = false): Promise<string> {
     if (jwtInFlight) return jwtInFlight;
     if (!forceRefresh && cachedJwt && jwtExpiresAt > now() + 30_000) return cachedJwt;
     const generation = authGeneration;
@@ -175,7 +188,7 @@ function auth(): ReturnType<typeof createGuilduoAuth> {
   assertConfigured();
   if (!productionAuth) {
     const client = new Client().setEndpoint(endpoint).setProject(projectId);
-    productionAuth = createGuilduoAuth({ account: new Account(client) });
+    productionAuth = createGuilduoAuth({ account: new Account(client), prepareAccessToken: true });
   }
   return productionAuth;
 }
