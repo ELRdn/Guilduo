@@ -19,6 +19,7 @@ const scriptPath = path.join(root, "tools", "generate-release-config.mts");
 const tsxCli = require.resolve("tsx/cli");
 
 const BASE_ENV = {
+  APPWRITE_REVISION_BATCH: "",
   WORKER_PLACEMENT_REGION: "",
   APPWRITE_ENDPOINT: "https://example.cloud.appwrite.io/v1",
   APPWRITE_PROJECT_ID: "example-project",
@@ -62,6 +63,20 @@ test("release placement is optional, validated and never changes the Appwrite en
   }
   withTempDir((dir) => {
     assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", WORKER_PLACEMENT_REGION: "https://untrusted.invalid" }));
+    assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
+  });
+});
+
+test("revision batching is explicitly configurable with a safe default and rejects typos", () => {
+  for (const flag of ["", "false", "true"]) {
+    withTempDir((dir) => {
+      runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", APPWRITE_REVISION_BATCH: flag });
+      const config = JSON.parse(readFileSync(path.join(dir, "wrangler.jsonc"), "utf8"));
+      assert.equal(config.vars.APPWRITE_REVISION_BATCH, flag || "false");
+    });
+  }
+  withTempDir((dir) => {
+    assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", APPWRITE_REVISION_BATCH: "treu" }));
     assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
   });
 });

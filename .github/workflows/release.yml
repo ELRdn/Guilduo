@@ -43,6 +43,8 @@ jobs:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
+          APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
       - run: npm run design:check
       - run: npx -y -p @google/design.md designmd lint DESIGN.md
@@ -159,6 +161,8 @@ jobs:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
+          APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
       - name: Publish Appwrite Worker secret
         shell: bash
         run: printf '%s' "$APPWRITE_API_KEY" | npx wrangler secret put APPWRITE_API_KEY
