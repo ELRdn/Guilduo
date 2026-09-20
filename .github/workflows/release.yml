@@ -8,7 +8,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  # The retained-asset chain and active Site must have only one publisher,
+  # including the manual Deploy Appwrite Site workflow.
+  group: appwrite-site-production
   cancel-in-progress: false
 
 jobs:
@@ -84,6 +86,8 @@ jobs:
         id: appwrite_site
         shell: bash
         run: |
+          node --import tsx tools/check-site-deploy-cache.mts "$APPWRITE_SITE_URL"
+          node --import tsx tools/retain-site-assets.mts "$APPWRITE_SITE_URL" dist
           tar -czf "$RUNNER_TEMP/guilduo-site.tar.gz" -C dist .
           deployment="$(bash tools/deploy-appwrite-site.sh "$RUNNER_TEMP/guilduo-site.tar.gz")"
           echo "$deployment"
