@@ -322,3 +322,34 @@ Cloudflare管理画面でTiered Cacheが無効（switchの `aria-checked=false`�
 OAuth Agentからの呼び出しは403。応答はno-storeで、HTMLキャッシュの対象外。UIの本人確認・UID照合・遅延panelの読み込みは維持する。Workerを先に配備し、その後にSiteを配備する。旧Workerの404に限り従来の3 endpointへ戻るため、配備のずれでも起動できる。通信失敗・401・403・409・503ではfallbackしない。
 
 これは初期通信の本数を減らす変更で、保存処理やAppwrite commitの待ち時間は変えない。実際のGUI効果は配備後に測定する。直前のGUIは1,818ms（HTML HIT708ms）、2,226ms（UPDATING649ms / Age146秒）、1,582ms。HITでもネットワーク待ちに揺れがあるため、最速値だけを比較しない。
+
+### 2026-09-21: 集約APIの本番検証とHTTP/2比較
+
+PR #37をmain `ac3dd1e306679699eb73f2f08cafb4d13f9f1922` からWorker run `35526374280`、Site run `35526463404` の順で配備した。CIは403テスト・型検査・build・LP検証に成功。Worker versionは `1f2ecf43-9554-4d5f-97f2-07183f63c521`、新しいRelay Forge bundleは `relayForge-B6iSf5pw.js`。初期GETが3件から `workspace/bootstrap` の1件になり、200・no-storeで返ることをブラウザで確認した。旧Workerへのfallbackは使われていない。
+
+旧配備の63 assetは、本番の公開URLから再取得し、全件のサイズ・SHA-256、JS/CSSのContent-Typeが一致した。新manifestは66 assetで、旧auth/next/Relay Forgeの3 bundleを保持した。旧bundleで開いた画面も残して確認したが、**旧HTMLを新規navigationとして読み直す試験は未実施**。HTMLキャッシュは両ルールを復旧し、TTL/SWRは120/120秒を維持する。
+
+集約後もHTTP/3のHITリロードは1,935/1,938msだった。HTMLだけで642/629ms、Cloudflareの `cfOrigin=0`、`cfEdge=65/7ms`。ブラウザの応答情報は `fromServiceWorker=false` で、Service Workerの待ちではない。取得開始時のHTTP/3接続に約123msかかっていた。初期API自体はheaders473/489ms、Worker内部131/113msで、リクエスト数の削減だけでGUIの安定した短縮を証明できなかった。
+
+[Cloudflareの公式切り分け手順](https://developers.cloudflare.com/speed/optimization/protocol/troubleshooting/protocol-troubleshooting/)に従い、17:44 UTCにzoneのHTTP/3を無効化し、同じブラウザでHTMLが実際にHTTP/2へ切り替わったことを確認した。
+
+| HTTP/2での再読み込み | GUI全体 | HTMLヘッダーまで | HTMLキャッシュ |
+| --- | ---: | ---: | --- |
+| 切り替え直後 | 2,035ms | 909ms | EXPIRED |
+| 次の起動 | 1,102ms | 126ms | HIT |
+| 続く起動 | 1,266ms | 127ms | HIT |
+| 編集後、時間を空けた起動 | 1,774ms | 528ms | EXPIRED |
+| 完了後の起動 | 1,590ms | 135ms | HIT / Age113秒 |
+
+既存接続のAPI通信にはHTTP/3が残っていたため、全通信がHTTP/2になったとは扱わない。HTMLのHITは3回とも約0.13秒で、HTTP/3での約0.63秒から改善した。この環境での改善に基づきHTTP/3はオフを維持するが、別ネットワークやブラウザ一般への効果は未検証。通常のHITでもGUI全体にはばらつきが残る。
+
+承認済みの計測専用Questを追加1件だけ作り、2回編集して完了した。最初の編集後と完了後にF5を実行し、最後の文面と完了が残ることを確認した。計測後は完了・アーカイブ済み、全84件／アーカイブ68件。無関係なQuestは変更していない。
+
+| 操作 | GUI全体 | Worker total | 備考 |
+| --- | ---: | ---: | --- |
+| 作成 | 1,847ms | 1,189ms | preflight315ms |
+| 編集01 | 1,636ms | 965ms | preflight314ms、begin227 / stage324 / commit367ms |
+| 編集02 | 1,279ms | 935ms | preflightなし、begin200 / stage304 / commit372ms |
+| 完了 | 1,358ms | 1,016ms | preflightなし、begin203 / stage360 / commit412ms |
+
+通常の編集・完了は約1.3秒だが、初回のpreflightとAppwrite確定処理、期限切れHTMLで待ちが増える。**安定して約1秒という目標はまだ未達**。次はHTTP/2での長い未アクセス後の挙動と、保存時の往復を検証する。確定保存や競合検査を省略しない。
