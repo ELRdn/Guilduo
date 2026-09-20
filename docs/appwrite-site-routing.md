@@ -1,5 +1,7 @@
 # Appwrite Siteの公開host routing
 
+> 現在のキャッシュはTTL120秒＋SWR3600秒。下部の「2026-09-21 current cache policy after old-shell startup verification」を現行契約として優先する。120/120秒・最大240秒という記述は変更前の履歴。
+
 このリポジトリは、LPとRelay Forgeを1つのAppwrite Siteの同じactive deploymentへ梱包します。hostごとに異なるHTMLを返す処理はAppwrite Siteの静的ファイルツリーへ埋め込まず、CloudflareのURL Rewriteで入口だけを切り替えます。正式URLの利用ルールは[`public-urls.md`](public-urls.md)を参照してください。
 
 この方式は本番へ反映済みです。`https://guilduo.com/`は公式LP、`https://app.guilduo.com/`はGuilduo / Relay Forgeの正式Web Appとして案内します。
@@ -182,3 +184,13 @@ upload前のarchive検査は、実際のtarに含まれる検証HTMLが、その
 Site配備後、ログイン済みブラウザでこのURLを新規navigationとして開き、旧scriptが200・正しいMIMEで読み込まれること、認証済みCommandとQuest一覧が描画されることを確認する。必要なら現在の正式rootへ戻り、同じデータと新bundleの起動も比較する。書き込みは不要。元HTMLとの差分検査やassetのhash一致だけではこの起動確認を代替しない。
 
 **この仕組みの追加だけではTTL/SWRを変更しない。** 本番で旧HTMLの起動を確認してから、保持48時間を超えないキャッシュ期間を個別に評価する。配備時の両キャッシュルール停止・DYNAMIC/BYPASS確認・起動検証・240秒経過の手順は、設定変更を文書化するまで維持する。
+
+## 2026-09-21 current cache policy after old-shell startup verification
+
+PR #41のSite配備run `35529717689`（main `89580b9562bbc3ca86e266b7f41f010975ffd25d`）後に、旧HTMLを検証用URLから新規navigationとして開いた。旧 `relayForge-W-qZEHbT.js` とCSSは200・正しいMIMEで取得でき、認証済みCommandとQuest一覧（16件、アーカイブ69件）が描画された。例外なし。正式rootでは新 `relayForge-DojrYnmJ.js` の起動も確認。旧76 asset全件のサイズ・SHA-256・MIME一致、元HTMLと検証HTMLのhash一致も確認した。
+
+この検証を根拠に、公開HTMLのCache Response Ruleで **Cloudflare onlyのstale-while-revalidateを120秒から3600秒へ変更**した。max-ageは120秒、元のブラウザ向け `public, max-age=0, must-revalidate` と対象条件は維持する。鮮度2分を超えたHTMLを最大1時間、配信元で更新しながら返せるようにする。個人データ・API応答はキャッシュしない。仕様は [CloudflareのCache Response Rules](https://developers.cloudflare.com/cache/how-to/cache-response-rules/settings/) を参照。
+
+以後はこの節を現行契約とし、上の120/120秒・最大240秒という記録は変更前の履歴として扱う。最大のHTML保持は3720秒で、旧assetの48時間保持より短い。配備時は引き続き両ルール停止・DYNAMIC/BYPASS確認・保持付きarchive検査を必須とする。復旧条件は新旧HTMLのGUI起動と旧asset保持の確認であり、240秒を待つだけでは代替できない。従来の240秒の停止時間も当面維持するが、長く残る旧HTMLの安全性は検証済みasset保持で担保する。
+
+旧asset保持の検査に失敗した場合はuploadを停止し、旧archiveを直接配備しない。保持を保証できない緊急rollbackではキャッシュ両ルールを停止したまま復旧する。元設定へ戻すときはCloudflare onlyのstale-while-revalidateを120秒へ戻す。長い猶予で保存済みのHTMLは直ちに消えないため、保持を削除する理由にはしない。
