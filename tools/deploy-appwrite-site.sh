@@ -20,6 +20,13 @@ for name in APPWRITE_PROJECT_ID APPWRITE_SITE_ID APPWRITE_DEPLOY_KEY; do
   fi
 done
 
+# Cached HTML can reference hashed assets removed by the next deployment.
+# Check before the first upload, not after activation. Legacy callers without a
+# public origin still use the generated-domain lookup below.
+if [[ -n "${APPWRITE_SITE_URL:-}" ]]; then
+  node --import tsx tools/check-site-deploy-cache.mts "$APPWRITE_SITE_URL"
+fi
+
 endpoint="${site_endpoint%/}/sites/$APPWRITE_SITE_ID/deployments"
 chunk_size=$((5 * 1024 * 1024))
 total_size="$(stat -c '%s' "$archive")"

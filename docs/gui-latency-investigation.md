@@ -222,3 +222,46 @@ Appwriteの競合検出は操作をstageした時点からの変更に基づく�
 - 証跡は `.qa-artifacts/latency-investigation/` に保存（Git対象外）。ブラウザ結果は `browser/results.json`、画面幅別の待機表示は `browser/pending-*.png`。
 
 **この節の検証時点では本番未配備。** SiteとWorkerの両方の配備後に、F5・計測用Questの編集・完了を同じ条件で再計測する必要がある。この時点で本番の短縮秒数・p95は未検証。上の直列段数や合成テストを実測改善率に換算しない。
+
+## 11. 本番再計測と公開HTML改善（2026-09-20）
+
+上のローカル検証時点から、PR #23〜#28の修正を本番へ反映した。PR #25のWorker配置は `aws:ap-southeast-1`、PR #27はGUI計測ログのJSON文字列化、PR #28はアカウント検証とJWT発行の並行開始。PR #28はmain `d0a7478`、Site配備run `35516997732` のattempt 3で成功した。最初の2回はAppwrite uploadのHTTP 499/503で失敗しており、マージだけを配備成功とはしていない。
+
+Codexのログイン済みアプリ内ブラウザで、承認済みの同一計測Questだけを編集し、最後に完了した。操作開始から成功応答・render・2回のanimation frameまでのページ内 `guilduo_gui_timing` を採用した。操作ツールの実行時間は含めない。新たなQuestの追加はない。
+
+### 再読み込み
+
+HTMLが `CF-Cache-Status: DYNAMIC` の時はGUI全体4,304ms、HTMLの応答ヘッダー受信まで1,863ms、配信元待ち1,268msだった。公開HTMLのみの2分キャッシュを追加し、Browser TTLは配信元の `max-age=0, must-revalidate` を保持するよう明示設定した。範囲・配備手順は [`appwrite-site-routing.md`](appwrite-site-routing.md) に記載。
+
+| PR #28配備後の条件 | HTMLヘッダー受信まで | GUI全体 |
+| --- | ---: | ---: |
+| 新bundleの初回取得、HTML EXPIRED | 878ms | 3,142ms |
+| 通常再読み込み、HTML HIT | 141ms | 1,223ms |
+| 通常再読み込み、HTML EXPIRED | 915ms | 1,934ms |
+| 通常再読み込み、HTML HIT | 416ms | 1,610ms |
+| 通常再読み込み、HTML EXPIRED | 457ms | 2,669ms |
+| 完了後の再読み込み、HTML EXPIRED | 1,032ms | 2,277ms |
+
+新bundle `/assets/relayForge-Bdk0sOqJ.js` の読み込みをブラウザで確認。`/account` と `/account/jwts` が約1ms以内の差で開始することも確認した。通常HITの1,223msサンプルではアカウント165ms、JWT354ms、初期API3件449〜467ms。API応答にHTMLのキャッシュは適用されていない。これは少数の連続測定で、地域別p95や全利用者の保証ではない。
+
+### 編集・完了と永続化
+
+| 操作 | GUI全体 | Worker total | 補足 |
+| --- | ---: | ---: | --- |
+| 編集04 | 1,962ms | 1,246ms | preflight約337msを含む |
+| 編集05 | 1,553ms | 1,211ms | 成功後の描画まで |
+| 編集06 | 1,580ms | 888ms | preflight約311msを含む |
+| 編集07 | 1,469ms | 1,107ms | preflightなし |
+| 編集08 | 1,283ms | 882ms | preflightなし |
+| 最終完了 | 3,396ms | 2,907ms | 下流保存の遅いケースを観測 |
+
+編集05〜08の内容は再読み込み後にも保持された。最終完了後も再読み込みし、アーカイブ一覧で同じQuestが「完了」と表示されることを確認した。完了時の内訳はauth 93ms、state_read 462ms、tx_begin 236ms、tx_read 518ms、tx_stage 671ms、tx_commit 818ms。段階には並列実行があるため単純合算でGUI時間を再現しない。完了までの遅延は描画だけでは説明できず、Appwriteへの永続化待ちが残る。
+
+### 配備時の追加修正と未達条件
+
+古いJSのURLが次のSite配備でHTML fallbackになり、キャッシュされた旧HTMLが起動できなくなる危険を発見した。`tools/check-site-deploy-cache.mts` で公開入口2件を検査し、HTMLがcacheableならupload前に停止する。rule停止→配備→新bundle検証→旧HTML期限経過→rule再有効化の順を採用する。自動purgeは未導入。
+
+- 配備ガード追加後: 全363テスト、`npm run check`、`npm run build`、shell構文検査、`git diff --check`が成功。
+- 本番でcacheable応答を受けたCLIガードが終了コード1で停止することも確認。テストのためのSite uploadは実行していない。
+- 通常の再読み込みと編集は約1.2〜1.6秒のケースを確認したが、キャッシュ更新時の2秒台・完了時3.4秒が残る。**全操作が安定して約1秒という目標は未達**。
+- 次の調査は保存時のAppwrite往復・下流のばらつき。競合検査・認証・commitを省略して数字を下げない。新しい保存方式は別途、同時編集と既存クライアントの互換性を検証してから適用する。

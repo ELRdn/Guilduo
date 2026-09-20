@@ -67,6 +67,31 @@ Cloudflare URL Rewriteはhostnameを変更できないため、DNSの向き先�
 
 ## BuildとGitHub Actions
 
+### Web Appの公開HTMLキャッシュ（2026-09-20）
+
+Cloudflare Cache Rule `Guilduo public app shell` を有効化した。静的HTMLを毎回Appwriteまで取得する待ちを減らすため、次の条件だけを対象にする。
+
+```text
+(http.host eq "app.guilduo.com" and http.request.uri.path in {"/" "/next/relay-forge/"} and http.request.uri.query eq "" and http.request.method in {"GET" "HEAD"} and not any(http.request.headers.names[*] eq "authorization"))
+```
+
+- Cache eligibility: **Eligible for cache**。
+- Edge TTL: **Ignore cache-control header and use this TTL / 120 seconds**。
+- Browser TTL: **Respect origin TTL** を明示設定する。設定を省略するとzoneの4時間設定が適用されたため、省略しない。応答の `Cache-Control: public, max-age=0, must-revalidate` を確認済み。
+- Cache keyは既定値。host/path/queryをまとめる設定は追加しない。
+- 対象は利用者によらず同じ静的アプリHTMLのみ。OAuth callbackを含むquery付きURL、Authorization付き要求、Appwrite API、Worker REST/MCP、LPは対象外。HTMLに個人情報を埋め込む方式へ変更する前にこのルールを無効化・再設計する。
+
+反映確認では通常URLで `CF-Cache-Status: HIT` と `Age`、query付き検証URLで `DYNAMIC` を確認した。CDNが空の場合と120秒経過後は配信元を待つ。キャッシュヒットだけを初回表示や保存時間の改善として報告しない。
+
+Siteは古いhashed assetを保持しない。旧JSのURLがHTTP 200でもHTML fallbackを返すことがあるため、200だけでは可用性を証明できない。キャッシュを有効なまま配備すると最大120秒、古いHTMLが削除済みJSを参照する危険がある。次の順序を必須とする。
+
+1. DashboardでこのCache Ruleを一時的に無効化し、反映を待つ。
+2. 通常URLとcompatibility pathの応答が `DYNAMIC` または `BYPASS` になったことを確認して配備する。`tools/deploy-appwrite-site.sh` は公開origin指定時に両入口を検査し、`HIT` だけでなく `MISS`・`EXPIRED` 等でも**upload前に停止する**。通信失敗でも配備しない。queryやリクエストのno-cacheで検査を回避しない。
+3. 新しいHTMLの参照先JS/CSSが正しいContent-Typeで返ることとアプリの起動を確認する。
+4. 旧HTMLの保持期限120秒が過ぎてからルールを再度有効にし、新しいbundleと `HIT` を確認する。
+
+現行CLIトークンではcache purgeが拒否されるため、自動purge済みと扱わない。緊急時はルールを無効化したまま既知のdeploymentへrollbackする。zone全体のpurgeや他ルールの置換は不要。CLIで公開originを省略する古いgenerated-domain向け経路にはこの検査がないため、公式Web Appの配備では `APPWRITE_SITE_URL` を必ず指定する。
+
 Buildは従来どおり`dist/`全体をAppwrite Siteへuploadします。`dist/lp/`、`dist/lp/en/`、`dist/next/`、`dist/next/relay-forge/`を削除したり、生成HTMLを手で編集したりしません。
 
 productionのGitHub Environmentでは次を指定します。
