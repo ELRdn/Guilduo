@@ -375,3 +375,9 @@ PR #39（main `8d8dd20649cddfc8418dcff8a38a32dc06f387b4`）のWorkerを先に配
 再読み込みは配備直後4,243ms、キャッシュ復旧の途中1,508ms（HTML DYNAMIC406ms）、編集後1,726ms（EXPIRED557ms）、完了後1,978ms（HIT144ms）、続く通常起動1,007ms（UPDATING142ms）だった。完了後の遅い起動ではAppwrite認証のpreflightが701/742ms、次の起動ではpreflightがなくaccount128ms・JWT137msだった。初期APIはそれぞれ515/465ms。最速1回をもって目標達成とはしない。次は認証の接続確認と保存先の変動を切り分ける。
 
 Route登録用APIはDashboard登録後の再配備でも拒否された。後続修正ではDashboard管理を明示し、トークンの権限を広げずに既存Routeを保持する。Worker配備後・新経路を使うSite配備前に未認証APIの401/JSON/no-storeを検査し、URLが静的HTMLへ戻った場合などは成功にしない。
+
+### 起動時間の内訳
+
+初回描画時に、既存の `guilduo_gui_timing` に加えて `guilduo_gui_resource_timing` をローカルconsoleへ出す。Navigation TimingのHTML応答完了時刻、Resource Timingのaccount・JWT・workspace要求の開始時刻と所要時間、同一originのJS/CSS応答が最後に終わった時刻を記録する。並列要求の時間を足して全体時間と解釈しない。認証通信の値はpreflightを含む取得全体であり、CORSの制限で内部のDNS/TLS内訳を読めない場合もある。
+
+URL・クエリ・ユーザーID・Quest本文・認証情報は記録せず、各API種別は最大5件。サーバーへ送信しない。CDPはメモリキャッシュ応答に過去のrequestTime/receiveHeadersEndを再掲する場合があるため、今回のnavigation開始時刻と照合し、古い値を今回の待ち時間へ足さない。この計測は新しいnavigationに属するResource Timingを使う。

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ASSET_RETENTION_MS, RETAINED_ASSET_MANIFEST, retainSiteAssets } from "../tools/retain-site-assets.mts";
+import { ASSET_RETENTION_MS, RETAINED_ASSET_MANIFEST, PREVIOUS_SHELL_PATH, PREVIOUS_SHELL_META_PATH, previousShellProbe, retainSiteAssets } from "../tools/retain-site-assets.mts";
 
 const now = Date.UTC(2026, 8, 21);
 const oldName = "app-OldHash01.js", newName = "app-NewHash02.js";
@@ -30,7 +30,7 @@ function server(assets: unknown[] | null, files: Record<string, string>, active 
     if (url.pathname === RETAINED_ASSET_MANIFEST) return assets === null
       ? new Response("fallback", { headers: { "content-type": "text/html" } })
       : Response.json({ version: 1, generatedAt: now - 1, assets });
-    if (url.pathname === "/" || url.pathname === "/next/relay-forge/") return new Response(`<script type="module" src="/assets/${active}"></script>`, { headers: { "content-type": "text/html" } });
+    if (url.pathname === "/" || url.pathname === "/next/relay-forge/") return new Response(`<html><head><script type="module" src="/assets/${active}"></script></head><body></body></html>`, { headers: { "content-type": "text/html" } });
     const body = files[url.pathname.slice("/assets/".length)];
     return body === undefined ? new Response("fallback", { headers: { "content-type": "text/html" } }) : new Response(body, { headers: { "content-type": "text/javascript" } });
   };
@@ -46,6 +46,22 @@ test("retention preserves previous imports and starts retirement at replacement,
   const manifest = JSON.parse(await readFile(join(dist, "assets/retained-releases.json"), "utf8"));
   assert.equal(manifest.assets.find((a: { name: string }) => a.name === oldName).retiredAt, now);
   assert.equal(manifest.assets.find((a: { name: string }) => a.name === newName).retiredAt, null);
+  const probe = await readFile(join(dist, PREVIOUS_SHELL_PATH), "utf8");
+  const metadata = JSON.parse(await readFile(join(dist, PREVIOUS_SHELL_META_PATH), "utf8"));
+  assert.match(probe, /noindex,nofollow/);
+  assert.match(probe, new RegExp(oldName));
+  assert.doesNotMatch(probe, new RegExp(newName));
+  assert.equal(metadata.probeSha256, sha(probe));
+  assert.equal(metadata.capturedAt, now);
+});
+
+test("old-shell probe preserves reference destinations and changes only indexing metadata", () => {
+  const origin = new URL("https://app.example.test");
+  const html = '<html><head><script src="../../assets/app-OldHash01.js"></script></head><body><a href="#content">skip</a></body></html>';
+  assert.equal(previousShellProbe(html, origin), html.replace("<head>", '<head>\n<meta name="robots" content="noindex,nofollow">'));
+  for (const bad of ['<script src="/assets/app-OldHash01.js"></script>', '<head><base href="https://other.test/"></head>', '<head><script src="./app-OldHash01.js"></script></head>']) {
+    assert.throws(() => previousShellProbe(bad, origin), /head|base|location-dependent/);
+  }
 });
 
 test("multiple deployments preserve original retirement time and prune only after 48 hours", async t => {

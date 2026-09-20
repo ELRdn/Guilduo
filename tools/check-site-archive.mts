@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ASSET_RETENTION_MS, RETAINED_ASSET_MANIFEST, boundedBody, parseManifest } from "./retain-site-assets.mts";
+import { ASSET_RETENTION_MS, RETAINED_ASSET_MANIFEST, PREVIOUS_SHELL_PATH, PREVIOUS_SHELL_META_PATH, previousShellProbe, boundedBody, parseManifest } from "./retain-site-assets.mts";
 
 type ArchivedFile = { size: number; sha256: string; text?: string };
 
@@ -61,13 +62,23 @@ export async function assertSiteArchiveSafe(options: {
     if (!scripts) throw new Error("Shell has no verifiable script entry.");
   };
   checkShell(files["next/relay-forge/index.html"]?.text ?? "");
+  const probe = files[PREVIOUS_SHELL_PATH.slice(1)];
+  const probeMeta = JSON.parse(files[PREVIOUS_SHELL_META_PATH.slice(1)]?.text || "null") as {
+    version: number; capturedAt: number; sourcePath: string; sourceSha256: string; probeSha256: string;
+  } | null;
+  if (!probe?.text || !probeMeta || probeMeta.version !== 1 || probeMeta.capturedAt !== manifest.generatedAt
+    || probeMeta.sourcePath !== "/next/relay-forge/" || probe.sha256 !== probeMeta.probeSha256) throw new Error("Archive has no verified previous-shell probe.");
+  checkShell(probe.text);
   for (const path of ["/", "/next/relay-forge/"]) {
     const shell = await request(path);
     if (!shell.ok || !(shell.headers.get("content-type") ?? "").includes("text/html")) {
       await shell.body?.cancel();
       throw new Error("Cannot verify the active shell.");
     }
-    checkShell((await boundedBody(shell, 2 * 1024 * 1024)).toString("utf8"));
+    const activeHtml = (await boundedBody(shell, 2 * 1024 * 1024)).toString("utf8");
+    checkShell(activeHtml);
+    if (path === probeMeta.sourcePath && (createHash("sha256").update(activeHtml).digest("hex") !== probeMeta.sourceSha256
+      || previousShellProbe(activeHtml, origin) !== probe.text)) throw new Error("Previous-shell probe differs from the active release.");
   }
 }
 

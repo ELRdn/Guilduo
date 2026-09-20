@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertSiteArchiveSafe } from "../tools/check-site-archive.mts";
-import { ASSET_RETENTION_MS } from "../tools/retain-site-assets.mts";
+import { ASSET_RETENTION_MS, previousShellProbe } from "../tools/retain-site-assets.mts";
 
 const now = Date.UTC(2026, 8, 21);
 const origin = "https://app.example.test";
@@ -17,12 +17,16 @@ const asset = (name: string, retiredAt: number | null) => ({ name, retiredAt,
   sha256: createHash("sha256").update(contents[name as keyof typeof contents]).digest("hex"),
 });
 type Member = { name: string; text: string; link?: boolean };
-const shell = (name: string) => `<script type="module" src="/assets/${name}"></script>`;
+const shell = (name: string) => `<html><head><script type="module" src="/assets/${name}"></script></head><body></body></html>`;
+const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+const oldProbe = () => previousShellProbe(shell(oldName), new URL(origin));
 const manifest = () => ({ version: 1, generatedAt: now, assets: [asset(oldName, now), asset(lazyName, now), asset(newName, null)] });
 const members = (): Member[] => [
   ...Object.entries(contents).map(([name, text]) => ({ name: `./assets/${name}`, text })),
   { name: "./assets/retained-releases.json", text: JSON.stringify(manifest()) },
   { name: "./next/relay-forge/index.html", text: shell(newName) },
+  { name: "./deployment-check/previous-shell.html", text: oldProbe() },
+  { name: "./deployment-check/previous-shell.json", text: JSON.stringify({ version: 1, capturedAt: now, sourcePath: "/next/relay-forge/", sourceSha256: sha(shell(oldName)), probeSha256: sha(oldProbe()) }) },
 ];
 async function archive(t: { after: (fn: () => Promise<void>) => void }, entries: Member[]) {
   const directory = await mkdtemp(join(tmpdir(), "guilduo-archive-"));
@@ -55,6 +59,13 @@ const check = (path: string, fetcher = server()) => assertSiteArchiveSafe({ arch
 
 test("actual tar retains both the previous entry and its lazy imports", async t => {
   await check(await archive(t, members()));
+});
+
+test("missing, altered or falsely attributed previous HTML cannot pass archive verification", async t => {
+  const missing = members().filter(m => !m.name.endsWith("previous-shell.html"));
+  const altered = members().map(m => m.name.endsWith("previous-shell.html") ? { ...m, text: shell(newName) } : m);
+  const forged = members().map(m => m.name.endsWith("previous-shell.json") ? { ...m, text: m.text.replace(sha(shell(oldName)), sha("unrelated")) } : m);
+  for (const entries of [missing, altered, forged]) await assert.rejects(check(await archive(t, entries)), /previous-shell|Previous-shell/);
 });
 
 test("archive omissions and changed bytes cannot pass a valid manifest", async t => {

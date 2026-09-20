@@ -1,10 +1,23 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const RETAINED_ASSET_MANIFEST = "/assets/retained-releases.json";
 export const ASSET_RETENTION_MS = 48 * 60 * 60 * 1000;
+export const PREVIOUS_SHELL_PATH = "/deployment-check/previous-shell.html";
+export const PREVIOUS_SHELL_META_PATH = "/deployment-check/previous-shell.json";
+export function previousShellProbe(html: string, origin: URL): string {
+  if (!/<head(?:\s[^>]*)?>/i.test(html) || /<base\b/i.test(html)) throw new Error("Previous shell needs a verifiable head without base overrides.");
+  for (const match of html.matchAll(/\b(?:src|href)=["']([^"']+)["']/g)) {
+    if (match[1].startsWith("#")) continue;
+    const before = new URL(match[1], new URL("/next/relay-forge/", origin));
+    const after = new URL(match[1], new URL(PREVIOUS_SHELL_PATH, origin));
+    if (before.href !== after.href) throw new Error("Previous shell has location-dependent references.");
+  }
+  // The only content change excludes the diagnostic URL from search indexes.
+  return html.replace(/<head(?:\s[^>]*)?>/i, '$&\n<meta name="robots" content="noindex,nofollow">');
+}
 const MAX_FILE_BYTES = 32 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
@@ -116,10 +129,12 @@ export async function retainSiteAssets(options: {
 
   // Validate the currently published shell even when a manifest exists: manual/old deployments
   // must not silently reset the retained-release chain. On the first run it must be the same build.
+  let previousHtml = "";
   for (const path of ["/", "/next/relay-forge/"]) {
     const response = await request(path);
     if (!response.ok || !(response.headers.get("content-type") ?? "").includes("text/html")) throw new Error("Cannot verify active public shell.");
     const html = (await boundedBody(response, MAX_MANIFEST_BYTES)).toString("utf8");
+    if (path === "/next/relay-forge/") previousHtml = html;
     let scripts = 0;
     for (const match of html.matchAll(/\b(?:src|href)=["']([^"']+)["']/g)) {
       const url = new URL(match[1], new URL(path, origin));
@@ -137,6 +152,13 @@ export async function retainSiteAssets(options: {
     }
     if (!scripts) throw new Error("Active shell has no verifiable asset entry.");
   }
+  const probe = previousShellProbe(previousHtml, origin);
+  const probeDirectory = resolve(options.dist, "deployment-check");
+  await mkdir(probeDirectory); // Fresh builds only; never follow or replace an existing directory/link.
+  await writeFile(resolve(options.dist, PREVIOUS_SHELL_PATH.slice(1)), probe, { flag: "wx" });
+  await writeFile(resolve(options.dist, PREVIOUS_SHELL_META_PATH.slice(1)), JSON.stringify({
+    version: 1, capturedAt: now, sourcePath: "/next/relay-forge/", sourceSha256: digest(Buffer.from(previousHtml)), probeSha256: digest(Buffer.from(probe)),
+  }), { flag: "wx" });
   const manifest: Manifest = { version: 1, generatedAt: now, assets: [...output.values()].sort((a, b) => a.name.localeCompare(b.name)) };
   await writeFile(resolve(directory, "retained-releases.json"), JSON.stringify(manifest));
   return { current: current.size, retained: output.size - current.size, bytes, bootstrapped };

@@ -29,7 +29,8 @@ def inspect(path):
             total += member.size
             if total > 512 * 1024 * 1024:
                 raise ValueError("Archive is too large")
-            capture = name in ("assets/retained-releases.json", "next/relay-forge/index.html")
+            capture = name in ("assets/retained-releases.json", "next/relay-forge/index.html",
+                               "deployment-check/previous-shell.html", "deployment-check/previous-shell.json")
             if capture and member.size > 2 * 1024 * 1024:
                 raise ValueError("Manifest or shell is too large")
             digest = hashlib.sha256()
