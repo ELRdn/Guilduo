@@ -25,6 +25,7 @@ done
 # public origin still use the generated-domain lookup below.
 if [[ -n "${APPWRITE_SITE_URL:-}" ]]; then
   node --import tsx tools/check-site-deploy-cache.mts "$APPWRITE_SITE_URL"
+  node --import tsx tools/check-site-archive.mts "$archive" "$APPWRITE_SITE_URL"
 fi
 
 endpoint="${site_endpoint%/}/sites/$APPWRITE_SITE_ID/deployments"
