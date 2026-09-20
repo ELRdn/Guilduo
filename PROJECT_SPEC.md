@@ -236,6 +236,7 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 - Appwrite JWT-shaped credentials go directly to Appwrite verification; opaque OAuth credentials retain the D1/KV and revocation path. Token shape never grants identity or scopes. Authentication refresh is forwarded and concurrent JWT issuance is shared.
 - State mutations overlap the independent initial state read and transaction creation. Transactional revision recheck, staging, commit and conflict retry remain mandatory; failed attempts release the transaction. No state/Quest schema migration.
 - CORS preflight reuse is bounded and origin-specific. Read requests have a deadline; writes are never automatically retried on timeout.
+- Public Web App HTML may be edge-cached for 120 seconds under the narrow rule in `docs/appwrite-site-routing.md`; authenticated APIs and OAuth query URLs are excluded. Site deployment with a public origin must reject cacheable HTML before upload, because older hashed assets are not retained. Disable the rule before replacing assets and only re-enable it after verification and expiry of the previous shell.
 
 
 - 共有ドメイン、API、MCP、Appwrite Schemaを変更する前に、この文書を更新する。
