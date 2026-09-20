@@ -31,6 +31,10 @@ const placementRegion = String(process.env.WORKER_PLACEMENT_REGION || "").trim()
 const revisionBatch = String(process.env.APPWRITE_REVISION_BATCH || "false").trim();
 const webApiZone = String(process.env.WEB_API_ROUTE_ZONE_ID || "").trim();
 const webApiBrowser = String(process.env.WEB_API_BROWSER_ENABLED || "false").trim();
+const webApiManagement = String(process.env.WEB_API_ROUTE_MANAGEMENT || "wrangler").trim();
+if (!["wrangler", "dashboard"].includes(webApiManagement) || (webApiManagement === "dashboard" && !webApiZone)) {
+  throw new Error("Web API route management must be wrangler or dashboard with a configured zone.");
+}
 if ((webApiZone && (!/^[a-f0-9]{32}$/.test(webApiZone) || !webAppUrl.startsWith("https://")))
   || !["true", "false"].includes(webApiBrowser) || (webApiBrowser === "true" && !webApiZone)) {
   throw new Error("Web API routing requires a valid zone, HTTPS Web App, and explicit browser switch.");
@@ -65,7 +69,7 @@ const wrangler = {
   ...(placementRegion ? { placement: { region: placementRegion } } : {}),
   routes: [
     { pattern: new URL(mcpBaseUrl).hostname, custom_domain: true },
-    ...(webApiZone ? [{ pattern: `${webAppUrl}/api/v1/*`, zone_id: webApiZone }] : []),
+    ...(webApiZone && webApiManagement === "wrangler" ? [{ pattern: `${webAppUrl}/api/v1/*`, zone_id: webApiZone }] : []),
   ],
   vars: {
     APPWRITE_ENDPOINT: process.env.APPWRITE_ENDPOINT,
