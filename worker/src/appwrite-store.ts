@@ -185,6 +185,12 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
   };
   const create = etag === null || etag === undefined;
   if (!create) {
+    if (env.APPWRITE_REVISION_BATCH === "true") {
+      if (currentRevision < 0 || !Number.isSafeInteger(currentRevision + 1) || String(currentRevision) !== etag) {
+        throw Object.assign(new Error("Invalid state revision."), { status: 409, code: "invalid_state_revision" });
+      }
+      return writeRevisionBatch(env, uid, data, currentRevision, preparedTransactionId);
+    }
     const transactionId = preparedTransactionId ?? await createStateTransaction(env);
     const transactionalRow = new URL(rowUrl(env, uid));
     transactionalRow.searchParams.set("transactionId", transactionId);
@@ -222,6 +228,42 @@ export async function writeState(env: WorkerEnv, identity: Identity, payload: St
   if (response.status === 409) return false;
   if (!response.ok) return throwAppwritePersistenceFailure(response, create ? "create_state_row" : "upsert_state_row");
   return true;
+}
+
+async function writeRevisionBatch(env: WorkerEnv, uid: string, data: JsonRecord, revision: number, preparedTransactionId?: string): Promise<boolean> {
+  const transactionId = preparedTransactionId ?? await createStateTransaction(env);
+  let committed = false;
+  try {
+    const target = { databaseId: String(env.APPWRITE_DATABASE_ID), tableId: String(env.APPWRITE_STATE_TABLE_ID), rowId: uid };
+    // Appwrite replays these in one DB transaction with row locks. The upper
+    // bound rejects a newer revision; the lower bound also rejects an older one.
+    // A failed bound rolls back every earlier operation, including the increment.
+    // Neither bound is a clamp. Keep both: monotonic revision alone is not a CAS.
+    const operations = [
+      { ...target, action: "increment", data: { column: "revision", value: 1, max: revision + 1 } },
+      { ...target, action: "decrement", data: { column: "revision", value: 1, min: revision } },
+      { ...target, action: "update", data },
+    ];
+    const staged = await timePhase("tx_stage", () => fetch(`${transactionsUrl(env, transactionId)}/operations`, {
+      method: "POST", headers: appwriteHeaders(env), body: JSON.stringify({ operations }),
+    }));
+    if (!staged.ok) return throwAppwritePersistenceFailure(staged, "stage_revision_batch");
+    const response = await timePhase("tx_commit", () => fetch(transactionsUrl(env, transactionId), {
+      method: "PATCH", headers: appwriteHeaders(env), body: JSON.stringify({ commit: true }),
+    }));
+    if (response.status === 409) return false;
+    if (response.status === 400) {
+      const error = await response.clone().json().catch(() => null) as { type?: unknown } | null;
+      // Only these two numeric guards can hit a bound in this batch. Unknown
+      // failures (including uncertain network/commit outcomes) must not retry.
+      if (error?.type === "attribute_limit_exceeded") return false;
+    }
+    if (!response.ok) return throwAppwritePersistenceFailure(response, "commit_revision_batch");
+    committed = true;
+    return true;
+  } finally {
+    if (!preparedTransactionId && !committed) await discardStateTransaction(env, transactionId);
+  }
 }
 
 export async function mutateState(env: WorkerEnv, identity: Identity, mutator: StateMutation): Promise<{ state: QuestForgeState; result: unknown }> {

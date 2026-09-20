@@ -157,7 +157,7 @@ async function withFakeAppwrite<T>(api: FakeAppwriteStateApi, run: () => Promise
   }
 }
 
-async function patchQuest(api: FakeAppwriteStateApi, patch: Record<string, unknown>, questId?: string): Promise<Response> {
+async function patchQuest(api: FakeAppwriteStateApi, patch: Record<string, unknown>, questId?: string, workerEnv: WorkerEnv = env): Promise<Response> {
   const targetQuestId = questId || (await api.persistedState()).tasks[0].id;
   return withFakeAppwrite(api, async () => {
     const worker = (await import("../worker/src/index.ts")).default;
@@ -166,7 +166,7 @@ async function patchQuest(api: FakeAppwriteStateApi, patch: Record<string, unkno
       method: "PATCH",
       headers: { authorization: "Bearer state-test-token", origin: "http://localhost:5173", "content-type": "application/json" },
       body: JSON.stringify(patch),
-    }), env, context(pending));
+    }), workerEnv, context(pending));
     await Promise.allSettled(pending);
     return result;
   });
@@ -337,4 +337,153 @@ test("concurrent state change is retried without losing the other writer's data"
   assert.equal(saved.nextAction, "Our update");
   assert.equal(api.row.revision, 6);
   assert.equal(api.requests.filter((request) => request.method === "DELETE" && request.url.endsWith("/transactions/tx-1")).length, 1);
+});
+
+// Models Appwrite's transaction replay + bounded numeric updates, not a live
+// provider acceptance test. Production opt-in requires the separate probe.
+type StagedOperation = { action: string; rowId: string; data: Record<string, unknown> };
+class AtomicRevisionApi extends FakeAppwriteStateApi {
+  private sequence = 0;
+  private batches = new Map<string, StagedOperation[]>();
+  beforeStage?: () => Promise<void>;
+  failCommit = false;
+  async fetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+    const url = new URL(String(input));
+    const method = init?.method || "GET";
+    if (!url.pathname.includes("/transactions")) return super.fetch(input, init);
+    this.requests.push({ url: String(url), method, body: String(init?.body || ""), headers: {} });
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+    if (url.pathname.endsWith("/transactions") && method === "POST") {
+      const id = `batch-${++this.sequence}`;
+      this.batches.set(id, []);
+      return response({ $id: id }, 201);
+    }
+    const id = url.pathname.split("/")[4];
+    assert.ok(this.batches.has(id), "operation must address its own live transaction");
+    if (method === "DELETE") { this.batches.delete(id); return new Response(null, { status: 204 }); }
+    if (url.pathname.endsWith("/operations") && method === "POST") {
+      await this.beforeStage?.();
+      if (this.failStage) return response({ type: "general_unauthorized_scope" }, 401);
+      this.batches.set(id, body.operations as StagedOperation[]);
+      return response({ $id: id }, 201);
+    }
+    if (method === "PATCH" && body.commit === true) {
+      if (this.failCommit) return response({ type: "general_server_error" }, 500);
+      // Apply to a private copy, publishing only after every operation succeeds.
+      const next = structuredClone(this.row);
+      for (const operation of this.batches.get(id) || []) {
+        assert.equal(operation.rowId, "owner-1");
+        const data = operation.data;
+        if (operation.action === "increment" || operation.action === "decrement") {
+          assert.equal(data.column, "revision");
+          const value = Number(next.revision) + (operation.action === "increment" ? 1 : -1) * Number(data.value);
+          if (data.max !== undefined && value > Number(data.max) || data.min !== undefined && value < Number(data.min)) {
+            return response({ type: "attribute_limit_exceeded" }, 400);
+          }
+          next.revision = value;
+        } else {
+          assert.equal(operation.action, "update");
+          Object.assign(next, data);
+        }
+      }
+      Object.assign(this.row, next);
+      return response({ $id: id, status: "committed" }, 200);
+    }
+    return response({ type: "unexpected_test_request" }, 500);
+  }
+}
+const batchEnv: WorkerEnv = { ...env, APPWRITE_REVISION_BATCH: "true" };
+
+test("opt-in batch commits full state with no transactional snapshot re-download", async () => {
+  const state = largeState();
+  const api = new AtomicRevisionApi(state);
+  assert.equal((await patchQuest(api, { nextAction: "batched" }, undefined, batchEnv)).status, 200);
+  const saved = await api.persistedState();
+  assert.equal(saved.tasks[0].nextAction, "batched");
+  assert.deepEqual(saved.migrationSnapshots, state.migrationSnapshots);
+  assert.equal(api.row.revision, 5);
+  assert.equal(api.requests.filter(r => r.method === "GET" && r.url.includes("/rows/")).length, 1);
+  assert.equal(api.requests.filter(r => r.method === "POST" && r.url.endsWith("/operations")).length, 1);
+});
+
+test("batch rejects both stale and future revisions and rolls back a passed first bound", async () => {
+  for (const revision of ["3", "5"]) {
+    const state = initialState(), api = new AtomicRevisionApi(state);
+    const before = structuredClone(api.row);
+    assert.equal(await withFakeAppwrite(api, () => writeState(batchEnv, "owner-1", { state }, revision)), false);
+    assert.deepEqual(api.row, before);
+    assert.ok(api.requests.some(r => r.method === "DELETE"));
+  }
+});
+
+test("batch retries a concurrent change between read and stage without losing that writer's fields", async () => {
+  const api = new AtomicRevisionApi(initialState());
+  api.beforeStage = async () => {
+    api.beforeStage = undefined;
+    const concurrent = await api.persistedState();
+    concurrent.tasks[0].notes = "keep concurrent edit";
+    api.row.stateJson = JSON.stringify(concurrent);
+    api.row.revision = 5;
+  };
+  assert.equal((await patchQuest(api, { nextAction: "our edit" }, undefined, batchEnv)).status, 200);
+  const saved = await api.persistedState();
+  assert.equal(saved.tasks[0].notes, "keep concurrent edit");
+  assert.equal(saved.tasks[0].nextAction, "our edit");
+  assert.equal(api.row.revision, 6);
+  assert.equal(api.requests.filter(r => r.method === "DELETE").length, 1);
+});
+
+test("only one of two writes based on the same revision can commit", async () => {
+  const state = initialState(), api = new AtomicRevisionApi(state);
+  const left = structuredClone(state), right = structuredClone(state);
+  left.tasks[0].notes = "left"; right.tasks[0].notes = "right";
+  const outcomes = await withFakeAppwrite(api, () => Promise.all([
+    writeState(batchEnv, "owner-1", { state: left }, "4"),
+    writeState(batchEnv, "owner-1", { state: right }, "4"),
+  ]));
+  assert.deepEqual([...outcomes].sort(), [false, true]);
+  assert.equal((await api.persistedState()).tasks[0].notes, outcomes[0] ? "left" : "right");
+  assert.equal(api.row.revision, 5);
+});
+
+test("revision zero is guarded exactly and malformed revisions never reach Appwrite", async () => {
+  const state = initialState(), api = new AtomicRevisionApi(state); api.row.revision = 0;
+  assert.equal(await withFakeAppwrite(api, () => writeState(batchEnv, "owner-1", { state }, "1")), false);
+  assert.equal(api.row.revision, 0);
+  assert.equal(await withFakeAppwrite(api, () => writeState(batchEnv, "owner-1", { state }, "0")), true);
+  assert.equal(api.row.revision, 1);
+  for (const invalid of ["04", "-1", "4.5", "NaN", String(Number.MAX_SAFE_INTEGER)]) {
+    const count = api.requests.length;
+    await assert.rejects(withFakeAppwrite(api, () => writeState(batchEnv, "owner-1", { state }, invalid)), /Invalid state revision/);
+    assert.equal(api.requests.length, count);
+  }
+});
+
+test("unknown commit errors do not become automatic retries", async () => {
+  for (const status of [400, 401, 503]) {
+    const api = new AtomicRevisionApi(initialState());
+    const fetch = api.fetch.bind(api);
+    api.fetch = async (input, init) => {
+      if (new URL(String(input)).pathname.includes("/transactions/") && init?.method === "PATCH") {
+        return response({ type: "general_unknown_error" }, status);
+      }
+      return fetch(input, init);
+    };
+    const before = structuredClone(api.row);
+    assert.equal((await patchQuest(api, { nextAction: "must not replay" }, undefined, batchEnv)).status, 500);
+    assert.deepEqual(api.row, before);
+    assert.equal(api.requests.filter(r => r.method === "POST" && r.url.endsWith("/transactions")).length, 1);
+    assert.equal(api.requests.filter(r => r.method === "DELETE").length, 1);
+  }
+});
+
+test("batch never retries uncertain stage or commit errors as a known revision conflict", async () => {
+  for (const mode of ["failStage", "failCommit"] as const) {
+    const api = new AtomicRevisionApi(initialState()); api[mode] = true;
+    const before = structuredClone(api.row);
+    assert.equal((await patchQuest(api, { nextAction: "must fail" }, undefined, batchEnv)).status, 500);
+    assert.deepEqual(api.row, before);
+    assert.equal(api.requests.filter(r => r.method === "POST" && r.url.endsWith("/transactions")).length, 1);
+    assert.equal(api.requests.filter(r => r.method === "DELETE").length, 1);
+  }
 });
