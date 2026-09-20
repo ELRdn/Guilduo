@@ -7,6 +7,7 @@
  * (see the note at the top of `tokens.css`).
  */
 
+import "../../runtime-config.js";
 import "./tokens.css";
 import "./foundation.css";
 import "./shell.css";

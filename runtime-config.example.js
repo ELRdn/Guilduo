@@ -1,5 +1,6 @@
 const runtimeConfig = {
   gatewayUrl: "https://mcp.guilduo.com",
+  webApiBaseUrl: "",
   joinGuildUrl: "https://app.guilduo.com/",
   sourceUrl: "https://github.com/your-account/QuestForge",
   externalOAuthEnabled: false,

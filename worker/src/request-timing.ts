@@ -20,7 +20,7 @@ export async function timePhase<T>(phase: Phase, operation: () => Promise<T>): P
 
 function routeLabel(request: Request): string | null {
   if (request.method === "OPTIONS" || !request.headers.has("authorization")) return null;
-  const path = new URL(request.url).pathname;
+  const path = new URL(request.url).pathname.replace(/^\/api\/v1\//, "/v1/");
   if (path === "/mcp" || path === "/mcp-next") return "mcp";
   if (path === "/v1/state") return "state";
   if (/^\/v1\/quests(?:\/|$)/.test(path)) return "quests";

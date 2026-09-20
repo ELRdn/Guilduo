@@ -29,6 +29,12 @@ const mcpAllowedOrigins = String(process.env.MCP_ALLOWED_ORIGINS || `${workerBas
 const allowedWebOrigins = [...new Set([webAppUrl, publicSiteUrl, "http://localhost:5173", "http://127.0.0.1:5173"])].join(",");
 const placementRegion = String(process.env.WORKER_PLACEMENT_REGION || "").trim();
 const revisionBatch = String(process.env.APPWRITE_REVISION_BATCH || "false").trim();
+const webApiZone = String(process.env.WEB_API_ROUTE_ZONE_ID || "").trim();
+const webApiBrowser = String(process.env.WEB_API_BROWSER_ENABLED || "false").trim();
+if ((webApiZone && (!/^[a-f0-9]{32}$/.test(webApiZone) || !webAppUrl.startsWith("https://")))
+  || !["true", "false"].includes(webApiBrowser) || (webApiBrowser === "true" && !webApiZone)) {
+  throw new Error("Web API routing requires a valid zone, HTTPS Web App, and explicit browser switch.");
+}
 if (revisionBatch !== "true" && revisionBatch !== "false") {
   throw new Error("Invalid APPWRITE_REVISION_BATCH: expected true or false");
 }
@@ -41,6 +47,7 @@ const appwrite = {
 };
 const runtime = {
   gatewayUrl: mcpBaseUrl,
+  webApiBaseUrl: webApiBrowser === "true" ? `${webAppUrl}/api` : "",
   sourceUrl: process.env.SOURCE_URL || "",
   externalOAuthEnabled: String(process.env.EXTERNAL_OAUTH_ENABLED || "false").toLowerCase() === "true",
   telemetryEndpoint: process.env.TELEMETRY_ENDPOINT || `${mcpBaseUrl}/telemetry`,
@@ -56,7 +63,10 @@ const wrangler = {
   compatibility_flags: ["nodejs_compat"],
   workers_dev: true,
   ...(placementRegion ? { placement: { region: placementRegion } } : {}),
-  routes: [{ pattern: new URL(mcpBaseUrl).hostname, custom_domain: true }],
+  routes: [
+    { pattern: new URL(mcpBaseUrl).hostname, custom_domain: true },
+    ...(webApiZone ? [{ pattern: `${webAppUrl}/api/v1/*`, zone_id: webApiZone }] : []),
+  ],
   vars: {
     APPWRITE_ENDPOINT: process.env.APPWRITE_ENDPOINT,
     APPWRITE_PROJECT_ID: process.env.APPWRITE_PROJECT_ID,
@@ -68,6 +78,7 @@ const wrangler = {
     PROVIDER_OAUTH_BASE_URL: providerOAuthBaseUrl,
     MCP_ALLOWED_ORIGINS: mcpAllowedOrigins,
     WEB_APP_URL: webAppUrl,
+    WEB_API_ENABLED: webApiZone ? "true" : "false",
     ALLOWED_ORIGINS: allowedWebOrigins,
   },
   triggers: { crons: ["*/15 * * * *"] },
