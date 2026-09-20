@@ -48,6 +48,7 @@ jobs:
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
           WEB_API_ROUTE_ZONE_ID: ${{ vars.WEB_API_ROUTE_ZONE_ID }}
+          WEB_API_ROUTE_MANAGEMENT: ${{ vars.WEB_API_ROUTE_MANAGEMENT || 'wrangler' }}
           WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
       - run: npm run check
       - run: npm run brand:assets -- --check
@@ -56,6 +57,11 @@ jobs:
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+      - name: Verify Web API route before enabling browser transport
+        if: vars.WEB_API_BROWSER_ENABLED == 'true'
+        run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"
+        env:
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
       - name: Upload and activate Appwrite Site
         shell: bash
         env:

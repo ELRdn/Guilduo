@@ -43,6 +43,7 @@ jobs:
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
           WEB_API_ROUTE_ZONE_ID: ${{ vars.WEB_API_ROUTE_ZONE_ID }}
+          WEB_API_ROUTE_MANAGEMENT: ${{ vars.WEB_API_ROUTE_MANAGEMENT || 'wrangler' }}
           WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
           WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
           APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
@@ -70,6 +71,11 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+      - name: Verify Web API route
+        if: vars.WEB_API_ROUTE_ZONE_ID != ''
+        run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"
+        env:
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
       - name: Verify production Worker
         shell: bash
         run: |

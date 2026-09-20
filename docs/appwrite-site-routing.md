@@ -142,6 +142,10 @@ Cloudflare Speed → Settings → Protocol Optimizationの **HTTP/3 (with QUIC)*
 
 ### Web RESTの同一origin経路
 
+productionではRoute登録用APIが配備用トークンから拒否されたため、2026-09-21に管理画面で正確なRouteを登録した。`WEB_API_ROUTE_MANAGEMENT=dashboard` はこのRouteをDashboard管理とし、WranglerにはMCP custom domainだけを渡す。既存Routeを削除しない。既定値 `wrangler` ではRouteも自動管理する。権限不足を理由にトークンの権限は拡張していない。
+
+Worker配備後、および新経路を有効にしたSite配備前には `tools/check-web-api-route.mts` が認証なしのGETを送り、401・JSONのunauthorized・no-storeを検証する。HTML fallbackやredirect、200のデータ応答、キャッシュ許可、通信失敗は配備を失敗させる。管理画面での登録だけを、APIが動作する証拠にはしない。
+
 `WEB_API_ROUTE_ZONE_ID` にWeb AppのCloudflare zone IDを指定すると、release configは既存Workerに `https://app.guilduo.com/api/v1/*` のRouteを追加する。既存のproxied DNS上でRESTだけを処理し、Appwrite Siteのhost rewriteは変更しない。`/api/*` 全体を割り当ててはいけない。`/api/openapi.json` は既存の静的ファイルである。MCP・OAuth・認証SDKは従来のhostを使う。
 
 先にWorkerだけを配備し、実際のRoute登録、未認証401と `Cache-Control: no-store`、既存HTMLと静的ファイルの配信を確認する。その後、production変数 `WEB_API_BROWSER_ENABLED=true` を設定してSiteを配備する。ブラウザは公式originかつ標準Gatewayの場合だけ新経路を選ぶ。カスタムGateway・ローカルpreviewは従来の接続先を使う。Bearer認証と保存の確定処理は共通で、失敗した書き込みを別hostへ再送しない。

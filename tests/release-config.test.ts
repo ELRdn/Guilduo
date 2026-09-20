@@ -20,6 +20,7 @@ const tsxCli = require.resolve("tsx/cli");
 
 const BASE_ENV = {
   WEB_API_ROUTE_ZONE_ID: "",
+  WEB_API_ROUTE_MANAGEMENT: "wrangler",
   WEB_API_BROWSER_ENABLED: "false",
   APPWRITE_REVISION_BATCH: "",
   WORKER_PLACEMENT_REGION: "",
@@ -67,6 +68,20 @@ test("Web API route and browser rollout are separate and leave MCP/static URLs i
     { WEB_API_ROUTE_ZONE_ID: "invalid" }, { WEB_API_BROWSER_ENABLED: "true" },
     { WEB_API_BROWSER_ENABLED: "typo" }, { WEB_API_ROUTE_ZONE_ID: "a".repeat(32), WEB_APP_URL: "http://app.example.test" },
   ]) withTempDir(dir => {
+    assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", ...extra }));
+    assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
+  });
+});
+
+test("dashboard-managed route preserves Worker support without route API permissions", () => {
+  withTempDir(dir => {
+    runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", WEB_API_ROUTE_ZONE_ID: "a".repeat(32), WEB_API_ROUTE_MANAGEMENT: "dashboard", WEB_API_BROWSER_ENABLED: "true" });
+    const config = JSON.parse(readFileSync(path.join(dir, "wrangler.jsonc"), "utf8"));
+    assert.deepEqual(config.routes, [{ pattern: "mcp.guilduo.com", custom_domain: true }]);
+    assert.equal(config.vars.WEB_API_ENABLED, "true");
+    assert.match(readFileSync(path.join(dir, "runtime-config.js"), "utf8"), /webApiBaseUrl/);
+  });
+  for (const extra of [{ WEB_API_ROUTE_MANAGEMENT: "typo" }, { WEB_API_ROUTE_MANAGEMENT: "dashboard" }]) withTempDir(dir => {
     assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", ...extra }));
     assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
   });
