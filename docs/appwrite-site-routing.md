@@ -110,6 +110,12 @@ JOIN_GUILD_URL=https://app.guilduo.com/
 
 `WEB_APP_URL`はAppwrite API endpointではありません。Appwrite API Custom Domainの`api.guilduo.com`は有効化・疎通確認済みのため、productionの`APPWRITE_ENDPOINT`は`https://api.guilduo.com/v1`を使います。generated endpointはrollback用に保持します。MCPは別hostの`https://mcp.guilduo.com/mcp`です。
 
+## キャッシュ階層（2026-09-21）
+
+CloudflareのCaching → Tiered CacheでSmart Tiered Cacheを有効化した。既にキャッシュ可能な公開コンテンツについて、下位拠点のMISS時に上位拠点のキャッシュを確認する。[Cloudflare公式の仕様](https://developers.cloudflare.com/cache/how-to/tiered-cache/)を参照。認証APIのキャッシュ許可やHTMLの保持期限は変更していない。Origin Configurationの地域hintは未設定のまま。管理画面で同じスイッチをオフにすると戻せる。
+
+HTMLは引き続きTTL120秒＋SWR120秒。Site配備時は公開HTML用のCache RuleとCache Response Ruleを両方止め、DYNAMIC/BYPASS確認・upload・新asset確認・停止反映から240秒経過・再有効化の手順を守る。Tiered Cacheの有効化を、旧bundle保持やキャッシュ破棄の代替にしない。GUI効果の確認は [`gui-latency-investigation.md`](gui-latency-investigation.md) に記録する。
+
 ## ローカル検証
 
 ```powershell

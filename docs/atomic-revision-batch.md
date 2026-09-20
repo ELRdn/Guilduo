@@ -1,6 +1,6 @@
 # 保存往復の削減候補: commit時のrevision照合
 
-状態: **実サービスの独立行検証済み・既定で無効・GUI計測待ち**（2026-09-21 JST）。`APPWRITE_REVISION_BATCH=true` の場合だけ利用する。release設定生成とWorker/release workflowに接続済み。未指定はfalse、不正値は設定生成を停止する。
+状態: **本番で有効・GUIの編集/完了と再読み込み後の保持を検証済み**（2026-09-21 JST）。PR #30のWorker配備run `35520778910` でproductionの `APPWRITE_REVISION_BATCH=true` を反映した。未指定の既定値はfalse、不正値は設定生成を停止する。全操作が安定して約1秒という目標はまだ未達。
 
 ## 解決したい待ち
 
@@ -39,7 +39,7 @@
 - source上、3操作それぞれに最終行のupdateイベントを発行するため、外部webhook/realtime連携の重複処理とcommit時間の増加を確認する。ブラウザの既存state同期はWorker経由のpollだが、外部連携の不存在までは証明していない。
 - 同じ計測対象・条件でGUIの編集・完了・F5・永続化を再測定する。transaction stage/commit増加が再読込削減を上回る場合は採用しない。
 
-診断スクリプトと秘匿情報を含まない結果はGit対象外の `.qa-artifacts/latency-investigation/` に置く。現在の本番設定・本番ユーザーstate・計測Questはこの候補の検証では変更していない。
+診断スクリプトと秘匿情報を含まない結果はGit対象外の `.qa-artifacts/latency-investigation/` に置く。候補の独立行検証では本番設定・本番ユーザーstate・計測Questを変更していない。後続の本番有効化・GUI検証は末尾に記録する。
 
 ## 実サービス検証: 2026-09-21 JST
 
@@ -73,3 +73,9 @@ Appwrite管理画面の公式組み込みCLIを、ログイン済みconsole sess
 2026-09-21 JSTのAppwrite管理画面ではWebhooksは `No webhooks yet`、Functionsも `No functions yet`。既存GUIはWorker pollingで同期している。今後Appwrite updateイベントを購読する連携を追加する場合は、batchが同じ最終状態に対して複数イベントを発生させることを考慮する。
 
 rollbackはproduction環境変数 `APPWRITE_REVISION_BATCH=false` にして `Deploy Appwrite Worker` を再実行する。データ形式は変わらないため、既存方式で読み書きを継続できる。Siteの再deployは不要。
+
+## 本番GUIによる確認
+
+2026-09-21 JST、承認済みの計測専用Questを1件作成し、3回編集して完了した。ページ内計測（クリックから保存応答・render・2回のanimation frameまで）は作成2,251ms、編集1,689/1,423/1,354ms、完了1,427ms。編集内容と完了状態の両方を、実際の再読み込み後に確認した。
+
+完了時のWorkerは1,072ms、auth 70ms、state_read 62ms、tx_begin 214ms、tx_stage 371ms、tx_commit 417ms。並列区間があるため単純合算しない。以前の完了3,396msより短いが、それぞれ1件の観測であり、改善率やp95の保証にはしない。更新確定を待つ挙動・競合検査は維持している。詳細は [`gui-latency-investigation.md`](gui-latency-investigation.md) を参照。
