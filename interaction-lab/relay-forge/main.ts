@@ -26,6 +26,7 @@ import { dismissOAuthFailure, observeAuthState, signIn, signOutUser, getIdToken 
 import { QuestForgeApiError, QuestForgeRepository } from "../repository.ts";
 import { createProductionRuntime } from "./production.ts";
 import { reportGuiTiming } from "./gui-timing.ts";
+import { prepareWorkspaceReads, type PreparedWorkspace } from "./bootstrap-preparation.ts";
 
 const root = requireElement<HTMLElement>(document, "#relay-forge-root");
 const params = new URLSearchParams(window.location.search);
@@ -100,14 +101,14 @@ function bootstrap(
   if (kind !== "loading") heading.focus({ preventScroll: true });
 }
 
-async function mountProduction(uid: string, email: string): Promise<void> {
+async function mountProduction(uid: string, email: string, prepared?: PreparedWorkspace): Promise<void> {
   const timingAction = initialProductionLoad ? "reload" : "connect";
   const loadStarted = initialProductionLoad ? 0 : performance.now();
   const sequence = ++loadSequence;
   bootstrap("Workspaceを読み込んでいます", "Quest、Actor、Relay、Connectionを安全に同期しています。");
   try {
-    const repository = new QuestForgeRepository({ getToken: (forceRefresh) => getIdToken(forceRefresh) });
-    const runtime = await createProductionRuntime(repository, uid, email);
+    const repository = prepared?.repository ?? new QuestForgeRepository({ getToken: (forceRefresh) => getIdToken(forceRefresh) });
+    const runtime = await createProductionRuntime(repository, uid, email, prepared?.snapshot);
     if (sequence !== loadSequence || demoRequested) return;
     // Injected here, not imported by the shell: Appwrite Auth stays a
     // swappable port rather than a hard dependency of the Relay Forge UI.
@@ -174,16 +175,18 @@ function showSignedOut(): void {
 }
 
 function checkAuth(): void {
+  const preparation = prepareWorkspaceReads(force => getIdToken(force));
   observeAuthState((state) => {
-    if (demoRequested) return;
+    if (demoRequested) { preparation.finish(); return; }
     if (state.status === "checking") {
       bootstrap("サインインを確認しています", "Guilduo workspaceへ安全に接続しています。");
       return;
     }
     if (state.status === "authenticated") {
-      void mountProduction(state.user.uid, state.user.email);
+      void mountProduction(state.user.uid, state.user.email, preparation.finish(state.user.uid));
       return;
     }
+    preparation.finish();
     if (state.status === "signed-out") {
       showSignedOut();
       return;
@@ -200,6 +203,8 @@ function checkAuth(): void {
       { label: "再接続", primary: true, run: checkAuth },
       { label: "デモを見る", run: showDemo },
     ], "error");
+  }, (token, subject) => {
+    if (!demoRequested) preparation.onSessionToken(token, subject);
   });
 }
 

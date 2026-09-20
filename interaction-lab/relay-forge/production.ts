@@ -222,8 +222,9 @@ export async function createProductionRuntime(
   repository: QuestForgeRepository,
   selfUid: string,
   email = "",
+  preparedSnapshot?: ReturnType<QuestForgeRepository["loadSnapshot"]>,
 ): Promise<RelayForgeRuntime> {
-  return runtimeFromSnapshot(await repository.loadSnapshot({ deferPanels: true }), repository, selfUid, email);
+  return runtimeFromSnapshot(await (preparedSnapshot ?? repository.loadSnapshot({ deferPanels: true })), repository, selfUid, email);
 }
 
 function runtimeFromSnapshot(snapshot: Awaited<ReturnType<QuestForgeRepository["loadSnapshot"]>>, repository: QuestForgeRepository, selfUid: string, email: string): RelayForgeRuntime {

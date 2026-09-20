@@ -1,12 +1,13 @@
-import { beginGoogleSignIn, clearOAuthFailure, currentAccount, getAccessToken, resolveAuthState, signOutAccount, type GuilduoAuthState, type GuilduoUser } from "../appwrite-auth.ts";
+import { beginGoogleSignIn, clearOAuthFailure, currentAccount, getAccessToken, resolveAuthState, signOutAccount, type GuilduoAuthState, type GuilduoUser, type SessionReadPreparation } from "../appwrite-auth.ts";
 
 export type Unsubscribe = () => void;
 export type ObservedAuthState = { status: "checking" } | GuilduoAuthState;
 
-export function observeAuthState(callback: (state: ObservedAuthState) => void): Unsubscribe {
+export function observeAuthState(callback: (state: ObservedAuthState) => void, prepareRead?: SessionReadPreparation): Unsubscribe {
   let active = true;
   callback({ status: "checking" });
-  resolveAuthState().then((state) => { if (active) callback(state); });
+  resolveAuthState(prepareRead ? (token, subject) => { if (active) prepareRead(token, subject); } : undefined)
+    .then((state) => { if (active) callback(state); });
   return () => { active = false; };
 }
 
