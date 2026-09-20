@@ -353,3 +353,25 @@ PR #37をmain `ac3dd1e306679699eb73f2f08cafb4d13f9f1922` からWorker run `35526
 | 完了 | 1,358ms | 1,016ms | preflightなし、begin203 / stage360 / commit412ms |
 
 通常の編集・完了は約1.3秒だが、初回のpreflightとAppwrite確定処理、期限切れHTMLで待ちが増える。**安定して約1秒という目標はまだ未達**。次はHTTP/2での長い未アクセス後の挙動と、保存時の往復を検証する。確定保存や競合検査を省略しない。
+
+### 2026-09-21: Web RESTの同一origin化
+
+PR #39（main `8d8dd20649cddfc8418dcff8a38a32dc06f387b4`）のWorkerを先に配備し、管理画面で `https://app.guilduo.com/api/v1/*` を既存Workerへ割り当てた。Worker配備run `35528221140` はRoute登録APIで失敗したが、本体のuploadは完了していた。Dashboard登録後に、未認証401・JSON・no-store、既存HTMLと静的OpenAPIの正常配信を確認してから、Site run `35528356994` を配備した。Site配備は成功。新bundleは `relayForge-W-qZEHbT.js`、認証済みGUIの初期GETは同一origin・HTTP/2・200・no-storeだった。APIへのCookie依存や認証の省略はない。
+
+旧66 assetは全件、公開URLからサイズ・SHA-256・JS/CSS MIMEを確認した（15,850,262 bytes）。新manifestは76 asset。HTMLキャッシュの両ルールは一時停止し、停止反映から240秒経過と新GUI起動を確認して両方復旧した。TTL/SWRは120/120秒、HTTP/3は引き続きオフ。旧HTMLを新規navigationとして起動する試験は依然未実施。
+
+計測Questを1件作成、3回編集、完了。編集02の後と完了後にF5を実行し、編集内容と完了が保持された。計測後は全85件／アーカイブ69件。無関係なQuestは変更していない。
+
+| 操作 | GUI全体 | Worker total | Appwrite begin / stage / commit |
+| --- | ---: | ---: | --- |
+| 作成 | 1,428ms | 1,072ms | 195 / 296 / 365ms |
+| 編集01 | 2,231ms | 1,871ms | 295 / 674 / 788ms |
+| 編集02 | 1,406ms | 1,052ms | 210 / 337 / 452ms |
+| 編集03 | 1,456ms | 1,105ms | 198 / 309 / 553ms |
+| 完了 | 1,316ms | 972ms | 202 / 337 / 398ms |
+
+各保存は同一originのFetchで、以前の初回作成・編集にあった約315msのpreflightは発生しなかった。前の作成1,847msから短縮した観測だが、保存先の負荷は揃っていない。編集01はAppwrite内の待ち自体が増えており、今回の変更だけでばらつきは消えない。
+
+再読み込みは配備直後4,243ms、キャッシュ復旧の途中1,508ms（HTML DYNAMIC406ms）、編集後1,726ms（EXPIRED557ms）、完了後1,978ms（HIT144ms）、続く通常起動1,007ms（UPDATING142ms）だった。完了後の遅い起動ではAppwrite認証のpreflightが701/742ms、次の起動ではpreflightがなくaccount128ms・JWT137msだった。初期APIはそれぞれ515/465ms。最速1回をもって目標達成とはしない。次は認証の接続確認と保存先の変動を切り分ける。
+
+Route登録用APIはDashboard登録後の再配備でも拒否された。後続修正ではDashboard管理を明示し、トークンの権限を広げずに既存Routeを保持する。Worker配備後・新経路を使うSite配備前に未認証APIの401/JSON/no-storeを検査し、URLが静的HTMLへ戻った場合などは成功にしない。
