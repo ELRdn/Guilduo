@@ -75,6 +75,15 @@ test("bootstrap fails if the currently active entry is absent or has different b
   }
 });
 
+test("query strings cannot hide a missing stylesheet from active-shell verification", async t => {
+  const dist = await fixture(t);
+  const fetcher = server(null, { [newName]: "new" }, newName, p => p === "/" ? new Response(
+    `<script src="/assets/${newName}?v=1"></script><link href="/assets/missing-Hash0001.css?v=1">`,
+    { headers: { "content-type": "text/html" } },
+  ) : undefined);
+  await assert.rejects(retainSiteAssets({ ...opts(dist, fetcher), bootstrap: true }), /unretained asset/);
+});
+
 test("HTML fallbacks and checksum errors in old chunks stop deployment preparation", async t => {
   for (const files of [{}, { [oldName]: "corrupted" }] as Record<string, string>[]) {
     const dist = await fixture(t);

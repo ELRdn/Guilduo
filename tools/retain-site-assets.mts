@@ -121,9 +121,9 @@ export async function retainSiteAssets(options: {
     if (!response.ok || !(response.headers.get("content-type") ?? "").includes("text/html")) throw new Error("Cannot verify active public shell.");
     const html = (await boundedBody(response, MAX_MANIFEST_BYTES)).toString("utf8");
     let scripts = 0;
-    for (const match of html.matchAll(/\b(?:src|href)=["']([^"']+\.(?:js|css))["']/g)) {
+    for (const match of html.matchAll(/\b(?:src|href)=["']([^"']+)["']/g)) {
       const url = new URL(match[1], new URL(path, origin));
-      if (url.origin !== origin.origin || !url.pathname.startsWith("/assets/")) continue;
+      if (url.origin !== origin.origin || !url.pathname.startsWith("/assets/") || !/\.(?:js|css)$/.test(url.pathname)) continue;
       const name = url.pathname.slice("/assets/".length);
       const asset = output.get(name);
       if (!asset) throw new Error("Active shell references an unretained asset. Seed retention from the currently deployed build first.");
