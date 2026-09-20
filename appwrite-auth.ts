@@ -2,6 +2,9 @@ import { Account, Client, OAuthProvider } from "appwrite";
 import appwriteConfig from "./appwrite-config.js";
 
 export type GuilduoUser = { uid: string; email: string; displayName: string; photoURL?: string };
+// The subject is only a discard/matching hint. The server still verifies every
+// prefetched GET, and no result may be rendered before account.get succeeds.
+export type SessionReadPreparation = (token: string, subjectHint: string) => void;
 type AppwriteAccount = { $id?: string; email?: string; name?: string; prefs?: Record<string, unknown> };
 type AppwriteAccountPort = {
   get: () => Promise<AppwriteAccount>;
@@ -44,6 +47,14 @@ function isUnauthorized(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; status?: unknown };
   return candidate.code === 401 || candidate.status === 401;
+}
+
+function sessionSubjectHint(token: string): string {
+  try {
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as { userId?: unknown };
+    return typeof decoded.userId === "string" ? decoded.userId : "";
+  } catch { return ""; }
 }
 
 function browserReturnUrl(): string {
@@ -95,7 +106,7 @@ export function createGuilduoAuth(options: AuthOptions) {
     return cachedUser;
   }
 
-  async function resolveAuthState(): Promise<GuilduoAuthState> {
+  async function resolveAuthState(prepareRead?: SessionReadPreparation): Promise<GuilduoAuthState> {
     const callback = getOAuthCallback();
     let callbackError: unknown = null;
     if (callback) {
@@ -109,10 +120,24 @@ export function createGuilduoAuth(options: AuthOptions) {
     }
 
     try {
-      // Both endpoints verify the same session. The token stays behind the
-      // verified-account gate in getAccessToken, even if issuance finishes first.
-      if (options.prepareAccessToken) void issueAccessToken().catch(() => {});
-      return { status: "authenticated", user: await refreshAccount() };
+      // Both endpoints verify the session. getAccessToken retains the account
+      // gate; only the optional read preparation may start before metadata.
+      const generation = authGeneration;
+      if (options.prepareAccessToken || prepareRead) void issueAccessToken().then((token) => {
+        const subject = prepareRead ? sessionSubjectHint(token) : "";
+        if (generation === authGeneration && token && subject) prepareRead?.(token, subject);
+      }).catch(() => {});
+      const user = await refreshAccount();
+      const tokenSubject = sessionSubjectHint(cachedJwt);
+      if (tokenSubject && tokenSubject !== user.uid) {
+        // Account/session changed while the two requests were in flight.
+        // Discard the old token as well as any speculative workspace result.
+        authGeneration += 1;
+        cachedJwt = "";
+        jwtExpiresAt = 0;
+        jwtInFlight = null;
+      }
+      return { status: "authenticated", user };
     } catch (error) {
       authGeneration += 1;
       jwtInFlight = null;
@@ -142,6 +167,8 @@ export function createGuilduoAuth(options: AuthOptions) {
     const generation = authGeneration;
     const pending = options.account.createJWT({ duration: 900 }).then((result) => {
       if (generation !== authGeneration) return "";
+      const subject = sessionSubjectHint(String(result.jwt || ""));
+      if (cachedUser && subject && subject !== cachedUser.uid) throw new Error("Appwrite session changed during token issuance");
       cachedJwt = String(result.jwt || "");
       jwtExpiresAt = now() + 14 * 60 * 1000;
       return cachedJwt;
@@ -201,10 +228,10 @@ export function clearOAuthFailure(): void {
   clearBrowserAuthParameters();
 }
 
-export async function resolveAuthState(): Promise<GuilduoAuthState> {
+export async function resolveAuthState(prepareRead?: SessionReadPreparation): Promise<GuilduoAuthState> {
   if (hasOAuthFailure()) return { status: "oauth-failed" };
   try {
-    return await auth().resolveAuthState();
+    return await auth().resolveAuthState(prepareRead);
   } catch (error) {
     if (error instanceof Error && error.message === "Appwrite is not configured") return { status: "signed-out" };
     return { status: "connection-error", error };
