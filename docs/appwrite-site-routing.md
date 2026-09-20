@@ -172,3 +172,13 @@ npm test
 ## 2026-09-06 LPv2.1 adoption
 
 公式入口`/lp/`・`/lp/en/`の内容をLPv2.1へ変更。Cloudflareのrewrite先、Appwrite Site、Web Appの入口は従来どおり。`/lpv2/`・`/lpv2-1/`はnoindexの比較用URLとして残す。共有する体験コードは`lpv2/`、追加モーションは`lpv2-1/`で管理する。
+
+## 配備後の旧HTML起動検証
+
+保持処理は配備直前の `/next/relay-forge/` の公開HTMLを `/deployment-check/previous-shell.html` に保存する。変更は検索除外用の `noindex,nofollow` metaだけで、script・stylesheet・リンクの解決先が元と一致しないHTMLは拒否する。検証用URLを新規ユーザーへ案内しない。ユーザーデータや認証情報は含まない。メタデータJSONに取得時刻と元HTML・検証HTMLのSHA-256を記録する。
+
+upload前のarchive検査は、実際のtarに含まれる検証HTMLが、その時点で公開中のHTMLと一致することを確認する。欠落・改変・別のHTMLへの差し替え・古い配備への巻き戻しは失敗させる。検証ページは毎回、直前のHTMLに置き換える。参照先assetは従来どおり48時間保持する。
+
+Site配備後、ログイン済みブラウザでこのURLを新規navigationとして開き、旧scriptが200・正しいMIMEで読み込まれること、認証済みCommandとQuest一覧が描画されることを確認する。必要なら現在の正式rootへ戻り、同じデータと新bundleの起動も比較する。書き込みは不要。元HTMLとの差分検査やassetのhash一致だけではこの起動確認を代替しない。
+
+**この仕組みの追加だけではTTL/SWRを変更しない。** 本番で旧HTMLの起動を確認してから、保持48時間を超えないキャッシュ期間を個別に評価する。配備時の両キャッシュルール停止・DYNAMIC/BYPASS確認・起動検証・240秒経過の手順は、設定変更を文書化するまで維持する。
