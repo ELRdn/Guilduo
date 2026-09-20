@@ -1,5 +1,53 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createGuilduoAuth } from "../appwrite-auth.ts";
+
+test("startup prepares one JWT while account verification is pending", async () => {
+  let finishAccount!: (value: { $id: string }) => void;
+  const account = new Promise<{ $id: string }>(resolve => { finishAccount = resolve; });
+  let issued = 0;
+  const auth = createGuilduoAuth({ prepareAccessToken: true, getOAuthCallback: () => null, account: {
+    get: () => account,
+    createJWT: async () => { issued++; return { jwt: "test-token" }; },
+    createOAuth2Token: () => {}, createSession: async () => ({}), deleteSession: async () => ({}),
+  } });
+  const state = auth.resolveAuthState();
+  assert.equal(issued, 1, "issuance starts without waiting for account response");
+  assert.equal(auth.currentAccount(), null);
+  finishAccount({ $id: "owner" });
+  assert.equal((await state).status, "authenticated");
+  assert.equal(await auth.getAccessToken(), "test-token");
+  assert.equal(issued, 1);
+});
+
+test("failed account verification discards an early JWT and never releases it", async () => {
+  let rejectAccount!: (error: unknown) => void;
+  const account = new Promise<never>((_, reject) => { rejectAccount = reject; });
+  const auth = createGuilduoAuth({ prepareAccessToken: true, getOAuthCallback: () => null, account: {
+    get: () => account, createJWT: async () => ({ jwt: "unusable-token" }),
+    createOAuth2Token: () => {}, createSession: async () => ({}), deleteSession: async () => ({}),
+  } });
+  const state = auth.resolveAuthState();
+  await Promise.resolve();
+  rejectAccount({ code: 401 });
+  assert.equal((await state).status, "signed-out");
+  assert.equal(await auth.getAccessToken(), "");
+  assert.equal(auth.currentAccount(), null);
+});
+
+test("sign-out during startup cannot restore the user or prefetched token", async () => {
+  let finishAccount!: (value: { $id: string }) => void;
+  const account = new Promise<{ $id: string }>(resolve => { finishAccount = resolve; });
+  const auth = createGuilduoAuth({ prepareAccessToken: true, getOAuthCallback: () => null, account: {
+    get: () => account, createJWT: async () => ({ jwt: "old-token" }),
+    createOAuth2Token: () => {}, createSession: async () => ({}), deleteSession: async () => ({}),
+  } });
+  const state = auth.resolveAuthState();
+  await auth.signOutAccount();
+  finishAccount({ $id: "owner" });
+  assert.equal((await state).status, "signed-out");
+  assert.equal(auth.currentAccount(), null);
+});
 
 test("Appwrite OAuth return restores the authenticated Guilduo user", async () => {
   const authModule = await import("../appwrite-auth.ts");
