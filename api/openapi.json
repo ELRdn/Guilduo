@@ -2518,6 +2518,88 @@
           }
         }
       }
+    },
+    "/v1/workspace/bootstrap": {
+      "get": {
+        "operationId": "getWorkspaceBootstrap",
+        "summary": "Load the signed-in Web workspace with one authenticated request",
+        "description": "Web bearer authentication only; OAuth Agent clients use the existing scoped resources. Returns the same all-view Quest page (limit 200), own profile, and public Agent records including archived Agents. Optional profile/Agent failures are explicit panelErrors. Responses are never cached.",
+        "responses": {
+          "200": {
+            "description": "Initial workspace data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "quests",
+                    "total",
+                    "profile",
+                    "agents",
+                    "panelErrors"
+                  ],
+                  "properties": {
+                    "quests": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Quest"
+                      },
+                      "maxItems": 200
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "profile": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "agents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "panelErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "index",
+                          "message"
+                        ],
+                        "properties": {
+                          "index": {
+                            "type": "integer",
+                            "enum": [
+                              3,
+                              5
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Web access or required scope denied"
+          },
+          "409": {
+            "description": "Workspace is not synchronized"
+          }
+        }
+      }
     }
   },
   "components": {

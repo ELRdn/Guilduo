@@ -876,6 +876,26 @@ async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context
 
 async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
   const method = request.method;
+  if (path === "/v1/workspace/bootstrap" && method === "GET") {
+    if (identity.authType === "oauth") throw new DomainError(403, "workspace_bootstrap_web_only", "Use the scoped REST or MCP resources for Agent access.");
+    assertScope(identity.scopes, "quests:read");
+    // Authenticate once, then perform the same bounded reads as the three
+    // existing endpoints. A failed optional panel must not hide the Quest list.
+    const [questPage, panels] = await Promise.all([
+      stateFor(env, identity).then(state => listQuestPage(state, { view: "all", limit: 200 })),
+      Promise.allSettled([
+        (async () => { assertScope(identity.scopes, "profiles:read"); return getOwnProfile(env, identity.uid); })(),
+        (async () => { assertConnectionScope(identity, "agents:read"); return toPublicAgents(await listAgents(env, identity.uid, { includeArchived: true })); })(),
+      ]),
+    ]);
+    return json({
+      ...questPage,
+      profile: panels[0].status === "fulfilled" ? panels[0].value : null,
+      agents: panels[1].status === "fulfilled" ? panels[1].value : [],
+      panelErrors: panels.flatMap((panel, index) => panel.status === "rejected"
+        ? [{ index: index === 0 ? 3 : 5, message: index === 0 ? "プロフィールを読み込めませんでした。" : "Agent一覧を読み込めませんでした。" }] : []),
+    }, 200, { "cache-control": "no-store" });
+  }
   if (path === "/v1/state" && method === "GET") {
     assertScope(identity.scopes, "quests:read");
     const { payload } = await readState(env, identity);
