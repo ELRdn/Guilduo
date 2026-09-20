@@ -28,6 +28,10 @@ const publicSiteUrl = normalizeBaseUrl(process.env.PUBLIC_SITE_URL || OFFICIAL_S
 const mcpAllowedOrigins = String(process.env.MCP_ALLOWED_ORIGINS || `${workerBaseUrl},${mcpBaseUrl}`).trim();
 const allowedWebOrigins = [...new Set([webAppUrl, publicSiteUrl, "http://localhost:5173", "http://127.0.0.1:5173"])].join(",");
 const placementRegion = String(process.env.WORKER_PLACEMENT_REGION || "").trim();
+const revisionBatch = String(process.env.APPWRITE_REVISION_BATCH || "false").trim();
+if (revisionBatch !== "true" && revisionBatch !== "false") {
+  throw new Error("Invalid APPWRITE_REVISION_BATCH: expected true or false");
+}
 if (placementRegion && !/^(aws|gcp|azure):[a-z][a-z0-9-]{1,63}$/.test(placementRegion)) {
   throw new Error("Invalid WORKER_PLACEMENT_REGION: expected provider:region");
 }
@@ -59,6 +63,7 @@ const wrangler = {
     APPWRITE_DATABASE_ID: process.env.APPWRITE_DATABASE_ID,
     APPWRITE_STATE_TABLE_ID: process.env.APPWRITE_STATE_TABLE_ID,
     APPWRITE_LEGACY_TABLE_ID: process.env.APPWRITE_LEGACY_TABLE_ID,
+    APPWRITE_REVISION_BATCH: revisionBatch,
     PUBLIC_BASE_URL: workerBaseUrl,
     PROVIDER_OAUTH_BASE_URL: providerOAuthBaseUrl,
     MCP_ALLOWED_ORIGINS: mcpAllowedOrigins,

@@ -70,6 +70,7 @@ export interface WorkerEnv {
   APPWRITE_STATE_TABLE_ID?: string;
   APPWRITE_LEGACY_TABLE_ID?: string;
   APPWRITE_API_KEY?: string;
+  APPWRITE_REVISION_BATCH?: string;
   PUBLIC_BASE_URL?: string;
   /** Provider OAuth callback origin; falls back to PUBLIC_BASE_URL for compatibility. */
   PROVIDER_OAUTH_BASE_URL?: string;
