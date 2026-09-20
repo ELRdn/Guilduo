@@ -132,6 +132,12 @@ CloudflareのCaching → Tiered CacheでSmart Tiered Cacheを有効化した。�
 
 HTMLは引き続きTTL120秒＋SWR120秒。Site配備時は公開HTML用のCache RuleとCache Response Ruleを両方止め、DYNAMIC/BYPASS確認・upload・新asset確認・停止反映から240秒経過・再有効化の手順を守る。Tiered Cacheの有効化を、旧bundle保持やキャッシュ破棄の代替にしない。GUI効果の確認は [`gui-latency-investigation.md`](gui-latency-investigation.md) に記録する。
 
+## HTTP/3の比較設定（2026-09-21）
+
+Cloudflare Speed → Settings → Protocol Optimizationの **HTTP/3 (with QUIC)** をオフにした。zone全体の設定で、HTTP/2・HTTP/2 to Origin・TLS 1.3・0-RTTは変更していない。公開HTMLを同じアプリ内ブラウザで比較すると、HTTP/3のHIT約0.63秒に対してHTTP/2は3回とも約0.13秒になった。測定の範囲とGUI全体の時間は [`gui-latency-investigation.md`](gui-latency-investigation.md) を参照。既存接続にはHTTP/3が残り得るので、切り替えは各応答のprotocolで確認する。
+
+戻す場合は同じ **HTTP/3 (with QUIC)** をオンにする。HTMLのTTL/SWR、認証、保存先やデータ形式には変更がない。HTTP/3を無効化すればすべての利用者が速くなる、という一般的な推奨ではなく、この環境の比較結果に基づく設定。今後ネットワーク条件を変えて再評価する。
+
 ## ローカル検証
 
 ```powershell
