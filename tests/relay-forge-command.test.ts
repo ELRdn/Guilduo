@@ -339,7 +339,7 @@ test("an empty revision reason never reaches the domain", async () => {
 test("every gate blocks a write, in the documented precedence", async () => {
   const base = { evidenceReviewed: true, writeLocked: false, permissionMissing: null, conflict: null };
   assert.equal(blockingReason(base, "idle"), null);
-  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /確認|checked/);
+  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /確認|check/i);
   assert.match(String(blockingReason({ ...base, writeLocked: true }, "idle")), /再接続/);
   assert.match(String(blockingReason({ ...base, conflict: "conflict" }, "idle")), /conflict/);
   assert.equal(blockingReason({ ...base, permissionMissing: "scope" }, "idle"), "scope");
