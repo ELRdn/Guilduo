@@ -417,8 +417,7 @@ export function toLoomQuest(input: LoomQuestInput): LoomQuest {
 }
 
 export function questRef(id: string): string {
-  const digits = id.replace(/\D/g, "");
-  return digits.length > 0 ? `QF-${digits}` : `QF-${id.slice(0, 3).toUpperCase()}`;
+  return id.toUpperCase().startsWith("QF-") ? id.toUpperCase() : `QF-${id.replace(/^q-/i, "").toUpperCase()}`;
 }
 
 function formatDay(iso: string): string {

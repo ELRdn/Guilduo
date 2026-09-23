@@ -195,7 +195,8 @@ export function normalizeBattleModel(options: NormalizeBattleOptions): BattleMod
     const kind = text(entry, "kind");
     return {
       channel: "execution",
-      text: text(entry, "text"),
+      // The root UI stores log entries as inline HTML; this surface renders plain text.
+      text: text(entry, "text").replace(/<[^>]*>/g, ""),
       tone: kind === "success" ? "success" : kind === "danger" ? "danger" : "info",
       at: text(entry, "at"),
     };
