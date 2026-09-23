@@ -54,23 +54,31 @@ while (( offset < total_size )); do
     headers+=(--header "X-Appwrite-ID: $deployment_id")
   fi
 
-  http_status="$(curl --silent --show-error \
-    --output "$response" \
-    --write-out '%{http_code}' \
-    --request POST \
-    "${headers[@]}" \
-    --form "code=@$chunk;filename=$(basename "$archive");type=application/gzip" \
-    --form 'installCommand=' \
-    --form 'buildCommand=' \
-    --form 'outputDirectory=.' \
-    --form 'activate=true' \
-    "$endpoint")"
-
-  if [[ "$http_status" -lt 200 || "$http_status" -ge 300 ]]; then
-    jq '{message, type, code}' "$response" 2>/dev/null || true
-    echo "Appwrite deployment chunk $part failed with HTTP $http_status" >&2
-    exit 1
-  fi
+  max_chunk_attempts=5
+  http_status=""
+  for chunk_attempt in $(seq 1 "$max_chunk_attempts"); do
+    curl_exit=0
+    http_status="$(curl --silent --show-error \
+      --output "$response" \
+      --write-out '%{http_code}' \
+      --request POST \
+      "${headers[@]}" \
+      --form "code=@$chunk;filename=$(basename "$archive");type=application/gzip" \
+      --form 'installCommand=' \
+      --form 'buildCommand=' \
+      --form 'outputDirectory=.' \
+      --form 'activate=true' \
+      "$endpoint")" || curl_exit=$?
+    if [[ $curl_exit -eq 0 && "$http_status" =~ ^[0-9]{3}$ && "$http_status" -ge 200 && "$http_status" -lt 300 ]]; then
+      break
+    fi
+    if (( chunk_attempt == max_chunk_attempts )); then
+      jq '{message, type, code}' "$response" 2>/dev/null || true
+      echo "Appwrite deployment chunk $part failed after $chunk_attempt attempts (HTTP ${http_status:-curl-$curl_exit})" >&2
+      exit 1
+    fi
+    sleep $((chunk_attempt * 2))
+  done
 
   current_id="$(jq -er '.["$id"]' "$response")"
   if [[ -z "$deployment_id" ]]; then
