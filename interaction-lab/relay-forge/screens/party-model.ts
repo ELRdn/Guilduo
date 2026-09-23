@@ -6,7 +6,7 @@
  */
 
 import type { Quest } from "../../../types/questforge.ts";
-import type { Actor } from "../model.ts";
+import { type Actor, questRef } from "../model.ts";
 import { instantLabel, type ScreenNotice } from "./screen-state.ts";
 
 /* ------------------------------------------------------------------ *
@@ -125,10 +125,6 @@ function heldState(quest: Quest, unmet: number): HeldQuest["state"] {
   if (quest.assignee.handoffState === "blocked" || unmet > 0) return "blocked";
   if (quest.assignee.handoffState === "working") return "working";
   return "waiting";
-}
-
-function questRef(id: string): string {
-  return id.toUpperCase().startsWith("QF-") ? id.toUpperCase() : `QF-${id.replace(/^q-/i, "").toUpperCase()}`;
 }
 
 /**

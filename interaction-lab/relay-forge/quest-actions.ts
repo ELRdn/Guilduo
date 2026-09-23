@@ -17,7 +17,10 @@ export function questActionState(quest: Quest | null): QuestActionState {
     return { mode: "handoff-decision", statusLabel: "Human decision required", actions: [] };
   }
   if (quest.assignee.type !== "self") {
-    return { mode: "read-only", statusLabel: "Agent がこの Quest を保持しています", actions: ["edit"] };
+    const statusLabel = quest.assignee.handoffState === "accepted"
+      ? "Agent の成果物を承認済みです"
+      : "Agent がこの Quest を保持しています";
+    return { mode: "read-only", statusLabel, actions: ["edit"] };
   }
   if (quest.done || quest.lifecycleState !== "active") {
     return { mode: "read-only", statusLabel: "この Quest は完了しています", actions: [] };

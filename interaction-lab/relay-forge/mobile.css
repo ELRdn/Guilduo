@@ -21,6 +21,11 @@
     display: none;
   }
 
+  /* Command scrolls the page, so the shell grows with its content; a fixed
+   * viewport height lets the content overflow and the sticky bottom
+   * navigation drifts up into the page as it scrolls. */
+  .rf-shell[data-mobile="true"][data-domain="command"] { height: auto; }
+
   .rf-shell[data-mobile="true"] {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
@@ -98,7 +103,11 @@
     color: var(--qf-color-fg-strong);
   }
 
-  .rf-m-status { display: flex; align-items: center; gap: var(--qf-space-5); }
+  /* Title and the inbox share the first row; status takes its own row so no
+   * label breaks mid-word at 375px. */
+  .rf-m-header { flex-wrap: wrap; row-gap: var(--qf-space-2); }
+  .rf-m-header > .rf-human-inbox-trigger { margin-left: auto; white-space: nowrap; }
+  .rf-m-status { display: flex; flex-basis: 100%; align-items: center; gap: var(--qf-space-5); white-space: nowrap; }
 
   .rf-m-attention { display: inline-flex; align-items: baseline; gap: var(--qf-space-2); }
 
@@ -150,6 +159,9 @@
   /* ---------------- Attention Shelf carousel ---------------- */
 
   .rf-m-shelf-controls { display: flex; gap: var(--qf-space-2); }
+  /* 44px targets at <=900px, including the quiet shelf and history controls. */
+  .rf-m-shelf-controls > .rf-icon-button { min-width: var(--qf-space-11); min-height: var(--qf-space-11); }
+  .rf-m-chronicle-toggle { min-height: var(--qf-space-11); }
   .rf-m-prev { transform: rotate(135deg); }
 
   .rf-m-shelf-track {
@@ -240,6 +252,10 @@
     gap: var(--qf-space-4);
     padding-block: var(--qf-space-4);
   }
+
+  /* The final step has no thread; without this its empty span takes the avatar
+   * cell and pushes the name into the time column. */
+  .rf-m-relay-step:last-child .rf-m-relay-thread { display: none; }
 
   /* One thread down the avatar column so the order reads as a path. */
   .rf-m-relay-step:not(:last-child) .rf-m-relay-thread {
@@ -507,5 +523,18 @@
 }
 
 @media (max-width: 900px) {
-  .rf-m-decision .rf-task-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* One row keeps the fixed bar short enough that the Quest above stays readable. */
+  .rf-m-decision .rf-task-actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: minmax(0, 1.4fr);
+    grid-auto-columns: minmax(0, 1fr);
+    gap: var(--qf-space-3);
+  }
+  .rf-m-decision .rf-task-actions > * { padding-inline: var(--qf-space-2); font-size: 13px; white-space: nowrap; }
+  /* Five or more actions do not fit one row at 375px; fall back to two columns. */
+  .rf-m-decision .rf-task-actions:has(> :nth-child(5)) {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
