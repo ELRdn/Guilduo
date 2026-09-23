@@ -373,6 +373,14 @@ test("Battle: the model reads the session the domain produced, including blocked
   assert.ok(tooExpensive !== undefined && !tooExpensive.enabled, "a command that costs more MP than is held is not offered");
 });
 
+test("Battle: log entries stored as inline HTML by the root UI render as plain text", () => {
+  const session = new FixtureBattlePort(fixtureBattleState([])).session();
+  const battle = session.battle as unknown as { log: unknown[] };
+  battle.log = [{ text: "<strong>一回クエスト</strong> MP +34 / Focus +2", kind: "info", at: "2026-09-23T00:00:00.000Z" }];
+  const model = normalizeBattleModel({ session });
+  assert.equal(model.timeline[0]?.text, "一回クエスト MP +34 / Focus +2");
+});
+
 test("Battle: a dry run computes the outcome and writes nothing", async () => {
   const port = new FixtureBattlePort(fixtureBattleState([]));
   const before = normalizeBattleModel({ session: port.session() });

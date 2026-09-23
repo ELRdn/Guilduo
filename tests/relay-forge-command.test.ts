@@ -372,3 +372,39 @@ test("failure explanations never leak a token, URL or raw payload", () => {
     assert.doesNotMatch(message, /Bearer|token|authorization/i, "no credential in a user-facing failure message");
   }
 });
+
+test("Quest refs keep the full id so distinct UUIDs never collide", () => {
+  const model = normalizeCommandModel({
+    profile: { uid: "uid-1", displayName: "Hironao" },
+    agents: [],
+    quests: [
+      buildQuest({ id: "E342C766-C5CF-44B8-92AD-68EFE8367539", title: "Upstream" }),
+      buildQuest({ id: "q-184", title: "Fixture", dependencyIds: ["E342C766-C5CF-44B8-92AD-68EFE8367539"] }),
+    ],
+    syncLabel: "10:52",
+  });
+
+  assert.deepEqual(model.quests.map((quest) => quest.ref), ["QF-E342C766-C5CF-44B8-92AD-68EFE8367539", "QF-184"]);
+  assert.equal(model.quests[1]?.dependencies[0]?.ref, "QF-E342C766-C5CF-44B8-92AD-68EFE8367539");
+});
+
+test("an unfinished dependency stops the Quest in Command, matching the Quests portfolio", () => {
+  const assignee = { type: "self", id: "uid-1", label: "Hironao", handoffState: "none" } as const;
+  const model = normalizeCommandModel({
+    profile: { uid: "uid-1", displayName: "Hironao" },
+    agents: [],
+    quests: [
+      buildQuest({ id: "q-up", title: "Upstream", assignee }),
+      buildQuest({ id: "q-down", title: "Downstream", dependencyIds: ["q-up"], assignee }),
+      buildQuest({ id: "q-done", title: "Finished upstream", done: true, lifecycleState: "completed", assignee }),
+      buildQuest({ id: "q-free", title: "Unblocked", dependencyIds: ["q-done"], assignee }),
+    ],
+    syncLabel: "10:52",
+  });
+
+  const byId = new Map(model.quests.map((quest) => [quest.id, quest]));
+  assert.equal(byId.get("q-down")?.state, "blocked");
+  assert.equal(byId.get("q-down")?.dependencies[0]?.blocking, true);
+  assert.notEqual(byId.get("q-free")?.state, "blocked");
+  assert.deepEqual(model.interventions.map((item) => item.questId), ["q-down"]);
+});

@@ -304,7 +304,7 @@ export function interventionLens(
       section(
         "Evidence",
         primary === null
-          ? el("p", { class: "rf-lens-state" }, "Evidence を取得できません")
+          ? el("p", { class: "rf-lens-state" }, "Evidence はまだありません")
           : el(
             "dl",
             { class: "rf-evidence" },

@@ -27,6 +27,7 @@ import {
   deriveSelectedQuestView,
   type Intervention,
   type LoomQuest,
+  questRef,
   type RelaySpine,
   toLoomQuest,
 } from "./model.ts";
@@ -257,6 +258,12 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
   const loomQuests: LoomQuest[] = [];
   const interventions: Intervention[] = [];
 
+  const records = new Map(options.quests.map((quest) => [quest.id, quest]));
+  const completed = (id: string): boolean => {
+    const quest = records.get(id);
+    return quest !== undefined && (quest.done || quest.lifecycleState === "completed");
+  };
+
   for (const quest of options.quests) {
     // Command is an operational surface. Archived history stays available in Quests.
     if (quest.lifecycleState === "archived") continue;
@@ -265,16 +272,26 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
     }
     const holder = known.get(quest.assignee.type === "agent" ? quest.assignee.id : selfActor.id);
     const relay = spineFor(quest, selfActor.id);
+    // Same rule as the Quests portfolio: an unfinished dependency stops the Quest.
+    const unmetDependencyIds = quest.dependencyIds.filter((id) => !completed(id));
+    const blockedByDependency = unmetDependencyIds.length > 0
+      && !quest.done
+      && quest.lifecycleState !== "completed"
+      && quest.assignee.handoffState !== "review_required"
+      && quest.assignee.handoffState !== "blocked";
     const loomQuest = toLoomQuest({
       quest,
       relay,
       dependencies: quest.dependencyIds.map((questId) => ({
         questId,
-        ref: `QF-${questId.replace(/\D/g, "")}`,
+        ref: questRef(questId),
         critical: quest.isBlockingOthers,
-        blocking: quest.assignee.handoffState === "blocked",
+        blocking: quest.assignee.handoffState === "blocked" || (blockedByDependency && !completed(questId)),
       })),
-      stateLabel: stateLabelFor(quest, holder),
+      stateLabel: blockedByDependency
+        ? `Blocked by ${unmetDependencyIds.map(questRef).join(", ")}`
+        : stateLabelFor(quest, holder),
+      ...(blockedByDependency ? { overrideState: "blocked" as const } : {}),
       actionLabel: quest.assignee.handoffState === "review_required" ? "Review output" : "Inspect",
       context: quest.notes === "" ? quest.category : quest.notes,
     });
@@ -296,7 +313,6 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
     }
   }
 
-  const records = new Map(options.quests.map((quest) => [quest.id, quest]));
   const selectedViews = new Map(loomQuests.map((quest) => {
     const record = records.get(quest.id)!;
     return [quest.id, {
