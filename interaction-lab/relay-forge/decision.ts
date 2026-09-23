@@ -69,7 +69,7 @@ export function blockingReason(gate: DecisionGate, phase: DecisionPhase): string
   if (gate.conflict !== null) return gate.conflict;
   if (gate.writeLocked) return "再接続まで書き込みは保留中です";
   if (phase === "submitting") return "送信中です";
-  if (!gate.evidenceReviewed) return relayText("checked");
+  if (!gate.evidenceReviewed) return relayText("checkFirst");
   return null;
 }
 

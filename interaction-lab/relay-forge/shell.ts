@@ -2130,7 +2130,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
                * `aria-current` and the selected treatment — otherwise the bar
                * would announce no current page at all on Battle and
                * Connections. */
-              const overflowActive = MOBILE_OVERFLOW.some((domain) => domain.id === state.domain);
+              const overflowActive = state.domain === "settings"
+                || MOBILE_OVERFLOW.some((domain) => domain.id === state.domain);
               const more = el(
                 "button",
                 {
@@ -2856,6 +2857,16 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     return null;
   }
 
+  /* A destination change starts at the top; re-renders within one keep their scroll. */
+  let renderedDomain: NavId | null = null;
+  function resetScrollOnDomainChange(): void {
+    if (renderedDomain !== null && renderedDomain !== state.domain) {
+      screenHost.scrollTop = 0;
+      window.scrollTo(0, 0);
+    }
+    renderedDomain = state.domain;
+  }
+
   function render(): void {
     shell.setAttribute("data-domain", state.domain);
     shell.setAttribute("data-mobile", isMobile() ? "true" : "false");
@@ -2876,6 +2887,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       renderChronicle();
       renderLens();
       renderMobile();
+      resetScrollOnDomainChange();
       return;
     }
     /* A non-Command destination owns the whole workfield. Every Command region
@@ -2897,6 +2909,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     replaceChildren(screenHost, screen.main);
     if (screen.sticky === null || screen.sticky === undefined) replaceChildren(screenSticky);
     else replaceChildren(screenSticky, screen.sticky);
+    resetScrollOnDomainChange();
   }
 
   function handleLensAsSheetChange(event: MediaQueryListEvent): void {

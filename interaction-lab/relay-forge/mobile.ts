@@ -199,7 +199,7 @@ function mobileShelf(state: MobileState, callbacks: MobileCallbacks): HTMLElemen
       "div",
       { class: "rf-m-section-head" },
       el("h2", { class: "rf-region-label" }, "Attention Shelf"),
-      el("span", { class: "rf-region-count" }, `${state.model.interventions.length} interventions`),
+      el("span", { class: "rf-region-count" }, `${state.model.interventions.length} ${state.model.interventions.length === 1 ? "intervention" : "interventions"}`),
       el("span", { class: "rf-m-shelf-controls" }, previous, forward),
     ),
     track,

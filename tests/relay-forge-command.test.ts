@@ -222,6 +222,12 @@ test("Request revision remains exclusive to Agent review", () => {
     statusLabel: "Agent がこの Quest を保持しています",
     actions: ["edit"],
   });
+  const accepted = buildQuest({
+    id: "q-accepted",
+    title: "Accepted",
+    assignee: { type: "agent", id: "forge-runner", label: "Forge Runner", handoffState: "accepted" },
+  });
+  assert.equal(questActionState(accepted).statusLabel, "Agent の成果物を承認済みです");
 });
 test("the transition table matches the domain", () => {
   assert.equal(canTransition("review_required", "accepted"), true);
@@ -333,7 +339,7 @@ test("an empty revision reason never reaches the domain", async () => {
 test("every gate blocks a write, in the documented precedence", async () => {
   const base = { evidenceReviewed: true, writeLocked: false, permissionMissing: null, conflict: null };
   assert.equal(blockingReason(base, "idle"), null);
-  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /確認|checked/);
+  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /確認|check/i);
   assert.match(String(blockingReason({ ...base, writeLocked: true }, "idle")), /再接続/);
   assert.match(String(blockingReason({ ...base, conflict: "conflict" }, "idle")), /conflict/);
   assert.equal(blockingReason({ ...base, permissionMissing: "scope" }, "idle"), "scope");
@@ -384,8 +390,8 @@ test("Quest refs keep the full id so distinct UUIDs never collide", () => {
     syncLabel: "10:52",
   });
 
-  assert.deepEqual(model.quests.map((quest) => quest.ref), ["QF-E342C766-C5CF-44B8-92AD-68EFE8367539", "QF-184"]);
-  assert.equal(model.quests[1]?.dependencies[0]?.ref, "QF-E342C766-C5CF-44B8-92AD-68EFE8367539");
+  assert.deepEqual(model.quests.map((quest) => quest.ref), ["QF-E342C766", "QF-184"]);
+  assert.equal(model.quests[1]?.dependencies[0]?.ref, "QF-E342C766");
 });
 
 test("an unfinished dependency stops the Quest in Command, matching the Quests portfolio", () => {

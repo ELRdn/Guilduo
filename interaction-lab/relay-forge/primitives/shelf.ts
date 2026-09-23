@@ -97,7 +97,7 @@ export function attentionShelf(
       "div",
       { class: "rf-shelf-header" },
       el("h2", { class: "rf-region-label" }, "Attention Shelf"),
-      el("span", { class: "rf-region-count" }, `${interventions.length} interventions`),
+      el("span", { class: "rf-region-count" }, `${interventions.length} ${interventions.length === 1 ? "intervention" : "interventions"}`),
     ),
     el("div", { class: "rf-shelf-track" }, ...cards),
   );

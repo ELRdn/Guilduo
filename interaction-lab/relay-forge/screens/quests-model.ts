@@ -7,6 +7,7 @@
  */
 
 import type { HandoffState, Impact, Quest } from "../../../types/questforge.ts";
+import { questRef } from "../model.ts";
 import type { ScreenNotice } from "./screen-state.ts";
 
 /* ------------------------------------------------------------------ *
@@ -191,7 +192,7 @@ export function normalizeQuestsModel(options: NormalizeQuestsOptions): QuestsMod
     return {
       id: quest.id,
       humanRequest: Boolean(quest.humanRequest),
-      ref: quest.id.toUpperCase().startsWith("QF-") ? quest.id.toUpperCase() : `QF-${quest.id.replace(/^q-/i, "").toUpperCase()}`,
+      ref: questRef(quest.id),
       title: quest.title,
       bucket,
       archived: quest.lifecycleState === "archived",
