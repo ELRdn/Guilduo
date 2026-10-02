@@ -1,16 +1,16 @@
 {
   "name": "questforge",
-  "version": "0.5.0",
-  "description": "Connect QuestForge's quests, Agent handoffs, reviews, and command battles to an AI client.",
+  "version": "0.6.0-beta.8",
+  "description": "Connect Guilduo Quests, Human and Agent handoffs, reviews, and command battles to an AI client.",
   "author": {
-    "name": "QuestForge contributors"
+    "name": "Radon"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "QuestForge",
-    "shortDescription": "AIを仲間に、最強のパーティーを。",
-    "longDescription": "人間が目的と最終判断を持ち、AIがQuestの整理・作業・レビューを支援します。すべての書き込みはdry-runと確認を優先します。",
-    "developerName": "QuestForge contributors",
+    "displayName": "Guilduo Workflows",
+    "shortDescription": "HumanとAgentでQuest・確認・レビューをつなぐ",
+    "longDescription": "GuilduoのMCPとWorkflow Skillで、Questの整理、人への確認依頼、回答待ち、フィードバック後の再開を支援します。読み取りとdry-runを先に行い、許可された範囲で操作します。",
+    "developerName": "Radon",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read", "Write"],
     "defaultPrompt": [

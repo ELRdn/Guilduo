@@ -1,8 +1,14 @@
 # Guilduo OpenAI Plugin / MCP App package
 
 This directory is the repository-side handoff package for a Guilduo remote MCP App. The existing directory name is retained as a compatibility-sensitive legacy identifier.
-It is intentionally prepared for registration, but it does not contain an OpenAI technical
-app ID, provider secret, Firebase token, or deployment credential.
+It is a registration template, not an installable connection by itself. It does not contain a real
+OpenAI technical app ID, provider secret, Appwrite token, or deployment credential.
+
+For a working local package, follow [Guilduo plugin setup](../../docs/guilduo-plugin-setup.md).
+`tools/prepare-guilduo-plugin.mts` bundles the current Skill with either an existing registered App
+or the official OAuth MCP endpoint. It removes the unused connection and registration placeholder.
+The generated companion is named `guilduo-workflows`; existing `questforge` plugin, MCP and Skill IDs
+remain unchanged. A legacy QuestForge connection is not the current Guilduo App.
 
 ## What is already linked
 
@@ -14,7 +20,7 @@ app ID, provider secret, Firebase token, or deployment credential.
 
 ## Registration handoff
 
-1. Deploy and smoke-test the Worker and Firebase beta first.
+1. Deploy and smoke-test the Worker and Appwrite beta first.
 2. In the OpenAI developer dashboard, create a remote MCP App and copy the technical ID.
 3. Copy `.app.json.example` to `.app.json` and fill the technical ID and approved public URLs.
 4. Confirm the OAuth metadata endpoint, privacy policy, terms, account deletion path, and support contact.

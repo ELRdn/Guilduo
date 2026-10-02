@@ -31,6 +31,7 @@ Use the connected Guilduo MCP server as the source of truth. Never invent Quest 
 3. Read `get_agent_link`, `list_registered_agents`, and `get_current_agent_context`. When the user authorizes the identity to use, call `link_agent` with that exact immutable Agent ID. An intentional relink changes this connection's later identity; do not silently choose a different Agent.
 4. Connection-management uses the OAuth connection grant. Execution permissions are the intersection of that grant and the Agent's allowed scopes. Missing `agents:write` in execution scopes does not mean the OAuth link permission disappeared. Do not expand execution scopes to fix a control-plane failure.
 5. Prove the first read with `list_quests`/`get_quest`, then perform a user-authorized Quest update. Only a successful persisted operation proves writing works. Refresh the client's `tools/list` after a server update; do not assume a cached tool list includes new tools.
+6. Before a Human relay, verify that `request_human_review` and `list_human_requests` are available in this client. If either is missing, report the missing tools and refresh the developer-mode connection metadata, then start a new chat. Never replace them with ordinary Quest writes or fabricate a human answer. A Skill does not grant OAuth or Agent scopes.
 
 ## Agent To Human: Request, Wait, Resume
 
