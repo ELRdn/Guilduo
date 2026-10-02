@@ -112,7 +112,7 @@ Object.assign(openapi.paths, {
     delete: { summary: "Revoke one OAuth MCP client grant for the signed-in web user", description: "Revokes the OAuth grant and its refresh session without deleting the linked Agent. A later OAuth authorization creates a new grant.", parameters: [parameter("clientId")], responses: ok("OAuth connection revoked") },
   },
   "/v1/agents/{agentId}/connections/{clientId}": {
-    put: { summary: "Link an OAuth MCP client to one Agent", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Linked connection") },
+    put: { summary: "Configure the Agents allowed on an OAuth MCP connection", description:"The path Agent remains the legacy single-Agent default. When allowedAgentIds contains more than one Agent, MCP executions require actingAgentId on every call. Only owned active Agents can be allowed. Omission retains the legacy single-Agent configuration.", parameters: [parameter("agentId"), parameter("clientId")], requestBody: { ...body({ type:"object", properties:{ allowedAgentIds:{ type:"array", maxItems:20, items:{ type:"string", maxLength:80, pattern:"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } } }, additionalProperties:false }), required:false }, responses: ok("Linked connection") },
     delete: { summary: "Unlink an OAuth MCP client from an Agent without revoking its OAuth grant", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Unlinked connection") },
   },
   "/v1/profile": {
@@ -284,6 +284,13 @@ schemas.QuestInput.properties ||= {};
 schemas.QuestInput.properties.assignee = { $ref: "#/components/schemas/Assignee" };
 schemas.QuestInput.properties.parentQuestId = { type: "string", maxLength: 120 };
 schemas.QuestInput.properties.handoff = { $ref: "#/components/schemas/Handoff" };
+schemas.QuestPatch = { type: "object", properties: { ...schemas.QuestInput.properties, expectedUpdatedAt: { type: "string", format: "date-time", maxLength: 40, description: "Optional optimistic concurrency guard. Use the latest Quest updatedAt; a mismatch returns 409 quest_conflict." } } };
+const questPatch = openapi.paths["/v1/quests/{questId}"].patch!;
+questPatch.requestBody = body({ $ref: "#/components/schemas/QuestPatch" });
+questPatch.responses = { ...(questPatch.responses as OpenApiSchema), "409": { description: "Quest changed since the supplied expectedUpdatedAt (quest_conflict)" } };
+const questScore = openapi.paths["/v1/quests/{questId}/score"].post!;
+questScore.requestBody = body({ type: "object", required: ["direction"], properties: { direction: { type: "string", enum: ["up", "down"] }, source: { type: "string" }, expectedUpdatedAt: schemas.QuestPatch.properties!.expectedUpdatedAt } });
+questScore.responses = { ...(questScore.responses as OpenApiSchema), "409": { description: "Quest changed since the supplied expectedUpdatedAt (quest_conflict)" } };
 schemas.QuestRequester = { type: ["object", "null"], readOnly: true, required: ["type", "id", "label"], properties: { type: { type: "string", enum: ["human", "agent"] }, id: { type: "string" }, label: { type: "string" } }, additionalProperties: false, description: "Trusted creator identity. null means the legacy or unlinked creator is unknown." };
 schemas.HumanRequest = { type: ["object", "null"], readOnly: true, required: ["sourceQuestId", "requestKey", "recipientId", "reason", "checkTarget", "artifactUrl", "status", "seenAt", "respondedAt", "response", "outcome"], properties: { sourceQuestId: { type: "string" }, requestKey: { type: "string" }, recipientId: { type: "string" }, reason: { type: "string" }, checkTarget: { type: "string" }, artifactUrl: { type: "string" }, status: { type: "string", enum: ["pending", "deferred", "answered"] }, seenAt: { type: "string" }, respondedAt: { type: "string" }, response: { type: "string" }, outcome: { type: "string", enum: ["", "approved", "changes_requested"] } }, additionalProperties: false };
 schemas.HumanReviewInput = { ...(MCP_TOOLS.find((tool) => tool.name === "request_human_review")!.inputSchema as OpenApiSchema), required: ["requestKey", "title", "reason", "checkTarget", "completionCriteria"] };

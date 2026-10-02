@@ -414,13 +414,14 @@ export class QuestForgeRepository {
     return this.request(`/v1/quests/${encodeURIComponent(questId)}`, { method: "PATCH", body: JSON.stringify(patch) });
   }
 
-  async scoreQuest(questId: string, direction: "up" | "down" = "up"): Promise<JsonRecord> {
-    return this.request(`/v1/quests/${encodeURIComponent(questId)}/score`, { method: "POST", body: JSON.stringify({ direction, source: "interaction-lab" }) });
+  async scoreQuest(questId: string, direction: "up" | "down" = "up", expectedUpdatedAt?: string): Promise<JsonRecord> {
+    return this.request(`/v1/quests/${encodeURIComponent(questId)}/score`, { method: "POST", body: JSON.stringify({ direction, source: "interaction-lab", expectedUpdatedAt }) });
   }
 
   async getBattleSession(): Promise<JsonRecord> {
     return this.request("/v1/battle/session");
   }
+
 
   async batchScoreQuests(questIds: string[], direction: "up" | "down" = "up", dryRun = true): Promise<JsonRecord> {
     return this.request("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds, direction, dryRun, source: "interaction-lab" }) });
@@ -670,8 +671,8 @@ export class QuestForgeRepository {
     return response.blob();
   }
 
-  async linkAgentConnection(agentId: string, clientId: string): Promise<JsonRecord> {
-    return this.request(`/v1/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(clientId)}`, { method: "PUT" });
+  async linkAgentConnection(agentId: string, clientId: string, allowedAgentIds?: readonly string[]): Promise<JsonRecord> {
+    return this.request(`/v1/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(clientId)}`, { method: "PUT", ...(allowedAgentIds ? { body:JSON.stringify({ allowedAgentIds }) } : {}) });
   }
 
   async unlinkAgentConnection(agentId: string, clientId: string): Promise<JsonRecord> {

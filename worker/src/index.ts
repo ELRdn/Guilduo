@@ -26,7 +26,7 @@ import {
 } from "../../server/questforge-domain.ts";
 import type { DomainInput, DomainRecord } from "../../server/questforge-domain.ts";
 import { listHumanRequests, preserveRelayState, requestHumanReview, respondHumanReview, type RelayContext } from "../../server/human-requests.ts";
-import { mutateState, readState, writeState } from "./appwrite-store.ts";
+import { mutateState, prepareStateTransaction, readState, writeState } from "./appwrite-store.ts";
 import { authenticateRequest } from "./security.ts";
 import {
   approveAuthorization,
@@ -133,6 +133,7 @@ import { isQuest } from "../../types/questforge.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 
 type WorkerIdentity = AuthIdentity & {
+  agentConnection?: AgentConnectionRecord | null;
   agent?: AgentRecord;
   connectionScopes?: string[];
   agentAllowedScopes?: string[];
@@ -402,6 +403,7 @@ const AGENT_CONNECTION_OBJECT = {
   required: ["clientId", "clientName", "scopes", "firstConnectedAt", "lastUsedAt", "revokedAt"],
   properties: {
     clientId: { type: "string" }, clientName: { type: "string" }, scopes: { type: "array", items: { type: "string" } },
+    allowedAgentIds: { type: "array", items: { type: "string" }, maxItems: 20 },
     firstConnectedAt: { type: "string" }, lastUsedAt: { type: "string" }, revokedAt: { type: ["string", "null"] },
   },
   additionalProperties: false,
@@ -422,6 +424,8 @@ const AGENT_CONTEXT_OUTPUT = {
   properties: {
     agent: { anyOf: [AGENT_PUBLIC_RESPONSE_SCHEMA, { type: "null" }] },
     clientId: { type: ["string", "null"] },
+    allowedAgentIds: { type: "array", items: { type: "string" }, maxItems: 20 },
+    requiresAgentSelection: { type: "boolean" },
     connectionScopes: { type: "array", items: { type: "string" } },
     agentAllowedScopes: { type: "array", items: { type: "string", enum: AGENT_SCOPES } },
     effectiveExecutionScopes: { type: "array", items: { type: "string" } },
@@ -460,12 +464,12 @@ const MCP_TOOLS = [
   { name: "list_today_quests", title: "List Today's Quests", description: "List active scheduled Guilduo quests visible today, including overdue work.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_quests", title: "List Quests", description: "List Guilduo quests by today, week, future, backlog, completed, archive, or all views.", inputSchema: { type: "object", properties: LIST_QUEST_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "create_quest", title: "Create Quest", description: "Create a Guilduo habit, daily, todo, or reward with planning and priority details.", inputSchema: { type: "object", required: ["kind", "title"], properties: QUEST_INPUT_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: WRITE_ANNOTATIONS },
-  { name: "update_quest", title: "Update Quest", description: "Edit one Guilduo quest. Moving a scheduled date later increments rolloverCount.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, ...QUEST_INPUT_PROPERTIES }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "update_quest", title: "Update Quest", description: "Edit one Guilduo quest. Pass its latest expectedUpdatedAt to reject stale edits. Moving a scheduled date later increments rolloverCount.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, ...QUEST_INPUT_PROPERTIES, expectedUpdatedAt: { type: "string", format: "date-time", maxLength: 40 } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "batch_update_quests", title: "Batch Update Quests", description: "Preview or atomically update up to 100 quests, including postponing or moving them to backlog.", inputSchema: { type: "object", required: ["questIds"], properties: { questIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 }, patch: { type: "object", properties: QUEST_INPUT_PROPERTIES }, postponeDays: { type: "integer", minimum: -365, maximum: 365 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "batch_score_quests", title: "Batch Score Quests", description: "Preview or atomically complete or reopen up to 100 quests. One-off todo quests become archived when completed.", inputSchema: { type: "object", required: ["questIds", "direction"], properties: { questIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 }, direction: { type: "string", enum: ["up", "down"] }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_SCORE_OUTPUT, annotations: WRITE_ANNOTATIONS },
   { name: "archive_quests", title: "Archive Quests", description: "Preview or archive completed one-off todo quests. Archived quests are retained permanently.", inputSchema: { type: "object", properties: { questIds: { type: "array", items: { type: "string" }, maxItems: 100 }, throughDate: { type: "string", format: "date" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_OUTPUT, annotations: DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS },
   { name: "link_external_record", title: "Link External Record", description: "Link a Google Calendar, Toggl, or other external record to a quest.", inputSchema: { type: "object", required: ["questId", "service", "externalId"], properties: { questId: { type: "string" }, service: { type: "string" }, externalId: { type: "string" }, type: { type: "string" }, url: { type: "string", format: "uri" }, projectId: { type: "string" }, durationMinutes: { type: "integer", minimum: 0 }, syncedAt: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { quest: QUEST_OBJECT, link: QUEST_OBJECT, event: QUEST_OBJECT }, additionalProperties: false }, annotations: OPEN_WORLD_IDEMPOTENT_ANNOTATIONS },
-  { name: "score_quest", title: "Score Quest", description: "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects. A completed one-off todo is archived automatically.", inputSchema: { type: "object", required: ["questId", "direction"], properties: { questId: { type: "string" }, direction: { type: "string", enum: ["up", "down"] } }, additionalProperties: false }, outputSchema: SCORE_OUTPUT, annotations: WRITE_ANNOTATIONS },
+  { name: "score_quest", title: "Score Quest", description: "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects. A completed one-off todo is archived automatically. Pass its latest expectedUpdatedAt to reject stale or repeated completion.", inputSchema: { type: "object", required: ["questId", "direction"], properties: { questId: { type: "string" }, direction: { type: "string", enum: ["up", "down"] }, expectedUpdatedAt: { type: "string", format: "date-time", maxLength: 40 } }, additionalProperties: false }, outputSchema: SCORE_OUTPUT, annotations: WRITE_ANNOTATIONS },
   { name: "get_character_state", title: "Get Character State", description: "Return the current character, MP, equipment, and boss state.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: CHARACTER_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "buy_reward", title: "Buy Reward", description: "Redeem a reward quest using Gems.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" } }, additionalProperties: false }, outputSchema: REWARD_OUTPUT, annotations: DESTRUCTIVE_ANNOTATIONS },
   { name: "list_integrations", title: "List Integrations", description: "List per-user integration connection, configuration, and reconnect status without exposing provider tokens.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { integrations: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
@@ -511,7 +515,10 @@ const MCP_TOOLS = [
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate Guilduo activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_calendar_schedule", title: "Get Calendar Schedule", description: "Read the cached Google Calendar schedule for a date. Connect and sync Calendar first.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { schedule: GENERIC_OBJECT_OUTPUT }, additionalProperties: false }, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "convert_calendar_event_to_quest", title: "Convert Calendar Event to Quest", description: "Create a Guilduo quest from a cached Calendar event and optional safe task-field overrides.", inputSchema: { type: "object", required: ["eventId"], properties: { eventId: { type: "string", minLength: 1 }, calendarId: { type: "string", minLength: 1 }, overrides: { type: "object", properties: CALENDAR_OVERRIDE_PROPERTIES, additionalProperties: false } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
-];
+].map(tool => ({ ...tool, inputSchema: { ...tool.inputSchema, properties: {
+  ...tool.inputSchema.properties,
+  actingAgentId: { type:"string", maxLength:80, pattern:"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", description:"Agent acting on this call. Required for a shared connection. Read get_current_agent_context for allowed IDs; this never changes another caller's Agent." },
+} } }));
 
 function json(value: unknown, status = 200, headers: JsonHeaders = {}): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
@@ -710,6 +717,7 @@ function toPublicAgentConnection(connection: AgentConnectionRecord | null, clien
   return {
     clientId: String(source.clientId || ""),
     clientName: String(source.clientName || "Guilduo MCP client"),
+    allowedAgentIds: connection?.allowedAgentIds ?? (connection ? [connection.agentId] : []),
     scopes,
     firstConnectedAt: String(source.firstConnectedAt || ""),
     lastUsedAt: String(source.lastUsedAt || ""),
@@ -805,10 +813,12 @@ async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity):
   if (identity?.authType !== "oauth" || !identity.clientId) return identity;
   const connectionScopes = [...(identity.scopes || [])];
   await noteAuthorizedClientUse(env, identity);
+  const agentConnection = await getAgentConnection(env, identity.uid, identity.clientId);
   const agent = await getAgentForClient(env, identity.uid, identity.clientId);
   if (!agent || agent.uid !== identity.uid) {
     return {
       ...identity,
+      agentConnection,
       connectionScopes,
       agentAllowedScopes: [],
       effectiveExecutionScopes: connectionScopes,
@@ -818,7 +828,7 @@ async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity):
   const agentAllowedScopes = [...(agent.allowedScopes || [])];
   const allowed = new Set(agentAllowedScopes);
   const effectiveExecutionScopes = (identity.scopes || []).filter((scope) => allowed.has(scope));
-  return { ...identity, connectionScopes, agentAllowedScopes, effectiveExecutionScopes, scopes: effectiveExecutionScopes, agent };
+  return { ...identity, agentConnection, connectionScopes, agentAllowedScopes, effectiveExecutionScopes, scopes: effectiveExecutionScopes, agent };
 }
 
 async function assignQuestToAgent(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, input: WorkerArgs): Promise<JsonRecord> {
@@ -892,8 +902,10 @@ async function stateFor(env: WorkerEnv, identity: WorkerIdentity, initialize = f
   return payload.state;
 }
 
-async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, mutation: (state: QuestForgeState) => unknown | Promise<unknown>): Promise<MutationResult> {
-  const { result: rawResult } = await mutateState(env, identity, mutation);
+async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, mutation: (state: QuestForgeState) => unknown | Promise<unknown>, prepareNext = false): Promise<MutationResult> {
+  const prepare = prepareNext && identity.authType !== "oauth";
+  const { result: rawResult } = await mutateState(env, identity, mutation, prepare);
+  if (prepare) context.waitUntil(prepareStateTransaction(env));
   const result = asRecord(rawResult) as MutationResult;
   const events = Array.isArray(result.events) ? result.events : result.event ? [result.event] : [];
   for (const event of events) context.waitUntil(deliverEvent(env, identity.uid, webhookEvent(asRecord(event))));
@@ -914,6 +926,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
         (async () => { assertConnectionScope(identity, "agents:read"); return toPublicAgents(await listAgents(env, identity.uid, { includeArchived: true })); })(),
       ]),
     ]);
+    if (identity.scopes.includes("quests:write")) context.waitUntil(prepareStateTransaction(env));
     return json({
       ...questPage,
       profile: panels[0].status === "fulfilled" ? panels[0].value : null,
@@ -1066,7 +1079,10 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const clientId = decodeURIComponent(agentConnectionMatch[2]);
     const client = await getAuthorizedClient(env, identity.uid, clientId);
     if (!client) throw new DomainError(404, "oauth_client_not_found", "An active OAuth MCP client with this ID was not found for the signed-in user.");
+    const input = request.body ? await requestRecord(request) : {};
+    if (Object.keys(input).some(key => key !== "allowedAgentIds")) throw new DomainError(400, "invalid_connection_input", "Only allowedAgentIds can be configured here.");
     return json({ connection: await relinkAgentConnection(env, identity.uid, agentId, {
+      allowedAgentIds: input.allowedAgentIds,
       clientId: client.clientId,
       clientName: client.clientName,
       scopes: client.scopes,
@@ -1250,7 +1266,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
     const actor = await relayContext(env, identity, "api");
-    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { ...actor, returnEvent: true }));
+    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { ...actor, returnEvent: true }), true);
     const createdQuest = created.quest;
     if (createdQuest && await isTogglFocusAutoCreateEnabled(env, identity)) {
       try {
@@ -1312,7 +1328,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   if (questMatch && method === "PATCH") {
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
-    return json(await mutateAndNotify(env, identity, context, (state) => patchQuest(state, decodeURIComponent(questMatch[1]), input, { source: "api", returnEvent: true })));
+    return json(await mutateAndNotify(env, identity, context, (state) => patchQuest(state, decodeURIComponent(questMatch[1]), input, { source: "api", returnEvent: true }), true));
   }
   const handoffMatch = path.match(/^\/v1\/quests\/([^/]+)\/handoff$/);
   if (handoffMatch && method === "POST") {
@@ -1328,7 +1344,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
     const direction = input.direction === "down" ? "down" : "up";
-    return json(await mutateAndNotify(env, identity, context, (state) => scoreQuest(state, decodeURIComponent(scoreMatch[1]), direction, { source: "api" })));
+    return json(await mutateAndNotify(env, identity, context, (state) => scoreQuest(state, decodeURIComponent(scoreMatch[1]), direction, { source: "api", expectedUpdatedAt: input.expectedUpdatedAt }), true));
   }
   if (path === "/v1/character" && method === "GET") {
     assertScope(identity.scopes, "character:read");
@@ -1526,6 +1542,20 @@ async function convertCalendarEventWithOverrides(env: WorkerEnv, identity: Worke
 }
 
 async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<unknown> {
+  const allowedAgentIds = identity.agentConnection?.allowedAgentIds ?? (identity.agentConnection ? [identity.agentConnection.agentId] : []);
+  if (Object.prototype.hasOwnProperty.call(args, "actingAgentId")) {
+    const { actingAgentId, ...input } = args;
+    if (typeof actingAgentId !== "string" || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(actingAgentId) || actingAgentId.length > 80) throw new DomainError(400, "invalid_acting_agent", "actingAgentId must be a registered Agent ID.");
+    if (identity.authType !== "oauth" || !identity.clientId || !identity.agentConnection || identity.agentConnection.revokedAt || !allowedAgentIds.includes(actingAgentId)) throw new DomainError(403, "agent_not_allowed", "This Agent is not allowed on the current MCP connection. Configure the connection in Settings first.");
+    const agent = await getAgent(env, identity.uid, actingAgentId);
+    if (agent.status !== "active") throw new DomainError(403, "agent_inactive", "This Agent is not active.");
+    const connectionScopes = identity.connectionScopes || identity.scopes;
+    const effectiveExecutionScopes = connectionScopes.filter(scope => agent.allowedScopes.includes(scope));
+    identity = { ...identity, agent, agentAllowedScopes:agent.allowedScopes, scopes:effectiveExecutionScopes, effectiveExecutionScopes };
+    args = input;
+  } else if (allowedAgentIds.length > 1 && !["get_current_agent_context", "get_agent_link", "list_registered_agents", "link_agent", "unlink_agent"].includes(name)) {
+    throw new DomainError(400, "acting_agent_required", "This MCP connection is shared. Pass actingAgentId on every tool call; read get_current_agent_context for allowed IDs. Do not change the shared link to switch callers.");
+  }
   if (name === "list_registered_agents") {
     assertConnectionScope(identity, "agents:read");
     return { agents: toPublicAgents(await listAgents(env, identity.uid)) };
@@ -1538,6 +1568,8 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
     return {
       agent: identity.agent ? toPublicAgent(identity.agent) : null,
       clientId: identity.clientId || null,
+      allowedAgentIds,
+      requiresAgentSelection: allowedAgentIds.length > 1,
       connectionScopes,
       agentAllowedScopes,
       effectiveExecutionScopes,
@@ -1553,6 +1585,7 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
   }
   if (name === "link_agent") {
     const client = await requireMcpConnection(env, identity, "agents:write");
+    if (allowedAgentIds.length > 1) throw new DomainError(409, "shared_connection_managed", "This connection is shared. Use actingAgentId on each call; change allowed Agents in Settings instead of relinking every caller.");
     const agentId = requiredString(args.agentId, "agentId");
     const previous = await getAgentConnection(env, identity.uid, identity.clientId || "");
     await relinkAgentConnection(env, identity.uid, agentId, {
@@ -1651,7 +1684,7 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
     const { questId, ...link } = args;
     return mutateAndNotify(env, identity, context, (state) => linkExternalRecord(state, requiredString(questId, "questId"), link as DomainRecord, { source: "mcp" }));
   }
-  if (name === "score_quest") { assertScope(identity.scopes, "quests:write"); return mutateAndNotify(env, identity, context, (state) => scoreQuest(state, requiredString(args.questId, "questId"), args.direction === "down" ? "down" : "up", { source: "mcp" })); }
+  if (name === "score_quest") { assertScope(identity.scopes, "quests:write"); return mutateAndNotify(env, identity, context, (state) => scoreQuest(state, requiredString(args.questId, "questId"), args.direction === "down" ? "down" : "up", { source: "mcp", expectedUpdatedAt: args.expectedUpdatedAt })); }
   if (name === "get_character_state") { assertScope(identity.scopes, "character:read"); return { character: characterState(await stateFor(env, identity)) }; }
   if (name === "buy_reward") { assertScope(identity.scopes, "rewards:write"); return mutateAndNotify(env, identity, context, (state) => buyReward(state, requiredString(args.questId, "questId"), { source: "mcp" })); }
   if (name === "list_integrations") { assertScope(identity.scopes, "integrations:read"); return { integrations: await listIntegrations(env, identity) }; }

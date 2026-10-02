@@ -93,7 +93,7 @@ export class FixtureHandoffPort implements HandoffPort {
           handoff: {
             ...quest.handoff,
             note: typeof input.note === "string" ? input.note : quest.handoff.note,
-            ...(next === "accepted" ? { reviewedAt: now, reviewedBy: "u-hironao" } : {}),
+            ...(next === "accepted" ? { reviewedAt: now, reviewedBy: "u-admin" } : {}),
           },
         };
         this.quests.set(questId, applied);

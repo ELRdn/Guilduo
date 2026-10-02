@@ -356,7 +356,7 @@ const INTEGRATIONS: readonly FixtureIntegration[] = [
     id: "google-tasks", name: "Google Tasks", auth: "oauth2", status: "connected",
     capabilities: ["import", "export", "bidirectional"], configurationStatus: "ready",
     account: {
-      status: "connected", providerAccountName: "hironao@example.test", settings: { taskList: "Guilduo" },
+      status: "connected", providerAccountName: "admin@example.test", settings: { taskList: "Guilduo" },
       lastSyncedAt: "2026-08-26T11:05:00.000Z", lastError: "",
     },
   },
@@ -364,7 +364,7 @@ const INTEGRATIONS: readonly FixtureIntegration[] = [
     id: "google-calendar", name: "Google Calendar", auth: "oauth2", status: "connected",
     capabilities: ["import", "convert_to_quest"], configurationStatus: "ready",
     account: {
-      status: "connected", providerAccountName: "hironao@example.test", settings: { calendar: "primary" },
+      status: "connected", providerAccountName: "admin@example.test", settings: { calendar: "primary" },
       lastSyncedAt: "2026-08-26T06:40:00.000Z", lastError: "同期は成功しましたが、3件の予定が変換対象外でした。",
     },
   },
@@ -469,7 +469,7 @@ export interface FixtureAgent {
 }
 
 const PARTY_MEMBERS: readonly FixturePartyMember[] = [
-  { uid: "hironao", displayName: "Hironao", handle: "hironao", role: "owner", joinedAt: "2026-05-02T08:00:00.000Z", level: 24 },
+  { uid: "admin", displayName: "admin", handle: "admin", role: "owner", joinedAt: "2026-05-02T08:00:00.000Z", level: 24 },
   { uid: "mika", displayName: "Mika", handle: "mika", role: "member", joinedAt: "2026-06-14T10:30:00.000Z", level: 17 },
 ];
 
@@ -509,7 +509,7 @@ export function fixturePartyMembersFor(variant: ScreenVariant): readonly Fixture
       return PARTY_MEMBERS.slice(0, 1);
     case "long":
       return PARTY_MEMBERS.map((entry, index) => (index === 0
-        ? { ...entry, displayName: "Hironao（Guilduo Relay Forge のオペレーターかつレビュー担当）", handle: "hironao-relay-forge-operator" }
+        ? { ...entry, displayName: "admin（Guilduo Relay Forge のオペレーターかつレビュー担当）", handle: "admin-relay-forge-operator" }
         : entry));
     default:
       return PARTY_MEMBERS;

@@ -570,3 +570,23 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* The app handles this gesture with a read, keeping the browser document alive. */
+@media (max-width: 900px) {
+  html:has(.rf-pull-refresh) { overscroll-behavior-y: none; }
+}
+.rf-pull-refresh {
+  position: fixed;
+  z-index: var(--qf-z-toast);
+  top: calc(env(safe-area-inset-top, 0px) + var(--qf-space-4));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - var(--qf-space-8));
+  padding: var(--qf-space-3) var(--qf-space-4);
+  border: 1px solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-sm);
+  background: var(--qf-color-surface);
+  color: var(--qf-color-fg-strong);
+  text-align: center;
+  pointer-events: none;
+}

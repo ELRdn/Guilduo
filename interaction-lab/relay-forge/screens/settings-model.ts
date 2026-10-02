@@ -32,7 +32,7 @@ export interface SettingsState {
   connectionBusyId: string | null;
   connectionMessage: () => string;
   connectionTone: "success" | "error" | null;
-  connectionDrafts: Record<string, string>;
+  connectionDrafts: Record<string, string[]>;
   /** Section to bring into view on the next render — consumed once, then cleared. */
   pendingFocus: SettingsSection | null;
 }
@@ -81,6 +81,7 @@ export interface SettingsMcpConnectionRow {
   readonly lastUsedAt: string;
   /** The last/current relation target, retained for a useful legacy state. */
   readonly linkedAgentId: string | null;
+  readonly allowedAgentIds?: readonly string[];
   /** Non-null when the relation exists but is no longer active. */
   readonly linkRevokedAt: string | null;
   /** True when an active OAuth grant exists for this client. */

@@ -302,7 +302,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/QuestInput"
+                "$ref": "#/components/schemas/QuestPatch"
               }
             }
           }
@@ -317,6 +317,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Quest changed since the supplied expectedUpdatedAt (quest_conflict)"
           }
         }
       },
@@ -382,12 +385,13 @@
                     ]
                   },
                   "source": {
+                    "type": "string"
+                  },
+                  "expectedUpdatedAt": {
                     "type": "string",
-                    "examples": [
-                      "web",
-                      "mcp",
-                      "plugin"
-                    ]
+                    "format": "date-time",
+                    "maxLength": 40,
+                    "description": "Optional optimistic concurrency guard. Use the latest Quest updatedAt; a mismatch returns 409 quest_conflict."
                   }
                 }
               }
@@ -415,6 +419,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Quest changed since the supplied expectedUpdatedAt (quest_conflict)"
           }
         }
       }
@@ -1971,7 +1978,8 @@
     },
     "/v1/agents/{agentId}/connections/{clientId}": {
       "put": {
-        "summary": "Link an OAuth MCP client to one Agent",
+        "summary": "Configure the Agents allowed on an OAuth MCP connection",
+        "description": "The path Agent remains the legacy single-Agent default. When allowedAgentIds contains more than one Agent, MCP executions require actingAgentId on every call. Only owned active Agents can be allowed. Omission retains the legacy single-Agent configuration.",
         "parameters": [
           {
             "name": "agentId",
@@ -1990,6 +1998,28 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "allowedAgentIds": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80,
+                      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Linked connection",
@@ -3962,6 +3992,12 @@
           "dryRun": {
             "type": "boolean",
             "default": true
+          },
+          "actingAgentId": {
+            "type": "string",
+            "maxLength": 80,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+            "description": "Agent acting on this call. Required for a shared connection. Read get_current_agent_context for allowed IDs; this never changes another caller's Agent."
           }
         },
         "additionalProperties": false
@@ -4057,6 +4093,142 @@
           }
         },
         "additionalProperties": false
+      },
+      "QuestPatch": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "habit",
+              "daily",
+              "todo",
+              "reward"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "planningState": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "backlog"
+            ]
+          },
+          "lifecycleState": {
+            "type": "string",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          },
+          "planningMode": {
+            "type": "string",
+            "enum": [
+              "on_date",
+              "until_due"
+            ]
+          },
+          "scheduledDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "scheduledTime": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily",
+              "weekdays",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "trivial",
+              "easy",
+              "medium",
+              "hard"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6
+          },
+          "estimatedMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actualMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "completionCriteria": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "nextAction": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "isBlockingOthers": {
+            "type": "boolean"
+          },
+          "dependencyIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/Assignee"
+          },
+          "parentQuestId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "handoff": {
+            "$ref": "#/components/schemas/Handoff"
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 40,
+            "description": "Optional optimistic concurrency guard. Use the latest Quest updatedAt; a mismatch returns 409 quest_conflict."
+          }
+        }
       }
     }
   }

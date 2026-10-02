@@ -37,6 +37,7 @@ export interface AgentConnectionRecord {
   clientId: string;
   uid: string;
   agentId: string;
+  allowedAgentIds?: string[];
   clientName: string;
   scopes: string[];
   firstConnectedAt: string;
@@ -217,6 +218,7 @@ function normalizeConnection(row: unknown): AgentConnectionRecord | null {
     clientId: String(item.client_id ?? item.clientId ?? ""),
     uid: String(item.uid || ""),
     agentId: String(item.agent_id ?? item.agentId ?? ""),
+    allowedAgentIds: [...new Set([String(item.agent_id ?? item.agentId ?? ""), ...parseScopes(item.allowed_agent_ids ?? item.allowedAgentIds, [])])].filter(Boolean),
     clientName: String(item.client_name ?? item.clientName ?? ""),
     scopes: parseScopes(item.scopes, []),
     firstConnectedAt: String(item.first_connected_at ?? item.firstConnectedAt ?? ""),
@@ -262,11 +264,11 @@ async function countActiveAgents(env: WorkerEnv, uid: string): Promise<number> {
 
 async function revokeAgentConnections(env: WorkerEnv, uid: string, agentId: string, revokedAt: string): Promise<void> {
   if (env.QUESTFORGE_DB) {
-    await env.QUESTFORGE_DB.prepare("UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL")
+    await env.QUESTFORGE_DB.prepare("UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL AND json_array_length(allowed_agent_ids) < 2")
       .bind(revokedAt, revokedAt, uid, agentId).run();
   } else {
     for (const connection of memory(env).connections.values()) {
-      if (connection.uid === uid && connection.agentId === agentId && !connection.revokedAt) {
+      if (connection.uid === uid && connection.agentId === agentId && !connection.revokedAt && (connection.allowedAgentIds?.length ?? 0) < 2) {
         connection.revokedAt = revokedAt;
         connection.updatedAt = revokedAt;
       }
@@ -429,7 +431,7 @@ export async function updateAgent(env: WorkerEnv, uid: string, agentId: string, 
     ];
     if (revoke) {
       statements.push(env.QUESTFORGE_DB.prepare(
-        "UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL AND changes() = 1",
+        "UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL AND json_array_length(allowed_agent_ids) < 2 AND changes() = 1",
       ).bind(updatedAt, updatedAt, uid, agentId));
     }
     const results = await env.QUESTFORGE_DB.batch(statements);
@@ -515,10 +517,10 @@ export async function listAgentConnections(env: WorkerEnv, uid: string, agentId:
   }
   let rows;
   if (env.QUESTFORGE_DB) {
-    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND agent_id = ? ORDER BY first_connected_at DESC").bind(uid, agentId).all<JsonRecord>()).results || [];
+    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND (agent_id = ? OR EXISTS (SELECT 1 FROM json_each(allowed_agent_ids) WHERE value = ?)) ORDER BY first_connected_at DESC").bind(uid, agentId, agentId).all<JsonRecord>()).results || [];
   } else {
     rows = [...memory(env).connections.values()]
-      .filter((connection) => connection.uid === uid && connection.agentId === agentId)
+      .filter((connection) => connection.uid === uid && (connection.agentId === agentId || connection.allowedAgentIds?.includes(agentId)))
       .sort((a, b) => b.firstConnectedAt.localeCompare(a.firstConnectedAt));
   }
   return rows.map(normalizeConnection).filter((connection): connection is AgentConnectionRecord => Boolean(connection));
@@ -616,11 +618,22 @@ export async function linkAgentConnection(env: WorkerEnv, uid: string, agentId: 
  * invariant and the original connection timestamps are preserved.
  */
 export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId: string, input: AgentInput = {}): Promise<AgentConnectionRecord | null> {
-  assertSafeKeys(input, LINK_CONNECTION_KEYS, "agent connection");
+  assertSafeKeys(input, [...LINK_CONNECTION_KEYS, "allowedAgentIds"], "agent connection");
   const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
   if (!agent) throw agentError(404, "agent_not_found", "Agent was not found.");
   if (agent.status === "archived") throw agentError(409, "agent_archived", "Archived agents cannot be linked to clients.");
   if (agent.status !== "active") throw agentError(409, "agent_inactive", "Only an active Agent can be linked to a client.");
+
+  if (input.allowedAgentIds !== undefined && (!Array.isArray(input.allowedAgentIds) || input.allowedAgentIds.length > MAX_AGENTS || input.allowedAgentIds.some(id => typeof id !== "string" || !AGENT_ID_PATTERN.test(id) || id.length > 80))) {
+    throw agentError(400, "invalid_allowed_agents", "allowedAgentIds must contain up to 20 Agent IDs.");
+  }
+  const allowedAgentIds = [...new Set([agentId, ...((input.allowedAgentIds ?? []) as string[])])];
+  if (allowedAgentIds.length > MAX_AGENTS) throw agentError(400, "invalid_allowed_agents", "A connection can use up to 20 Agents.");
+  for (const id of allowedAgentIds) {
+    const allowedAgent = normalizeAgent(await getAgentRow(env, uid, id));
+    if (!allowedAgent) throw agentError(404, "agent_not_found", "Agent was not found.");
+    if (allowedAgent.status !== "active") throw agentError(409, "agent_inactive", "Only active Agents can share a connection.");
+  }
 
   const clientId = cleanString(input.clientId, 200, "client_id", { required: true });
   const clientName = cleanString(input.clientName, 80, "client_name", { required: true });
@@ -634,6 +647,7 @@ export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId
     client_id: clientId,
     uid,
     agent_id: agentId,
+    allowed_agent_ids: JSON.stringify(allowedAgentIds),
     client_name: clientName,
     scopes: JSON.stringify(scopes),
     first_connected_at: firstConnectedAt,
@@ -646,14 +660,14 @@ export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId
   if (env.QUESTFORGE_DB) {
     if (existing) {
       await env.QUESTFORGE_DB.prepare(`UPDATE agent_registry_connections
-        SET agent_id = ?, client_name = ?, scopes = ?, first_connected_at = ?, last_used_at = ?, revoked_at = NULL, updated_at = ?
+        SET agent_id = ?, client_name = ?, scopes = ?, first_connected_at = ?, last_used_at = ?, revoked_at = NULL, updated_at = ?, allowed_agent_ids = ?
         WHERE uid = ? AND client_id = ?`)
-        .bind(agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, updatedAt, uid, clientId).run();
+        .bind(agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, updatedAt, row.allowed_agent_ids, uid, clientId).run();
     } else {
       await env.QUESTFORGE_DB.prepare(`INSERT INTO agent_registry_connections
-        (client_id, uid, agent_id, client_name, scopes, first_connected_at, last_used_at, revoked_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(clientId, uid, agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, null, createdAt, updatedAt).run();
+        (client_id, uid, agent_id, client_name, scopes, first_connected_at, last_used_at, revoked_at, created_at, updated_at, allowed_agent_ids)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(clientId, uid, agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, null, createdAt, updatedAt, row.allowed_agent_ids).run();
     }
   } else {
     memory(env).connections.set(`${uid}:${clientId}`, {
@@ -667,6 +681,7 @@ export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId
       revokedAt: null,
       createdAt,
       updatedAt,
+      allowedAgentIds,
     });
   }
   return normalizeConnection(row);

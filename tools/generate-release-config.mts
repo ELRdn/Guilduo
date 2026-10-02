@@ -29,6 +29,7 @@ const mcpAllowedOrigins = String(process.env.MCP_ALLOWED_ORIGINS || `${workerBas
 const allowedWebOrigins = [...new Set([webAppUrl, publicSiteUrl, "http://localhost:5173", "http://127.0.0.1:5173"])].join(",");
 const placementRegion = String(process.env.WORKER_PLACEMENT_REGION || "").trim();
 const revisionBatch = String(process.env.APPWRITE_REVISION_BATCH || "false").trim();
+const preparedTransactions = String(process.env.APPWRITE_PREPARED_TRANSACTIONS || "false").trim();
 const webApiZone = String(process.env.WEB_API_ROUTE_ZONE_ID || "").trim();
 const webApiBrowser = String(process.env.WEB_API_BROWSER_ENABLED || "false").trim();
 const webApiManagement = String(process.env.WEB_API_ROUTE_MANAGEMENT || "wrangler").trim();
@@ -41,6 +42,9 @@ if ((webApiZone && (!/^[a-f0-9]{32}$/.test(webApiZone) || !webAppUrl.startsWith(
 }
 if (revisionBatch !== "true" && revisionBatch !== "false") {
   throw new Error("Invalid APPWRITE_REVISION_BATCH: expected true or false");
+}
+if (!["true", "false"].includes(preparedTransactions) || (preparedTransactions === "true" && revisionBatch !== "true")) {
+  throw new Error("APPWRITE_PREPARED_TRANSACTIONS requires true/false and revision batching when enabled");
 }
 if (placementRegion && !/^(aws|gcp|azure):[a-z][a-z0-9-]{1,63}$/.test(placementRegion)) {
   throw new Error("Invalid WORKER_PLACEMENT_REGION: expected provider:region");
@@ -78,6 +82,7 @@ const wrangler = {
     APPWRITE_STATE_TABLE_ID: process.env.APPWRITE_STATE_TABLE_ID,
     APPWRITE_LEGACY_TABLE_ID: process.env.APPWRITE_LEGACY_TABLE_ID,
     APPWRITE_REVISION_BATCH: revisionBatch,
+    APPWRITE_PREPARED_TRANSACTIONS: preparedTransactions,
     PUBLIC_BASE_URL: workerBaseUrl,
     PROVIDER_OAUTH_BASE_URL: providerOAuthBaseUrl,
     MCP_ALLOWED_ORIGINS: mcpAllowedOrigins,

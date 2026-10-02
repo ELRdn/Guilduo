@@ -110,6 +110,7 @@ function normalizeAgentConnections(value: unknown): SettingsMcpConnectionRow[] {
       firstConnectedAt: text(connection.firstConnectedAt) || previous?.firstConnectedAt || "",
       lastUsedAt: text(connection.lastUsedAt) || previous?.lastUsedAt || "",
       linkedAgentId: text(connection.agentId) || previous?.linkedAgentId || null,
+      allowedAgentIds: [...new Set([text(connection.agentId), ...strings(connection.allowedAgentIds)])].filter(Boolean),
       linkRevokedAt: text(connection.revokedAt) || null,
       authorized: previous?.authorized ?? false,
       revokedAt: previous?.revokedAt ?? null,

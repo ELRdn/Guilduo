@@ -1,5 +1,5 @@
 import type { HumanRequest, Quest, QuestForgeState, QuestRequester } from "../types/questforge.ts";
-import { normalizeRequester } from "../shared/relay.ts";
+import { nextQuestTimestamp, normalizeRequester } from "../shared/relay.ts";
 import { createId, createQuest, DomainError, getQuest, migrateState, scoreQuest, type DomainContext, type DomainEvent, type DomainInput, type DomainRecord } from "./questforge-domain.ts";
 
 export interface RelayContext extends DomainContext {
@@ -25,10 +25,6 @@ function text(input: DomainInput, key: string, max: number, required = false): s
 function expected(quest: Quest, input: DomainInput, dryRun: boolean): void {
   if (!dryRun && !input.expectedUpdatedAt) throw new DomainError(400, "expected_updated_at_required", "Read this Quest and include expectedUpdatedAt before writing.");
   if (input.expectedUpdatedAt && input.expectedUpdatedAt !== quest.updatedAt) throw new DomainError(409, "quest_conflict", "The Quest changed. Read it again before retrying.");
-}
-
-function timestamp(previous: string): string {
-  return new Date(Math.max(Date.now(), (Date.parse(previous) || 0) + 1)).toISOString();
 }
 
 function humanEvent(state: QuestForgeState, quest: Quest, type: string, context: RelayContext): DomainEvent {
@@ -109,7 +105,7 @@ export function respondHumanReview(state: QuestForgeState, questId: string, inpu
   }
   expected(quest, input, dryRun);
   if ((action === "seen" && request.seenAt) || (action === "defer" && request.status === "deferred") || (action === "resume" && request.status === "pending")) return { dryRun, reused: true, quest: getQuest(target, quest.id).quest, events: [] };
-  const now = timestamp(quest.updatedAt);
+  const now = nextQuestTimestamp(quest.updatedAt);
   request.seenAt ||= now;
   quest.updatedAt = now;
   if (action === "defer") request.status = "deferred";

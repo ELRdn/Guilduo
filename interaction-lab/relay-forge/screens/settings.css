@@ -278,7 +278,7 @@
 .rf-set-connection-link { display: flex; align-items: center; gap: var(--qf-space-3); min-width: 0; }
 .rf-set-connection-label { flex: 0 0 auto; color: var(--qf-color-fg-muted); font: var(--qf-text-label); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
 .rf-set-connection-agent-copy { display: flex; flex-direction: column; gap: var(--qf-space-1); min-width: 0; flex: 1 1 auto; }
-.rf-set-connection-agent-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--qf-color-fg-default); font: var(--qf-text-component); font-size: 13px; }
+.rf-set-connection-agent-copy strong { overflow-wrap: anywhere; color: var(--qf-color-fg-default); font: var(--qf-text-component); font-size: 13px; }
 .rf-set-connection-agent-copy span { color: var(--qf-color-fg-muted); font: var(--qf-text-metadata); font-size: 12px; overflow-wrap: anywhere; }
 .rf-set-connection-agent-placeholder { display: inline-flex; align-items: center; justify-content: center; width: var(--qf-space-8); height: var(--qf-space-8); flex: 0 0 auto; border: var(--qf-border-width) dashed var(--qf-color-border-default); border-radius: var(--qf-radius-pill); color: var(--qf-color-fg-muted); font: var(--qf-font-mono); }
 .rf-set-connection-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--qf-space-2); flex: 0 0 auto; flex-wrap: wrap; }

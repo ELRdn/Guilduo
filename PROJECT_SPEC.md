@@ -113,6 +113,7 @@ flowchart LR
 - Workerの実行配置は任意の`WORKER_PLACEMENT_REGION`（`provider:region`）でAppwriteの保存地域付近へ指定できる。未指定ならCloudflareの既定配置を維持する。配置調整はデータ移行ではなく、認証・保存先endpoint・トランザクション・revision照合を変更しない。対象環境の設定を空にして再配備すると元の配置へ戻せる。
 - Relay Forgeのブラウザ計測は`guilduo_gui_timing`として固定の操作名と経過msのみをローカルconsoleへ出す。保存応答の検証・render後の描画機会までを測り、保存失敗・非表示タブ・破棄済み画面の成功値を記録しない。初期ロードはnavigation開始から、再接続は接続開始から測る。計測専用の外部送信は行わない。
 - 本番の初期接続は、OAuth callbackのセッション交換後、Appwriteのアカウント検証と短命JWT発行を並列で開始する。JWTが先に返ってもアカウント検証の成功前には呼び出し元へ渡さない。検証失敗・サインアウト後の結果は破棄し、未検証のユーザー表示や認証検査の省略で高速化しない。
+- 任意の `APPWRITE_PREPARED_TRANSACTIONS=true` はrevision batchが有効な場合だけ使う。認証済みWeb bootstrapとQuest作成・編集・完了の成功後に、空のAppwrite transactionをWorker環境ごとに最大1件準備する。TTL60秒の最初の30秒だけ利用し、IDを同期的に1回だけ取り出す。状態・ユーザーID・操作を事前保存せず、利用時に本人の最新状態を読み、従来のrevision照合とcommitを行う。準備待ちを他リクエストからawaitせず、未準備・期限切れは通常の開始処理へ戻す。定期補充やブラウザへのtransaction ID公開は行わない。
 
 ### 3.3 プロフィール画像の正本と境界
 
@@ -132,6 +133,7 @@ flowchart LR
 - Agentは自分の担当Questから確認を依頼できる。人の回答は本人のWeb認証を必要とし、Agentや通常のQuest更新で代筆・完了できない。確認先は外部の環境で、回答はテキスト。外部リンクを開くこと自体を確認・承認と判定しない。
 - 作成・回答はdry-runと`expectedUpdatedAt`で現在状態を照合する。保留・再開・既読は確認Questのみを更新する。回答による確認Quest完了、Handoffのaccepted、元Questの完了はそれぞれ別の明示操作とし、親完了・報酬を連鎖させない。
 - 同じrequestKeyの再送は元の依頼を返し、異なる内容への再利用は拒否する。回答済みの同一回答の再送は報酬を再付与しない。再確認は新しいrequestKeyの独立Questとして過去の回答を保持する。
+- Human受信箱は回答開始前に取得した遅延一覧を回答後へ適用しない。dry-run中に画面を破棄した場合は実書込みへ進めず、保存済み回答・未対応件数を古い通信結果で戻さない。
 - Schema 7へ任意フィールドを追加し、既存JSON/gzipを読み続ける。旧クライアントの全状態保存でも、サーバーが保持する依頼主・確認Questを消去/改変させない。API/MCPへ確認依頼の作成・一覧を追加し、回答はWeb用RESTから行う。既存のAgent/OAuth権限分離と保存容量修正を維持する。
 
 ### 4.1 Quest
@@ -196,6 +198,13 @@ local
 
 ## 6. MCP、Skill、Harnessの境界
 
+### Shared MCP callers (2026-10-02)
+
+- An OAuth connection can allow multiple owned active Registry Agents. Settings persists `allowedAgentIds` on the existing connection; migration `0011_shared_mcp_agents.sql` adds the membership column without renaming identifiers or changing Schema 7 state.
+- Every MCP tool accepts optional `actingAgentId`. For a multi-Agent connection, execution requires it; discovery/control tools can inspect the connection without it. One-Agent calls retain their existing behavior. Identity is scoped to the current call, never written into a shared session or inferred from an OpenAI client name/User-Agent.
+- The selected Agent must belong to the owner and the connection allowlist, be active, and use only the intersection of its policy and the original OAuth grant. Missing, invalid, unlisted, revoked and inactive identities fail closed. Human request and Quest requester metadata use that selected identity. Membership changes belong to authenticated Web Settings; `link_agent` cannot overwrite a shared connection.
+- These are caller-declared identities within one authorized connection, not separate credentials or proof of which OpenAI product sent a call. Instructions must choose the known Agent ID and send it on every request. See [shared MCP setup](docs/shared-mcp-agents.md).
+
 Guilduoは**作戦データ・権限・Handoffを管理するControl/Data Plane**、DeepSeek Harness、OpenClaw、Hermes等は**モデル・Tool・Skill・Session・Sandboxを実行するExecution Plane**として扱う。
 
 ### Guilduo側
@@ -233,8 +242,10 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 
 ### Launch behavior and private caching (2026-10-02)
 
+- Quest PATCH and score accept optional `expectedUpdatedAt` in REST/MCP. The shared domain validates it against the latest transactional Quest before changing fields, events or rewards; mismatches return `409 quest_conflict`. Omission preserves existing client behavior. Every domain Quest mutation advances its timestamp, including writes within one clock tick. Relay Forge sends the version it displayed for editing and task actions, retains a conflicting draft and requires a fresh read before further actions. A second completion from a stale screen must not reopen a completed Quest.
 - Relay Forge Quest completion uses the existing score endpoint, preserving canonical rewards and archival rules. Handoff acceptance and Human-review completion remain separate from completion of the source Quest. The UI refreshes canonical Battle state after scoring and rejects older deferred snapshots; a missing session is never replaced with demo data.
 - Editing a Quest preserves its planning state, scheduled date, unchanged assignee/handoff state and zero-minute estimate. Pending Quest and Agent writes cannot be submitted twice or cancelled by closing the editor; failures retain the draft.
+- An uncertain Quest create/edit result (lost response, server failure, or malformed success) holds resubmission. The editable draft stays available for copying; closing the editor refreshes the workspace through reads, without replaying the write. A confirmed 4xx refusal may be corrected and retried; stale versions require a new read. This does not add automatic merging or server-side creation idempotency.
 - The Service Worker bypasses authenticated requests and private API/OAuth/MCP/telemetry paths. Static Privacy, Terms and LP navigation cannot replace the cached application shell. Old caches are invalidated by the v23 upgrade. This does not enable offline private data storage or register a new Service Worker for Relay Forge.
 - `PRIVACY.md` and `TERMS.md` are the content sources for the static `/privacy/` and `/terms/` pages. Local output does not establish production availability, handling of deletion requests or legal acceptance. See `docs/launch-readiness.md`.
 - The official service operator is Radon. Public bug reports go to the existing Guilduo GitHub Issues page; individual inquiries and account/data deletion requests go to `el2radon2official@gmail.com`. Self-hosted instances publish their own operator contact. Policy pages render the canonical documents' HTTPS and mailto links without requiring JavaScript. Publishing this contact does not establish legal review or completion of a deletion request.
@@ -286,6 +297,8 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 | 正本 | source of truth |
 
 ### Relay Forge workspace refresh (2026-10-02)
+
+- Background and explicit reads preserve the current document and screen-region scroll positions, including movement during the request. Mobile pull-to-refresh at the top shares the existing read path, mutation guards, failure recovery and disposal rules; it never reloads the document or replays writes.
 
 - The production Shell refreshes canonical REST snapshots every 30 seconds while visible and on focus, visibility return, online recovery, or explicit retry. It does not upload a whole client state. All Quest pages are read before applying a snapshot.
 - Existing data stays visible during refresh. Shared write guards prevent mutation during refresh, offline state or a failed primary read. Editors and active writes postpone automatic refresh; a detached mount never applies a late response. Selection, drafts, focus and cached authenticated avatar URLs are retained.

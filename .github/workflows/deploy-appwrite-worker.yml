@@ -47,6 +47,7 @@ jobs:
           WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
           WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
           APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
+          APPWRITE_PREPARED_TRANSACTIONS: ${{ vars.APPWRITE_PREPARED_TRANSACTIONS || 'false' }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
       - run: npm run check
       - run: npm test

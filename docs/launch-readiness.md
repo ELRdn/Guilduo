@@ -1,6 +1,82 @@
 # Guilduo ローンチ確認記録
 
-更新: 2026-10-02。対象: 現在の作業ツリー、`0.6.0-beta.8`候補。**ローカル検証済み・本候補未配備・実機受入未完了**。
+更新: 2026-10-02。対象: 現在の作業ツリー、`0.6.0-beta.8`候補。**D1・Worker配備済み／SiteはGitHub Actions配備準備中／実機受入未完了**。
+
+## GitHub Actions経由の本番反映（2026-10-03）
+
+GitHubのproduction環境に既存のAPPWRITE_DEPLOY_KEYを確認。最新mainのQuest参照・依存関係表示・モバイル操作・公開メール保護・upload再試行を維持して今回の変更を統合。専用作業ツリーで453テスト、型検査、デザイン・ブランド検査、契約再生成、ビルド、同期15、静かな更新7、Human Relay34、公開用起動40が成功。元の作業ツリーは保持する。
+
+## 本番反映の進捗（2026-10-02）
+
+ユーザーから本番反映の承認とキャッシュ無効化の連絡を受領。公開HTMLのcache guardも通過し、キャッシュ設定は変更していない。全450テスト・型検査・公開用起動40条件を直前に確認した。
+
+- D1: `0011_shared_mcp_agents.sql`適用成功。既存接続・データを保持する追加列のみ。
+- Worker: version `3bbeadd9-5eaa-4e88-bc62-09165442e30d`を100%配備。直前は`2c686f88-61b6-4a24-a0bf-0798f5ed1843`。本番から読み取った変数・D1/KV/R2・配置を照合し、反映後も一致。`APPWRITE_REVISION_BATCH=true`を維持し、任意の準備transactionは有効化していない。
+- Worker検証: health 200（2.7.0／Schema 7／Agent保存D1）、OAuth metadata 200、未認証REST/MCP 401、App originのCORS 204、実MCPの`get_current_agent_context`で`allowedAgentIds:["codex"]`・`requiresAgentSelection:false`を確認。
+- Site: 現行64 asset＋旧23 assetを含むarchiveを準備し、旧HTML／asset保持検査成功。既存キーでのアップロードは`general_unauthorized_scope`／`sites.write`不足のHTTP 401。Siteの配備・activationは行われていない。`sites.read`も不足し、GitHub production環境に配備用`APPWRITE_DEPLOY_KEY`が存在することを確認。SecretはActions内で利用し、専用ブランチから配備する。
+- モック名: 表示・ID・メール例・履歴を`admin`へ統一。認証失敗→デモをChromeの1440／412pxで確認、関連77テスト成功。旧assetを取り込む前の現行ビルドのテキスト50ファイルに固定個人名なし。互換用に保持した旧assetの内容は変更していないため、過去の配布物からの完全消去を意味しない。
+
+配備証拠は`.qa-artifacts/deploy-2026-10-02/`の`migration.log`、`worker-deploy.log`、`worker-public-checks.json`、`retention.log`、`archive-check.log`、`site-upload.log`。モック確認は`.qa-artifacts/demo-admin-2026-10-02/`。元の作業ツリーは保持し、最新mainへ統合した専用ブランチからGitHub Actions配備を行う。Site反映が終わるまで、以下のUI改善を公開済みとは扱わない。配備再開時は公開manifestとcache guardを再確認し、準備後1時間を超えたarchiveは再生成する。
+
+## 静かな更新・共有MCP・スマホ更新の追加確認（2026-10-02）
+
+実Chromeで30秒の自動再取得時にPCの一覧スクロールが450pxから0へ戻ることを再現した。共通描画処理でページ位置を保持し、再取得時は内部一覧と補足の開閉も保持する。通信開始時と完了時それぞれの現在位置を保存し、待機中に動かした位置を巻き戻さない。既存の再描画構造を維持しており、DOM差分更新への全面置換ではない。
+
+スマホでは最上部から1本指で下へ72px引き、離すとデータだけを再取得する。短い引き・横方向・取消・複数指・入力・モーダル・Networkのパンを除外する。Moreの更新ボタンはキーボードでも操作可能。更新中の重複読取を止め、書込み保留と入力保護を既存の共通ガードで維持する。
+
+共有MCPはSettingsで利用可能なAgentを複数登録し、各呼び出しの`actingAgentId`で担当を選ぶ。1つのAgentだけの既存接続は省略可能。共有接続では実行主体の省略・未許可・無効Agentを拒否し、権限を合算しない。Agentを1人無効にしても他メンバーの接続を失効させない。同じOAuth資格情報からChat／Codex／Dotsを自動認証する仕組みではなく、許可済みIDの明示指定である。[設定手順](shared-mcp-agents.md)を参照。
+
+証拠は`.qa-artifacts/quiet-refresh-2026-10-02/`に保存。開始時の差分は`baseline.patch`、修正前の失敗は`reproduction.log`。ドイツ語320pxの共有カード、引いて更新の表示、更新後の一覧位置をスクリーンショットで目視確認した。
+
+| 検証 | 結果・ログ |
+| --- | --- |
+| 全体テスト | 450成功、失敗・スキップ0。`unit-final.log` |
+| 共有MCP | 実SQLiteの旧接続migrationとmembership保存、同時Actor、ID・所有者・Agent/OAuth権限、依頼元、共有link変更禁止、SDK経路・失効の拒否を確認。`shared-tests-final.log` |
+| 型検査 | 成功。`typecheck-final.log` |
+| デザイン契約・差分 | `design:check`と`git diff --check`成功。`design-final.log` |
+| 静かな更新・Settings・タッチ | 7シナリオ成功。PC／スマホの遅延中の位置保持、3Agent保存・再読込、9言語×3幅、実Chrome CDPタッチ、Moreのキーボード更新を含む。`browser-final.log` |
+| 二端末同期・競合保護 | 最終ガード変更後も15シナリオ成功。`sync-final.log` |
+| 既存Settings操作 | 1440／390px・9言語、取消・保存・削除・回復成功。`settings.log` |
+| 公開用起動・入口 | 起動40／実入口12成功。`launch-final.log`、`entry-final.log`。認証応答は合成、保存は隔離HTTP Worker |
+| 公開用アクセシビリティ | 343条件成功。`accessibility-final.log` |
+| API契約 | 56ツール・60パス・Schema 7を維持。両ファイルの再生成SHA-256一致。`contracts-final.log` |
+| ビルド | 成功。`build.log`。`relayForge-Xb2KRM0z.js`は503.29 kB／gzip 154.49 kB。500 kB超のchunk警告あり。閾値を引き上げて隠していない |
+| Guilduoロードマップ | 親計画・LP-R07のnotes／nextActionを更新し再取得で照合。変更はnotes／nextAction／updatedAtのみ、active／done=falseを保持。`roadmap-updates.json` |
+
+配備順は**D1 migration `0011_shared_mcp_agents.sql` → Worker → Site**。新Workerは追加列を参照するため、下の過去記録のWorker → Site手順だけでは不十分。本変更のcommit・push・配備は行っていない。実Chat／Codex／Dotsで更新されたツール引数を渡せること、物理Pixel 9のタッチとTalkBack、実Google同期、Codex／OpenClawのHuman往復、本番性能・運用は未受入のまま管理する。
+
+## 保存競合・応答喪失の追加確認（2026-10-02）
+
+今回の追加修正は未配備。以前のSettings／Workspace修正の配備記録と、公開Privacy／Termsの最新確認は分けて扱う。開始時の未コミット変更を保持し、commit・push・タグ作成・配備は行っていない。
+
+| 実際に再現した問題 | 修正と再確認 |
+| --- | --- |
+| 二端末で開いた編集から、先に保存された内容を古い入力で上書き | REST/MCPのQuest PATCHとscoreへ任意の`expectedUpdatedAt`を追加。共有ドメインの最新状態と照合し、競合は409。入力とエラーを保持し再送を止め、閉じた後に読取で回復 |
+| 古い画面の「完了」が完了済みQuestを再開 | 表示時の更新日時をscoreへ渡す。実ChromeのPCで完了後、スマホの古い完了は409。報酬・完了を保持し、読取再試行のみで復帰 |
+| 見積2000分が編集保存で1440分へ切り詰められる／UIのタイトル上限160とAPIの80が不一致 | API既存境界のタイトル80文字・見積100000分へ統一。2000分保持とnative入力検証を確認 |
+| Human回答保存後に古い一覧通信が返り、未対応へ戻る | 回答開始前の読取を破棄。HTTP一覧を実際に遅延させて回答後に返し、回答と件数の保持を確認。dry-run中の画面破棄後は実書込みも開始しない |
+| Quest作成は保存済みなのに応答だけ失われ、再送できる | 実WorkerへPOSTを通した後でブラウザ応答を破棄。結果不明時はdraftを残して再送を止める。閉じた後の再読取で保存済み1件を確認し、疑似submitでもPOSTは1回 |
+
+証拠は`.qa-artifacts/launch-2026-10-02-cyan/`へ保存。`conflict-reproduction.log`、`inbox-reproduction.log`、`lost-response-reproduction.log`は修正前の失敗を記録する。競合・結果不明の案内は9言語×320／412／1440pxで確認し、スクリーンショットを目視した。Human Relay検査を既存のCI開発サーバー検査へ追加した。
+
+| 検証 | 今回の結果・ログ |
+| --- | --- |
+| 全体テスト | 448成功、失敗・スキップ0。`unit-final.log` |
+| strict型検査 | 成功。`typecheck-final.log` |
+| デザイン・ビルド | 成功。`design.log`、`build-final.log` |
+| API生成 | 56ツール・60パス・Schema 7を維持。更新・完了の任意入力と409を追加し、再生成のSHA-256一致を確認。`contracts-final.log` |
+| 二端末同期・競合・応答喪失 | 15シナリオ成功。エラー2種類の9言語×3幅も含む。`sync-final.log` |
+| Human Relay | 9言語×3幅を含む33条件成功後、破棄時ガードを加えた7結合条件も成功。`human-relay.log`、`human-relay-dispose.log` |
+| 起動・保存・画像・LP規約 | source55／公開用40条件成功。`launch-source-final.log`、`launch-built.log` |
+| 公開用アプリ入口 | 12シナリオ成功。`entry-built-final.log`。SDK認証応答は合成、データ処理は隔離HTTP Worker |
+| 共通画面・Command | 画面70条件とCommand操作成功。`screens.log`、`command-source.log` |
+| 公開用アクセシビリティ | 9言語で343条件成功。`accessibility-built.log`。新規エラー状態は`sync-final.log`で追加確認 |
+| 公開Privacy／Terms | 実Chrome・JS無効・320／1440pxで本文、運営者、窓口、canonical、横はみ出しなしの4条件成功。`public-policy.json` |
+| Guilduoロードマップ | 既存の親計画・LP-R07のnotes／nextActionを更新し、再取得で一致。変更はnotes／nextAction／updatedAtのみ、active／done=falseを保持。`roadmap-updates.json` |
+
+公開LP／Web App／OAuth metadataは200、未認証MCPは401、healthは2.7.0／Schema 7／56ツール。`www`はENOTFOUND。`public-status.json`と`public-policy.json`が最新の証拠であり、下の以前のfallback記録を更新する。最初のChromeアクセスは一時的な名前解決失敗で、再実行した直接アクセスは成功した。
+
+配備時は**Workerを先に更新し、その後Siteを更新**する。旧Workerは追加フィールドを無視するため、Siteだけ更新しても競合防止は成立しない。旧クライアント向けに更新日時未指定の従来動作を維持し、書込みの自動再送・自動マージ・作成のサーバー冪等化は追加していない。実Google OAuth、物理Pixel 9同期とTalkBack、Codex／OpenClawのHuman往復、本番性能・窓口運用の受入は未完了。
 
 ## 修正と実確認
 
@@ -80,7 +156,7 @@ Human確認とHandoffの外部確認チェックを維持する。プレビュ�
 
 ## 公開URLの読み取り確認
 
-`.qa-artifacts/launch/public-check.json`（2026-10-02 JST）: 公式日英LP／Web App／OAuth metadataは200。MCP healthは2.7.0・Schema 7・56ツール。未認証MCPとAppwrite accountは401。GitHub公開URLは200。`www`はENOTFOUND。Privacy／Termsは200でもtitle/h1が既存Guilduoのfallbackで、ポリシー本文は未公開。
+以前の`.qa-artifacts/launch/public-check.json`（2026-10-02 JST）ではPrivacy／Termsがfallbackだったが、同日後半の最新確認では公開本文を配布している。上記`public-status.json`／`public-policy.json`を現在の判断に使う。公式日英LP／Web App／OAuth metadataは200、MCP healthは2.7.0・Schema 7・56ツール、未認証MCPは401、`www`はENOTFOUND。
 
 ## 公開前に残る受入
 
@@ -189,17 +265,6 @@ Guilduo MCPで本追加結果と次の受入を親計画へ保存し、再取得
 - 証拠: nav-command-{source,built}-final.log、nav-command-tests.log、nav-entry{,-built}.log、nav-launch-built.log、nav-{typecheck,design,build}-final.log。nav-before.jsonとnav-after.json／pngで位置と表示を照合。ブラウザだけで元CSSへ戻したnav-regression.jsonでは252pxのずれが再発する。
 - LANの同じ候補URLで再読込後のPixel 9確認を依頼済み。物理端末での修正受入は回答待ち。実認証・本番同期・外部Agent・読み上げ・本番性能と本候補配備は引き続き未完了。
 - 共通navの影響は公開用の主要画面70条件でも成功（nav-screens-built.log）。検査の初回は公開用パスに未対応で開発URLのHTTPエラーになったため、既存の--built指定で正しいpathを選ぶ1行を追加して再実行した。最終型と差分検査も成功。Guilduo MCPの親計画・LP-R07はnotesとnextActionを更新し、再取得で変更がnotes／nextAction／updatedAtのみ、active・done=false・完了条件等の保持を確認した。
-
-
-## commit・push・配備の依頼と統合候補（2026-10-02）
-
-- ひろなおからcommit・push・本番反映の依頼を受領。最新main 0729f43070ce06bc0eeb803401af0df78b2aeca4のモバイル・実データ・配備chunk retry修正を独立worktreeへ統合。未公開のprepared transactionコード・テスト・設定は元の作業ツリーへ保持し、公開対象から除外。
-- 全439テスト・型・デザイン・ビルド成功。従来の444結果は元の作業ツリーの記録で、transaction関連を除外し最新mainの追加テストを含む今回の公開候補とは件数が異なる。
-- 公式rootとcompatibility pathのHTMLキャッシュはEXPIRED／HITで有効。既存Cloudflare API tokenはzoneの参照が可能だがrulesetsの読み取りはHTTP403。文書どおり両HTMLルール停止とDYNAMIC／BYPASS確認が配備前に必要。retention manifestはHTTP200 application/jsonを確認。
-
-
-- PR #46をmain 5df20a938133e3cd034fa0e0465c792db56c87abへ統合。PR CI36967142686・main CI36967432960成功、Site配備36967433844成功。両HTMLキャッシュルールはひろなおが停止し、DYNAMICを確認。公開候補のCommand122・画面70・入口12・launch40・accessibility343成功。
-- 配備後の実URL検査で、Cloudflare email obfuscationが公開メールをdata-cfemailとemail-protectionへ変換し、JavaScriptなしのmailtoが失われることを確認。静的policy本文へCloudflare標準のemail_offコメントを加え、built launch検査でも除外コメントが保たれることを検査する。本番の窓口再確認と新旧GUI起動、キャッシュ復帰は再配備後に続行する。
 
 
 ## Settings権限表示と無効MCP削除の本番配備（2026-10-02）

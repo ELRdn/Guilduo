@@ -1,5 +1,9 @@
 import type { HumanRequest, QuestRequester } from "../types/questforge.ts";
 
+export function nextQuestTimestamp(previous: string): string {
+  return new Date(Math.max(Date.now(), (Date.parse(previous) || 0) + 1)).toISOString();
+}
+
 export function normalizeRequester(value: unknown): QuestRequester | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const actor = value as Record<string, unknown>;

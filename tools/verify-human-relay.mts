@@ -133,9 +133,11 @@ try {
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Settings", exact: true }).first().click();
     const onboarding = page.locator(".rf-relay-onboarding");
-    assert.match(await onboarding.textContent() || "", /My Review Agent/);
-    assert.match(await onboarding.textContent() || "", /quests:write/);
-    assert.doesNotMatch(await onboarding.textContent() || "", /agents:write/);
+    assert.ok((await onboarding.textContent() || "").includes(relayText("registerAgent", "ja")));
+    const connection = page.locator('.rf-set-connection-card[data-linked="true"]');
+    assert.match(await connection.textContent() || "", /My Review Agent/);
+    assert.match(await connection.textContent() || "", /quests:write/);
+    assert.doesNotMatch(await connection.textContent() || "", /agents:write/);
     await onboarding.screenshot({ path: join(output, "integrated-onboarding.png") });
     await page.getByRole("button", { name: "Skills", exact: true }).first().click();
     await page.getByRole("searchbox", { name: "Skillsを検索" }).fill("request_human_review");
@@ -148,12 +150,57 @@ try {
     await page.locator(`[data-request-id="${second.quest.id}"] summary`).click();
     await widthCheck(page);
     await page.getByRole("checkbox", { name: relayText("checked", "ja"), exact: true }).check();
-    await page.getByRole("button", { name: relayText("approve", "ja"), exact: true }).click();
-    await notice(page).filter({ hasText: relayText("saved", "ja") }).waitFor();
+    let releaseRead!: () => void;
+    let readStarted!: () => void;
+    const readGate = new Promise<void>(resolve => { releaseRead = resolve; });
+    const readReady = new Promise<void>(resolve => { readStarted = resolve; });
+    await page.route(`${fixture.baseUrl}/v1/human-requests?*`, async route => {
+      const response = await route.fetch();
+      readStarted();
+      await readGate;
+      await route.fulfill({ response });
+    });
+    try {
+      await page.getByRole("button", { name: relayText("refresh", "ja"), exact: true }).click();
+      await readReady;
+      await page.getByRole("button", { name: relayText("approve", "ja"), exact: true }).click();
+      await notice(page).filter({ hasText: relayText("saved", "ja") }).waitFor();
+    } finally { releaseRead(); }
+    await page.waitForFunction("!document.querySelector('.rf-human-inbox > div button').disabled");
+    assert.equal(await page.locator(`[data-request-id="${second.quest.id}"]`).count(), 0, "A delayed pre-answer list cannot return answered work to the pending inbox");
+    await page.unroute(`${fixture.baseUrl}/v1/human-requests?*`);
+    results.push("A delayed inbox read cannot overwrite a saved Human answer or its pending count");
     await page.screenshot({ path: join(output, "integrated-mobile.png") });
     assert.equal((await fixture.mcp("list_human_requests", { status: "answered" })).quests.length, 2);
     results.push("412px production UI saves a no-change response through HTTP and MCP reads it back");
     results.push("HTTP Worker + production UI + MCP: Agent request, Human feedback, Agent readback, reload, independent original completion");
+
+    const abandoned = await fixture.receive("abandoned-preview");
+    await page.reload();
+    await page.locator(".rf-human-inbox-trigger:visible").first().click();
+    await page.locator(`[data-request-id="${abandoned.quest.id}"] summary`).click();
+    await page.getByRole("checkbox", { name:relayText("checked", "ja"), exact:true }).check();
+    let releasePreview!: () => void;
+    let previewStarted!: () => void;
+    const previewGate = new Promise<void>(resolve => { releasePreview = resolve; });
+    const previewReady = new Promise<void>(resolve => { previewStarted = resolve; });
+    let executed = 0;
+    await page.route(`${fixture.baseUrl}/v1/quests/${abandoned.quest.id}/review-response`, async route => {
+      if (route.request().postDataJSON().dryRun === false) executed++;
+      const response = await route.fetch();
+      previewStarted();
+      await previewGate;
+      await route.fulfill({ response });
+    });
+    try {
+      await page.getByRole("button", { name:relayText("approve", "ja"), exact:true }).click();
+      await previewReady;
+      await page.evaluate("window.dispatchEvent(new Event('test:unmount'))");
+    } finally { releasePreview(); }
+    await page.waitForLoadState("networkidle");
+    assert.equal(executed, 0, "Disposing the workspace during dry-run must not start a real answer");
+    assert.equal((await fixture.web(`/v1/quests/${abandoned.quest.id}`)).quest.humanRequest?.status, "pending");
+    results.push("Disposing the workspace during Human-response preview never starts an answer write");
   } finally { await fixture.close(); }
   assert.deepEqual(errors, []);
   await writeFile(join(output, "results.json"), JSON.stringify({ results, errors, note: "Local browser/domain fixture. Does not certify physical Pixel 9 or live Codex/OpenClaw clients." }, null, 2));
