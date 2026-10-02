@@ -200,3 +200,13 @@ Guilduo MCPで本追加結果と次の受入を親計画へ保存し、再取得
 
 - PR #46をmain 5df20a938133e3cd034fa0e0465c792db56c87abへ統合。PR CI36967142686・main CI36967432960成功、Site配備36967433844成功。両HTMLキャッシュルールはひろなおが停止し、DYNAMICを確認。公開候補のCommand122・画面70・入口12・launch40・accessibility343成功。
 - 配備後の実URL検査で、Cloudflare email obfuscationが公開メールをdata-cfemailとemail-protectionへ変換し、JavaScriptなしのmailtoが失われることを確認。静的policy本文へCloudflare標準のemail_offコメントを加え、built launch検査でも除外コメントが保たれることを検査する。本番の窓口再確認と新旧GUI起動、キャッシュ復帰は再配備後に続行する。
+
+
+## Settings権限表示と無効MCP削除の本番配備（2026-10-02）
+
+- `0936966`でSettingsの権限を接続ごとのQuest閲覧・更新可否へ整理。技術スコープと接続IDはnative detailsへ折りたたみ、無効MCPの削除を既存の接続解除・履歴削除APIへ接続した。AgentとQuestを保持し、不確定な失敗後は一覧の読取再試行を案内する。
+- 全441テスト・型検査・デザイン検査・ビルド・launch40成功。1440px/390px・9言語・キーボード開閉・取消・旧リンク削除・再取得失敗・保存保持を実Chromeと隔離Workerで確認。Linuxの検査期待値だけがOS言語へ依存する問題を`085f747`で修正し、CI run `36988262174`は成功。
+- ひろなおのGOとキャッシュ停止確認後、公開HTMLのDYNAMICを確認。Site配備run `36990716820`は`085f7479b6f18b94104bfe9ce65c6e914cae96dd`で成功。正式rootと互換pathは新`relayForge-BY0c1eq4.js`を配信している。
+- 配備前のHTMLと旧画面検証用HTMLのSHA-256を照合。旧asset74件のMIME・サイズ・SHA-256一致、新旧画面の起動とナビ、正式rootのサインイン画面、4つのPrivacy/Terms公開URLを確認。証拠: `.qa-artifacts/settings-live-release-results.json`、`settings-live-release.log`、`settings-deploy.log`。
+- 実際に配信されたHTML/JSを使った1440px/390pxのSettings検査も成功。合成Appwrite認証と隔離ローカルWorkerだけを使い、再接続なし削除・Agent/Quest保持・再読込を確認した。本番個人データの削除や実Google認証の追加受入ではない。証拠: 元checkoutの`.qa-artifacts/published-settings/results.json`と`1440.png`、`390.png`。
+- キャッシュ停止確認から240秒以上経過し、新旧起動と旧asset保持を確認したため、両キャッシュルールを設定値を変えず復帰する操作を依頼済み。復帰と最終配信確認は回答待ち。
