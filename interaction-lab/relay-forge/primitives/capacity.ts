@@ -9,6 +9,7 @@
 
 import { type CapacitySlot } from "../model.ts";
 import { el } from "./dom.ts";
+import { relayText } from "../relay-copy.ts";
 
 export interface CapacityBandOptions {
   readonly onSelect: (slot: CapacitySlot) => void;
@@ -22,7 +23,7 @@ export function capacityBand(
 ): HTMLElement {
   const band = el(
     "div",
-    { class: "rf-capacity", role: "group", "aria-label": "Capacity" },
+    { class: "rf-capacity", role: "group", "aria-label": relayText("commandCapacity") },
     ...slots.map((slot) => {
       const button = el(
         "button",

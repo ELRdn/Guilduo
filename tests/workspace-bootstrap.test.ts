@@ -81,3 +81,32 @@ test("client falls back only for an older Worker and retains optional panel erro
     await assert.rejects(repo.loadSnapshot({ deferPanels: true }), { code: "invalid_workspace_bootstrap" });
   } finally { globalThis.fetch = original; }
 });
+
+test("bootstrap and legacy snapshots read every Quest page and never turn malformed pages into empty data", async () => {
+  const original = globalThis.fetch;
+  const repo = new QuestForgeRepository({ baseUrl:"https://worker.test", getToken:async () => "web" });
+  try {
+    for (const legacy of [false, true]) {
+      const cursors: string[] = [];
+      globalThis.fetch = async input => {
+        const url = new URL(String(input));
+        if (url.pathname === "/v1/workspace/bootstrap" && legacy) return Response.json({}, { status:404 });
+        if (url.pathname === "/v1/workspace/bootstrap" || url.pathname === "/v1/quests") {
+          const cursor = url.searchParams.get("cursor") || "";
+          cursors.push(cursor);
+          return Response.json({ quests:Array.from({ length:cursor ? 7 : 200 }, (_, i) => ({ id:`q-${cursor ? 200+i : i}` })), total:207, nextCursor:cursor ? null : "next page", profile:null, agents:[], panelErrors:[] });
+        }
+        return Response.json({});
+      };
+      const snapshot = await repo.loadSnapshot({ deferPanels:true });
+      assert.equal(snapshot.quests.length, 207);
+      assert.equal(snapshot.total, 207);
+      assert.deepEqual(cursors, ["", "next page"]);
+      assert.equal((await snapshot.loadDeferred!()).quests.length, 207);
+    }
+    globalThis.fetch = async () => Response.json({ quests:[{ id:"repeat" }], nextCursor:"again" });
+    await assert.rejects(repo.listAllQuests(), { code:"invalid_quest_page" });
+    globalThis.fetch = async () => Response.json({});
+    await assert.rejects(repo.loadSnapshot(), { code:"invalid_quest_page" });
+  } finally { globalThis.fetch = original; }
+});

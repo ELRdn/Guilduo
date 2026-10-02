@@ -11,9 +11,10 @@
  */
 
 import { chromium, type Page } from "playwright-core";
+import { relayText } from "../interaction-lab/relay-forge/relay-copy.ts";
 
 const baseUrl = process.argv[2] ?? "http://localhost:5250";
-const pagePath = "/interaction-lab/relay-forge/index.html";
+const pagePath = process.argv.includes("--built") ? "/next/relay-forge/" : "/interaction-lab/relay-forge/index.html";
 
 const chromePath = process.env.QF_CHROME_PATH
   ?? (process.platform === "win32"
@@ -327,6 +328,25 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     JSON.stringify(chainWalk),
   );
 
+  await page.locator('[data-network-control="networkFit"]').click();
+  const actorNode = page.locator('.rf-n-node[data-kind="actor"]').first();
+  const networkActorId = await actorNode.getAttribute('data-node-id');
+  await actorNode.click();
+  await page.locator('.rf-n-open').click();
+  check('Network Actor opens its exact Party identity', await page.locator('.rf-p-row[data-selected="true"]').getAttribute('data-actor-id') === networkActorId);
+  await navigate(page, 'network');
+  await page.locator('.rf-n-back').click();
+  const restoredQuestId = await page.locator('.rf-n-node[data-focused="true"]').getAttribute('data-node-id');
+  await navigate(page, 'quests');
+  check('Network Back updates the shared Quest selection', await page.locator('.rf-q-row[data-selected="true"]').getAttribute('data-quest-id') === restoredQuestId);
+  await navigate(page, 'network');
+  await page.locator('[data-network-control="networkFit"]').click();
+  const connectionNode = page.locator('.rf-n-node[data-kind="connection"]').first();
+  const networkConnectionId = await connectionNode.getAttribute('data-node-id');
+  await connectionNode.click();
+  await page.locator('.rf-n-open').click();
+  check('Network integration opens its exact Connection record', await page.locator('.rf-c-row[data-selected="true"]').getAttribute('data-connection-id') === networkConnectionId);
+
   /* ---------------- Party ---------------- */
 
   await navigate(page, "party");
@@ -447,7 +467,7 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
   })()`) as { deltas: string[]; note: string; executeEnabled: boolean };
   check(
     "Battle: the preview states every change and says nothing has been written yet",
-    previewCopy.deltas.length === 4 && previewCopy.note.includes("まだ何も書き込まれていません") && previewCopy.executeEnabled,
+    previewCopy.deltas.length === 4 && previewCopy.note === relayText("battlePreviewOnly", "ja") && previewCopy.executeEnabled,
     JSON.stringify(previewCopy),
   );
 
@@ -516,7 +536,7 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     var rows = [].slice.call(document.querySelectorAll(".rf-c-row"));
     var connected = rows.filter(function (r) { return r.getAttribute("data-health") === "connected"; })[0];
     if (connected !== undefined) connected.click();
-    var unavailable = (document.querySelector(".rf-unavailable") || {}).textContent || "";
+    var unavailable = [].slice.call(document.querySelectorAll(".rf-c-detail-note")).map(function (el) { return el.textContent; }).join(" ");
     return {
       scopes: document.querySelectorAll(".rf-c-scope").length,
       unavailable: unavailable,
@@ -533,7 +553,7 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
 
   const syncGate = await page.evaluate(`(function () {
     var buttons = [].slice.call(document.querySelectorAll(".rf-c-actions button"));
-    var run = buttons.filter(function (b) { return b.textContent.indexOf("同期を実行") !== -1; })[0];
+    var run = document.querySelector('[data-connection-action="sync"]');
     return { runPresent: run !== undefined, runDisabled: run === undefined || run.disabled };
   })()`) as { runPresent: boolean; runDisabled: boolean };
   check(
@@ -546,7 +566,7 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
   await page.waitForSelector('.rf-c-result[data-tone="preview"]');
   const afterPreview = await page.evaluate(`(function () {
     var buttons = [].slice.call(document.querySelectorAll(".rf-c-actions button"));
-    var run = buttons.filter(function (b) { return b.textContent.indexOf("同期を実行") !== -1; })[0];
+    var run = document.querySelector('[data-connection-action="sync"]');
     return {
       counts: (document.querySelector(".rf-c-preview-list") || {}).textContent || "",
       note: (document.querySelector(".rf-c-result-note") || {}).textContent || "",
@@ -555,7 +575,7 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
   })()`) as { counts: string; note: string; runEnabled: boolean };
   check(
     "Connections: the preview reports counts and says nothing was written",
-    afterPreview.counts.includes("取り込み") && afterPreview.note.includes("まだ何も書き込まれていません") && afterPreview.runEnabled,
+    afterPreview.counts.includes("新規") && afterPreview.note.includes("まだ書き込んでいません") && afterPreview.runEnabled,
     JSON.stringify(afterPreview),
   );
 
@@ -567,7 +587,7 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     return {
       impact: impact,
       namesQuests: impact.some(function (t) { return t.indexOf("Quest") !== -1; }),
-      saysNotDeleted: impact.some(function (t) { return t.indexOf("削除されません") !== -1; }),
+      saysNotDeleted: impact.some(function (t) { return t.indexOf("Questは削除しません") !== -1; }),
       confirmFocused: active !== null && active.className.indexOf("rf-danger-button") !== -1
     };
   })()`) as Record<string, unknown>;
@@ -621,7 +641,7 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     JSON.stringify(skillsFrame),
   );
 
-  const skillsExpandBefore = await page.locator('.rf-skills-group[data-group="agent-relay"] .rf-skills-tool-row').count();
+  const skillsExpandBefore = await page.locator('.rf-skills-group[data-group="agent-relay"] .rf-skills-tool-list:not([hidden]) .rf-skills-tool-row').count();
   await page.locator('.rf-skills-group[data-group="agent-relay"] .rf-skills-group-toggle').click();
   await page.waitForTimeout(60);
   const skillsExpand = await page.evaluate(`(function () {
@@ -662,14 +682,14 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
   })()`) as { empty: string; groups: number };
   check(
     "Skills: an unconnected MCP server has an explicit empty state, not a fake tool list",
-    skillsUnconnected.empty.includes("MCP server未接続") && skillsUnconnected.groups === 0,
+    skillsUnconnected.empty.includes("MCP接続先がありません") && skillsUnconnected.groups === 0,
     JSON.stringify(skillsUnconnected),
   );
 
   await goto(page, "empty");
   await navigate(page, "skills");
   const skillsEmpty = await page.evaluate(`(document.querySelector(".rf-screen-empty") || {}).textContent || ""`) as string;
-  check("Skills: zero tools has a useful empty state", skillsEmpty.includes("利用できるMCP Toolはまだありません"), skillsEmpty);
+  check("Skills: zero tools has a useful empty state", skillsEmpty.includes("利用できるMCPツールはまだありません"), skillsEmpty);
 
   await goto(page, "error");
   await navigate(page, "skills");

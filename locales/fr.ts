@@ -1,4 +1,5 @@
 export default Object.freeze({
+  "relay.count": "{count, plural, one {# élément} other {# éléments}}",
   "locale.label": "Langue",
   "nav.tasks": "Quêtes",
   "nav.bosses": "Bosses",

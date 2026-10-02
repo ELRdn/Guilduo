@@ -2,21 +2,15 @@
  * Bottom sheet — the mobile overlay contract (brief B3).
  *
  * A sheet is a modal surface, so it owns the full contract rather than just a
- * drag handle: an explicit close button, Escape, a focus trap, focus return to
- * the trigger, `aria-modal`, and a scrim that dismisses. Nothing here depends
+ * drag handle: a native modal dialog, an explicit close button, Escape, focus
+ * return to the trigger, and a scrim that dismisses. Nothing here depends
  * on a gesture, because a gesture cannot be reached from a keyboard.
  */
 
 import { el } from "./dom.ts";
+import { relayText } from "../relay-copy.ts";
 
-const FOCUSABLE = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "textarea:not([disabled])",
-  "select:not([disabled])",
-  '[tabindex]:not([tabindex="-1"])',
-].join(",");
+const FOCUSABLE = "a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex='-1'])";
 
 export interface SheetOptions {
   readonly title: string;
@@ -30,7 +24,7 @@ export interface SheetOptions {
 
 export interface SheetHandle {
   readonly element: HTMLElement;
-  /** Detaches the document-level key handler. Call before removing the sheet. */
+  /** Closes the native modal. Call before removing the sheet. */
   readonly release: () => void;
 }
 
@@ -39,8 +33,8 @@ export function bottomSheet(options: SheetOptions, ...content: (Node | null)[]):
 
   const close = el(
     "button",
-    { type: "button", class: "rf-icon-button rf-sheet-close", title: "閉じる" },
-    el("span", { class: "rf-visually-hidden" }, "閉じる"),
+    { type: "button", class: "rf-icon-button rf-sheet-close", title: relayText("close") },
+    el("span", { class: "rf-visually-hidden" }, relayText("close")),
     el("span", { class: "rf-close-mark", "aria-hidden": "true" }),
   );
 
@@ -48,9 +42,6 @@ export function bottomSheet(options: SheetOptions, ...content: (Node | null)[]):
     "div",
     {
       class: "rf-sheet-panel",
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": titleId,
     },
     el(
       "header",
@@ -63,13 +54,13 @@ export function bottomSheet(options: SheetOptions, ...content: (Node | null)[]):
   );
 
   const scrim = el("div", { class: "rf-sheet-scrim" });
-  const element = el("div", { class: "rf-sheet" }, scrim, panel);
+  const element = el("dialog", { class: "rf-sheet", "aria-modal": "true", "aria-labelledby": titleId }, scrim, panel);
 
   let released = false;
   const finish = (): void => {
     if (released) return;
     released = true;
-    document.removeEventListener("keydown", onKeyDown, true);
+    if (element.open) element.close();
     options.onClose();
     // The panel is detached inside onClose, so restore focus once the removal
     // has settled; focusing while the active element is still inside a node
@@ -77,44 +68,35 @@ export function bottomSheet(options: SheetOptions, ...content: (Node | null)[]):
     queueMicrotask(() => options.returnFocusTo()?.focus());
   };
 
-  function onKeyDown(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      finish();
-      return;
-    }
+  close.addEventListener("click", finish);
+  scrim.addEventListener("click", finish);
+  element.addEventListener("cancel", event => { event.preventDefault(); finish(); });
+  element.addEventListener("close", finish);
+  // Native modality isolates the page; keep Tab from moving into browser chrome.
+  element.addEventListener("keydown", event => {
     if (event.key !== "Tab") return;
-    // Focus trap: Tab cycles inside the panel and never escapes to the page.
-    const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)]
-      .filter((item) => item.offsetParent !== null || item === document.activeElement);
-    if (items.length === 0) return;
+    const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(item => item.offsetParent !== null || item === document.activeElement);
     const first = items[0];
     const last = items[items.length - 1];
-    const active = document.activeElement;
-    if (event.shiftKey && active === first) {
+    if (first && event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && active === last) {
+    } else if (last && !event.shiftKey && document.activeElement === last) {
       event.preventDefault();
       first.focus();
     }
-  }
+  });
 
-  close.addEventListener("click", finish);
-  scrim.addEventListener("click", finish);
-  document.addEventListener("keydown", onKeyDown, true);
-
-  // Opening moves focus into the sheet so the trap has somewhere to start.
+  // Native modality moves focus inside and excludes the background.
   queueMicrotask(() => {
-    const target = panel.querySelector<HTMLElement>(FOCUSABLE) ?? panel;
-    target.focus();
+    if (!released && element.isConnected) element.showModal();
   });
 
   return {
     element,
     release: () => {
       released = true;
-      document.removeEventListener("keydown", onKeyDown, true);
+      if (element.open) element.close();
     },
   };
 }

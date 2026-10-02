@@ -7,6 +7,8 @@
 
 import { questRef } from "../model.ts";
 import type { ScreenNotice } from "./screen-state.ts";
+import { relayText } from "../relay-copy.ts";
+import { t } from "../../../i18n.ts";
 
 /* ------------------------------------------------------------------ *
  * ViewModel
@@ -38,7 +40,7 @@ export interface AffectedQuest {
 export interface ConnectionView {
   readonly id: string;
   readonly name: string;
-  /** oauth2 / personal_api_key / basic_api_token, verbatim from the adapter. */
+  /** Authentication label, verbatim from the gateway or fixture adapter. */
   readonly auth: string;
   readonly health: ConnectionHealth;
   /** One sentence: what is true about this connection right now. */
@@ -63,6 +65,7 @@ export interface ConnectionsModel {
   readonly connections: readonly ConnectionView[];
   readonly notices: readonly ScreenNotice[];
   readonly writeHeld: boolean;
+  readonly refreshFailed: boolean;
   /** True when the gateway cannot report the granted scope set. */
   readonly grantedScopesUnavailable: boolean;
 }
@@ -72,12 +75,12 @@ export interface ConnectionsModel {
  * ------------------------------------------------------------------ */
 
 export const HEALTH_CHIP: Readonly<Record<ConnectionHealth, { label: string; mark: string; tone: "done" | "waiting" | "blocked" | "danger" | "neutral" | "review" }>> = {
-  connected: { label: "接続中", mark: "==", tone: "done" },
-  degraded: { label: "劣化", mark: "~~", tone: "waiting" },
-  expired: { label: "失効", mark: "!!", tone: "danger" },
-  permission_required: { label: "権限が必要", mark: "!?", tone: "review" },
-  not_connected: { label: "未接続", mark: "--", tone: "neutral" },
-  unavailable: { label: "提供前", mark: "..", tone: "neutral" },
+  connected: { get label() { return t("integration.status.connected"); }, mark: "==", tone: "done" },
+  degraded: { get label() { return relayText("connectionDegraded"); }, mark: "~~", tone: "waiting" },
+  expired: { get label() { return t("integration.status.reconnect_required"); }, mark: "!!", tone: "danger" },
+  permission_required: { get label() { return t("integration.status.admin_setup_required"); }, mark: "!?", tone: "review" },
+  not_connected: { get label() { return relayText("unconnected"); }, mark: "--", tone: "neutral" },
+  unavailable: { get label() { return t("integration.status.planned"); }, mark: "..", tone: "neutral" },
 };
 
 /** Health ordering: what needs attention first. */
@@ -110,6 +113,7 @@ export interface QuestLinkRecord {
   readonly title: string;
   /** `externalLinks[].service` values on this Quest. */
   readonly services: readonly string[];
+  readonly lifecycleState?: string;
 }
 
 export interface AgentScopeRecord {
@@ -126,6 +130,7 @@ export interface NormalizeConnectionsOptions {
   readonly agents: readonly AgentScopeRecord[];
   readonly notices?: readonly ScreenNotice[];
   readonly writeHeld?: boolean;
+  readonly refreshFailed?: boolean;
 }
 
 function healthOf(record: IntegrationRecord): ConnectionHealth {
@@ -138,20 +143,20 @@ function healthOf(record: IntegrationRecord): ConnectionHealth {
   return "not_connected";
 }
 
-function summaryOf(health: ConnectionHealth, record: IntegrationRecord): string {
+function summaryOf(health: ConnectionHealth): string {
   switch (health) {
     case "connected":
-      return "正常に同期しています。";
+      return relayText("connectionHealthy");
     case "degraded":
-      return "接続は生きていますが、直近の同期で問題が出ています。";
+      return relayText("connectionDegradedHint");
     case "expired":
-      return "アクセス権が失効しました。再接続するまで同期は止まります。";
+      return relayText("connectionExpiredHint");
     case "permission_required":
-      return "この環境ではプロバイダ設定が未完了です。管理者の設定が必要です。";
+      return t("integration.setup.admin");
     case "not_connected":
-      return "まだ接続していません。接続するとQuestの取り込みが始まります。";
+      return relayText("connectionDisconnectedHint");
     default:
-      return `${record.name} はまだ提供されていません。`;
+      return t("integration.preview.planned");
   }
 }
 
@@ -159,7 +164,7 @@ export function normalizeConnectionsModel(options: NormalizeConnectionsOptions):
   const connections = options.integrations.map((record): ConnectionView => {
     const health = healthOf(record);
     const affectedQuests = options.questLinks
-      .filter((link) => link.services.includes(record.id))
+      .filter((link) => link.lifecycleState !== "archived" && link.services.includes(record.id))
       .map((link) => ({ id: link.id, ref: questRef(link.id), title: link.title }));
     const affectedAgents = options.agents
       .filter((agent) => agent.allowedScopes.some((scope) => scope.startsWith("integrations:")))
@@ -169,7 +174,7 @@ export function normalizeConnectionsModel(options: NormalizeConnectionsOptions):
       name: record.name,
       auth: record.auth,
       health,
-      summary: summaryOf(health, record),
+      get summary() { return summaryOf(health); },
       lastError: record.account?.lastError ?? "",
       lastSyncedAt: record.account?.lastSyncedAt ?? "",
       requiredScopes: options.requiredScopes[record.id] ?? [],
@@ -178,13 +183,12 @@ export function normalizeConnectionsModel(options: NormalizeConnectionsOptions):
       affectedAgents,
       accountLabel: record.account?.providerAccountName ?? "",
       // Only a live connection can be synced; only a real one can be revoked.
-      canSync: health === "connected" || health === "degraded",
-      canReconnect: health === "expired" || health === "not_connected",
+      canSync: (health === "connected" || health === "degraded") && ["google-calendar", "google-tasks", "notion"].includes(record.id),
+      canReconnect: (health === "expired" || health === "not_connected") && ["google-calendar", "google-tasks", "notion"].includes(record.id),
       canDisconnect: health === "connected" || health === "degraded" || health === "expired",
     };
   });
 
-  connections.slice().sort();
   const sorted = [...connections].sort((left, right) => {
     const byHealth = HEALTH_WEIGHT[left.health] - HEALTH_WEIGHT[right.health];
     if (byHealth !== 0) return byHealth;
@@ -195,6 +199,7 @@ export function normalizeConnectionsModel(options: NormalizeConnectionsOptions):
     connections: sorted,
     notices: options.notices ?? [],
     writeHeld: options.writeHeld ?? false,
+    refreshFailed: options.refreshFailed ?? false,
     // The gateway has no field for the granted set; this is not a load failure.
     grantedScopesUnavailable: true,
   };
@@ -209,7 +214,7 @@ export interface ConnectionActionResult {
   readonly code: string;
   readonly message: string;
   /** For a sync preview: what the run would change. Counts only. */
-  readonly preview?: { readonly imported: number; readonly updated: number; readonly skipped: number };
+  readonly preview?: { readonly imported: number; readonly updated: number; readonly skipped: number; readonly conflicts?: number };
 }
 
 export interface ConnectionsPort {
@@ -221,6 +226,12 @@ export interface ConnectionsPort {
   reconnect(id: string): Promise<ConnectionActionResult>;
   /** `POST /v1/integrations/{id}/disconnect`. Revokes, keeps the Quests. */
   disconnect(id: string): Promise<ConnectionActionResult>;
+  /** Reload after a confirmed mutation without repeating that mutation. */
+  refresh?(): Promise<ConnectionActionResult>;
+}
+
+export function connectionSyncDirection(id: string): "import" | "export" | "bidirectional" {
+  return id === "notion" ? "export" : id === "google-tasks" ? "bidirectional" : "import";
 }
 
 /** Health values that require a human to do something. Pure, so it is shared. */

@@ -612,3 +612,5 @@ error
 ## 17. Official LP promotion
 
 2026-09-06: LPv2.1の承認済み体験・モーションを公式`/lp/`と`/lp/en/`へ採用する。14節の旧スクリーンショット中心の仕様を、この公式LPでは15〜16節の体験仕様で置き換える。日本語canonicalは`https://guilduo.com/`、英語は`https://guilduo.com/lp/en/`。既存のhost rewriteとWeb Appは維持する。LPv2とLPv2.1の比較URLも維持し、検索エンジンにはnoindexを指定する。
+
+- `/privacy/`と`/terms/`は正本文書から静的生成し、運営者・個別窓口・バグ報告先もJavaScriptなしで読める。本文中のリンクは下線で操作可能と示し、メールアドレスと長いURLは320pxでも折り返す。既存LPのパレットと文字・余白を継承する。

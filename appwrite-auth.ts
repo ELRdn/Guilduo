@@ -39,8 +39,9 @@ function assertConfigured(): void {
 }
 
 function normalizeAccount(account: AppwriteAccount): GuilduoUser {
+  if (!account || typeof account.$id !== "string" || account.$id.trim() === "") throw new Error("Invalid Appwrite account identity");
   const avatar = typeof account.prefs?.avatarUrl === "string" ? account.prefs.avatarUrl : "";
-  return { uid: String(account.$id || ""), email: String(account.email || ""), displayName: String(account.name || account.email || ""), ...(avatar ? { photoURL: avatar } : {}) };
+  return { uid: account.$id, email: String(account.email || ""), displayName: String(account.name || account.email || ""), ...(avatar ? { photoURL: avatar } : {}) };
 }
 
 function isUnauthorized(error: unknown): boolean {

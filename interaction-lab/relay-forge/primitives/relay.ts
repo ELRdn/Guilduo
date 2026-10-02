@@ -9,9 +9,11 @@
  * The rendered segment length is 28px minimum, matching section 14.4.
  */
 
-import { type Actor, type ConnectorState, type RelaySpine } from "../model.ts";
+import { type Actor, type ConnectorState, type RelaySpine, connectorLabel } from "../model.ts";
 import { actorNode } from "./actor.ts";
 import { el, svg } from "./dom.ts";
+import { relayText } from "../relay-copy.ts";
+import { countLabel } from "../screens/screen-state.ts";
 
 /** Connector artwork is drawn in a 40x28 box; the line runs on the vertical mid. */
 function connectorGraphic(state: ConnectorState): SVGElement {
@@ -66,16 +68,6 @@ function connectorGraphic(state: ConnectorState): SVGElement {
   );
 }
 
-const CONNECTOR_DESCRIPTION: Readonly<Record<ConnectorState, string>> = {
-  completed: "handed off",
-  active: "executing",
-  waiting: "waiting",
-  review: "review required",
-  blocked: "blocked",
-  pending: "next",
-  automated: "automated",
-};
-
 export interface RelaySpineOptions {
   /** Compact mode shows previous, current and next only (section 15.4). */
   readonly compact?: boolean;
@@ -95,7 +87,7 @@ export function relaySpine(
   if (spine.hiddenBefore > 0) {
     parts.push(el(
       "span",
-      { class: "rf-relay-hidden", title: `${spine.hiddenBefore} earlier legs` },
+      { class: "rf-relay-hidden", title: `${relayText("commandHistory")} · ${countLabel(spine.hiddenBefore)}` },
       `+${spine.hiddenBefore}`,
     ));
   }
@@ -134,10 +126,10 @@ export function relaySpine(
         {
           class: "rf-relay-connector",
           "data-connector": leg.connector,
-          title: leg.connectorNote ?? CONNECTOR_DESCRIPTION[leg.connector],
+          title: leg.connectorNote ?? connectorLabel(leg.connector),
         },
         connectorGraphic(leg.connector),
-        el("span", { class: "rf-visually-hidden" }, ` ${leg.connectorNote ?? CONNECTOR_DESCRIPTION[leg.connector]} `),
+        el("span", { class: "rf-visually-hidden" }, ` ${leg.connectorNote ?? connectorLabel(leg.connector)} `),
       ));
     }
   });
@@ -148,7 +140,7 @@ export function relaySpine(
       class: "rf-relay",
       "data-compact": (options.compact ?? false) ? "true" : "false",
       role: "group",
-      "aria-label": "Relay path",
+      "aria-label": relayText("commandResponsibility"),
     },
     ...parts,
   );
@@ -169,8 +161,8 @@ export function relayHistory(spine: RelaySpine, actors: ReadonlyMap<string, Acto
         ? (leg.connector === "blocked" ? "blocked" : leg.connector === "review" ? "review" : "current")
         : isPast ? "completed" : "idle");
     const description = leg.connector === null
-      ? (isCurrent ? "holds the work" : "next expected holder")
-      : (leg.connectorNote ?? CONNECTOR_DESCRIPTION[leg.connector]);
+      ? relayText(isCurrent ? "commandHoldsWork" : "commandNextHolder")
+      : (leg.connectorNote ?? connectorLabel(leg.connector));
     return el(
       "li",
       { class: "rf-relay-history-row", "data-current": isCurrent ? "true" : "false" },

@@ -17,24 +17,20 @@
  * real relation exists, and same-cause branches share one trunk.
  */
 
-import { type Actor, type LoomQuest, type QuestVisualState, stateSignal } from "../model.ts";
+import { type Actor, type LoomQuest, stateSignal } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el } from "./dom.ts";
 import { weaveQuestRows, type WovenRow } from "./spine-model.ts";
+import { relayText } from "../relay-copy.ts";
 
 /** Short verb-first state word shown at the row's trailing edge. */
-const STATE_WORD: Readonly<Record<QuestVisualState, string>> = {
-  planned: "planned",
-  ready: "ready",
-  working: "executing",
-  review_required: "review",
-  waiting: "waiting",
-  blocked: "blocked",
-  completed: "completed",
-  archived: "archived",
-};
+const STATE_WORD = {
+  planned:"commandPlanned", ready:"commandReady", working:"stateWorking", review_required:"stateReview",
+  waiting:"waiting", blocked:"stateBlocked", completed:"stateDone", archived:"commandArchived",
+} as const;
 
 export interface QuestLoomOptions {
+  readonly listId: string;
   readonly actors: ReadonlyMap<string, Actor>;
   readonly selectedQuestId: string | null;
   readonly onSelect: (questId: string, trigger: HTMLElement) => void;
@@ -72,6 +68,7 @@ function loomRow(row: WovenRow, options: QuestLoomOptions): HTMLElement {
       "data-last": row.last ? "true" : "false",
       "data-branch-head": row.branchHead ? "true" : "false",
       "aria-selected": selected ? "true" : "false",
+      "aria-label": `${quest.ref} · ${quest.title} · ${relayText(STATE_WORD[quest.state])}`,
     },
     el("span", { class: "rf-spine-thread", "aria-hidden": "true" }),
     node,
@@ -83,11 +80,11 @@ function loomRow(row: WovenRow, options: QuestLoomOptions): HTMLElement {
         { class: "rf-spine-head" },
         holder === undefined ? null : actorAvatar(holder, { size: "row" }),
         el("span", { class: "rf-spine-ref" }, quest.ref),
-        el("span", { class: "rf-spine-state-word" }, STATE_WORD[quest.state]),
+        el("span", { class: "rf-spine-state-word" }, relayText(STATE_WORD[quest.state])),
       ),
       el("span", { class: "rf-spine-title", title: quest.title }, quest.title),
       relation === "branch" && blocker !== undefined
-        ? el("span", { class: "rf-spine-blocker" }, `blocked by ${blocker.ref}`)
+        ? el("span", { class: "rf-spine-blocker" }, relayText("commandBlockedBy").replace("{quest}", blocker.ref))
         : null,
     ),
     selected ? el("span", { class: "rf-spine-chevron", "aria-hidden": "true" }) : null,
@@ -114,17 +111,19 @@ export function questLoom(
     {
       type: "button",
       class: "rf-icon-button rf-spine-collapse",
-      title: options.collapsed ? "Expand Quest Loom" : "Collapse Quest Loom",
+      title: relayText(options.collapsed ? "commandExpandLoom" : "commandCollapseLoom"),
+      "data-command-control": options.listId,
+      "aria-controls": options.listId,
       "aria-expanded": options.collapsed ? "false" : "true",
     },
-    el("span", { class: "rf-visually-hidden" }, options.collapsed ? "Expand Quest Loom" : "Collapse Quest Loom"),
+    el("span", { class: "rf-visually-hidden" }, relayText(options.collapsed ? "commandExpandLoom" : "commandCollapseLoom")),
     el("span", { class: "rf-collapse-mark", "aria-hidden": "true" }),
   );
   collapse.addEventListener("click", options.onToggleCollapse);
 
   const list = el(
     "div",
-    { class: "rf-spine-list", role: "listbox", "aria-label": "Quest Loom" },
+    { class: "rf-spine-list", id: options.listId, role: "listbox", "aria-label": relayText("commandLoom") },
     ...rows.map((row) => loomRow(row, options)),
   );
 
@@ -150,12 +149,12 @@ export function questLoom(
 
   return el(
     "section",
-    { class: "rf-spine", "aria-label": "Quest Loom", "data-collapsed": options.collapsed ? "true" : "false" },
+    { class: "rf-spine", "aria-label": relayText("commandLoom"), "data-collapsed": options.collapsed ? "true" : "false" },
     el(
       "div",
       { class: "rf-spine-header" },
       el("span", { class: "rf-spine-grip", "aria-hidden": "true" }),
-      el("h2", { class: "rf-region-label" }, "Quest Loom"),
+      el("h2", { class: "rf-region-label" }, relayText("commandLoom")),
       collapse,
     ),
     list,

@@ -6,11 +6,13 @@
  * ------------------------------------------------------------------ */
 
 .rf-screen--network {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
 }
 
 .rf-n-workspace {
+  flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 30%);
   gap: var(--qf-pane-gap);
@@ -176,8 +178,8 @@
 }
 
 .rf-n-map-control {
-  min-width: var(--qf-space-9);
-  min-height: var(--qf-space-9);
+  min-width: var(--qf-space-11);
+  min-height: var(--qf-space-11);
   padding-inline: var(--qf-space-3);
   color: var(--qf-color-fg-default);
   font: var(--qf-text-label);
@@ -269,7 +271,7 @@
 
 .rf-n-reason {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--qf-space-3);
   padding: var(--qf-space-3);
   border-left: var(--qf-border-width) solid var(--qf-color-border-default);
@@ -290,7 +292,7 @@
 
 .rf-n-chain {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--qf-space-3);
   align-items: center;
   width: 100%;
@@ -300,6 +302,14 @@
   border-left: var(--qf-selection-width) solid var(--qf-color-danger);
   border-radius: var(--qf-radius-xs);
 }
+
+.rf-n-chain > .rf-srow-id { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.rf-screen--network .rf-chip { white-space: normal; flex-shrink: 0; }
+.rf-screen--network .rf-chip-label { white-space: normal; }
+.rf-n-node-top { flex-wrap: wrap; gap: var(--qf-space-1); }
+.rf-n-node-ref { max-width: 100%; }
+.rf-n-map-controls { max-width: calc(100% - 2 * var(--qf-space-4)); flex-wrap: wrap; }
+.rf-n-outline-reason, .rf-n-m-row-reason, .rf-n-focus-sub { overflow-wrap: anywhere; }
 
 .rf-n-chain[data-selected="true"] { background: var(--qf-color-selected); }
 .rf-n-chain:hover { background: var(--qf-color-inset); }
@@ -313,7 +323,7 @@
   white-space: nowrap;
 }
 
-.rf-n-chain-count { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); white-space: nowrap; }
+.rf-n-chain-count { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); white-space: normal; text-align: right; }
 
 /* ---------------- narrower desktop ---------------- */
 

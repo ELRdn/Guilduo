@@ -20,6 +20,15 @@ const params = new URLSearchParams(location.search);
 const baseUrl = params.get("api") || "";
 if (new URL(baseUrl).hostname !== "127.0.0.1") throw new Error("This fixture only connects to an isolated local Worker.");
 setLocale(params.get("lang") || "ja");
+window.addEventListener("test:locale", event => setLocale((event as CustomEvent).detail));
 const repository = new QuestForgeRepository({ baseUrl, getToken: async () => "local-relay-human-test-token" });
 const runtime = await createProductionRuntime(repository, params.get("uid") || "");
-mountRelayForge(document.querySelector<HTMLElement>("#relay-forge-root")!, runtime);
+const previewSync = runtime.connectionsPort!.previewSync.bind(runtime.connectionsPort);
+window.addEventListener("test:connection-preview-failure", event => {
+  runtime.connectionsPort!.previewSync = (event as CustomEvent).detail
+    ? async () => { throw new Error("Isolated test rejection"); }
+    : previewSync;
+});
+const root = document.querySelector<HTMLElement>("#relay-forge-root")!;
+const unmount = mountRelayForge(root, runtime);
+window.addEventListener("test:unmount", () => { unmount(); root.replaceChildren("Signed out"); });

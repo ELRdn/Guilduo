@@ -20,6 +20,7 @@
 
 import type { Actor } from "../model.ts";
 import { el } from "../primitives/dom.ts";
+import { relayText, type RelayCopyKey } from "../relay-copy.ts";
 import {
   countLabel,
   elapsedLabel,
@@ -52,7 +53,7 @@ export interface ScreenContext {
   readonly writeLocked: boolean;
   /** Ask the shell to select a Quest. Shared with Command's selection. */
   readonly onSelectQuest: (questId: string) => void;
-  /** Ask the shell to navigate. `questId` deep-links a selection at the target. */
+  /** Ask the shell to navigate. The optional id selects a Quest, Actor or Connection at the destination. */
   readonly onNavigate: (domain: string, questId?: string) => void;
   /** Politely announce a state change to assistive technology. */
   readonly announce: (message: string) => void;
@@ -137,15 +138,15 @@ export function screenRegion(
  * Status presentation — one look per meaning, across all six screens
  * ------------------------------------------------------------------ */
 
-const STATUS_TITLE: Readonly<Record<Exclude<ScreenStatus, "ready">, string>> = {
-  loading: "読み込み中",
-  empty: "まだありません",
-  partial: "一部だけ読み込めました",
-  error: "読み込みに失敗しました",
-  permission: "権限が足りません",
-  offline: "オフラインです",
-  stale: "表示が古くなっています",
-  conflict: "ほかで更新されました",
+const STATUS_TITLE: Readonly<Record<Exclude<ScreenStatus, "ready">, RelayCopyKey>> = {
+  loading: "statusLoading",
+  empty: "statusEmpty",
+  partial: "statusPartial",
+  error: "statusError",
+  permission: "statusPermission",
+  offline: "statusOffline",
+  stale: "statusStale",
+  conflict: "statusConflict",
 };
 
 /**
@@ -172,7 +173,7 @@ export function screenNotice(notice: ScreenNotice): HTMLElement {
     el(
       "div",
       { class: "rf-screen-notice-copy" },
-      el("strong", null, STATUS_TITLE[notice.status]),
+      el("strong", null, relayText(STATUS_TITLE[notice.status])),
       el("span", null, notice.detail),
     ),
     action,
@@ -293,6 +294,31 @@ export interface Segment {
   readonly count: number;
 }
 
+/** Single tab stop and arrow selection for the existing ARIA radio buttons. */
+export function radioGroupKeyboard(group: HTMLElement): HTMLElement {
+  const radios = [...group.querySelectorAll<HTMLButtonElement>('button[role="radio"]')];
+  for (const radio of radios) radio.tabIndex = radio.getAttribute("aria-checked") === "true" ? 0 : -1;
+  group.addEventListener("keydown", event => {
+    const index = radios.indexOf(document.activeElement as HTMLButtonElement);
+    if (index < 0 || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? radios.length - 1
+      : (index + (["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1) + radios.length) % radios.length;
+    radios[next]?.click();
+  });
+  group.addEventListener("click", event => {
+    const clicked = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[role="radio"]') : null;
+    if (clicked === null) return;
+    const index = radios.indexOf(clicked);
+    queueMicrotask(() => {
+      const current = group.isConnected ? group : [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')]
+        .find(candidate => candidate.getAttribute("aria-label") === group.getAttribute("aria-label"));
+      current?.querySelectorAll<HTMLButtonElement>('button[role="radio"]')[index]?.focus({ preventScroll: true });
+    });
+  });
+  return group;
+}
+
 /**
  * A single-select segment control. Rendered as a radio group rather than a row
  * of buttons so arrow keys move between options and the current option is
@@ -304,7 +330,7 @@ export function segmentControl(
   selected: string,
   onSelect: (id: string) => void,
 ): HTMLElement {
-  return el(
+  return radioGroupKeyboard(el(
     "div",
     { class: "rf-segments", role: "radiogroup", "aria-label": name },
     ...segments.map((segment) => {
@@ -323,7 +349,7 @@ export function segmentControl(
       button.addEventListener("click", () => onSelect(segment.id));
       return button;
     }),
-  );
+  ));
 }
 
 /** A labelled search box. The label is visible on mobile and hidden on desktop. */
@@ -344,7 +370,21 @@ export function searchField(
     // is not written to the URL, a log or any request.
     enterkeyhint: "search",
   }) as HTMLInputElement;
-  input.addEventListener("input", () => onInput(input.value));
+  const update = () => {
+    const focused = document.activeElement === input;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    onInput(input.value);
+    if (focused && !input.isConnected) {
+      const replacement = [...document.querySelectorAll<HTMLInputElement>('input[type="search"]')]
+        .find((candidate) => candidate.getAttribute("aria-label") === label);
+      replacement?.focus({ preventScroll: true });
+      if (start !== null && end !== null) replacement?.setSelectionRange(start, end);
+    }
+  };
+  // Keep the native input alive while an IME is converting Japanese/Korean text.
+  input.addEventListener("input", (event) => { if (!event.isComposing) update(); });
+  input.addEventListener("compositionend", update);
   return el("div", { class: "rf-search" }, input);
 }
 
@@ -369,18 +409,18 @@ export interface ConfirmOptions {
  * default focus target.
  */
 export function confirmPanel(options: ConfirmOptions): HTMLElement {
-  const cancel = el("button", { type: "button", class: "rf-secondary-button" }, "やめる");
+  const cancel = el("button", { type: "button", class: "rf-secondary-button", disabled: options.busy === true }, relayText("cancel"));
   const confirm = el(
     "button",
     { type: "button", class: "rf-danger-button", disabled: options.busy === true ? true : null },
-    options.busy === true ? "実行中…" : options.confirmLabel,
+    options.busy === true ? relayText("executing") : options.confirmLabel,
   );
   cancel.addEventListener("click", () => options.onCancel());
   confirm.addEventListener("click", () => options.onConfirm());
   return el(
     "div",
-    { class: "rf-confirm", role: "group", "aria-label": `${options.action}の確認` },
-    el("p", { class: "rf-confirm-title" }, `${options.action}すると次が起きます`),
+    { class: "rf-confirm", role: "group", "aria-label": relayText("confirmAction").replace("{action}", options.action), "aria-busy": String(options.busy === true) },
+    el("p", { class: "rf-confirm-title" }, relayText("confirmImpact").replace("{action}", options.action)),
     el("ul", { class: "rf-confirm-impact" }, ...options.impact.map((line) => el("li", null, line))),
     el("div", { class: "rf-confirm-actions" }, cancel, confirm),
   );
@@ -395,7 +435,7 @@ export function unavailableAction(what: string, why: string): HTMLElement {
   return el(
     "p",
     { class: "rf-unavailable" },
-    el("span", { class: "rf-unavailable-tag" }, "未接続"),
+    el("span", { class: "rf-unavailable-tag" }, relayText("unconnected")),
     el("span", null, `${what} — ${why}`),
   );
 }

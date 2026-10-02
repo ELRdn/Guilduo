@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { normalizePartyMembers } from "../interaction-lab/relay-forge/production.ts";
+import { setLocale, SUPPORTED_LOCALES, t } from "../i18n.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath: string): string => fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -19,13 +20,13 @@ test("Party exposes Agent registration and editing through the production reposi
   assert.match(production, /readonly agentPort:/);
   assert.match(production, /agentPort: repository/);
   assert.match(production, /!members\.some\(\(member\) => member\.uid === selfUid\)/);
-  assert.match(production, /displayName: "あなた"/);
+
   assert.match(shell, /runtime\.agentPort\.createAgent/);
   assert.match(shell, /runtime\.agentPort\.updateAgent/);
   assert.match(shell, /expectedUpdatedAt: existing\?\.updatedAt/);
   assert.match(shell, /resolveActors\(profile, sharedAgents/);
-  assert.match(party, /Agentを登録/);
-  assert.match(party, /Agentを編集/);
+  assert.match(party, /relayText\("agentRegister"\)/);
+  assert.match(party, /relayText\("agentEdit"\)/);
 });
 
 test("Party always contains the signed-in Human exactly once", () => {
@@ -43,4 +44,13 @@ test("Party always contains the signed-in Human exactly once", () => {
     members: [{ uid: "appwrite-user", displayName: "Hironao", handle: "hironao", role: "owner" }],
   }, "appwrite-user", { uid: "appwrite-user", displayName: "Hironao" });
   assert.equal(existing.filter((member) => member.uid === "appwrite-user").length, 1);
+  const unnamed = normalizePartyMembers({}, "self", { uid:"self", displayName:"" })[0];
+  const named = normalizePartyMembers({}, "self", { uid:"self", displayName:"あなた" })[0];
+  try {
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(locale);
+      assert.equal(unnamed.displayName, t("task.assignee.self"));
+      assert.equal(named.displayName, "あなた");
+    }
+  } finally { setLocale("ja"); }
 });

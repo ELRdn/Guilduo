@@ -6,7 +6,8 @@
  * ------------------------------------------------------------------ */
 
 .rf-screen--connections {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
 }
 
@@ -15,6 +16,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(380px, 36%);
   gap: var(--qf-pane-gap);
   min-height: 0;
+  flex: 1;
 }
 
 /* ---------------- list ---------------- */
@@ -57,6 +59,10 @@
 .rf-c-row[data-health="unavailable"] .rf-srow-title { color: var(--qf-color-fg-muted); }
 
 .rf-c-cell { min-width: 0; display: flex; align-items: center; }
+.rf-c-cell .rf-chip { max-width:100%; white-space:normal; }
+.rf-c-cell .rf-chip-label { overflow-wrap:anywhere; }
+.rf-c-cell-name .rf-srow-title { white-space:normal; overflow-wrap:anywhere; }
+.rf-c-cell .rf-srow-sub { white-space:normal; overflow-wrap:anywhere; }
 .rf-c-cell-name { flex-direction: column; align-items: flex-start; gap: var(--qf-space-1); }
 .rf-c-impact-count { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-default); }
 
@@ -112,7 +118,7 @@
 
 .rf-c-scope { display: grid; grid-template-columns: var(--qf-space-5) minmax(0, 1fr); gap: var(--qf-space-3); align-items: center; }
 
-/* Satisfied is a filled square; unmet is a hollow dashed one — shape first. */
+/* Required scopes are neutral: granted scopes are not exposed by the API. */
 .rf-c-scope-mark {
   width: var(--qf-space-4);
   height: var(--qf-space-4);
@@ -120,10 +126,8 @@
   border-radius: var(--qf-radius-xs);
 }
 
-.rf-c-scope[data-state="satisfied"] { color: var(--qf-color-success); }
-.rf-c-scope[data-state="satisfied"] .rf-c-scope-mark { background: currentColor; }
-.rf-c-scope[data-state="unmet"] { color: var(--qf-color-fg-muted); }
-.rf-c-scope[data-state="unmet"] .rf-c-scope-mark { border-style: dashed; }
+.rf-c-scope[data-state="required"] { color: var(--qf-color-fg-muted); }
+.rf-c-scope[data-state="required"] .rf-c-scope-mark { border-style: dashed; }
 
 .rf-c-scope-name {
   font: var(--qf-font-mono);
@@ -159,6 +163,7 @@
 }
 
 .rf-c-actions { display: flex; gap: var(--qf-space-3); flex-wrap: wrap; }
+.rf-c-actions > button { height:auto; min-height:var(--qf-control-default); padding-block:var(--qf-space-2); white-space:normal; overflow-wrap:anywhere; }
 .rf-c-disconnect { color: var(--qf-color-danger); border-color: var(--qf-color-danger); }
 
 /* ---------------- action result ---------------- */
@@ -203,6 +208,12 @@
 
 /* ---------------- mobile ---------------- */
 
+@media (max-width:1300px) and (min-width:901px) {
+  .rf-c-head { display:none; }
+  .rf-c-row { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); }
+  .rf-c-workspace { grid-template-columns:minmax(0, 1fr) minmax(300px, 44%); }
+}
+
 @media (max-width: 900px) {
   .rf-screen--connections { grid-template-rows: none; height: auto; }
   .rf-c-workspace { display: contents; }
@@ -231,7 +242,7 @@
 
   .rf-c-card-top { display: flex; align-items: center; gap: var(--qf-space-3); flex-wrap: wrap; }
   .rf-c-card-summary { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
-  .rf-c-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: var(--qf-space-3); }
+  .rf-c-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: var(--qf-space-3); flex-wrap:wrap; }
 
   .rf-c-mobile-bar { display: flex; }
   .rf-c-back { width: 100%; min-height: var(--qf-space-11); }

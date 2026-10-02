@@ -1,6 +1,6 @@
 # Guilduo 公開URLガイド
 
-最終更新: 2026-08-30
+最終更新: 2026-10-02
 
 この文書は、Guilduoの公開URLを人間とエージェントが同じ理解で扱うための早見表である。新しいユーザー向けリンク、README、接続手順には、原則として以下の正式URLを使う。
 
@@ -14,6 +14,12 @@
 | MCP | https://mcp.guilduo.com/mcp | OAuth対応Remote HTTP MCP | READY |
 | Appwrite API | https://api.guilduo.com/v1 | Appwrite SDKとWorkerが使うAPI endpoint | READY |
 | Documentation | https://docs.guilduo.com/ | 将来のドキュメントサイト | Reserved / Future |
+| Privacy | https://guilduo.com/privacy/ | `PRIVACY.md`を正本とする静的ページ | LOCAL VERIFIED / DEPLOYMENT PENDING |
+| Terms | https://guilduo.com/terms/ | `TERMS.md`を正本とする静的ページ | LOCAL VERIFIED / DEPLOYMENT PENDING |
+| バグ報告 | https://github.com/ELRdn/Guilduo/issues | 公開GitHub Issues | READY |
+| 個別問い合わせ・データ削除依頼 | mailto:el2radon2official@gmail.com | 公式運営者Radonの個別受付窓口 | OPERATOR CONFIRMED / POLICY DEPLOYMENT PENDING |
+
+2026-10-02の未認証確認では、公式LP・Web App・OAuth metadataへ到達し、MCP healthは56ツールを報告。`www.guilduo.com`はDNS未解決。Privacy／Termsの本番URLはHTTP 200でも既存アプリへのfallbackで、本文配布を確認できない。配備後はステータスだけでなく見出し・本文・canonicalを確認する。[確認記録](launch-readiness.md)
 
 ### 新規ユーザーへ案内する入口
 

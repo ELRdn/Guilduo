@@ -2,6 +2,7 @@ import { humanInbox } from "./human-inbox.ts";
 import { reportGuiTiming } from "./gui-timing.ts";
 import { relayText } from "./relay-copy.ts";
 import { relaySuccess } from "./relay-motion.ts";
+import { getLocale, t } from "../../i18n.ts";
 /**
  * Relay Forge App Shell and the Command Golden Screen.
  *
@@ -67,6 +68,7 @@ import {
   writeHeldFor,
 } from "./screens/fixtures.ts";
 import type { ScreenContext, ScreenRender } from "./screens/runtime.ts";
+import { countLabel, screenNotice } from "./screens/runtime.ts";
 import {
   initialQuestsState,
   normalizeQuestsModel,
@@ -92,11 +94,13 @@ import {
 import {
   type BattleState as BattleScreenState,
   initialBattleState,
+  battleBusy,
+  refreshBattle,
   normalizeBattleModel,
   renderBattleDesktop,
   renderBattleMobile,
 } from "./screens/battle.ts";
-import { type BattleFailure, FixtureBattlePort, fixtureBattleState } from "./screens/battle-port.ts";
+import { type BattleFailure, FixtureBattlePort, fixtureBattleState, validateBattleSession } from "./screens/battle-port.ts";
 import type { BattleSession, Quest } from "../../types/questforge.ts";
 import {
   type ConnectionsState,
@@ -144,13 +148,13 @@ import { effectiveTheme, nextQuickToggleTheme, parseThemePreference, THEME_KEY, 
  * and nothing else. Each owns its own composition and scroll ownership.
  */
 const DOMAINS = [
-  { id: "command", label: "Command", mnemonic: "C", migrated: true, primaryOnMobile: true },
-  { id: "quests", label: "Quests", mnemonic: "Q", migrated: true, primaryOnMobile: true },
-  { id: "network", label: "Network", mnemonic: "N", migrated: true, primaryOnMobile: true },
-  { id: "party", label: "Party", mnemonic: "P", migrated: true, primaryOnMobile: true },
-  { id: "battle", label: "Battle", mnemonic: "B", migrated: true, primaryOnMobile: false },
-  { id: "connections", label: "Connections", mnemonic: "X", migrated: true, primaryOnMobile: false },
-  { id: "skills", label: "Skills", mnemonic: "S", migrated: true, primaryOnMobile: false },
+  { id: "command", label: "Command", migrated: true, primaryOnMobile: true },
+  { id: "quests", label: "Quests", migrated: true, primaryOnMobile: true },
+  { id: "network", label: "Network", migrated: true, primaryOnMobile: true },
+  { id: "party", label: "Party", migrated: true, primaryOnMobile: true },
+  { id: "battle", label: "Battle", migrated: true, primaryOnMobile: false },
+  { id: "connections", label: "Connections", migrated: true, primaryOnMobile: false },
+  { id: "skills", label: "Skills", migrated: true, primaryOnMobile: false },
 ] as const;
 
 /**
@@ -187,14 +191,13 @@ interface ShellState {
   questFlowOpen: boolean;
   moreOpen: boolean;
   /** Set once the user scrolls the Shelf, so auto-snap stops interfering. */
-  shelfUserScrolled: boolean;
   /* Decision flow. `decision` is the last result from the Handoff Command. */
   revisionOpen: boolean;
   revisionReason: string;
   revisionError: string | null;
   decision: DecisionResult;
   taskSubmitting: boolean;
-  taskMessage: string;
+  taskMessage: () => string;
   taskTone: "success" | "error" | null;
   theme: "light" | "dark" | "system";
   /** Element focus returns to when the Lens closes. */
@@ -249,12 +252,19 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   let sharedMcpTools = [...(runtime?.mcpTools ?? [])];
   let mcpToolsLoadError = runtime?.mcpToolsLoadError ?? null;
   let mcpToolsLoading = false;
+  let connectionMutation = 0;
+  let connectionRefreshFailed = false;
+  let humanResponseBusy = false;
+  let workspaceRefreshing = false;
+  let workspaceOffline = false;
   let sharedIntegrations = runtime?.integrations;
   let sharedMembers = runtime?.members;
   let sharedPartyName = runtime?.partyName;
   let deferredLoading = Boolean(runtime?.loadDeferred);
   let deferredError: string | null = null;
   let deferredPanelErrors = runtime?.panelErrors ?? [];
+  let battleMutation = 0;
+  let battleLoadError: string | null = null;
 
   async function loadDeferredPanels(): Promise<void> {
     if (!runtime?.loadDeferred || lifecycle.disposed) return;
@@ -262,21 +272,23 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     deferredError = null;
     render();
     try {
+      const version = battleMutation;
+      const connectionVersion = connectionMutation;
       const panels = await runtime.loadDeferred();
       if (lifecycle.disposed) return;
       // Never replace Quests, profile or Agents: the user may have edited them
       // while auxiliary requests were pending.
-      sharedIntegrations = panels.integrations;
+      if (connectionVersion === connectionMutation) sharedIntegrations = panels.integrations;
       sharedMembers = panels.members;
       sharedPartyName = panels.partyName;
-      battleSession = panels.battleSession;
+      if (version === battleMutation) battleSession = panels.battleSession;
       sharedAgentConnections = [...panels.agentConnections];
       agentConnectionsLoadError = panels.agentConnectionsLoadError;
       sharedMcpTools = [...panels.mcpTools];
       mcpToolsLoadError = panels.mcpToolsLoadError;
-      deferredPanelErrors = panels.panelErrors ?? [];
+      deferredPanelErrors = (panels.panelErrors ?? []).filter(entry => version === battleMutation || entry.index !== 1);
     } catch (error) {
-      if (!lifecycle.disposed) deferredError = error instanceof Error ? error.message : "読み込みに失敗しました。";
+      if (!lifecycle.disposed) deferredError = error instanceof Error ? error.message : relayText("loadFailed");
     } finally {
       if (!lifecycle.disposed) { deferredLoading = false; render(); }
     }
@@ -418,7 +430,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     model: initialModel,
     domain: "command",
     selectedQuestId: production ? initialQuestId : "q-184",
-    lensState: window.matchMedia("(max-width: 900px)").matches ? "closed" : "open",
+    lensState: window.matchMedia("(min-width: 1600px)").matches ? "open" : "closed",
     railCollapsed: false,
     loomCollapsed: false,
     chronicleExpanded: false,
@@ -429,13 +441,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     mobileChronicleOpen: false,
     questFlowOpen: false,
     moreOpen: false,
-    shelfUserScrolled: false,
     revisionOpen: false,
     revisionReason: "",
     revisionError: null,
     decision: IDLE_DECISION,
     taskSubmitting: false,
-    taskMessage: "",
+    taskMessage: () => "",
     taskTone: null,
     theme: readStoredTheme(),
     lensTrigger: null,
@@ -500,7 +511,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     { failure: battleFailure },
   );
   const battlePort = runtime?.battlePort ?? fixtureBattlePort;
-  let battleSession: BattleSession | null = runtime?.battleSession ?? (state.variant === "empty" || state.variant === "loading"
+  let battleSession: BattleSession | null = runtime !== null ? runtime.battleSession : (state.variant === "empty" || state.variant === "loading"
     ? null
     : fixtureBattlePort.session());
 
@@ -511,7 +522,38 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       : state.variant === "conflict"
         ? "conflict"
         : "none";
-  const connectionsPort = runtime?.connectionsPort ?? new FixtureConnectionsPort(connectionFailure);
+  const baseConnectionsPort = runtime?.connectionsPort ?? new FixtureConnectionsPort(connectionFailure);
+  const refreshConnections = async () => {
+    connectionMutation += 1;
+    try {
+      const next = await runtime!.refreshConnections!();
+      if (lifecycle.disposed) return { ok:false, code:"disposed", message:"" };
+      sharedIntegrations = next.integrations;
+      sharedQuests = [...next.quests];
+      rawHandoffStates.clear();
+      for (const quest of sharedQuests) rawHandoffStates.set(quest.id, quest.assignee.handoffState);
+      rebuildQuestModel();
+      connectionRefreshFailed = false;
+      return { ok:true, code:"refreshed", get message() { return relayText("connectionRefreshed"); } };
+    } catch {
+      if (!lifecycle.disposed) connectionRefreshFailed = true;
+      return { ok:false, code:"refresh_failed", get message() { return relayText("connectionRefreshFailed"); } };
+    }
+  };
+  const connectionChange = async (work: () => ReturnType<typeof baseConnectionsPort.runSync>) => {
+    const result = await work();
+    if (!result.ok || lifecycle.disposed) return result;
+    const refreshed = await refreshConnections();
+    return refreshed.ok ? result : { ok:true, code:refreshed.code, get message() { return refreshed.message; } };
+  };
+  const connectionsPort = runtime?.refreshConnections ? {
+    previewSync: (id: string) => baseConnectionsPort.previewSync(id),
+    runSync: (id: string) => connectionChange(() => baseConnectionsPort.runSync(id)),
+    reconnect: (id: string) => baseConnectionsPort.reconnect(id),
+    disconnect: (id: string) => connectionChange(() => baseConnectionsPort.disconnect(id)),
+    refresh: refreshConnections,
+  } : baseConnectionsPort;
+  const connectionWriteHeld = () => state.screens.connections.busyId !== null || connectionRefreshFailed;
 
   const screenQuests = () => production ? sharedQuests : fixtureQuestsFor(state.variant);
   const screenAgents = () => production ? sharedAgents : fixtureAgentsFor(state.variant);
@@ -519,16 +561,110 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const screenMembers = () => sharedMembers ?? fixturePartyMembersFor(state.variant);
   const screenPartyName = () => sharedPartyName ?? fixturePartyNameFor(state.variant);
   const screenNotices = (label: string, retry: () => void) => production ? [] : noticesFor(state.variant, label, retry);
-  const screenWriteHeld = () => production ? state.stale : writeHeldFor(state.variant);
+  // ponytail: serialize UI writes; use per-resource locks only if parallel writes are needed.
+  const mutationBusy = () => connectionWriteHeld() || humanResponseBusy || state.taskSubmitting || state.decision.phase === "submitting" || state.screens.battle.phase === "submitting" || state.screens.battle.phase === "refreshing" || state.screens.settings.profileSaving || state.screens.settings.avatarSaving || state.screens.settings.connectionBusyId !== null || createSubmit.disabled || agentSubmit.disabled;
+  const workspaceWriteHeld = () => workspaceRefreshing || workspaceOffline || (production && state.model.syncState === "error");
+  const screenWriteHeld = () => mutationBusy() || workspaceWriteHeld() || state.screens.battle.needsRefresh || Boolean(battleLoadError) || state.stale || (!production && writeHeldFor(state.variant));
+
+  async function refreshWorkspace(): Promise<void> {
+    if (!runtime?.refreshWorkspace || lifecycle.disposed || workspaceRefreshing || mutationBusy() || deferredLoading || createDialog.open || agentDialog.open || inputComposing) return;
+    if (navigator.onLine === false) { markWorkspaceOffline(); return; }
+    const origin = document.activeElement;
+    const field = origin instanceof HTMLInputElement || origin instanceof HTMLTextAreaElement ? origin : null;
+    const focus = field ? { domain:state.domain, questId:state.selectedQuestId, selector:field.id ? `#${CSS.escape(field.id)}` : field.name ? `[name="${CSS.escape(field.name)}"]` : field.matches(".rf-revision-input") ? ".rf-revision-input" : ".rf-search-input", start:field.selectionStart, end:field.selectionEnd, direction:field.selectionDirection } : null;
+    const refreshControl = origin instanceof HTMLElement && origin.matches('.rf-screen-notice button, .rf-m-sync, [data-slot="health"]') ? state.domain : null;
+    workspaceRefreshing = true;
+    workspaceOffline = false;
+    state.model = { ...state.model, syncState:"syncing" };
+    render();
+    try {
+      const next = await runtime.refreshWorkspace();
+      if (lifecycle.disposed) return;
+      if (workspaceOffline) { state.model = { ...state.model, syncState:"error" }; return; }
+      const failed = new Set(next.panelErrors?.map(panel => panel.index));
+      const selectedVersion = selectedRawQuest()?.updatedAt;
+      sharedQuests = [...next.quests];
+      rawHandoffStates.clear();
+      for (const quest of sharedQuests) rawHandoffStates.set(quest.id, quest.assignee.handoffState);
+      if (!failed.has(3)) {
+        const cached = next.profile?.hasCustomAvatar ? avatarBlobUrls.get(profileAvatarCacheKey(next.profile.avatarVersion ?? 0)) : undefined;
+        sharedProfile = next.profile === null ? null : { ...next.profile, ...(cached ? { avatarUrl:cached } : {}) };
+        profileLoadError = next.profileLoadError;
+      }
+      if (!failed.has(5)) sharedAgents = next.agents.map(withCachedAvatar);
+      if (!failed.has(1)) { battleSession = next.battleSession; battleMutation += 1; battleLoadError = null; }
+      if (!failed.has(2)) { sharedIntegrations = next.integrations; connectionMutation += 1; }
+      if (!failed.has(4)) { sharedMembers = next.members; sharedPartyName = next.partyName; }
+      if (!failed.has(6)) { sharedAgentConnections = [...next.agentConnections]; agentConnectionsLoadError = next.agentConnectionsLoadError; }
+      if (!failed.has(7)) { sharedMcpTools = [...next.mcpTools]; mcpToolsLoadError = next.mcpToolsLoadError; }
+      deferredPanelErrors = next.panelErrors ?? [];
+      rebuildQuestModel();
+      if (selectedVersion !== selectedRawQuest()?.updatedAt) {
+        checkedReview = null;
+        state.decision = IDLE_DECISION;
+        taskQuestId = null;
+      }
+      refreshAgentAvatars();
+      refreshProfileAvatar();
+      void inbox.refresh();
+    } catch {
+      if (!lifecycle.disposed) state.model = { ...state.model, syncState:"error" };
+    } finally {
+      workspaceRefreshing = false;
+      if (!lifecycle.disposed) {
+        const restoreFocus = document.activeElement === document.body || document.activeElement === origin || Boolean(focus && document.activeElement instanceof HTMLElement && document.activeElement.matches(focus.selector));
+        render();
+        if (restoreFocus && focus && focus.domain === state.domain && focus.questId === state.selectedQuestId) {
+          const restored = [...shell.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(focus.selector)].find(element => element.getClientRects().length > 0);
+          if (restored && !restored.disabled) { restored.focus({ preventScroll:true }); if (focus.start !== null && focus.end !== null) restored.setSelectionRange(focus.start, focus.end, focus.direction ?? undefined); }
+        } else if (restoreFocus && refreshControl === state.domain) {
+          const restored = (state.domain === "command" ? shell.querySelector<HTMLElement>(isMobile() ? ".rf-m-sync" : '[data-slot="health"]') : screenHost.querySelector<HTMLElement>(".rf-screen-notice button, h1, h2"));
+          if (restored) { if (restored.matches("h1, h2")) restored.tabIndex = -1; restored.focus({ preventScroll:true }); }
+        }
+      }
+    }
+  }
+
+  function markWorkspaceOffline(): void {
+    if (!runtime?.refreshWorkspace || lifecycle.disposed) return;
+    workspaceOffline = true;
+    state.model = { ...state.model, syncState:"error" };
+    render();
+  }
+
+  function workspaceNotice(): HTMLElement | null {
+    if (!runtime?.refreshWorkspace) return null;
+    const partial = !workspaceOffline && state.model.syncState !== "error" && deferredPanelErrors.length > 0;
+    if (!partial && !workspaceOffline && state.model.syncState !== "error") return null;
+    return screenNotice({ status:partial ? "partial" : workspaceOffline ? "offline" : "error", detail:relayText(partial ? "statusPartial" : "writePaused"), action:{ label:relayText("retry"), onAct:() => { void refreshWorkspace(); } } });
+  }
   const screenNow = () => production ? Date.now() : FIXTURE_NOW;
   const screenToday = () => production ? new Date().toISOString().slice(0, 10) : FIXTURE_TODAY;
 
   const rail = el("nav", { class: "rf-rail", "aria-label": "Guilduo domains" });
   const operationBar = el("header", { class: "rf-operation-bar" });
   operationBar.addEventListener("click", (event) => {
-    const target = event.target instanceof Element ? event.target.closest(".rf-create, .rf-create-more") : null;
+    const target = event.target instanceof Element ? event.target.closest(".rf-create") : null;
     if (target !== null) openCreate();
   });
+
+  function openQuestSearch(): void {
+    if (shell.querySelector("dialog[open]") || state.questFlowOpen) return;
+    state.domain = "quests";
+    state.lensState = "closed";
+    state.screens.quests.segment = "all";
+    state.screens.quests.mobileDetailOpen = false;
+    render();
+    screenHost.querySelector<HTMLInputElement>('.rf-search-input')?.focus();
+  }
+
+  function handleSearchShortcut(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "k") return;
+    if (shell.querySelector("dialog[open]") || state.questFlowOpen) return;
+    event.preventDefault();
+    openQuestSearch();
+  }
+  document.addEventListener("keydown", handleSearchShortcut);
   const bandRegion = el("div", { class: "rf-band-region" });
   const shelfRegion = el("div", { class: "rf-shelf-region" });
   const workfield = el("main", { class: "rf-workfield", id: "rf-workfield" });
@@ -542,6 +678,13 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
    * with the decision hoisted out of the Lens into a fixed bar (brief B2). */
   const mobileRegion = el("div", { class: "rf-m-region" });
   const mobileDecision = el("div", { class: "rf-m-decision-region" });
+  const mobileFooterObserver = new ResizeObserver(() => {
+    if (lifecycle.disposed) return;
+    mobileRegion.style.setProperty("--rf-mobile-footer-height",
+      `${mobileDecision.getBoundingClientRect().height + rail.getBoundingClientRect().height}px`);
+  });
+  mobileFooterObserver.observe(mobileDecision);
+  mobileFooterObserver.observe(rail);
   const sheetHost = el("div", { class: "rf-sheet-host" });
   const liveRegion = el("p", { class: "rf-visually-hidden", role: "status", "aria-live": "polite" });
   /* The host for every non-Command destination. Command never renders into it,
@@ -550,13 +693,18 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const screenHost = el("div", { class: "rf-screen-host", id: "rf-screen-host" });
   const screenSticky = el("div", { class: "rf-screen-sticky" });
 
-  function createField(label: string, control: HTMLElement, hint = ""): HTMLLabelElement {
+  const editorLabels: Array<() => void> = [];
+  function createField(label: string | (() => string), control: HTMLElement, hint: string | (() => string) = ""): HTMLLabelElement {
+    const labelNode = el("span", { class: "rf-create-label" }, typeof label === "function" ? label() : label);
+    const hintNode = hint === "" ? null : el("small", { class: "rf-create-hint" }, typeof hint === "function" ? hint() : hint);
+    if (typeof label === "function") editorLabels.push(() => { labelNode.textContent = label(); });
+    if (typeof hint === "function" && hintNode !== null) editorLabels.push(() => { hintNode.textContent = hint(); });
     return el(
       "label",
       { class: "rf-create-field" },
-      el("span", { class: "rf-create-label" }, label),
+      labelNode,
       control,
-      hint === "" ? null : el("small", { class: "rf-create-hint" }, hint),
+      hintNode,
     );
   }
 
@@ -567,7 +715,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     maxlength: "160",
     autocomplete: "off",
     required: true,
-    placeholder: "何を完了させますか？",
+    placeholder: relayText("questTitlePlaceholder"),
   });
   const createNextAction = el("input", {
     class: "rf-create-input",
@@ -575,33 +723,33 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     type: "text",
     maxlength: "160",
     autocomplete: "off",
-    placeholder: "次に実行する具体的な一手",
+    placeholder: relayText("nextActionPlaceholder"),
   });
   const createDue = el("input", { class: "rf-create-input", name: "dueDate", type: "date" });
   const createEstimate = el("input", {
     class: "rf-create-input",
     name: "estimatedMinutes",
     type: "number",
-    min: "5",
+    min: "0",
     max: "1440",
-    step: "5",
+    step: "1",
     value: "30",
     inputmode: "numeric",
   });
   const createAssignee = el("select", { class: "rf-create-input", name: "assignee" });
-  createAssignee.append(el("option", { value: "self" }, sharedProfile?.displayName || "自分"));
+  createAssignee.append(el("option", { value: "self" }, sharedProfile?.displayName || t("task.assignee.self")));
   for (const agent of sharedAgents) {
     createAssignee.append(el("option", { value: agent.agentId }, `${agent.displayName} · Agent`));
   }
   const createError = el("p", { class: "rf-create-error", role: "alert", hidden: true });
-  const createHeading = el("h2", { class: "rf-create-title", id: "rf-create-title" }, "Questを作成");
-  const createKicker = el("p", { class: "rf-region-label" }, "NEW QUEST");
-  const createSubmit = el("button", { type: "submit", class: "rf-primary-button rf-create-submit" }, "Questを作成");
-  const createCancel = el("button", { type: "button", class: "rf-secondary-button" }, "キャンセル");
+  const createHeading = el("h2", { class: "rf-create-title", id: "rf-create-title" }, relayText("createQuest"));
+  const createKicker = el("p", { class: "rf-region-label" }, relayText("newQuest"));
+  const createSubmit = el("button", { type: "submit", class: "rf-primary-button rf-create-submit" }, relayText("createQuest"));
+  const createCancel = el("button", { type: "button", class: "rf-secondary-button" }, relayText("dialogCancel"));
   const createClose = el(
     "button",
-    { type: "button", class: "rf-icon-button rf-create-close", title: "閉じる" },
-    el("span", { class: "rf-visually-hidden" }, "閉じる"),
+    { type: "button", class: "rf-icon-button rf-create-close", title: relayText("close") },
+    el("span", { class: "rf-visually-hidden" }, relayText("close")),
     el("span", { class: "rf-close-mark", "aria-hidden": "true" }),
   );
   const createForm = el(
@@ -616,15 +764,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     el(
       "div",
       { class: "rf-create-body" },
-      createField("Quest名", createTitle),
-      createField("次の一手", createNextAction, "空欄でも作成できます"),
+      createField(() => t("task.title"), createTitle),
+      createField(() => relayText("nextOperation"), createNextAction, () => relayText("optionalActionHint")),
       el(
         "div",
         { class: "rf-create-pair" },
-        createField("期限", createDue),
-        createField("見積時間（分）", createEstimate),
+        createField(() => t("task.date"), createDue),
+        createField(() => relayText("minutesEstimate"), createEstimate),
       ),
-      createField("担当", createAssignee, "登録済みAgentへ直接渡すこともできます"),
+      createField(() => t("task.assignee"), createAssignee, () => relayText("assigneeHint")),
       createError,
     ),
     el("footer", { class: "rf-create-actions" }, createCancel, createSubmit),
@@ -637,15 +785,27 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   let editingQuestId: string | null = null;
 
+  function refreshQuestEditorCopy(): void {
+    createTitle.placeholder = relayText("questTitlePlaceholder");
+    createNextAction.placeholder = relayText("nextActionPlaceholder");
+    createKicker.textContent = relayText(editingQuestId === null ? "newQuest" : "editQuest");
+    createHeading.textContent = relayText(editingQuestId === null ? "createQuest" : "editQuest");
+    createSubmit.textContent = relayText(createSubmit.disabled ? "saving" : editingQuestId === null ? "createQuest" : "saveChanges");
+    createCancel.textContent = relayText("dialogCancel");
+    createClose.title = relayText("close");
+    createClose.querySelector('.rf-visually-hidden')!.textContent = relayText("close");
+  }
+
   function closeCreate(): void {
+    if (createSubmit.disabled) return;
     if (createDialog.open) createDialog.close();
   }
 
   function openCreate(): void {
+    if (screenWriteHeld()) return;
     editingQuestId = null;
-    createKicker.textContent = "NEW QUEST";
-    createHeading.textContent = "Questを作成";
-    createSubmit.textContent = "Questを作成";
+    syncAgentAssigneeOptions();
+    refreshQuestEditorCopy();
     createError.hidden = true;
     createError.textContent = "";
     if (!createDialog.open) createDialog.showModal();
@@ -653,16 +813,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function openEdit(quest: Quest): void {
+    if (screenWriteHeld()) return;
     if (quest.humanRequest) { inbox.open(undefined, quest.id); return; }
     editingQuestId = quest.id;
-    createKicker.textContent = "EDIT QUEST";
-    createHeading.textContent = "Questを編集";
-    createSubmit.textContent = "変更を保存";
+    refreshQuestEditorCopy();
     createTitle.value = quest.title;
     createNextAction.value = quest.nextAction;
     createDue.value = quest.dueDate;
-    createEstimate.value = String(quest.estimatedMinutes || 30);
-    createAssignee.value = quest.assignee.type === "agent" ? quest.assignee.id : "self";
+    createEstimate.value = String(quest.estimatedMinutes);
+    syncAgentAssigneeOptions();
+    createAssignee.value = quest.assignee.type === "self" ? "self" : quest.assignee.type === "human" ? ":current"
+      : [...createAssignee.options].some(option => option.value === quest.assignee.id) ? quest.assignee.id : ":current";
     createError.hidden = true;
     createError.textContent = "";
     if (!createDialog.open) createDialog.showModal();
@@ -688,34 +849,34 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   });
 
   async function submitCreate(): Promise<void> {
+    if (screenWriteHeld() || lifecycle.disposed) return;
     const title = createTitle.value.trim();
     if (title === "") {
-      createError.textContent = "Quest名を入力してください。";
+      createError.textContent = relayText("questTitleRequired");
       createError.hidden = false;
       createTitle.focus();
       return;
     }
     if (runtime === null) {
-      createError.textContent = "デモでは保存できません。Googleでサインインしてから作成してください。";
+      createError.textContent = relayText("demoSaveBlocked");
       createError.hidden = false;
       return;
     }
 
     const dueDate = createDue.value;
-    const estimatedMinutes = Math.max(5, Math.min(1440, Number(createEstimate.value) || 30));
+    const estimatedMinutes = Math.max(0, Math.min(1440, Number(createEstimate.value) || 0));
     const selectedAgent = sharedAgents.find((agent) => agent.agentId === createAssignee.value);
     const editing = editingQuestId !== null;
     const editedQuest = editingQuestId === null ? null : sharedQuests.find((quest) => quest.id === editingQuestId) ?? null;
-    const assigneePatch = editing
+    const sameAssignee = editedQuest !== null && (createAssignee.value === ":current" || editedQuest.assignee.type !== "human" && createAssignee.value === (editedQuest.assignee.type === "agent" ? editedQuest.assignee.id : "self"));
+    const assigneePatch = sameAssignee ? null : editing
       ? selectedAgent === undefined
-        ? { type: "self" as const, id: runtime.selfUid, label: sharedProfile?.displayName || "自分", handoffState: "none" as const }
+        ? { type: "self" as const, id: runtime.selfUid, label: sharedProfile?.displayName || t("task.assignee.self"), handoffState: "none" as const }
         : {
           type: "agent" as const,
           id: selectedAgent.agentId,
           label: selectedAgent.displayName,
-          handoffState: editedQuest?.assignee.type === "agent"
-            ? editedQuest.assignee.handoffState
-            : selectedAgent.defaultHandoffState || "ready",
+          handoffState: selectedAgent.defaultHandoffState || "ready",
         }
       : selectedAgent === undefined ? null : {
         type: "agent" as const,
@@ -725,7 +886,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       };
     const saveStarted = performance.now();
     createSubmit.disabled = true;
-    createSubmit.textContent = editingQuestId === null ? "作成しています…" : "変更を保存しています…";
+    createCancel.disabled = true;
+    createClose.disabled = true;
+    for (const input of createForm.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select")) input.disabled = true;
+    refreshQuestEditorCopy();
     createError.hidden = true;
 
     try {
@@ -734,9 +898,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         nextAction: createNextAction.value.trim(),
         estimatedMinutes,
         dueDate,
-        scheduledDate: dueDate,
-        planningMode: dueDate === "" ? "on_date" : "until_due",
-        planningState: dueDate === "" ? "backlog" : "scheduled",
+        ...(editing ? {} : {
+          scheduledDate: dueDate,
+          planningMode: dueDate === "" ? "on_date" : "until_due",
+          planningState: dueDate === "" ? "backlog" : "scheduled",
+        }),
         ...(assigneePatch === null ? {} : { assignee: assigneePatch }),
       };
       const response = editingQuestId === null
@@ -749,39 +915,47 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           ...payload,
         })
         : await runtime.questPort.updateQuest(editingQuestId, payload);
+      if (lifecycle.disposed) return;
       const value = response.quest;
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        throw new Error("作成結果にQuestが含まれていません。");
+        throw new Error(relayText("saveUnverified"));
       }
       const created = value as Quest;
       if (typeof created.id !== "string" || created.id === "" || typeof created.title !== "string") {
-        throw new Error("作成されたQuestの形式を確認できませんでした。");
+        throw new Error(relayText("saveUnverified"));
       }
 
       sharedQuests = [created, ...sharedQuests.filter((quest) => quest.id !== created.id)];
       rawHandoffStates.set(created.id, created.assignee.handoffState);
       const normalized = normalizeCommandModel({
-        profile: sharedProfile ?? { uid: runtime.selfUid, displayName: "あなた" },
+        profile: sharedProfile ?? { uid: runtime.selfUid },
         agents: sharedAgents,
         quests: sharedQuests,
-        syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+        syncLabel: new Date().toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit" }),
       });
       state.model = { ...normalized, chronicle: state.model.chronicle };
       state.selectedQuestId = created.id;
-      state.shelfUserScrolled = false;
+      shelfAlignedTo = null;
+      createSubmit.disabled = false;
       closeCreate();
       render();
-      announce(editing ? `${created.title}を更新しました。` : `${created.title}を作成しました。`);
+      announce(relayText(editing ? "questUpdated" : "questCreated"));
       reportGuiTiming(editing ? "edit" : "create", saveStarted, () => shell.isConnected);
     } catch (error) {
-      createError.textContent = error instanceof Error ? error.message : "Questを作成できませんでした。もう一度お試しください。";
+      if (lifecycle.disposed) return;
+      createError.textContent = profileErrorMessage(error, relayText("questSaveFailed"));
       createError.hidden = false;
     } finally {
+      if (lifecycle.disposed) return;
       createSubmit.disabled = false;
-      createSubmit.textContent = editing ? "変更を保存" : "Questを作成";
+      createCancel.disabled = false;
+      createClose.disabled = false;
+      for (const input of createForm.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select")) input.disabled = false;
+      refreshQuestEditorCopy();
     }
   }
 
+  let editingAgentId: string | null = null;
   const agentIdInput = el("input", {
     class: "rf-create-input",
     name: "agentId",
@@ -813,14 +987,14 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     type: "text",
     maxlength: "60",
     autocomplete: "off",
-    placeholder: "Build and test executor",
+    placeholder: relayText("agentRolePlaceholder"),
   });
   const agentInstructionsInput = el("textarea", {
     class: "rf-create-input",
     name: "instructions",
     maxlength: "4000",
     rows: "5",
-    placeholder: "このAgentに任せる役割と制約",
+    placeholder: relayText("agentInstructionsPlaceholder"),
   });
   const agentHandoffInput = el(
     "select",
@@ -857,6 +1031,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     class: "rf-visually-hidden",
     accept: "image/png,image/jpeg,image/webp",
     id: "rf-agent-avatar-input",
+    tabindex: -1,
   }) as HTMLInputElement;
   const agentAvatarImg = el("img", { class: "rf-agent-avatar-image", alt: "", hidden: true }) as HTMLImageElement;
   const agentAvatarFallback = el("span", { class: "rf-agent-avatar-fallback", "aria-hidden": "true" }, "?");
@@ -866,6 +1041,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     agentAvatarFallback.hidden = false;
   });
   const agentAvatarStatus = el("p", { class: "rf-agent-avatar-status", role: "status" });
+  let agentAvatarCopy: (() => string) | null = null;
+  const agentAvatarChoose = el("button", { type: "button", class: "rf-secondary-button" }, relayText("imageChoose"));
+  agentAvatarChoose.addEventListener("click", () => agentAvatarInput.click());
   const agentAvatarField = el(
     "div",
     { class: "rf-agent-avatar-field" },
@@ -873,37 +1051,50 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     el(
       "div",
       { class: "rf-agent-avatar-controls" },
-      el("label", { for: "rf-agent-avatar-input", class: "rf-secondary-button" }, "画像を選択"),
+      agentAvatarChoose,
       agentAvatarInput,
       agentAvatarStatus,
     ),
   );
   let pendingAgentAvatar: { readonly blob: Blob; readonly dataUrl: string } | null = null;
+  let agentImageProcessing = false;
   agentAvatarInput.addEventListener("change", () => {
     const file = agentAvatarInput.files?.[0];
     agentAvatarInput.value = "";
-    if (file === undefined) return;
-    agentAvatarStatus.textContent = "画像を処理しています…";
+    if (file === undefined || agentSubmit.disabled || lifecycle.disposed) return;
+    agentImageProcessing = true;
+    agentAvatarCopy = () => relayText("imageProcessing");
+    setAgentBusy(true);
     void resizeAvatarImage(file).then((resized) => {
+      if (lifecycle.disposed) return;
       pendingAgentAvatar = { blob: resized.blob, dataUrl: resized.dataUrl };
       agentAvatarImg.src = resized.dataUrl;
       agentAvatarImg.hidden = false;
       agentAvatarFallback.hidden = true;
-      agentAvatarStatus.textContent = "保存時にこの画像を反映します。";
+      agentAvatarCopy = () => relayText("imagePending");
     }).catch((error: unknown) => {
-      agentAvatarStatus.textContent = error instanceof AvatarImageError ? error.message : "画像を読み込めませんでした。";
+      if (lifecycle.disposed) return;
+      agentAvatarCopy = () => error instanceof AvatarImageError ? error.message : relayText("imageReadError");
+    }).finally(() => {
+      if (!lifecycle.disposed) { agentImageProcessing = false; setAgentBusy(false); }
     });
   });
 
   const agentError = el("p", { class: "rf-create-error", role: "alert", hidden: true });
-  const agentHeading = el("h2", { class: "rf-create-title", id: "rf-agent-title" }, "Agentを登録");
-  const agentKicker = el("p", { class: "rf-region-label" }, "NEW AGENT");
-  const agentSubmit = el("button", { type: "submit", class: "rf-primary-button rf-create-submit" }, "Agentを登録");
-  const agentCancel = el("button", { type: "button", class: "rf-secondary-button" }, "キャンセル");
+  let agentErrorCopy: (() => string) | null = null;
+  function showAgentError(copy: () => string): void {
+    agentErrorCopy = copy;
+    agentError.textContent = copy();
+    agentError.hidden = false;
+  }
+  const agentHeading = el("h2", { class: "rf-create-title", id: "rf-agent-title" }, relayText("agentRegister"));
+  const agentKicker = el("p", { class: "rf-region-label" }, relayText("agentNew"));
+  const agentSubmit = el("button", { type: "submit", class: "rf-primary-button rf-create-submit" }, relayText("agentRegister"));
+  const agentCancel = el("button", { type: "button", class: "rf-secondary-button" }, relayText("dialogCancel"));
   const agentClose = el(
     "button",
-    { type: "button", class: "rf-icon-button rf-create-close", title: "閉じる" },
-    el("span", { class: "rf-visually-hidden" }, "閉じる"),
+    { type: "button", class: "rf-icon-button rf-create-close", title: relayText("close") },
+    el("span", { class: "rf-visually-hidden" }, relayText("close")),
     el("span", { class: "rf-close-mark", "aria-hidden": "true" }),
   );
   const agentForm = el(
@@ -918,24 +1109,24 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     el(
       "div",
       { class: "rf-create-body" },
-      createField("Agent ID", agentIdInput, "半角小文字・数字・ハイフン。登録後は変更できません"),
-      createField("表示名", agentNameInput),
+      createField("Agent ID", agentIdInput, () => relayText("agentIdHint")),
+      createField(() => t("social.displayName"), agentNameInput),
       agentAvatarField,
       el(
         "div",
         { class: "rf-create-pair" },
         createField("Provider", agentProviderInput),
-        createField("Role", agentRoleInput),
+        createField(() => t("character.role"), agentRoleInput),
       ),
-      createField("指示", agentInstructionsInput, "秘密情報やAPIキーは入力しないでください"),
-      createField("既定の受け渡し", agentHandoffInput),
-      createField("Allowed Scopes", agentScopesInput, "Ctrl / Commandを押しながら複数選択できます"),
-      createField("状態", agentStatusInput, "Disabledにすると既存のMCP接続は失効します"),
+      createField(() => relayText("agentInstructions"), agentInstructionsInput, () => relayText("agentNoSecrets")),
+      createField(() => relayText("agentDefaultHandoff"), agentHandoffInput),
+      createField(() => relayText("agentScopesLabel"), agentScopesInput, () => relayText("agentScopesHint")),
+      createField(() => relayText("status"), agentStatusInput, () => relayText(editingAgentId === null ? "agentStartsActive" : "agentDisabledHint")),
       el(
         "div",
         { class: "rf-create-pair" },
-        createField("人間のレビューを必須にする", agentReviewInput),
-        createField("既定でdry-runにする", agentDryRunInput),
+        createField(() => relayText("agentReviewRequired"), agentReviewInput),
+        createField(() => relayText("agentDryRunDefault"), agentDryRunInput),
       ),
       agentError,
     ),
@@ -946,10 +1137,34 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     { class: "rf-create-dialog", "aria-labelledby": "rf-agent-title" },
     agentForm,
   );
-  let editingAgentId: string | null = null;
   let agentDialogReturnFocus: HTMLElement | null = null;
 
+  function refreshAgentEditorCopy(): void {
+    for (const refresh of editorLabels) refresh();
+    agentKicker.textContent = relayText(editingAgentId === null ? "agentNew" : "agentEdit");
+    agentHeading.textContent = relayText(editingAgentId === null ? "agentRegister" : "agentEdit");
+    agentSubmit.textContent = relayText(agentImageProcessing ? "imageProcessing" : agentSubmit.disabled ? "saving" : editingAgentId === null ? "agentRegister" : "saveChanges");
+    agentCancel.textContent = relayText("dialogCancel");
+    agentClose.title = relayText("close");
+    agentClose.querySelector('.rf-visually-hidden')!.textContent = relayText("close");
+    agentAvatarChoose.textContent = relayText("imageChoose");
+    agentRoleInput.placeholder = relayText("agentRolePlaceholder");
+    agentInstructionsInput.placeholder = relayText("agentInstructionsPlaceholder");
+    for (const option of agentHandoffInput.options) option.textContent = t(`task.handoffStates.${option.value}`);
+    for (const option of agentStatusInput.options) option.textContent = relayText(option.value === "active" ? "agentActive" : "disabled");
+    agentStatusInput.disabled = agentSubmit.disabled || editingAgentId === null;
+    agentAvatarStatus.textContent = agentAvatarCopy?.() ?? "";
+    if (!agentError.hidden && agentErrorCopy !== null) agentError.textContent = agentErrorCopy();
+  }
+
+  function setAgentBusy(busy: boolean): void {
+    for (const control of [agentSubmit, agentCancel, agentClose, agentAvatarChoose, agentAvatarInput]) control.disabled = busy;
+    for (const input of agentForm.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea")) input.disabled = busy || (input === agentIdInput && editingAgentId !== null);
+    refreshAgentEditorCopy();
+  }
+
   function closeAgentDialog(): void {
+    if (agentSubmit.disabled) return;
     if (agentDialog.open) agentDialog.close();
   }
 
@@ -963,7 +1178,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     for (const option of agentScopesInput.options) option.selected = option.value === "quests:read";
     agentError.hidden = true;
     agentError.textContent = "";
+    agentErrorCopy = null;
     pendingAgentAvatar = null;
+    agentAvatarCopy = null;
     agentAvatarImg.hidden = true;
     agentAvatarImg.removeAttribute("src");
     agentAvatarFallback.hidden = false;
@@ -971,27 +1188,23 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function openCreateAgent(): void {
-    if (runtime === null || state.stale) return;
+    if (runtime === null || screenWriteHeld()) return;
     agentDialogReturnFocus = document.activeElement as HTMLElement | null;
     editingAgentId = null;
     resetAgentDialog();
-    agentKicker.textContent = "NEW AGENT";
-    agentHeading.textContent = "Agentを登録";
-    agentSubmit.textContent = "Agentを登録";
+    refreshAgentEditorCopy();
     if (!agentDialog.open) agentDialog.showModal();
     queueMicrotask(() => agentIdInput.focus());
   }
 
   function openEditAgent(agentId: string): void {
-    if (runtime === null || state.stale) return;
+    if (runtime === null || screenWriteHeld()) return;
     const agent = sharedAgents.find((entry) => entry.agentId === agentId);
     if (agent === undefined) return;
     agentDialogReturnFocus = document.activeElement as HTMLElement | null;
     editingAgentId = agent.agentId;
     resetAgentDialog();
-    agentKicker.textContent = "EDIT AGENT";
-    agentHeading.textContent = "Agentを編集";
-    agentSubmit.textContent = "変更を保存";
+    refreshAgentEditorCopy();
     agentIdInput.value = agent.agentId;
     agentIdInput.disabled = true;
     agentNameInput.value = agent.displayName;
@@ -1017,11 +1230,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     const selected = createAssignee.value;
     replaceChildren(
       createAssignee,
-      el("option", { value: "self" }, sharedProfile?.displayName || "自分"),
+      el("option", { value: "self" }, sharedProfile?.displayName || t("task.assignee.self")),
       ...sharedAgents
         .filter((agent) => agent.status !== "archived" && agent.status !== "disabled")
         .map((agent) => el("option", { value: agent.agentId }, `${agent.displayName} · Agent`)),
     );
+    const editing = sharedQuests.find(quest => quest.id === editingQuestId);
+    if (editing && (editing.assignee.type === "human" || editing.assignee.type === "agent" && ![...createAssignee.options].some(option => option.value === editing.assignee.id))) {
+      createAssignee.append(el("option", { value: ":current" }, `${editing.assignee.label} · ${editing.assignee.type === "human" ? "Human" : "Agent"}`));
+    }
     createAssignee.value = [...createAssignee.options].some((option) => option.value === selected) ? selected : "self";
   }
 
@@ -1046,25 +1263,21 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   });
 
   async function submitAgent(): Promise<void> {
-    if (runtime === null) return;
+    if (runtime === null || screenWriteHeld() || lifecycle.disposed) return;
     const agentId = agentIdInput.value.trim().toLowerCase();
     const displayName = agentNameInput.value.trim();
     if (editingAgentId === null && (agentId.length > 80 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(agentId))) {
-      agentError.textContent = "Agent IDは半角小文字・数字・ハイフンのslugで入力してください。";
-      agentError.hidden = false;
+      showAgentError(() => relayText("agentIdInvalid"));
       agentIdInput.focus();
       return;
     }
     if (displayName === "") {
-      agentError.textContent = "表示名を入力してください。";
-      agentError.hidden = false;
+      showAgentError(() => relayText("displayNameRequired"));
       agentNameInput.focus();
       return;
     }
-    const editing = editingAgentId !== null;
     const existing = editingAgentId === null ? null : sharedAgents.find((agent) => agent.agentId === editingAgentId) ?? null;
-    agentSubmit.disabled = true;
-    agentSubmit.textContent = editing ? "保存しています…" : "登録しています…";
+    setAgentBusy(true);
     agentError.hidden = true;
     try {
       const values = {
@@ -1084,8 +1297,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           status: agentStatusInput.value,
           expectedUpdatedAt: existing?.updatedAt,
         });
+      if (lifecycle.disposed) return;
       const normalizedSaved = normalizeAgentRecord(response.agent);
-      if (normalizedSaved === null) throw new Error("保存結果にAgentが含まれていません。");
+      if (normalizedSaved === null) throw new Error(relayText("saveUnverified"));
       let saved = withCachedAvatar(normalizedSaved);
 
       /* Metadata is already saved at this point. The avatar is a second,
@@ -1094,16 +1308,18 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
        * leaves the dialog open on the avatar step so the user can retry just
        * the image, instead of losing the Agent ID / role / scopes they just
        * entered (brief Phase 3, "古い編集画面から新しい画像を上書きしない"). */
-      let avatarWarning: string | null = null;
+      let avatarWarning: "avatarRefreshHint" | "agentImageConflict" | "agentImageFailed" | null = null;
       const previousAvatarKey = existing?.hasCustomAvatar === true
         ? avatarCacheKey(existing.agentId, existing.avatarVersion ?? 0)
         : null;
       if (pendingAgentAvatar !== null) {
         try {
           const avatarResponse = await runtime.agentAvatarPort.uploadAgentAvatar(saved.agentId, pendingAgentAvatar.blob, saved.updatedAt);
+          if (lifecycle.disposed) return;
           const updated = normalizeAgentRecord(avatarResponse.agent);
           if (updated !== null) saved = updated;
           pendingAgentAvatar = null;
+          agentAvatarCopy = null;
           // Refetch the image the server just stored — over the same
           // authenticated route every other viewer uses — instead of trusting
           // the client-resized preview, and cache it under the new version.
@@ -1127,13 +1343,13 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
               }
             }
           } catch {
-            avatarWarning = "画像は保存されましたが、表示の更新に失敗しました。ページを再読み込みすると反映されます。";
+            avatarWarning = "avatarRefreshHint";
           }
         } catch (avatarError) {
           const apiError = avatarError as { status?: number; code?: string };
           avatarWarning = apiError.status === 409 || apiError.code === "agent_conflict"
-            ? "ほかの場所でAgentが更新されたため、画像は反映されませんでした。最新の状態を読み込み直してから、もう一度お試しください。"
-            : "Agentは保存しましたが、画像を保存できませんでした。もう一度お試しください。";
+            ? "agentImageConflict"
+            : "agentImageFailed";
         }
       }
 
@@ -1141,7 +1357,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       // state application below needs to be skipped for a disposed mount.
       if (lifecycle.disposed) return;
       sharedAgents = [saved, ...sharedAgents.filter((agent) => agent.agentId !== saved!.agentId)];
-      const profile = sharedProfile ?? { uid: runtime.selfUid, displayName: "あなた" };
+      const profile = sharedProfile ?? { uid: runtime.selfUid };
       state.model = {
         ...state.model,
         actors: resolveActors(profile, sharedAgents, [...state.model.actors.values()]),
@@ -1153,24 +1369,25 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       if (avatarWarning !== null) {
         editingAgentId = saved.agentId;
         agentIdInput.disabled = true;
-        agentError.textContent = avatarWarning;
-        agentError.hidden = false;
-        announce(avatarWarning);
+        const warningKey = avatarWarning;
+        showAgentError(() => relayText(warningKey));
+        announce(relayText(warningKey));
       } else {
+        agentSubmit.disabled = false;
         closeAgentDialog();
-        announce(editing ? `${saved.displayName}を更新しました。` : `${saved.displayName}を登録しました。`);
+        announce(relayText("agentSaved").replace("{name}", saved.displayName));
       }
       render();
       refreshAgentAvatars();
     } catch (error) {
       const apiError = error as { status?: number; code?: string };
-      agentError.textContent = apiError.status === 409 || apiError.code === "agent_conflict"
-        ? "ほかの場所でAgentが更新されました。最新の状態を読み込み直してから、もう一度編集してください。"
-        : error instanceof Error ? error.message : "Agentを保存できませんでした。もう一度お試しください。";
-      agentError.hidden = false;
+      if (lifecycle.disposed) return;
+      showAgentError(() => apiError.code === "agent_exists" ? relayText("agentExists")
+        : apiError.code === "agent_conflict" ? relayText("agentConflict")
+        : profileErrorMessage(error, relayText("agentSaveFailed")));
     } finally {
-      agentSubmit.disabled = false;
-      agentSubmit.textContent = editing ? "変更を保存" : "Agentを登録";
+      if (lifecycle.disposed) return;
+      setAgentBusy(false);
     }
   }
   /* ---------------------------------------------------------------- *
@@ -1191,7 +1408,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   });
   const accountMenuPanel = el("div", {
     class: "rf-account-menu",
-    "aria-label": "アカウントメニュー",
+    "aria-label": relayText("accountMenu"),
     hidden: true,
   });
   /* A single positioning context for the trigger and its popover — the panel
@@ -1243,16 +1460,16 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     try {
       await runtime.signOut();
     } catch {
-      announce("ログアウトに失敗しました。もう一度お試しください。");
+      announce(relayText("signOutFailed"));
     }
   }
 
   /** Rebuilds the trigger's content and the menu's items from current state. */
   function renderAccountMenu(): void {
     const selfActor = [...state.model.actors.values()].find((actor) => actor.kind === "human") ?? null;
-    const displayName = sharedProfile?.displayName?.trim() || (production ? "あなた" : "デモ");
+    const displayName = sharedProfile?.displayName?.trim() || (production ? t("task.assignee.self") : relayText("demoLabel"));
     accountMenuButton.setAttribute("aria-expanded", state.accountMenuOpen ? "true" : "false");
-    accountMenuButton.setAttribute("aria-label", `アカウントメニューを開く（${displayName}）`);
+    accountMenuButton.setAttribute("aria-label", `${relayText("accountMenu")} (${displayName})`);
     accountMenuButton.title = displayName;
     replaceChildren(
       accountMenuButton,
@@ -1261,9 +1478,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         : actorAvatar(selfActor, { size: "row", showMarker: false }),
     );
 
-    const accountItem = el("button", { type: "button", class: "rf-account-menu-item" }, "アカウント");
+    const accountItem = el("button", { type: "button", class: "rf-account-menu-item" }, relayText("accountTitle"));
     accountItem.addEventListener("click", () => openSettings("account"));
-    const settingsItem = el("button", { type: "button", class: "rf-account-menu-item" }, "設定");
+    const settingsItem = el("button", { type: "button", class: "rf-account-menu-item" }, relayText("settings"));
     settingsItem.addEventListener("click", () => openSettings("top"));
     const signOutItem = el(
       "button",
@@ -1272,7 +1489,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         class: "rf-account-menu-item rf-account-menu-item--danger",
         disabled: production ? null : true,
       },
-      "ログアウト",
+      t("sync.signOut"),
     );
     if (production) signOutItem.addEventListener("click", () => { void handleSignOut(); });
 
@@ -1284,9 +1501,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         el("p", { class: "rf-account-menu-name" }, displayName),
         production
           ? (sharedProfile?.handle ? el("p", { class: "rf-account-menu-handle" }, `@${sharedProfile.handle}`) : null)
-          : el("p", { class: "rf-account-menu-demo" }, "デモ表示です。実際の操作にはGoogleサインインが必要です。"),
+          : el("p", { class: "rf-account-menu-demo" }, relayText("demoHint")),
       ),
-      el("div", { class: "rf-account-menu-items" }, accountItem, settingsItem, signOutItem),
+      el("div", { class: "rf-account-menu-items" }, accountItem, settingsItem,
+        production ? signOutItem : el("a", { class: "rf-account-menu-item", href: window.location.pathname }, relayText("signIn"))),
     );
     accountMenuPanel.hidden = !state.accountMenuOpen;
   }
@@ -1313,12 +1531,35 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   );
   replaceChildren(root, shell);
   let checkedReview: string | null = null;
+  let decisionQuestId: string | null = null;
+  let taskQuestId: string | null = null;
+  let revisionSelection = state.selectedQuestId;
+  let inputComposing = false;
+
+  function decisionFeedback(): DecisionResult {
+    return decisionQuestId === state.selectedQuestId ? state.decision : IDLE_DECISION;
+  }
+  function resultTone(): "success" | "error" | null {
+    if (state.decision.phase === "submitting" || state.taskSubmitting) return null;
+    const decision = decisionFeedback();
+    if (decision.phase === "succeeded") return "success";
+    if (decision.phase === "failed" && decision.code !== "blocked") return "error";
+    return taskQuestId === state.selectedQuestId ? state.taskTone : null;
+  }
+  function resultMessage(): string {
+    if (state.decision.phase === "submitting") return decisionQuestId === state.selectedQuestId ? relayText("sending") : "";
+    const decision = decisionFeedback();
+    if (decision.phase === "succeeded" || decision.phase === "failed") return decision.message;
+    return taskQuestId === state.selectedQuestId ? state.taskMessage() : "";
+  }
   let humanPending = 0;
   let humanUnread = 0;
   let inboxInitialized = false;
   const inbox = humanInbox({
     quests: sharedQuests,
     port: runtime?.humanRequestPort ?? null,
+    writeHeld: screenWriteHeld,
+    onBusy: (busy) => { humanResponseBusy = busy; render(); },
     onQuest: (quest) => { applyQuestRecord(quest); render(); },
     onSource: (questId) => { void openSourceQuest(questId); },
     onCount: (pending, unread) => {
@@ -1356,6 +1597,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     return quest ? quest.id + ":" + quest.updatedAt : null;
   }
   function setExternalChecked(checked: boolean): void {
+    if (state.decision.phase === "submitting" || state.taskSubmitting) return;
     checkedReview = checked ? reviewVersion() : null;
     render();
     (isMobile() ? mobileDecision : lensRegion).querySelector<HTMLInputElement>(".rf-external-check input")?.focus();
@@ -1383,12 +1625,16 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   function applyQuestRecord(quest: Quest): void {
     sharedQuests = sharedQuests.some((entry) => entry.id === quest.id) ? sharedQuests.map((entry) => entry.id === quest.id ? quest : entry) : [quest, ...sharedQuests];
     rawHandoffStates.set(quest.id, quest.assignee.handoffState);
+    rebuildQuestModel();
+  }
+
+  function rebuildQuestModel(): void {
     if (runtime === null) return;
     const normalized = normalizeCommandModel({
-      profile: sharedProfile ?? { uid: runtime.selfUid, displayName: "あなた" },
+      profile: sharedProfile ?? { uid: runtime.selfUid },
       agents: sharedAgents,
       quests: sharedQuests,
-      syncLabel: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+      syncLabel: new Date().toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit" }),
     });
     state.model = { ...normalized, chronicle: state.model.chronicle };
     if (!state.model.quests.some((entry) => entry.id === state.selectedQuestId)) {
@@ -1399,9 +1645,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   async function runQuestAction(action: QuestActionId): Promise<void> {
     const quest = selectedRawQuest();
     if (action === "reply" && quest?.humanRequest) { inbox.open(undefined, quest.id); return; }
-    if (quest === null || runtime === null || state.taskSubmitting) return;
+    if (quest === null || runtime === null || screenWriteHeld() || lifecycle.disposed) return;
+    if (!questActionState(quest).actions.includes(action)) return;
     if (action === "edit") { openEdit(quest); return; }
-    if (action === "archive" && !window.confirm(`「${quest.title}」をアーカイブしますか？`)) return;
+    if (action === "archive" && !window.confirm(relayText("archiveConfirm").replace("{title}", quest.title))) return;
 
     const patch: Record<string, unknown> = action === "complete"
       ? { lifecycleState: "completed" }
@@ -1412,29 +1659,56 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           ...(action === "start" ? { handoff: { ...quest.handoff, startedAt: quest.handoff.startedAt || new Date().toISOString() } } : {}),
         };
     const actionStarted = performance.now();
+    taskQuestId = quest.id;
+    state.decision = IDLE_DECISION;
     state.taskSubmitting = true;
-    state.taskMessage = action === "complete" ? "完了を保存しています…" : "変更を保存しています…";
+    state.taskMessage = () => relayText(action === "complete" ? "completingQuest" : "savingQuest");
     state.taskTone = null;
     render();
     try {
-      const response = await runtime.questPort.updateQuest(quest.id, patch);
+      const response = action === "complete"
+        ? await runtime.questPort.scoreQuest(quest.id)
+        : await runtime.questPort.updateQuest(quest.id, patch);
+      if (lifecycle.disposed) return;
       const value = response.quest;
-      if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("更新結果にQuestが含まれていません。");
+      if (value === null || typeof value !== "object" || Array.isArray(value) || (value as Quest).id !== quest.id) throw { code: "save_unverified" };
       applyQuestRecord(value as Quest);
       state.taskTone = "success";
-      state.taskMessage = action === "start" ? "Questを開始しました"
-        : action === "stop" ? "Questを停止しました"
-          : action === "complete" ? "Questを完了しました"
-            : "Questをアーカイブしました";
-      announce(state.taskMessage);
+      state.taskMessage = () => relayText(action === "start" ? "questStarted"
+        : action === "stop" ? "questStopped"
+          : action === "complete" ? "questCompleted" : "questArchived");
+      announce(state.taskMessage());
+      if (action === "complete") {
+        battleMutation += 1;
+        await refreshBattleSession();
+      }
     } catch (error) {
+      if (lifecycle.disposed) return;
       state.taskTone = "error";
-      state.taskMessage = error instanceof Error ? error.message : "Questを更新できませんでした。";
-      announce(state.taskMessage);
+      state.taskMessage = () => profileErrorMessage(error, relayText("questSaveFailed"));
+      announce(state.taskMessage());
     } finally {
       state.taskSubmitting = false;
       render();
-      if (action === "complete" && state.taskTone === "success") reportGuiTiming("complete", actionStarted, () => shell.isConnected);
+      if (!lifecycle.disposed && action === "complete" && state.taskTone === "success") reportGuiTiming("complete", actionStarted, () => shell.isConnected);
+    }
+  }
+
+  async function refreshBattleSession(): Promise<boolean> {
+    if (lifecycle.disposed) return false;
+    const version = ++battleMutation;
+    if (!runtime) { battleSession = fixtureBattlePort.session(); return true; }
+    try {
+      const latest = await runtime.questPort.getBattleSession();
+      if (lifecycle.disposed || version !== battleMutation) return false;
+      validateBattleSession(latest.session);
+      battleSession = latest.session;
+      battleLoadError = null;
+      deferredPanelErrors = deferredPanelErrors.filter(entry => entry.index !== 1);
+      return true;
+    } catch {
+      if (!lifecycle.disposed && version === battleMutation) battleLoadError = relayText("loadFailed");
+      return false;
     }
   }
   /**
@@ -1485,7 +1759,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     // A3: a new Quest starts at the top of its workspace. Without this the
     // previous Quest's scroll offset would carry over and clip the new title.
     state.previewArtifactId = null;
-    state.shelfUserScrolled = false;
+    shelfAlignedTo = null;
     keepScroll = false;
     render();
     keepScroll = true;
@@ -1495,7 +1769,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     const restored = triggerWasInLoom
       ? [...(nextLoom?.querySelectorAll<HTMLElement>(".rf-spine-row") ?? [])]
           .find((row) => row.dataset.questId === questId) ?? null
-      : shell.querySelector<HTMLElement>(`[data-quest-id="${questId}"]`);
+      : (isMobile() ? mobileRegion : shell).querySelector<HTMLElement>(`[data-quest-id="${CSS.escape(questId)}"]`);
     if (loomSnapshot !== null && nextLoom !== null) {
       if (loomSnapshot.anchorOffset !== null && restored !== null) {
         const nextOffset = restored.getBoundingClientRect().top - nextLoom.getBoundingClientRect().top;
@@ -1520,7 +1794,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     state.questFlowOpen = true;
     const sheet = bottomSheet(
       {
-        title: "Quest flow",
+        title: relayText("commandFlow"),
         // Re-resolved on close: selecting inside the sheet re-renders the page
         // and replaces the button this was opened from.
         returnFocusTo: () => shell.querySelector<HTMLElement>(".rf-m-questflow") ?? trigger,
@@ -1542,10 +1816,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       evidenceReviewed: checkedReview !== null && checkedReview === reviewVersion(),
       writeLocked: state.stale,
       permissionMissing: forcedState === "permission"
-        ? "quests:write スコープが不足しています。Connections で接続権限とAgentの許可設定を確認してください。"
+        ? relayText("actionPermission")
         : null,
       conflict: forcedState === "conflict"
-        ? "他の Actor が先に状態を更新しました。最新の内容を確認してから再実行してください。"
+        ? relayText("handoffConflict")
         : null,
     };
   }
@@ -1569,7 +1843,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   async function runDecision(kind: DecisionKind): Promise<void> {
     const questId = state.selectedQuestId;
-    if (questId === null) return;
+    if (questId === null || screenWriteHeld() || lifecycle.disposed) return;
+    if (selectedQuestActions().mode !== "handoff-decision") return;
+    decisionQuestId = questId;
     state.revisionError = null;
     const result = await submitDecision(
       handoffPort,
@@ -1577,16 +1853,19 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       decisionGate(),
       state.decision.phase,
       (next) => {
+        if (lifecycle.disposed) return;
         state.decision = next;
         if (next.code === "reason_required") state.revisionError = next.message;
         render();
       },
     );
+    if (lifecycle.disposed) return;
     if (result.phase === "succeeded" && result.quest !== null) {
       applyHandoffResult(result, kind);
     }
     render();
     announce(result.message);
+    if (state.selectedQuestId !== questId || state.domain !== "command") return;
     if (result.phase === "succeeded") relaySuccess(isMobile() ? mobileDecision : lensRegion);
     // Focus returns to the control that started the decision.
     const target = state.revisionOpen
@@ -1606,15 +1885,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     rawHandoffStates.set(quest.id, quest.assignee.handoffState);
     sharedQuests = sharedQuests.map((entry) => entry.id === quest.id ? quest : entry);
     const normalized = normalizeCommandModel({
-      profile: sharedProfile ?? (runtime ? { uid: runtime.selfUid, displayName: "Human" } : null),
+      profile: sharedProfile ?? (runtime ? { uid: runtime.selfUid } : null),
       agents: sharedAgents,
       quests: sharedQuests,
       syncLabel: state.model.lastSyncLabel,
     });
     state.model = { ...normalized, chronicle: state.model.chronicle };
+    if (state.selectedQuestId !== quest.id) return;
     checkedReview = null;
+    taskQuestId = quest.id;
     state.taskTone = "success";
-    state.taskMessage = result.message;
+    state.taskMessage = () => result.message;
     state.revisionOpen = false;
     state.revisionReason = "";
     state.previewArtifactId = null;
@@ -1630,13 +1911,25 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   /** Moves focus to the Lens revision control without running a second command. */
   function focusRevision(): void {
+    if (state.decision.phase === "submitting" || state.taskSubmitting) return;
     if (state.lensState === "closed") state.lensState = "open";
     state.revisionOpen = true;
     state.decision = IDLE_DECISION;
+    state.taskTone = null;
+    state.taskMessage = () => "";
     render();
-    const field = lensRegion.querySelector<HTMLElement>(".rf-revision-input");
+    const field = (isMobile() ? mobileDecision : lensRegion).querySelector<HTMLElement>(".rf-revision-input");
     field?.focus();
     field?.scrollIntoView({ block: "nearest" });
+  }
+
+  function cancelRevision(): void {
+    if (state.decision.phase === "submitting" || state.taskSubmitting) return;
+    state.revisionOpen = false;
+    state.revisionReason = "";
+    state.revisionError = null;
+    render();
+    (isMobile() ? mobileDecision : lensRegion).querySelector<HTMLElement>(".rf-decision-approve")?.focus();
   }
 
   function closeLens(): void {
@@ -1656,9 +1949,6 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     state.moreOpen = false;
     state.accountMenuOpen = false;
     render();
-    window.requestAnimationFrame(() => {
-      screenHost.querySelector<HTMLElement>("h1")?.focus();
-    });
   }
 
   function selectTheme(next: ThemePreference): void {
@@ -1685,9 +1975,13 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function profileErrorMessage(error: unknown, fallback: string): string {
-    const apiError = error as { status?: number };
-    if (apiError.status === 401) return "認証の有効期限が切れました。ページを再読み込みしてサインインし直してください。";
-    return error instanceof Error ? error.message : fallback;
+    const apiError = error as { status?: number; code?: string };
+    if (apiError.status === 401) return relayText("sessionExpired");
+    if (apiError.code === "handle_cooldown") return relayText("handleCooldown");
+    if (apiError.code === "handle_taken") return relayText("handleTaken");
+    if (apiError.code === "save_unverified") return relayText("saveUnverified");
+    if (error instanceof AvatarImageError) return error.message;
+    return fallback;
   }
 
   function updateProfileDraft(field: ProfileDraftField, value: string): void {
@@ -1696,8 +1990,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   async function retryProfile(): Promise<void> {
-    if (runtime === null || state.screens.settings.profileSaving) return;
-    state.screens.settings.profileMessage = "";
+    if (runtime === null || state.screens.settings.profileSaving || state.screens.settings.avatarSaving) return;
+    state.screens.settings.profileMessage = () => "";
     state.screens.settings.profileTone = null;
     render();
     try {
@@ -1711,16 +2005,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       refreshProfileAvatar();
     } catch (error) {
       if (lifecycle.disposed) return;
-      profileLoadError = profileErrorMessage(error, "プロフィールを読み込めませんでした。再試行してください。");
+      profileLoadError = profileErrorMessage(error, relayText("profileLoadFailed"));
       render();
     }
   }
 
   async function saveProfile(): Promise<void> {
     const settings = state.screens.settings;
+    if (screenWriteHeld() || lifecycle.disposed) return;
     if (runtime === null) {
       settings.profileTone = "error";
-      settings.profileMessage = "デモでは保存できません。Googleでサインインしてから設定してください。";
+      settings.profileMessage = () => relayText("demoSaveBlocked");
       render();
       return;
     }
@@ -1730,44 +2025,44 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     const bio = draft.bio.trim();
     if (displayName.length < 1 || displayName.length > 60) {
       settings.profileTone = "error";
-      settings.profileMessage = "Display Nameは1〜60文字で入力してください。";
+      settings.profileMessage = () => `${t("social.displayName")}: ${relayText("displayNameHint")}`;
       render();
       return;
     }
     if (!/^[a-z0-9_]{3,20}$/.test(handle)) {
       settings.profileTone = "error";
-      settings.profileMessage = "Username / Handleは英数字と _ の3〜20文字で入力してください。";
+      settings.profileMessage = () => `${relayText("username")}: ${relayText("handleHint")}`;
       render();
       return;
     }
     if (bio.length > 160) {
       settings.profileTone = "error";
-      settings.profileMessage = "Bioは160文字以内で入力してください。";
+      settings.profileMessage = () => `${t("social.bio")}: ${relayText("bioHint")}`;
       render();
       return;
     }
     settings.profileSaving = true;
-    settings.profileMessage = "";
+    settings.profileMessage = () => "";
     settings.profileTone = null;
     render();
     try {
       const response = await runLifecycleStep(lifecycle, () => runtime!.profilePort.updateProfile({ displayName, handle, bio }));
       if (response.status === "disposed") return;
       const updated = profileFromResponse(response.value.profile);
-      if (updated === null) throw new Error("保存結果にプロフィールが含まれていません。");
+      if (updated === null) throw new Error(relayText("saveUnverified"));
       profileLoadError = null;
       sharedProfile = updated;
       settings.profileDraft = null;
       syncProfileActors();
       settings.profileTone = "success";
-      settings.profileMessage = "プロフィールを保存しました。";
-      announce("プロフィールを保存しました。");
+      settings.profileMessage = () => relayText("profileSaved");
+      announce(relayText("profileSaved"));
       render();
       refreshProfileAvatar();
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.profileTone = "error";
-      settings.profileMessage = profileErrorMessage(error, "プロフィールを保存できませんでした。もう一度お試しください。");
+      settings.profileMessage = () => profileErrorMessage(error, relayText("profileSaveFailed"));
     } finally {
       if (lifecycle.disposed) return;
       settings.profileSaving = false;
@@ -1778,21 +2073,22 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   /** Reused by the Account section and the account menu's own avatar. */
   async function saveProfileAvatar(file: File): Promise<void> {
     const settings = state.screens.settings;
+    if (screenWriteHeld() || lifecycle.disposed) return;
     if (runtime === null) {
       settings.avatarTone = "error";
-      settings.avatarMessage = "デモでは保存できません。Googleでサインインしてから変更してください。";
+      settings.avatarMessage = () => relayText("demoSaveBlocked");
       render();
       return;
     }
     if (sharedProfile === null) {
       settings.avatarTone = "error";
-      settings.avatarMessage = "先にプロフィールを保存してから、Avatarを追加してください。";
+      settings.avatarMessage = () => relayText("profileSetupHint");
       render();
       return;
     }
     settings.avatarSaving = true;
     settings.avatarProgress = 0;
-    settings.avatarMessage = "";
+    settings.avatarMessage = () => "";
     settings.avatarTone = null;
     render();
     const previousProfile = sharedProfile;
@@ -1817,7 +2113,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       if (response.status === "disposed") return;
       const updated = normalizeProfileRecord(response.value.profile);
       if (updated === null || updated.hasCustomAvatar !== true || updated.avatarVersion === undefined || updated.avatarVersion < 1) {
-        throw new Error("保存結果にAvatar情報が含まれていません。");
+        throw new Error(relayText("saveUnverified"));
       }
       committed = true;
       profileLoadError = null;
@@ -1843,18 +2139,18 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         sharedProfile = { ...updated, avatarUrl: finalUrl };
         syncProfileActors();
         settings.avatarTone = "success";
-        settings.avatarMessage = "Avatarを更新しました。";
-        announce("Avatarを更新しました。");
+        settings.avatarMessage = () => relayText("avatarUpdated");
+        announce(relayText("avatarUpdated"));
       } catch {
         settings.avatarTone = "success";
-        settings.avatarMessage = "Avatarを保存しました。表示の更新は再読み込み後に反映されます。";
+        settings.avatarMessage = () => relayText("avatarRefreshHint");
       }
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.avatarTone = "error";
-      settings.avatarMessage = committed
-        ? "Avatarは保存されましたが、表示の更新に失敗しました。再読み込みしてください。"
-        : profileErrorMessage(error, "Avatarを保存できませんでした。もう一度お試しください。");
+      settings.avatarMessage = () => committed
+        ? relayText("avatarRefreshHint")
+        : profileErrorMessage(error, relayText("avatarSaveFailed"));
       if (!committed) {
         sharedProfile = previousProfile;
         syncProfileActors();
@@ -1873,17 +2169,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   async function removeProfileAvatar(): Promise<void> {
     const settings = state.screens.settings;
-    if (runtime === null || sharedProfile === null || sharedProfile.hasCustomAvatar !== true || settings.avatarSaving) return;
+    if (runtime === null || sharedProfile === null || sharedProfile.hasCustomAvatar !== true || screenWriteHeld()) return;
     settings.avatarSaving = true;
     settings.avatarProgress = null;
-    settings.avatarMessage = "";
+    settings.avatarMessage = () => "";
     settings.avatarTone = null;
     render();
     try {
       const response = await runLifecycleStep(lifecycle, () => runtime!.profileAvatarPort.deleteProfileAvatar());
       if (response.status === "disposed") return;
       const updated = normalizeProfileRecord(response.value.profile);
-      if (updated === null) throw new Error("保存結果にプロフィールが含まれていません。");
+      if (updated === null) throw new Error(relayText("saveUnverified"));
       clearProfileAvatarCache();
       if (profilePreviewUrl !== null) {
         URL.revokeObjectURL(profilePreviewUrl);
@@ -1892,12 +2188,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       sharedProfile = updated;
       syncProfileActors();
       settings.avatarTone = "success";
-      settings.avatarMessage = "Avatarを削除しました。";
-      announce("Avatarを削除しました。");
+      settings.avatarMessage = () => relayText("avatarRemoved");
+      announce(relayText("avatarRemoved"));
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.avatarTone = "error";
-      settings.avatarMessage = profileErrorMessage(error, "Avatarを削除できませんでした。もう一度お試しください。");
+      settings.avatarMessage = () => profileErrorMessage(error, relayText("avatarRemoveFailed"));
     } finally {
       if (lifecycle.disposed) return;
       settings.avatarSaving = false;
@@ -1909,17 +2205,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     const settings = state.screens.settings;
     if (url === "") {
       settings.mcpCopyTone = "error";
-      settings.mcpCopyMessage = "MCP URLを取得できませんでした。";
+      settings.mcpCopyMessage = () => relayText("mcpUrlMissing");
       render();
       return;
     }
     try {
       await navigator.clipboard.writeText(url);
       settings.mcpCopyTone = "success";
-      settings.mcpCopyMessage = "コピーしました。";
+      settings.mcpCopyMessage = () => relayText("copied");
     } catch {
       settings.mcpCopyTone = "error";
-      settings.mcpCopyMessage = "コピーできませんでした。手動で選択してコピーしてください。";
+      settings.mcpCopyMessage = () => relayText("copyFailed");
     }
     render();
   }
@@ -1941,7 +2237,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       sharedMcpTools = toolsFromResponse(response.value);
     } catch (error) {
       if (lifecycle.disposed) return;
-      mcpToolsLoadError = profileErrorMessage(error, "MCP Tool一覧を取得できませんでした。再試行してください。");
+      mcpToolsLoadError = profileErrorMessage(error, relayText("loadFailed"));
     } finally {
       if (lifecycle.disposed) return;
       mcpToolsLoading = false;
@@ -1966,7 +2262,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       await refreshAgentConnections();
     } catch (error) {
       if (lifecycle.disposed) return;
-      agentConnectionsLoadError = profileErrorMessage(error, "MCP接続の一覧を取得できませんでした。再試行してください。");
+      agentConnectionsLoadError = profileErrorMessage(error, relayText("mcpListFailed"));
     } finally {
       if (lifecycle.disposed) return;
       agentConnectionsLoading = false;
@@ -1977,26 +2273,37 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   function openAgentPicker(clientId: string): void {
     const row = sharedAgentConnections.find((connection) => connection.clientId === clientId);
     state.screens.settings.connectionDrafts[clientId] = row?.linkedAgentId ?? "";
-    state.screens.settings.connectionMessage = "";
+    state.screens.settings.connectionMessage = () => "";
     state.screens.settings.connectionTone = null;
     render();
+    const card = connectionCard(clientId);
+    (card?.querySelector<HTMLButtonElement>('.rf-set-agent-picker button[aria-pressed="true"]') ?? card?.querySelector<HTMLButtonElement>('.rf-set-agent-picker button'))?.focus({ preventScroll: true });
+  }
+
+  function connectionCard(clientId: string): HTMLElement | null {
+    return screenHost.querySelector<HTMLElement>(`.rf-set-connection-card[data-client-id="${CSS.escape(clientId)}"]`);
   }
 
   function cancelAgentPicker(clientId: string): void {
+    if (state.screens.settings.connectionBusyId === clientId) return;
     delete state.screens.settings.connectionDrafts[clientId];
     render();
+    connectionCard(clientId)?.querySelector<HTMLButtonElement>('.rf-set-connection-actions button')?.focus({ preventScroll: true });
   }
 
   function selectConnectionAgent(clientId: string, agentId: string): void {
+    if (state.screens.settings.connectionBusyId === clientId) return;
     state.screens.settings.connectionDrafts[clientId] = agentId;
     render();
+    const card = connectionCard(clientId);
+    card?.querySelector<HTMLButtonElement>(`button[data-agent-id="${CSS.escape(agentId)}"]`)?.focus({ preventScroll: true });
   }
 
   async function linkAgent(clientId: string, agentId: string): Promise<void> {
     const settings = state.screens.settings;
-    if (runtime === null || agentId === "" || settings.connectionBusyId !== null) return;
+    if (runtime === null || agentId === "" || screenWriteHeld()) return;
     settings.connectionBusyId = clientId;
-    settings.connectionMessage = "";
+    settings.connectionMessage = () => "";
     settings.connectionTone = null;
     render();
     try {
@@ -2004,24 +2311,26 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       await refreshAgentConnections();
       delete settings.connectionDrafts[clientId];
       settings.connectionTone = "success";
-      settings.connectionMessage = "Linked Agentを更新しました。";
-      announce("Linked Agentを更新しました。");
+      settings.connectionMessage = () => relayText("agentLinked");
+      announce(relayText("agentLinked"));
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.connectionTone = "error";
-      settings.connectionMessage = profileErrorMessage(error, "Linked Agentを更新できませんでした。再試行してください。");
+      settings.connectionMessage = () => profileErrorMessage(error, relayText("agentLinkFailed"));
     } finally {
       if (lifecycle.disposed) return;
       settings.connectionBusyId = null;
       render();
+      const card = connectionCard(clientId);
+      (card?.querySelector<HTMLButtonElement>('.rf-set-agent-picker-actions button') ?? card?.querySelector<HTMLButtonElement>('.rf-set-connection-actions button'))?.focus({ preventScroll: true });
     }
   }
 
   async function unlinkAgent(clientId: string, agentId: string): Promise<void> {
     const settings = state.screens.settings;
-    if (runtime === null || agentId === "" || settings.connectionBusyId !== null) return;
+    if (runtime === null || agentId === "" || screenWriteHeld()) return;
     settings.connectionBusyId = clientId;
-    settings.connectionMessage = "";
+    settings.connectionMessage = () => "";
     settings.connectionTone = null;
     render();
     try {
@@ -2029,12 +2338,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       await refreshAgentConnections();
       delete settings.connectionDrafts[clientId];
       settings.connectionTone = "success";
-      settings.connectionMessage = "Agentのリンクを解除しました。MCP接続は維持されています。";
-      announce("Agentのリンクを解除しました。");
+      settings.connectionMessage = () => relayText("agentUnlinked");
+      announce(relayText("agentUnlinked"));
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.connectionTone = "error";
-      settings.connectionMessage = profileErrorMessage(error, "Agentのリンクを解除できませんでした。再試行してください。");
+      settings.connectionMessage = () => profileErrorMessage(error, relayText("agentUnlinkFailed"));
     } finally {
       if (lifecycle.disposed) return;
       settings.connectionBusyId = null;
@@ -2044,9 +2353,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   async function revokeMcpConnection(clientId: string): Promise<void> {
     const settings = state.screens.settings;
-    if (runtime === null || clientId === "" || settings.connectionBusyId !== null) return;
+    if (runtime === null || clientId === "" || screenWriteHeld()) return;
     settings.connectionBusyId = clientId;
-    settings.connectionMessage = "";
+    settings.connectionMessage = () => "";
     settings.connectionTone = null;
     render();
     try {
@@ -2054,12 +2363,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       await refreshAgentConnections();
       delete settings.connectionDrafts[clientId];
       settings.connectionTone = "success";
-      settings.connectionMessage = "MCP接続を解除しました。Agent本体は削除されません。";
-      announce("MCP接続を解除しました。");
+      settings.connectionMessage = () => relayText("mcpRevoked");
+      announce(relayText("mcpRevoked"));
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.connectionTone = "error";
-      settings.connectionMessage = profileErrorMessage(error, "MCP接続を解除できませんでした。もう一度お試しください。");
+      settings.connectionMessage = () => profileErrorMessage(error, relayText("mcpRevokeFailed"));
     } finally {
       if (lifecycle.disposed) return;
       settings.connectionBusyId = null;
@@ -2102,7 +2411,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
               class: "rf-nav-item",
               "data-selected": selected ? "true" : "false",
               "aria-current": selected ? "page" : null,
-              title: `${domain.label} (G then ${domain.mnemonic})`,
+              title: domain.label,
               disabled: domain.migrated ? null : true,
             },
             el("span", { class: "rf-nav-glyph", "data-domain": domain.id, "aria-hidden": "true" }),
@@ -2110,7 +2419,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
             domain.id === "command"
               ? el("span", { class: "rf-nav-attention" }, String(state.model.interventions.length))
               : null,
-            domain.migrated ? null : el("span", { class: "rf-visually-hidden" }, "未移行"),
+
           );
           if (domain.migrated) {
             button.addEventListener("click", () => {
@@ -2194,6 +2503,14 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
             button.addEventListener("click", () => openSettings("top"));
             return el("li", null, button);
           })(),
+          (() => {
+            if (!production) return el("li", null,
+              el("p", { class: "rf-demo-label" }, relayText("demoHint")),
+              el("a", { class: "rf-nav-item", href: window.location.pathname }, relayText("signIn")));
+            const signOut = el("button", { type: "button", class: "rf-nav-item" }, t("sync.signOut"));
+            signOut.addEventListener("click", () => { void handleSignOut(); });
+            return el("li", null, signOut);
+          })(),
         )
         : null,
       el(
@@ -2232,9 +2549,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         (() => {
           const collapse = el(
             "button",
-            { type: "button", class: "rf-rail-utility", title: "Collapse rail" },
-            el("span", { class: "rf-nav-label" }, "Collapse"),
-            el("kbd", { class: "rf-kbd" }, "⌘K"),
+            { type: "button", class: "rf-rail-utility", title: relayText(state.railCollapsed ? "expandRail" : "collapseRail"), "aria-expanded": String(!state.railCollapsed) },
+            el("span", { class: "rf-nav-label" }, relayText(state.railCollapsed ? "expandRail" : "collapseRail")),
             el("span", { class: "rf-collapse-mark", "aria-hidden": "true" }),
           );
           collapse.addEventListener("click", () => {
@@ -2266,33 +2582,25 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   function renderOperationBar(): void {
     const search = el(
       "button",
-      { type: "button", class: "rf-search-trigger", title: "Search and commands" },
+      { type: "button", class: "rf-search-trigger", title: relayText("questSearch") },
       el("span", { class: "rf-search-glyph", "aria-hidden": "true" }),
-      el("span", { class: "rf-search-copy" }, "Quest, Actor, Connection を検索"),
-      el("kbd", { class: "rf-kbd" }, "⌘K"),
+      el("span", { class: "rf-search-copy" }, relayText("questSearch")),
+      el("kbd", { class: "rf-kbd" }, /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"),
     );
+    search.addEventListener("click", openQuestSearch);
     replaceChildren(
       operationBar,
       el(
         "div",
         { class: "rf-operation-left" },
         el("h1", { class: "rf-page-title" }, domainLabel(state.domain)),
+        production ? null : el("span", { class: "rf-demo-label", role: "status", title: relayText("demoHint") }, relayText("demoLabel")),
       ),
       el("div", { class: "rf-operation-center" }, search),
       el(
         "div",
         { class: "rf-operation-right" },
-        el(
-          "span",
-          { class: "rf-create-group" },
-          el("button", { type: "button", class: "rf-primary-button rf-create" }, "Create"),
-          el(
-            "button",
-            { type: "button", class: "rf-primary-button rf-create-more", title: "Create options" },
-            el("span", { class: "rf-visually-hidden" }, "Create options"),
-            el("span", { class: "rf-caret-mark", "aria-hidden": "true" }),
-          ),
-        ),
+        el("button", { type: "button", class: "rf-primary-button rf-create", disabled:screenWriteHeld() }, relayText("createQuest")),
         el(
           "button",
           { type: "button", class: "rf-quiet-button rf-alerts rf-human-inbox-trigger", title: relayText("inbox") },
@@ -2307,14 +2615,14 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function renderBand(): void {
-    const slots = runtime ? state.model.capacity : state.stale ? fixtureCapacityStale : fixtureCapacity;
+    const slots = runtime ? state.model.capacity.map(slot => slot.id === "health" ? { ...slot, value:`${workspaceOffline ? relayText("statusOffline") : state.model.syncState === "error" ? relayText("statusError") : state.model.syncState === "synced" && deferredPanelErrors.length > 0 ? relayText("statusPartial") : t(`sync.${state.model.syncState}`)} · ${state.model.lastSyncLabel}`, tone:state.model.syncState === "error" ? "danger" as const : slot.tone } : slot) : state.stale ? fixtureCapacityStale : fixtureCapacity;
     replaceChildren(
       bandRegion,
       capacityBand(slots, {
         expandHealth: state.stale,
         onSelect: (slot: CapacitySlot) => {
           if (slot.filter === "health") {
-            if (runtime) { openSettings("mcp"); return; }
+            if (runtime) { void refreshWorkspace(); return; }
             state.stale = !state.stale;
             render();
             return;
@@ -2346,9 +2654,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
    * workspace opens at its header instead of inheriting an offset (A3).
    */
   let keepScroll = false;
+  let previewReturnControl: string | null = null;
 
   function buildLoom(inSheet: boolean): HTMLElement {
     return questLoom(state.model.quests, {
+      listId: inSheet ? "rf-sheet-loom" : "rf-command-loom",
       actors: state.model.actors,
       selectedQuestId: state.selectedQuestId,
       onSelect: (questId, trigger) => {
@@ -2375,17 +2685,20 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         el(
           "div",
           { class: "rf-state rf-state--empty", role: "status" },
-          el("p", { class: "rf-state-title" }, "判断対象の Quest を選んでください"),
-          el("p", { class: "rf-state-body" }, "Attention Shelf または Quest Loom から Quest を選ぶと、Relay と Evidence がここに開きます。"),
+          el("p", { class: "rf-state-title" }, relayText("shellChooseQuest")),
+          el("p", { class: "rf-state-body" }, relayText("shellChooseHint")),
         ),
       )
       : selectedQuestWorkspace(view, state.model.actors, {
-        writeLocked: state.stale || state.taskSubmitting,
-        pendingMessage: state.taskSubmitting ? state.taskMessage : undefined,
+        writeLocked: screenWriteHeld(),
+        pendingMessage: state.taskSubmitting && taskQuestId === state.selectedQuestId ? state.taskMessage() : undefined,
+        resultMessage: taskQuestId === state.selectedQuestId && !state.taskSubmitting ? state.taskMessage() : undefined,
+        resultTone: taskQuestId === state.selectedQuestId && !state.taskSubmitting ? state.taskTone : null,
         previewArtifactId: state.previewArtifactId,
         /* Evidence inspection only. The final decision lives in the Lens
          * Decision Bar (v2 section 7.4), so these never share a command. */
         onReviewOutput: (artifactId) => {
+          previewReturnControl = document.activeElement?.getAttribute("data-command-control") ?? null;
           state.previewArtifactId = artifactId;
           render();
           // Bring the whole preview into view, then take focus without letting
@@ -2397,7 +2710,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onClosePreview: () => {
           state.previewArtifactId = null;
           render();
-          workfield.querySelector<HTMLElement>(".rf-review-button")?.focus();
+          workfield.querySelector<HTMLElement>(previewReturnControl === null ? ".rf-review-button" : `[data-command-control="${CSS.escape(previewReturnControl)}"]`)?.focus();
+          previewReturnControl = null;
         },
         onRequestRevision: focusRevision,
         questActions: selectedQuestActions(),
@@ -2422,13 +2736,11 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           render();
         },
       }),
-      state.chronicleExpanded
-        ? el(
+      el(
           "div",
-          { class: "rf-chronicle-expanded" },
+          { class: "rf-chronicle-expanded", id:"rf-command-history", hidden:!state.chronicleExpanded },
           executionChronicle(chronicleForSelection(), state.model.actors),
-        )
-        : null,
+        ),
     );
   }
 
@@ -2439,18 +2751,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       lensRegion,
       interventionLens(state.lensState === "closed" ? null : content, state.model.actors, {
         state: state.lensState,
-        writeLocked: state.stale,
+        writeLocked: screenWriteHeld(),
         blockedReason: blockingReason(decisionGate(), state.decision.phase),
-        submitting: selectedQuestActions().mode === "handoff-decision" ? state.decision.phase === "submitting" : state.taskSubmitting,
+        submitting: state.decision.phase === "submitting" || state.taskSubmitting,
         verification: verificationSummary(),
         revisionOpen: state.revisionOpen,
         revisionReason: state.revisionReason,
         revisionError: state.revisionError,
-        resultTone: selectedQuestActions().mode === "handoff-decision"
-          ? (state.decision.phase === "succeeded" ? "success"
-            : state.decision.phase === "failed" && state.decision.code !== "blocked" ? "error" : null)
-          : state.taskTone,
-        resultMessage: selectedQuestActions().mode === "handoff-decision" ? state.decision.message : state.taskMessage,
+        resultTone: resultTone(),
+        resultMessage: resultMessage(),
         onClose: closeLens,
         onTogglePin: () => {
           state.lensState = state.lensState === "pinned" ? "open" : "pinned";
@@ -2459,19 +2768,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         externalChecked: decisionGate().evidenceReviewed,
         onExternalChecked: setExternalChecked,
         onApprove: () => { void runDecision("approve"); },
-        onOpenRevision: () => {
-          state.revisionOpen = true;
-          state.decision = IDLE_DECISION;
-          render();
-          lensRegion.querySelector<HTMLElement>(".rf-revision-input")?.focus();
-        },
-        onCancelRevision: () => {
-          state.revisionOpen = false;
-          state.revisionReason = "";
-          state.revisionError = null;
-          render();
-          lensRegion.querySelector<HTMLElement>(".rf-decision-approve")?.focus();
-        },
+        onOpenRevision: focusRevision,
+        onCancelRevision: cancelRevision,
         onRevisionInput: (value: string) => { state.revisionReason = value; },
         onSubmitRevision: () => { void runDecision("revise"); },
         questActions: selectedQuestActions(),
@@ -2492,24 +2790,21 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       evidenceOpen: state.mobileEvidenceOpen,
       supportingOpen: state.mobileSupportingOpen,
       chronicleOpen: state.mobileChronicleOpen,
-      writeLocked: state.stale,
+      writeLocked: screenWriteHeld(),
+      syncState: state.stale || state.model.syncState === "synced" && deferredPanelErrors.length > 0 ? "stale" : state.model.syncState,
       blockedReason: blockingReason(decisionGate(), state.decision.phase),
       verification: verificationSummary(),
       revisionOpen: state.revisionOpen,
       revisionReason: state.revisionReason,
       revisionError: state.revisionError,
-      resultTone: selectedQuestActions().mode === "handoff-decision"
-        ? (state.decision.phase === "succeeded" ? "success" as const
-        : state.decision.phase === "failed" && state.decision.code !== "blocked" ? "error" as const
-        : null)
-        : state.taskTone,
-      resultMessage: selectedQuestActions().mode === "handoff-decision" ? state.decision.message : state.taskMessage,
-      submitting: selectedQuestActions().mode === "handoff-decision" ? state.decision.phase === "submitting" : state.taskSubmitting,
+      resultTone: resultTone(),
+      resultMessage: resultMessage(),
+      submitting: state.decision.phase === "submitting" || state.taskSubmitting,
       permissionMissing: forcedState === "permission"
-        ? "quests:write スコープが不足しています。Connections で接続権限とAgentの許可設定を確認してください。"
+        ? relayText("actionPermission")
         : null,
       conflict: forcedState === "conflict"
-        ? "他の Actor が 10:58 に状態を更新しました。最新の内容を確認してから再実行してください。"
+        ? relayText("handoffConflict")
         : null,
       loading: forcedState === "loading",
     };
@@ -2526,12 +2821,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   function syncShelfPosition(): void {
     const track = mobileRegion.querySelector<HTMLElement>(".rf-m-shelf-track");
     if (track === null || state.selectedQuestId === null) return;
-    if (!track.dataset.scrollBound) {
-      track.dataset.scrollBound = "true";
-      track.addEventListener("scroll", () => { state.shelfUserScrolled = true; }, { passive: true });
-    }
-    if (state.shelfUserScrolled && state.selectedQuestId === shelfAlignedTo) return;
-    const card = track.querySelector<HTMLElement>(`.rf-m-shelf-card[data-quest-id="${state.selectedQuestId}"]`);
+    if (state.selectedQuestId === shelfAlignedTo) return;
+    const card = track.querySelector<HTMLElement>(`.rf-m-shelf-card[data-quest-id="${CSS.escape(state.selectedQuestId)}"]`);
     if (card === null) return;
     const trackBox = track.getBoundingClientRect();
     const cardBox = card.getBoundingClientRect();
@@ -2544,20 +2835,23 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       });
     }
     shelfAlignedTo = state.selectedQuestId;
-    state.shelfUserScrolled = false;
   }
 
   function renderMobile(): void {
     if (!isMobile()) {
+      shelfAlignedTo = null;
       replaceChildren(mobileRegion);
       replaceChildren(mobileDecision);
       return;
     }
     const snapshot = mobileState();
+    const track = mobileRegion.querySelector<HTMLElement>(".rf-m-shelf-track");
+    const shelfScroll = snapshot.selectedQuestId === shelfAlignedTo ? track?.scrollLeft : undefined;
     const callbacks = {
       onSelect: select,
       onOpenQuestFlow: openQuestFlow,
       onToggleEvidence: () => {
+        if (!snapshot.view?.evidence.find(artifact => artifact.primary)?.preview) return;
         state.mobileEvidenceOpen = !state.mobileEvidenceOpen;
         render();
       },
@@ -2571,25 +2865,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       },
       onExternalChecked: setExternalChecked,
       onInbox: (trigger: HTMLElement) => inbox.open(trigger),
+      onRefreshWorkspace: runtime?.refreshWorkspace ? () => { void refreshWorkspace(); } : undefined,
       onApprove: () => { void runDecision("approve"); },
-      onRequestRevision: () => {
-        state.revisionOpen = true;
-        state.decision = IDLE_DECISION;
-        render();
-        mobileDecision.querySelector<HTMLElement>(".rf-revision-input")?.focus();
-      },
+      onRequestRevision: focusRevision,
       onRevisionInput: (value: string) => { state.revisionReason = value; },
       onSubmitRevision: () => { void runDecision("revise"); },
       onQuestAction: (action: QuestActionId) => { void runQuestAction(action); },
-      onCancelRevision: () => {
-        state.revisionOpen = false;
-        state.revisionReason = "";
-        state.revisionError = null;
-        render();
-      },
+      onCancelRevision: cancelRevision,
     };
     replaceChildren(mobileRegion, mobileCommand(snapshot, callbacks));
     replaceChildren(mobileDecision, mobileDecisionBar(snapshot.view, snapshot, callbacks));
+    if (shelfScroll !== undefined) mobileRegion.querySelector<HTMLElement>(".rf-m-shelf-track")?.scrollTo({ left:shelfScroll });
     // Measure after layout: a re-render resets the track's scroll offset, so the
     // alignment has to be re-applied once the new DOM has been laid out.
     window.requestAnimationFrame(() => syncShelfPosition());
@@ -2608,7 +2894,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     return {
       actors: state.model.actors,
       isMobile: isMobile(),
-      writeLocked: state.stale || writeHeldFor(state.variant),
+      writeLocked: screenWriteHeld(),
       onSelectQuest: (questId: string) => {
         state.selectedQuestId = questId;
         render();
@@ -2617,14 +2903,24 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         const target = DOMAINS.find((entry) => entry.id === domain);
         if (target === undefined) return;
         if (questId !== undefined) {
-          /* Command works from the intervention queue, which is a subset of the
-           * portfolio. Handing it a Quest it does not hold would blank its
-           * workspace with no explanation, so the previous selection is kept
-           * and the reason is announced instead of silently losing context. */
-          const known = target.id !== "command" || state.model.quests.some((quest) => quest.id === questId);
-          if (known) state.selectedQuestId = questId;
-          else {
-            liveRegion.textContent = "この Quest は現在の介入キューにないため、Command の選択は変更していません。";
+          if (target.id === "party") {
+            state.screens.party.selectedActorId = questId;
+            state.screens.party.filter = "all";
+            state.screens.party.mobileDetailOpen = true;
+          } else if (target.id === "connections") {
+            state.screens.connections.selectedId = questId;
+            state.screens.connections.filter = "all";
+            state.screens.connections.mobileDetailOpen = true;
+          } else {
+            /* Command works from the intervention queue, which is a subset of the
+             * portfolio. Handing it a Quest it does not hold would blank its
+             * workspace with no explanation, so the previous selection is kept
+             * and the reason is announced instead of silently losing context. */
+            const known = target.id !== "command" || state.model.quests.some((quest) => quest.id === questId);
+            if (known) state.selectedQuestId = questId;
+            else {
+              liveRegion.textContent = relayText("interventionUnavailable");
+            }
           }
         }
         state.domain = target.id;
@@ -2643,15 +2939,20 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function renderScreen(): ScreenRender | null {
+    if (state.domain === "battle" && battleLoadError) {
+      const retry = el("button", { type: "button", class:"rf-secondary-button", "data-battle-action":"refresh", disabled:battleBusy(state.screens.battle) }, relayText("retry"));
+      retry.addEventListener("click", () => { void refreshBattle(state.screens.battle, { port:battlePort, onSession:() => {}, onRefresh:refreshBattleSession, isDisposed:() => lifecycle.disposed }, render); });
+      return { main: el("section", { class: "rf-deferred-panel" }, el("h2", {}, "Battle"), el("p", { role:battleBusy(state.screens.battle) ? "status" : "alert", tabindex:"-1", "data-battle-action":"status" }, battleBusy(state.screens.battle) ? relayText("statusLoading") : battleLoadError), retry) };
+    }
     const panelIndices: Partial<Record<NavId, readonly number[]>> = { network: [2], party: [4], battle: [1], connections: [2], skills: [7], settings: [6] };
     const indices = panelIndices[state.domain];
     const panelError = deferredError ?? deferredPanelErrors.find((entry) => indices?.includes(entry.index))?.message;
     if (runtime?.loadDeferred && indices && (deferredLoading || panelError)) {
-      const retry = el("button", { type: "button" }, "再試行");
+      const retry = el("button", { type: "button" }, relayText("retry"));
       retry.addEventListener("click", () => { if (!deferredLoading) void loadDeferredPanels(); });
       return { main: el("section", { class: "rf-deferred-panel", "aria-busy": String(deferredLoading) },
         el("h2", {}, domainLabel(state.domain)),
-        el("p", { role: deferredLoading ? "status" : "alert" }, deferredLoading ? "この画面の情報を読み込んでいます。タスクはそのまま操作できます。" : panelError || "読み込みに失敗しました。"),
+        el("p", { role: deferredLoading ? "status" : "alert" }, deferredLoading ? relayText("panelLoading") : panelError || relayText("loadFailed")),
         ...(deferredLoading ? [] : [retry])), sticky: null };
     }
     const context = screenContext();
@@ -2701,7 +3002,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
             .map((quest) => quest.id),
         })),
         selfUid: runtime?.selfUid ?? "hironao",
-        notices: screenNotices("関係データ", retry),
+        notices: screenNotices(relayText("networkData"), retry),
       });
       return isMobile()
         ? renderNetworkMobile(model, state.screens.network, context, state.selectedQuestId)
@@ -2715,10 +3016,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         agents: screenAgents(),
         selfUid: runtime?.selfUid ?? "hironao",
         partyName: screenPartyName(),
-        notices: screenNotices("パーティとAgent台帳", retry),
+        notices: screenNotices(relayText("agentsTitle"), retry),
         unavailable: [{
-          what: "メンバーの招待と離脱",
-          why: "この画面からは接続していません（Party の書き込み操作は未接続です）",
+          what: relayText("partyInvite"),
+          why: relayText("partyInviteHint"),
         }],
         now: screenNow(),
       });
@@ -2734,13 +3035,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     if (state.domain === "battle") {
       const model = normalizeBattleModel({
         session: battleSession,
-        notices: screenNotices("戦闘の状態", retry),
+        notices: screenNotices("Battle", retry),
         writeHeld: screenWriteHeld(),
         decisions: state.screens.battle.decisions,
       });
       const callbacks = {
         port: battlePort,
-        onSession: (session: BattleSession) => { battleSession = session; },
+        isDisposed: () => lifecycle.disposed,
+        onRefresh: refreshBattleSession,
+        onSession: (session: BattleSession) => { battleMutation += 1; battleSession = session; battleLoadError = null; deferredPanelErrors = deferredPanelErrors.filter(entry => entry.index !== 1); },
       };
       return isMobile()
         ? renderBattleMobile(model, state.screens.battle, context, callbacks)
@@ -2754,6 +3057,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         questLinks: quests.map((quest) => ({
           id: quest.id,
           title: quest.title,
+          lifecycleState: quest.lifecycleState,
           services: quest.externalLinks.map((link) => link.service),
         })),
         agents: screenAgents().map((agent) => ({
@@ -2761,8 +3065,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           displayName: agent.displayName,
           allowedScopes: agent.allowedScopes ?? [],
         })),
-        notices: screenNotices("連携", retry),
+        notices: screenNotices("Connections", retry),
         writeHeld: screenWriteHeld(),
+        refreshFailed: connectionRefreshFailed,
       });
       return isMobile()
         ? renderConnectionsMobile(model, state.screens.connections, context, connectionsPort)
@@ -2779,8 +3084,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         sourceLabel: "Guilduo MCP",
         sourceUrl: mcpUrl,
         connectionLabel: production
-          ? authorizedConnections === 0 ? "No external OAuth client connected" : `${authorizedConnections} authorized OAuth connection${authorizedConnections === 1 ? "" : "s"}`
-          : "Preview catalog",
+          ? authorizedConnections === 0 ? relayText("skillsNoClients") : `${relayText("skillsOAuth")}: ${countLabel(authorizedConnections)}`
+          : relayText("skillsPreview"),
         query: state.screens.skills.query,
         loading: production ? mcpToolsLoading : state.variant === "loading",
         connected: production ? mcpUrl !== "" : state.variant !== "permission",
@@ -2790,14 +3095,6 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onSearch: (query: string) => {
           state.screens.skills.query = query;
           render();
-          window.requestAnimationFrame(() => {
-            const input = screenHost.querySelector<HTMLInputElement>(".rf-skills-search-input");
-            if (input !== null) {
-              input.focus();
-              const position = Math.min(query.length, input.value.length);
-              input.setSelectionRange(position, position);
-            }
-          });
         },
         onToggleGroup: (groupId: string) => {
           state.screens.skills.expandedGroups[groupId] = state.screens.skills.expandedGroups[groupId] !== true;
@@ -2868,6 +3165,45 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function render(): void {
+    if (lifecycle.disposed || inputComposing) return;
+    if (revisionSelection !== state.selectedQuestId) {
+      revisionSelection = state.selectedQuestId;
+      state.revisionOpen = false;
+      state.revisionReason = "";
+      state.revisionError = null;
+      checkedReview = null;
+    }
+    if (decisionQuestId === state.selectedQuestId && state.decision.code === "reason_required") state.revisionError = state.decision.message;
+    const revisionField = document.activeElement instanceof HTMLTextAreaElement && document.activeElement.matches(".rf-revision-input")
+      ? { start:document.activeElement.selectionStart, end:document.activeElement.selectionEnd, direction:document.activeElement.selectionDirection }
+      : null;
+    const focusedQuest = document.activeElement instanceof HTMLElement && document.activeElement.matches(".rf-spine-row, .rf-shelf-card, .rf-m-shelf-card")
+      ? { id:document.activeElement.dataset.questId, selector:["rf-spine-row", "rf-shelf-card", "rf-m-shelf-card"].find(name => document.activeElement?.classList.contains(name)) }
+      : null;
+    const commandToggle = document.activeElement instanceof HTMLElement && document.activeElement.matches(".rf-m-review, .rf-m-supporting-toggle, .rf-m-chronicle-toggle")
+      ? document.activeElement.id : null;
+    const commandControl = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.commandControl : undefined;
+    const networkElement = document.activeElement instanceof HTMLElement && document.activeElement.closest(".rf-screen--network") ? document.activeElement : null;
+    const networkAttribute = networkElement === null ? undefined : ["data-node-id", "data-network-control", "data-lane", "data-focus-id"].find(name => networkElement.hasAttribute(name));
+    const networkFocus = networkAttribute === undefined ? null : { attribute:networkAttribute, value:networkElement!.getAttribute(networkAttribute)! };
+    const skillsElement = document.activeElement instanceof HTMLElement && document.activeElement.closest(".rf-skills-screen") ? document.activeElement : null;
+    const searchElement = document.activeElement instanceof HTMLInputElement && screenHost.contains(document.activeElement) && document.activeElement.matches(".rf-search-input") ? document.activeElement : null;
+    const searchInput = searchElement === null ? null : { domain:state.domain, start:searchElement.selectionStart, end:searchElement.selectionEnd, direction:searchElement.selectionDirection };
+    const skillsGroup = skillsElement?.dataset.groupToggle;
+    const skillsScroll = screenHost.querySelector<HTMLElement>(".rf-skills-screen")?.scrollTop;
+    const connectionElement = document.activeElement instanceof HTMLElement && document.activeElement.closest(".rf-screen--connections") ? document.activeElement : null;
+    const connectionAttribute = connectionElement === null ? undefined : ["data-connection-id", "data-connection-action"].find(name => connectionElement.hasAttribute(name));
+    const connectionFocus = connectionAttribute === undefined ? null : { attribute:connectionAttribute, value:connectionElement!.getAttribute(connectionAttribute)! };
+    const connectionConfirm = connectionElement?.closest(".rf-confirm-actions") ? [...connectionElement.parentElement!.children].indexOf(connectionElement) : -1;
+    const connectionFilter = connectionElement?.matches('.rf-segment') === true;
+    const battleElement = document.activeElement instanceof HTMLElement && (document.activeElement.closest(".rf-screen--battle") || document.activeElement.hasAttribute("data-battle-action")) ? document.activeElement : null;
+    const battleAttribute = battleElement === null ? undefined : ["data-command", "data-battle-action"].find(name => battleElement.hasAttribute(name));
+    const battlePreviewFocus = battleElement?.matches(".rf-b-preview") === true;
+    const battleFocus = battleAttribute === undefined ? null : { attribute:battleAttribute, value:battleElement!.getAttribute(battleAttribute)! };
+    refreshQuestEditorCopy();
+    refreshAgentEditorCopy();
+    if (createDialog.open) syncAgentAssigneeOptions();
+    document.documentElement.lang = getLocale();
     shell.setAttribute("data-domain", state.domain);
     shell.setAttribute("data-mobile", isMobile() ? "true" : "false");
     shell.setAttribute("data-questflow", state.questFlowOpen ? "open" : "closed");
@@ -2875,6 +3211,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     shell.setAttribute("data-lens", state.lensState);
     shell.setAttribute("data-loom", state.loomCollapsed ? "collapsed" : "expanded");
     shell.setAttribute("data-stale", state.stale ? "true" : "false");
+    shell.setAttribute("data-sync-state", state.model.syncState);
     shell.setAttribute("data-chronicle", state.chronicleExpanded ? "expanded" : "strip");
     renderRail();
     renderOperationBar();
@@ -2887,6 +3224,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       renderChronicle();
       renderLens();
       renderMobile();
+      const notice = workspaceNotice();
+      if (notice) (isMobile() ? mobileRegion.querySelector(".rf-m-page") : workfield.querySelector(".rf-selected-header") ?? workfield)?.prepend(notice);
+      if (revisionField !== null) {
+        const field = (isMobile() ? mobileDecision : lensRegion).querySelector<HTMLTextAreaElement>(".rf-revision-input");
+        if (field && !field.disabled) { field.focus({ preventScroll:true }); field.setSelectionRange(revisionField.start, revisionField.end, revisionField.direction); }
+      }
+      if (focusedQuest?.id && focusedQuest.selector) shell.querySelector<HTMLElement>(`.${focusedQuest.selector}[data-quest-id="${CSS.escape(focusedQuest.id)}"]`)?.focus({ preventScroll:true });
+      if (commandToggle) shell.querySelector<HTMLElement>(`#${commandToggle}`)?.focus({ preventScroll:true });
+      if (commandControl) shell.querySelector<HTMLElement>(`[data-command-control="${CSS.escape(commandControl)}"]`)?.focus({ preventScroll:true });
       resetScrollOnDomainChange();
       return;
     }
@@ -2907,13 +3253,33 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       return;
     }
     replaceChildren(screenHost, screen.main);
+    const syncNotice = workspaceNotice();
+    if (syncNotice) screen.main.prepend(syncNotice);
     if (screen.sticky === null || screen.sticky === undefined) replaceChildren(screenSticky);
     else replaceChildren(screenSticky, screen.sticky);
+    if ((battleFocus !== null || battlePreviewFocus) && state.domain === "battle") {
+      const selector = battleFocus === null ? '[data-battle-action="execute"]' : `[${battleFocus.attribute}="${CSS.escape(battleFocus.value)}"]`;
+      const target = screenHost.querySelector<HTMLButtonElement>(selector) ?? screenSticky.querySelector<HTMLButtonElement>(selector);
+      (target && !target.disabled ? target : screenHost.querySelector<HTMLElement>('.rf-b-preview[tabindex], .rf-b-command:not(:disabled), [data-battle-action="status"], [data-battle-action="refresh"]'))?.focus({ preventScroll:true });
+    }
+    if (connectionFocus !== null || connectionConfirm >= 0 || connectionFilter) {
+      const target = connectionFocus !== null ? screenHost.querySelector<HTMLButtonElement>(`[${connectionFocus.attribute}="${CSS.escape(connectionFocus.value)}"]`)
+        : connectionConfirm >= 0 ? screenHost.querySelectorAll<HTMLButtonElement>(".rf-confirm-actions button")[connectionConfirm]
+        : screenHost.querySelector<HTMLButtonElement>('.rf-segment[aria-checked="true"]');
+      (target && !target.disabled ? target : screenHost.querySelector<HTMLButtonElement>('.rf-c-back, .rf-c-row[data-selected="true"]'))?.focus({ preventScroll:true });
+    }
+    if (networkFocus !== null) window.requestAnimationFrame(() => screenHost.querySelector<HTMLElement>(`[${networkFocus.attribute}="${CSS.escape(networkFocus.value)}"]`)?.focus({ preventScroll:true }));
+    if (skillsScroll !== undefined) screen.main.scrollTop = skillsScroll;
+    if (searchInput !== null && searchInput.domain === state.domain) {
+      const input = screenHost.querySelector<HTMLInputElement>(".rf-search-input");
+      input?.focus({ preventScroll:true });
+      if (searchInput.start !== null && searchInput.end !== null) input?.setSelectionRange(searchInput.start, searchInput.end, searchInput.direction ?? undefined);
+    } else if (skillsGroup) screenHost.querySelector<HTMLElement>(`[data-group-toggle="${CSS.escape(skillsGroup)}"]`)?.focus({ preventScroll:true });
     resetScrollOnDomainChange();
   }
 
   function handleLensAsSheetChange(event: MediaQueryListEvent): void {
-    state.lensState = event.matches ? "closed" : "open";
+    state.lensState = window.matchMedia("(min-width: 1600px)").matches ? "open" : "closed";
     if (!event.matches) closeQuestFlow();
     render();
   }
@@ -2936,7 +3302,22 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
   }
   document.addEventListener("keydown", handleLensKeydown);
+  const handleRevisionComposition = (event: CompositionEvent) => {
+    if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) || !event.target.matches(".rf-revision-input, .rf-search-input")) return;
+    inputComposing = event.type === "compositionstart";
+    if (!inputComposing) window.requestAnimationFrame(render);
+  };
+  shell.addEventListener("compositionstart", handleRevisionComposition);
+  shell.addEventListener("compositionend", handleRevisionComposition);
   window.addEventListener("questforge:locale-changed", render);
+  const onWorkspaceResume = () => { if (document.visibilityState !== "hidden") void refreshWorkspace(); };
+  const workspaceInterval = runtime?.refreshWorkspace ? window.setInterval(onWorkspaceResume, 30000) : null;
+  if (runtime?.refreshWorkspace) {
+    window.addEventListener("focus", onWorkspaceResume);
+    window.addEventListener("online", onWorkspaceResume);
+    window.addEventListener("offline", markWorkspaceOffline);
+    document.addEventListener("visibilitychange", onWorkspaceResume);
+  }
 
   render();
   refreshAgentAvatars();
@@ -2949,10 +3330,19 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     // microtask hops away it still is) observes disposal before it can
     // create a Blob URL, mutate shared state, or render.
     lifecycle.dispose();
+    mobileFooterObserver.disconnect();
+    if (workspaceInterval !== null) window.clearInterval(workspaceInterval);
+    window.removeEventListener("focus", onWorkspaceResume);
+    window.removeEventListener("online", onWorkspaceResume);
+    window.removeEventListener("offline", markWorkspaceOffline);
+    document.removeEventListener("visibilitychange", onWorkspaceResume);
     window.removeEventListener("questforge:locale-changed", render);
+    shell.removeEventListener("compositionstart", handleRevisionComposition);
+    shell.removeEventListener("compositionend", handleRevisionComposition);
     inbox.destroy();
     document.removeEventListener("click", handleAccountMenuOutsideClick);
     document.removeEventListener("keydown", handleAccountMenuKeydown);
+    document.removeEventListener("keydown", handleSearchShortcut);
     lensAsSheet.removeEventListener("change", handleLensAsSheetChange);
     prefersDarkQuery.removeEventListener("change", handlePrefersDarkChange);
     document.removeEventListener("keydown", handleLensKeydown);

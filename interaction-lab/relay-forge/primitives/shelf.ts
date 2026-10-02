@@ -10,6 +10,8 @@
 import { type Actor, formatWaiting, type Intervention } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el } from "./dom.ts";
+import { relayText } from "../relay-copy.ts";
+import { countLabel } from "../screens/screen-state.ts";
 
 const SEVERITY_ORDER: Readonly<Record<Intervention["severity"], number>> = {
   blocked: 0,
@@ -17,11 +19,7 @@ const SEVERITY_ORDER: Readonly<Record<Intervention["severity"], number>> = {
   waiting: 2,
 };
 
-const SEVERITY_LABEL: Readonly<Record<Intervention["severity"], string>> = {
-  blocked: "Blocked",
-  review: "Review",
-  waiting: "Waiting",
-};
+const SEVERITY_LABEL = { blocked:"stateBlocked", review:"stateReview", waiting:"waiting" } as const;
 
 /** Non-colour state marks (section 4): each severity owns a distinct glyph. */
 function severityMark(severity: Intervention["severity"]): HTMLElement {
@@ -62,8 +60,8 @@ export function attentionShelf(
         "span",
         { class: "rf-shelf-head" },
         severityMark(intervention.severity),
-        el("span", { class: "rf-shelf-severity" }, SEVERITY_LABEL[intervention.severity]),
-        selected ? el("span", { class: "rf-shelf-selected" }, "SELECTED") : null,
+        el("span", { class: "rf-shelf-severity" }, relayText(SEVERITY_LABEL[intervention.severity])),
+        selected ? el("span", { class: "rf-shelf-selected" }, relayText("selected")) : null,
         el("span", { class: "rf-shelf-age" }, formatWaiting(intervention.waitingMinutes)),
       ),
       el(
@@ -75,7 +73,7 @@ export function attentionShelf(
           { class: "rf-shelf-foot" },
           el("span", { class: "rf-shelf-ref" }, intervention.questRef),
           intervention.affectedCount > 1
-            ? el("span", { class: "rf-shelf-count" }, `${intervention.affectedCount} Quests`)
+            ? el("span", { class: "rf-shelf-count" }, countLabel(intervention.affectedCount))
             : null,
         ),
       ),
@@ -92,12 +90,12 @@ export function attentionShelf(
 
   return el(
     "section",
-    { class: "rf-shelf", "aria-label": "Attention Shelf" },
+    { class: "rf-shelf", "aria-label": relayText("commandAttention") },
     el(
       "div",
       { class: "rf-shelf-header" },
-      el("h2", { class: "rf-region-label" }, "Attention Shelf"),
-      el("span", { class: "rf-region-count" }, `${interventions.length} ${interventions.length === 1 ? "intervention" : "interventions"}`),
+      el("h2", { class: "rf-region-label" }, relayText("commandAttention")),
+      el("span", { class: "rf-region-count" }, countLabel(interventions.length)),
     ),
     el("div", { class: "rf-shelf-track" }, ...cards),
   );

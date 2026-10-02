@@ -34,6 +34,8 @@
       "rail";
   }
 
+  .rf-shell[data-mobile="true"][data-domain="command"] { height: auto; }
+
   /* A destination screen takes the same single-column area Command's mobile
    * composition takes, and leaves the same room for the bottom navigation. */
   .rf-shell[data-mobile="true"][data-domain]:not([data-domain="command"]) {
@@ -77,7 +79,7 @@
     min-width: 0;
     background: var(--qf-color-field);
     /* Room for the fixed Decision Bar plus the bottom navigation. */
-    padding-bottom: calc(var(--qf-space-12) * 2 + var(--qf-space-9));
+    padding-bottom: calc(var(--rf-mobile-footer-height, calc(var(--qf-space-12) * 2 + var(--qf-space-9))) + var(--qf-space-5));
   }
 
   .rf-m-page { display: flex; flex-direction: column; }
@@ -89,6 +91,7 @@
     top: 0;
     z-index: var(--qf-z-sticky);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--qf-space-5);
@@ -103,11 +106,9 @@
     color: var(--qf-color-fg-strong);
   }
 
-  /* Title and the inbox share the first row; status takes its own row so no
-   * label breaks mid-word at 375px. */
-  .rf-m-header { flex-wrap: wrap; row-gap: var(--qf-space-2); }
-  .rf-m-header > .rf-human-inbox-trigger { margin-left: auto; white-space: nowrap; }
-  .rf-m-status { display: flex; flex-basis: 100%; align-items: center; gap: var(--qf-space-5); white-space: nowrap; }
+  .rf-m-header { row-gap: var(--qf-space-2); }
+  .rf-m-header > .rf-human-inbox-trigger { margin-left: auto; }
+  .rf-m-status { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: center; gap: var(--qf-space-5); }
 
   .rf-m-attention { display: inline-flex; align-items: baseline; gap: var(--qf-space-2); }
 
@@ -126,18 +127,25 @@
     font: var(--qf-text-metadata);
     font-size: 13px;
     color: var(--qf-color-fg-muted);
+    min-height: var(--qf-space-11);
+    background: transparent;
+    border: 0;
+    padding: 0;
   }
 
   .rf-m-sync::before {
     content: "";
     width: var(--qf-space-3);
     height: var(--qf-space-3);
+    flex: none;
     border-radius: var(--qf-radius-pill);
     background: var(--qf-color-success);
   }
 
   .rf-m-sync[data-state="stale"] { color: var(--qf-color-warning); }
   .rf-m-sync[data-state="stale"]::before { background: var(--qf-color-warning); }
+  .rf-m-sync[data-state="error"] { color: var(--qf-color-danger); }
+  .rf-m-sync[data-state="error"]::before { background: var(--qf-color-danger); }
 
   /* ---------------- Sections ---------------- */
 
@@ -153,8 +161,8 @@
     border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
   }
 
-  .rf-m-section-head { display: flex; align-items: center; gap: var(--qf-space-4); }
-  .rf-m-section-head .rf-region-label { flex: 1; }
+  .rf-m-section-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--qf-space-4); }
+  .rf-m-section-head .rf-region-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
   /* ---------------- Attention Shelf carousel ---------------- */
 
@@ -195,7 +203,7 @@
     background: var(--qf-color-selected);
   }
 
-  .rf-m-shelf-head { display: flex; align-items: center; gap: var(--qf-space-3); }
+  .rf-m-shelf-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--qf-space-3); }
 
   .rf-m-shelf-reason {
     font: var(--qf-text-compact);
@@ -238,7 +246,7 @@
 
   .rf-m-actions { display: flex; gap: var(--qf-space-4); }
   /* 44px targets at <=900px. */
-  .rf-m-actions > * { flex: 1; min-height: var(--qf-space-11); justify-content: center; }
+  .rf-m-actions > * { flex: 1; min-width: 0; height: auto; min-height: var(--qf-space-11); padding-block: var(--qf-space-3); white-space: normal; overflow-wrap: anywhere; justify-content: center; }
 
   /* ---------------- Vertical Relay ---------------- */
 
@@ -258,6 +266,7 @@
   .rf-m-relay-step:last-child .rf-m-relay-thread { display: none; }
 
   /* One thread down the avatar column so the order reads as a path. */
+  .rf-m-relay-step:last-child .rf-m-relay-thread { display: none; }
   .rf-m-relay-step:not(:last-child) .rf-m-relay-thread {
     position: absolute;
     left: calc(var(--qf-space-8) / 2);
@@ -311,11 +320,16 @@
     border-top: var(--qf-border-width) solid var(--qf-color-border-default);
   }
 
+  .rf-m-evidence-detail[hidden],
+  .rf-m-evidence-list[hidden],
+  .rf-m-chronicle-list[hidden] { display: none; }
+
   .rf-m-evidence-detail .rf-preview-change { grid-template-columns: minmax(0, 1fr) auto; }
 
   .rf-m-evidence-empty { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); }
 
-  .rf-m-supporting-toggle { align-self: flex-start; min-height: var(--qf-space-11); }
+  .rf-m-supporting-toggle { align-self: flex-start; max-width: 100%; height: auto; min-height: var(--qf-space-11); padding-block: var(--qf-space-3); white-space: normal; text-align: left; }
+  .rf-m-chronicle-toggle { height: auto; min-height: var(--qf-space-11); padding-block: var(--qf-space-3); white-space: normal; }
 
   .rf-m-evidence-list { display: flex; flex-direction: column; gap: var(--qf-space-2); }
 
@@ -387,6 +401,8 @@
   .rf-m-decision[data-shape="revision"] .rf-revision-input { font-size: 13px; }
 
   /* More panel sits directly above the bar it belongs to. */
+  .rf-rail:has(.rf-nav-more-panel) { z-index: var(--qf-z-popover); }
+
   .rf-nav-more-panel {
     position: absolute;
     right: var(--qf-page-gutter);
@@ -402,7 +418,12 @@
     box-shadow: var(--qf-shadow-overlay);
   }
 
-  .rf-shell[data-mobile="true"] .rf-rail { position: sticky; }
+  .rf-shell[data-mobile="true"] .rf-rail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
   .rf-shell[data-mobile="true"] .rf-nav-more-panel .rf-nav-item {
     flex-direction: row;
     height: var(--qf-space-11);
@@ -460,7 +481,18 @@
     position: fixed;
     inset: 0;
     z-index: var(--qf-z-modal);
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
   }
+
+  .rf-sheet::backdrop { background: transparent; }
 
   .rf-sheet-scrim {
     position: absolute;
@@ -531,7 +563,7 @@
     grid-auto-columns: minmax(0, 1fr);
     gap: var(--qf-space-3);
   }
-  .rf-m-decision .rf-task-actions > * { padding-inline: var(--qf-space-2); font-size: 13px; white-space: nowrap; }
+  .rf-m-decision .rf-task-actions > * { min-width: 0; height: auto; padding-inline: var(--qf-space-2); font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
   /* Five or more actions do not fit one row at 375px; fall back to two columns. */
   .rf-m-decision .rf-task-actions:has(> :nth-child(5)) {
     grid-auto-flow: row;
