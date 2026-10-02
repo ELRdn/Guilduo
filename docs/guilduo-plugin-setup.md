@@ -58,10 +58,15 @@ uses continuous review for tool changes; imported Skill changes still require a 
 
 ## Diagnosis recorded on 2026-10-02
 
-- Production `/health` reports 56 tools; the server's `tools/list` returns the complete `MCP_TOOLS`
-  array without filtering by Agent scopes. This chat exposes 54 Guilduo tools, missing the two Human
-  relay tools. A stale imported tool catalogue is the leading explanation; refresh/new-chat evidence
-  is still needed to establish the exact cause. Health alone is not an authenticated tool-list check.
+- Initially, production `/health` reported 56 tools while this chat exposed 54, missing the two Human
+  relay tools. The server's `tools/list` returns the complete `MCP_TOOLS` array without filtering by
+  Agent scopes. A stale imported tool catalogue was the leading explanation; the exact cause was not
+  established. Health alone is not an authenticated tool-list check.
+- Follow-up: the user reported a successful read-only `list_human_requests` call (0 requests) and
+  discovery of the `request_human_review` schema. This connection now also exposes all 56 tools,
+  including both Human tools, and `list_human_requests(status=all)` returned 0 requests successfully.
+  The missing-tool issue is resolved. Request creation permissions, web answers, feedback retrieval,
+  and Agent resumption remain untested; neither check created a Human confirmation Quest.
 - The installed App-only Guilduo package has no Skill declaration or Skill directory.
 - An older personal `questforge` package points at a different App. It is left intact.
 - Canonical and bundled Workflow Skills contain the Human review recipe. The companion preparation

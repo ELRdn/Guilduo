@@ -109,7 +109,7 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 - 現在のソース: REST/MCP 2.7.0、Schema 7、MCP 56ツール、OpenAPI 60パス。本番healthも56ツールを報告（2026-10-02）。本候補のUI変更と実アカウントによる全機能受入は未完了
 - /mcp の安定レーンと /mcp-next の検証レーン
 - Guilduo Workflow Skill（legacy technical ID: questforge-workflows）、ローカルCLI、Codex Plugin/MCP App登録準備パッケージ
-- 2026-10-02: Skill入りのGuilduo Workflowsローカルプラグインを配布・有効化し、Codexの`skills/list`で読込と正本一致を確認。旧QuestForge接続は保持。本番healthは56ツール、このチャットは54件のため、Guilduo接続のRefreshと新規チャットで2つのHuman確認ツールを再取得する。実往復受入はLP-R07に残す。[導入・更新手順](docs/guilduo-plugin-setup.md)
+- 2026-10-02: Skill入りのGuilduo Workflowsローカルプラグインを配布・有効化し、Codexの`skills/list`で読込と正本一致を確認。旧QuestForge接続は保持。ユーザーの読取確認報告に続き、この接続でも56ツールと`request_human_review`の公開スキーマ、`list_human_requests(status=all)`の正常応答（0件）を確認。2ツールの未検出は解消。依頼作成の実行権限・Web回答・FB取得・Agent再開の実往復受入はLP-R07に残す。[導入・更新手順](docs/guilduo-plugin-setup.md)
 - 日本語、英語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語、韓国語、簡体字中国語、ロシア語
 - Google Calendar、Google Tasks、Toggl、Notionの状態表示。Provider OAuthは公開βではEarly Accessとして停止
 - 匿名計測の同意UI、許可イベント限定のクライアント送信、Worker `/telemetry` 受け口、D1保存、90日保持上限
