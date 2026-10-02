@@ -152,11 +152,14 @@ export async function readState(env: WorkerEnv, identity: Identity): Promise<{ p
       if (legacyResponse.ok) {
         const legacyRow = await legacyResponse.json() as AppwriteRow;
         const legacyPayload = await payloadFromRow(legacyRow);
-        if (legacyPayload.state && await writeState(env, identity, legacyPayload, null)) {
+        if (!legacyPayload.state) throw Object.assign(new Error("Guilduo legacy state is unreadable."), { status: 409, code: "state_unavailable" });
+        if (await writeState(env, identity, legacyPayload, null)) {
           await fetch(legacyUrl, { method: "DELETE", headers: appwriteHeaders(env) });
-          return readState(env, identity);
         }
+        // A concurrent migration may have created the row; never treat that conflict as absence.
+        return readState(env, identity);
       }
+      if (legacyResponse.status !== 404) return throwAppwritePersistenceFailure(legacyResponse, "read_legacy_state");
     }
     return { payload: { state: null }, etag: null };
   }

@@ -869,8 +869,18 @@ function addDaysText(dateText: string, amount: number): string {
   return todayText(date);
 }
 
-async function stateFor(env: WorkerEnv, identity: WorkerIdentity): Promise<QuestForgeState> {
-  const { payload } = await readState(env, identity);
+async function stateFor(env: WorkerEnv, identity: WorkerIdentity, initialize = false): Promise<QuestForgeState> {
+  const { payload, etag } = await readState(env, identity);
+  // Only the authenticated Web entry may create a genuinely missing account state.
+  // An existing unreadable row has an etag and must remain recoverable.
+  if (!payload.state && etag === null && initialize && identity.authType === "appwrite") {
+    assertScope(identity.scopes, "quests:write");
+    const now = new Date().toISOString();
+    const state = migrateState({ schemaVersion: 7, createdAt: now, updatedAt: now } as QuestForgeState);
+    if (await writeState(env, identity, { state, schemaVersion: 7, clientUpdatedAt: now, deviceId: "guilduo-web-init" }, null)) return state;
+    // A concurrent first login won the create; read its state without replacing it.
+    return stateFor(env, identity);
+  }
   if (!payload?.state) throw Object.assign(new Error("Open Guilduo and complete cloud sync before connecting an AI client."), { status: 409, code: "state_unavailable" });
   if (Number(payload.state.schemaVersion || 0) < 7) {
     const migrated = await mutateState(env, identity, (state) => {
@@ -898,7 +908,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     // Authenticate once, then perform the same bounded reads as the three
     // existing endpoints. A failed optional panel must not hide the Quest list.
     const [questPage, panels] = await Promise.all([
-      stateFor(env, identity).then(state => listQuestPage(state, { view: "all", limit: 200 })),
+      stateFor(env, identity, true).then(state => listQuestPage(state, { view: "all", limit: 200 })),
       Promise.allSettled([
         (async () => { assertScope(identity.scopes, "profiles:read"); return getOwnProfile(env, identity.uid); })(),
         (async () => { assertConnectionScope(identity, "agents:read"); return toPublicAgents(await listAgents(env, identity.uid, { includeArchived: true })); })(),
