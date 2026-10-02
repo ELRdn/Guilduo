@@ -69,7 +69,7 @@ export function blockingReason(gate: DecisionGate, phase: DecisionPhase): string
   if (gate.conflict !== null) return gate.conflict;
   if (gate.writeLocked) return relayText("writePaused");
   if (phase === "submitting") return relayText("sending");
-  if (!gate.evidenceReviewed) return relayText("checked");
+  if (!gate.evidenceReviewed) return relayText("checkFirst");
   return null;
 }
 

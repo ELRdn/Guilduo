@@ -24,7 +24,10 @@ export function questActionState(quest: Quest | null): QuestActionState {
     return { mode:"handoff-decision", statusLabel:relayText("humanDecision"), actions:[] };
   }
   if (quest.assignee.type !== "self") {
-    return { mode:"read-only", statusLabel:relayText(quest.assignee.type === "human" ? "taskHumanHolding" : "taskAgentHolding"), actions:["edit"] };
+    const statusLabel = quest.assignee.type === "agent" && quest.assignee.handoffState === "accepted"
+      ? relayText("taskAgentAccepted")
+      : relayText(quest.assignee.type === "human" ? "taskHumanHolding" : "taskAgentHolding");
+    return { mode:"read-only", statusLabel, actions:["edit"] };
   }
   if (quest.assignee.handoffState === "working") {
     return { mode:"self-task", statusLabel:relayText("taskSelfWorking"), actions:["complete", "edit", "stop"] };

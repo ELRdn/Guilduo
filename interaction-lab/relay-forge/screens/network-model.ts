@@ -7,7 +7,7 @@
  */
 
 import type { Quest } from "../../../types/questforge.ts";
-import type { Actor } from "../model.ts";
+import { type Actor, questRef } from "../model.ts";
 import type { ScreenNotice } from "./screen-state.ts";
 import { countLabel } from "./screen-state.ts";
 import { relayText, type RelayCopyKey } from "../relay-copy.ts";
@@ -106,10 +106,6 @@ export interface NormalizeNetworkOptions {
   readonly connections: readonly ConnectionNodeInput[];
   readonly selfUid: string;
   readonly notices?: readonly ScreenNotice[];
-}
-
-function questRef(id: string): string {
-  return id.toUpperCase().startsWith("QF-") ? id.toUpperCase() : `QF-${id.replace(/^q-/i, "").toUpperCase()}`;
 }
 
 function ownerId(quest: Quest, selfUid: string): string {

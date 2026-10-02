@@ -5,6 +5,7 @@
  * value or an authorization URL; see the header of `connections.ts`.
  */
 
+import { questRef } from "../model.ts";
 import type { ScreenNotice } from "./screen-state.ts";
 import { relayText } from "../relay-copy.ts";
 import { t } from "../../../i18n.ts";
@@ -157,10 +158,6 @@ function summaryOf(health: ConnectionHealth): string {
     default:
       return t("integration.preview.planned");
   }
-}
-
-function questRef(id: string): string {
-  return id.toUpperCase().startsWith("QF-") ? id.toUpperCase() : `QF-${id.replace(/^q-/i, "").toUpperCase()}`;
 }
 
 export function normalizeConnectionsModel(options: NormalizeConnectionsOptions): ConnectionsModel {

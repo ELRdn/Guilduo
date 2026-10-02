@@ -419,9 +419,17 @@ export function toLoomQuest(input: LoomQuestInput): LoomQuest {
   };
 }
 
+/**
+ * The short, human-facing Quest reference shared by every surface. UUID ids
+ * keep their first block so a phone row stays one line; the letters are kept
+ * so distinct ids never fold into the same digits.
+ */
 export function questRef(id: string): string {
-  const digits = id.replace(/\D/g, "");
-  return digits.length > 0 ? `QF-${digits}` : `QF-${id.slice(0, 3).toUpperCase()}`;
+  const upper = id.toUpperCase();
+  if (upper.startsWith("QF-")) return upper;
+  const bare = upper.replace(/^(?:Q|QUEST)-/, "");
+  const uuid = /^([0-9A-F]{8})-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/.exec(bare);
+  return `QF-${uuid ? uuid[1] : bare}`;
 }
 
 function formatDay(iso: string): string {

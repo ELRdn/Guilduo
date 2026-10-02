@@ -2439,7 +2439,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
                * `aria-current` and the selected treatment — otherwise the bar
                * would announce no current page at all on Battle and
                * Connections. */
-              const overflowActive = MOBILE_OVERFLOW.some((domain) => domain.id === state.domain);
+              const overflowActive = state.domain === "settings"
+                || MOBILE_OVERFLOW.some((domain) => domain.id === state.domain);
               const more = el(
                 "button",
                 {
@@ -3153,6 +3154,16 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     return null;
   }
 
+  /* A destination change starts at the top; re-renders within one keep their scroll. */
+  let renderedDomain: NavId | null = null;
+  function resetScrollOnDomainChange(): void {
+    if (renderedDomain !== null && renderedDomain !== state.domain) {
+      screenHost.scrollTop = 0;
+      window.scrollTo(0, 0);
+    }
+    renderedDomain = state.domain;
+  }
+
   function render(): void {
     if (lifecycle.disposed || inputComposing) return;
     if (revisionSelection !== state.selectedQuestId) {
@@ -3222,6 +3233,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       if (focusedQuest?.id && focusedQuest.selector) shell.querySelector<HTMLElement>(`.${focusedQuest.selector}[data-quest-id="${CSS.escape(focusedQuest.id)}"]`)?.focus({ preventScroll:true });
       if (commandToggle) shell.querySelector<HTMLElement>(`#${commandToggle}`)?.focus({ preventScroll:true });
       if (commandControl) shell.querySelector<HTMLElement>(`[data-command-control="${CSS.escape(commandControl)}"]`)?.focus({ preventScroll:true });
+      resetScrollOnDomainChange();
       return;
     }
     /* A non-Command destination owns the whole workfield. Every Command region
@@ -3263,6 +3275,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       input?.focus({ preventScroll:true });
       if (searchInput.start !== null && searchInput.end !== null) input?.setSelectionRange(searchInput.start, searchInput.end, searchInput.direction ?? undefined);
     } else if (skillsGroup) screenHost.querySelector<HTMLElement>(`[data-group-toggle="${CSS.escape(skillsGroup)}"]`)?.focus({ preventScroll:true });
+    resetScrollOnDomainChange();
   }
 
   function handleLensAsSheetChange(event: MediaQueryListEvent): void {

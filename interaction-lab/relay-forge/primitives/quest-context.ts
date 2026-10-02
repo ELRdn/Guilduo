@@ -14,7 +14,9 @@ export function questContext(view: SelectedQuestView): HTMLElement | null {
     }
   } catch { /* An external URL is optional, including for physical-device checks. */ }
   return el("section", { class: "rf-quest-context", "aria-label": t("target") },
-    el("p", { title: view.requester ? `${view.requester.type}: ${view.requester.id}` : "" }, `${t("from")}: ${view.requester?.label || t("unknown")}`),
+    view.requester
+      ? el("p", { title: `${view.requester.type}: ${view.requester.id}` }, `${t("from")}: ${view.requester.label || t("unknown")}`)
+      : null,
     el("h3", { class: "rf-region-label" }, t("target")),
     review.note ? el("p", { class: "rf-human-request-text" }, review.note) : null,
     review.criteria ? el("p", { class: "rf-human-request-text" }, `${t("criteria")}: ${review.criteria}`) : null,

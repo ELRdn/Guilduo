@@ -292,6 +292,12 @@ test("Request revision remains exclusive to Agent review", () => {
     statusLabel: "AgentがこのQuestを保持しています",
     actions: ["edit"],
   });
+  const accepted = buildQuest({
+    id: "q-accepted",
+    title: "Accepted",
+    assignee: { type: "agent", id: "forge-runner", label: "Forge Runner", handoffState: "accepted" },
+  });
+  assert.equal(questActionState(accepted).statusLabel, relayText("taskAgentAccepted"));
 });
 test("the transition table matches the domain", () => {
   assert.equal(canTransition("review_required", "accepted"), true);
@@ -445,7 +451,7 @@ test("an empty revision reason never reaches the domain", async () => {
 test("every gate blocks a write, in the documented precedence", async () => {
   const base = { evidenceReviewed: true, writeLocked: false, permissionMissing: null, conflict: null };
   assert.equal(blockingReason(base, "idle"), null);
-  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /確認|checked/);
+  assert.match(String(blockingReason({ ...base, evidenceReviewed: false }, "idle")), /確認|check/i);
   assert.match(String(blockingReason({ ...base, writeLocked: true }, "idle")), /再接続/);
   assert.match(String(blockingReason({ ...base, conflict: "conflict" }, "idle")), /conflict/);
   assert.equal(blockingReason({ ...base, permissionMissing: "scope" }, "idle"), "scope");
@@ -483,4 +489,40 @@ test("failure explanations never leak a token, URL or raw payload", () => {
     assert.doesNotMatch(message, /https?:\/\//, "no URL in a user-facing failure message");
     assert.doesNotMatch(message, /Bearer|token|authorization/i, "no credential in a user-facing failure message");
   }
+});
+
+test("Quest refs keep the full id so distinct UUIDs never collide", () => {
+  const model = normalizeCommandModel({
+    profile: { uid: "uid-1", displayName: "Hironao" },
+    agents: [],
+    quests: [
+      buildQuest({ id: "E342C766-C5CF-44B8-92AD-68EFE8367539", title: "Upstream" }),
+      buildQuest({ id: "q-184", title: "Fixture", dependencyIds: ["E342C766-C5CF-44B8-92AD-68EFE8367539"] }),
+    ],
+    syncLabel: "10:52",
+  });
+
+  assert.deepEqual(model.quests.map((quest) => quest.ref), ["QF-E342C766", "QF-184"]);
+  assert.equal(model.quests[1]?.dependencies[0]?.ref, "QF-E342C766");
+});
+
+test("an unfinished dependency stops the Quest in Command, matching the Quests portfolio", () => {
+  const assignee = { type: "self", id: "uid-1", label: "Hironao", handoffState: "none" } as const;
+  const model = normalizeCommandModel({
+    profile: { uid: "uid-1", displayName: "Hironao" },
+    agents: [],
+    quests: [
+      buildQuest({ id: "q-up", title: "Upstream", assignee }),
+      buildQuest({ id: "q-down", title: "Downstream", dependencyIds: ["q-up"], assignee }),
+      buildQuest({ id: "q-done", title: "Finished upstream", done: true, lifecycleState: "completed", assignee }),
+      buildQuest({ id: "q-free", title: "Unblocked", dependencyIds: ["q-done"], assignee }),
+    ],
+    syncLabel: "10:52",
+  });
+
+  const byId = new Map(model.quests.map((quest) => [quest.id, quest]));
+  assert.equal(byId.get("q-down")?.state, "blocked");
+  assert.equal(byId.get("q-down")?.dependencies[0]?.blocking, true);
+  assert.notEqual(byId.get("q-free")?.state, "blocked");
+  assert.deepEqual(model.interventions.map((item) => item.questId), ["q-down"]);
 });

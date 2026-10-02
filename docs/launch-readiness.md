@@ -189,3 +189,10 @@ Guilduo MCPで本追加結果と次の受入を親計画へ保存し、再取得
 - 証拠: nav-command-{source,built}-final.log、nav-command-tests.log、nav-entry{,-built}.log、nav-launch-built.log、nav-{typecheck,design,build}-final.log。nav-before.jsonとnav-after.json／pngで位置と表示を照合。ブラウザだけで元CSSへ戻したnav-regression.jsonでは252pxのずれが再発する。
 - LANの同じ候補URLで再読込後のPixel 9確認を依頼済み。物理端末での修正受入は回答待ち。実認証・本番同期・外部Agent・読み上げ・本番性能と本候補配備は引き続き未完了。
 - 共通navの影響は公開用の主要画面70条件でも成功（nav-screens-built.log）。検査の初回は公開用パスに未対応で開発URLのHTTPエラーになったため、既存の--built指定で正しいpathを選ぶ1行を追加して再実行した。最終型と差分検査も成功。Guilduo MCPの親計画・LP-R07はnotesとnextActionを更新し、再取得で変更がnotes／nextAction／updatedAtのみ、active・done=false・完了条件等の保持を確認した。
+
+
+## commit・push・配備の依頼と統合候補（2026-10-02）
+
+- ひろなおからcommit・push・本番反映の依頼を受領。最新main 0729f43070ce06bc0eeb803401af0df78b2aeca4のモバイル・実データ・配備chunk retry修正を独立worktreeへ統合。未公開のprepared transactionコード・テスト・設定は元の作業ツリーへ保持し、公開対象から除外。
+- 全439テスト・型・デザイン・ビルド成功。従来の444結果は元の作業ツリーの記録で、transaction関連を除外し最新mainの追加テストを含む今回の公開候補とは件数が異なる。
+- 公式rootとcompatibility pathのHTMLキャッシュはEXPIRED／HITで有効。既存Cloudflare API tokenはzoneの参照が可能だがrulesetsの読み取りはHTTP403。文書どおり両HTMLルール停止とDYNAMIC／BYPASS確認が配備前に必要。retention manifestはHTTP200 application/jsonを確認。

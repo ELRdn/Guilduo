@@ -112,4 +112,7 @@ test("missing public manifest and failed reads stop the actual upload path", asy
   await assert.rejects(check(path, async () => { throw new Error("offline"); }), /offline/);
   const script = await readFile("tools/deploy-appwrite-site.sh", "utf8");
   assert.ok(script.indexOf("check-site-archive.mts") < script.indexOf('while (( offset < total_size ))'));
+  assert.match(script, /max_chunk_attempts=5/);
+  assert.match(script, /for chunk_attempt in \$\(seq 1 "\$max_chunk_attempts"\)/);
+  assert.match(script, /failed after \$chunk_attempt attempts/);
 });

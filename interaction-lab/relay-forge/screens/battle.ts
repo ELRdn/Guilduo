@@ -57,6 +57,14 @@ import {
   stateChip,
 } from "./runtime.ts";
 
+/* Quest kind names as the root UI shows them (locales/ja.ts `kind.*`). */
+const WEAK_KIND_LABELS: Readonly<Record<string, string>> = {
+  habit: "習慣ログ",
+  daily: "今日の約束",
+  todo: "一回クエスト",
+  reward: "ごほうび交換",
+};
+
 export * from "./battle-model.ts";
 
 /* ------------------------------------------------------------------ *
