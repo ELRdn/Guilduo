@@ -2,14 +2,16 @@
 
 最終更新: 2026-10-03
 
-## 2026-10-02: 本番反映の進捗
+## 2026-10-03: 本番反映完了・公開版確認
 
-- [x] ユーザー承認のもとD1 `0011_shared_mcp_agents.sql`とWorkerを本番へ反映。Worker version `3bbeadd9-5eaa-4e88-bc62-09165442e30d`。保存設定・配置・D1/KV/R2を保持し、health／OAuth／未認証401／CORS／実MCPのAgentコンテキストを再確認
-- [x] モックアップの表示名・内部参照・メール例・履歴を`admin`へ統一。旧Interaction Labの固定名も変更し、PC／スマホの認証失敗→デモ、関連77テスト、現在の配布用テキスト50ファイルを確認。配備前に全450テスト・型検査・起動40条件も成功
-- [x] キャッシュ無効を公開応答で確認。Siteは現行64 asset＋旧23 assetを保持したarchiveを準備し、保持と新旧HTML参照の検査に成功
-- [ ] Site配備を完了する。現在のAppwriteキーは`sites.write`不足でHTTP 401となり、アップロードは未実施。GitHub production環境のAPPWRITE_DEPLOY_KEYを確認済み。既存Actionsによる配備を準備中。**静かな更新・引いて更新・共有AgentのSettings・admin表示は公開画面にまだ反映されていない**
+- [x] D1 migration `0011_shared_mcp_agents.sql`とWorker version `3bbeadd9-5eaa-4e88-bc62-09165442e30d`を反映。既存設定・配置・D1/KV/R2を保持し、health／OAuth／未認証401／CORS／実MCPのAgentコンテキストを確認
+- [x] GitHubの`production`環境に保存済みの`APPWRITE_DEPLOY_KEY`を使い、[Site配備Actions 37024673402](https://github.com/ELRdn/Guilduo/actions/runs/37024673402)が成功。配備ソース`dbdb1124353629763abd1719987c3a76a8345878`、Appwrite deployment `6abfc9479192501efbe7`
+- [x] 静かな更新・引いて更新・共有AgentのSettings・`admin`表示を本番へ反映。公式App／互換path／LP／Privacy／TermsはHTTP 200、公開画面を実Chromeの1440／412pxで確認。現行bundleに固定個人名なし、新旧85 assetのサイズ・SHA-256一致と旧画面起動を確認
+- [x] 最新mainの修正を保持した統合版で453テスト・型・デザイン・ブランド・API契約再生成・ビルド、同期15／静かな更新7／Human Relay34／公開用起動40／アクセシビリティ343成功。Actionsでも配備前検査が成功
+- [x] Guilduo内の親計画・LP-R07へ配備結果と次の受入を反映。再取得でnotes／nextAction／updatedAtだけの変更とactive／done=falseを確認
+- [ ] 実Chat／Codex／Dotsの共有接続、物理Pixel 9の同期・ナビ・TalkBack、Human往復、本番性能・運用の受入を完了する
 
-キャッシュ設定は変更していない。元の作業ツリーを保持し、専用の配備ブランチへ必要な変更をcommit／pushして既存Actionsを実行する。詳細は[配備記録](docs/launch-readiness.md)。以下の未配備記録は作業時点の履歴であり、Workerについては本節が最新。
+キャッシュ設定は変更せず無効を維持。専用ブランチ`codex/refresh-shared-agents-release`から配備し、mainと元の作業ツリーの未コミット変更は保持した。詳細は[配備記録](docs/launch-readiness.md)。以下の検証件数・未配備記録は各作業時点の履歴であり、配備状態は本節が最新。
 
 ## 2026-10-02: 静かな更新・共有MCP・スマホ更新
 
@@ -18,9 +20,9 @@
 - [x] 1つのMCP接続へ複数Agentを許可し、各呼び出しの`actingAgentId`で担当を選択。並行呼び出しで共有設定を書き換えず、Agent権限とOAuth権限の積集合を維持。単独Agentの従来呼び出しは互換
 - [x] Settingsの複数選択・保存・再読込、1人の無効化による他Agentへの影響、未指定・未許可・失効済みの拒否を確認。9言語×320／412／1440pxと実Chromeタッチで検証
 - [x] 全450テスト、型検査、同期15、新規ブラウザ7、公開用起動40／入口12／アクセシビリティ343条件成功。API契約の再生成一致を確認。Guilduo内の親計画・LP-R07も進捗だけを更新・再取得で照合
-- [ ] D1 migration `0011_shared_mcp_agents.sql` → Worker → Siteの順で配備し、Chat／Codex／Dotsの実接続・物理Pixel 9で受け入れる。従来のWorker → Site手順にmigrationが先行する
+- [x] D1 migration `0011_shared_mcp_agents.sql` → Worker → Siteの順で配備完了（2026-10-03）。Chat／Codex／Dotsの実接続・物理Pixel 9受入は上の残存ゲートで継続
 
-本追加修正は未配備。送信元製品の自動判別ではなく、許可したAgent IDを毎回指定する方式。[使い方](docs/shared-mcp-agents.md)と[確認記録](docs/launch-readiness.md)に境界と配備手順を記録。公開用ビルドは成功したがRelay Forgeのchunkが503.29 kBとなり、500 kB超の警告が残る。本番性能・実機・実Human往復の受入は継続する。
+本追加修正は2026-10-03に配備・公開確認済み。送信元製品の自動判別ではなく、許可したAgent IDを毎回指定する方式。[使い方](docs/shared-mcp-agents.md)と[確認記録](docs/launch-readiness.md)に境界と配備手順を記録。公開用ビルドは成功したがRelay Forgeのchunkが503.29 kBとなり、500 kB超の警告が残る。本番性能・実機・実Human往復の受入は継続する。
 
 ## 2026-10-02: 保存競合・応答喪失の追加修正
 
@@ -31,7 +33,7 @@
 - [x] 全448テスト、型検査、デザイン検査、ビルド、API再生成の安定性、同期15シナリオ、実入口の公開用12シナリオを確認。詳細と再現ログは[追加確認記録](docs/launch-readiness.md)
 - [x] 公開Privacy／Termsの本文・運営者・窓口・canonicalを実Chromeの320／1440px、JavaScript無効で再確認。古い「未配信」の記録を更新
 - [x] Guilduo内の親計画・LP-R07へ追加修正と残る受入を反映。再取得でnotes・nextAction・updatedAtだけの変更を確認し、担当・依存関係・完了条件・未完了状態を保持
-- [ ] 本追加修正をレビューし、Worker → Siteの順で配備・公開URLを再検証する。旧Workerは追加の更新日時を無視するため、Siteだけの配備を保存競合対策の完了としない
+- [x] 本追加修正をレビューし、D1 migration → Worker → Siteの順で配備・公開URLを再検証（2026-10-03）。WorkerとSiteを両方更新し、保存競合対策を反映
 
 追加修正はローカル候補で検証済み。本番にある以前の改善と区別し、LP-R07の実Google認証／物理Pixel 9同期／Codex・OpenClaw往復／読み上げ／性能、公開運用の残存ゲートは維持する。
 
@@ -40,7 +42,7 @@
 - [x] Settingsの実効権限を接続ごとのQuest操作可否に整理し、技術スコープ・接続IDを折りたたみ。無効MCPの再接続なし削除を既存APIへ接続。1440px/390px・9言語・キーボード・取消・旧リンク削除・再取得失敗・Agent/Quest保持・再読込を隔離Workerと実Chromeで確認。検査をCIへ追加。085f747を本番Siteへ配備（run 36990716820成功）、配信されたコードの操作と新旧画面の起動・旧asset74件の保持を確認。キャッシュルール復帰確認は待機中。
 - [x] 別GoogleアカウントのWorkspace初回読込が409になる不具合を再現・修正。Appwrite認証済みの本人に空の状態を保存し、再読込・同時作成競合・既存/移行データ保持・保存失敗・MCP拒否を隔離APIで確認。402f4e3を本番Workerへ配備（version 2c686f88-61b6-4a24-a0bf-0798f5ed1843）。全441テスト・型検査・ビルド・契約差分なし、CI/Worker配備成功。別Googleアカウントで本番Workspaceが開けたとのユーザー確認を受領。端末間同期とHuman/Agent往復は別途未受入。
 
-実画面の確認→修正→再検証を実行した。今回の改善は**ローカルと公開用ビルドで検証済み、本番への反映は未実施**。詳細と再実行手順は[ローンチ確認記録](docs/launch-readiness.md)。
+実画面の確認→修正→再検証を実行した。今回の改善は**統合版を検証し、2026-10-03に本番反映・公開確認済み**。詳細と再実行手順は[ローンチ確認記録](docs/launch-readiness.md)。
 
 - [x] 上部検索とCtrl／⌘KをQuest検索へ接続。連続入力、カーソル位置、日本語IME変換中の入力を保持
 - [x] Quest編集で予定日・計画状態・担当者の作業状態・見積0分を保持

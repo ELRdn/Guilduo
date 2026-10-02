@@ -1,22 +1,24 @@
 # Guilduo ローンチ確認記録
 
-更新: 2026-10-02。対象: 現在の作業ツリー、`0.6.0-beta.8`候補。**D1・Worker配備済み／SiteはGitHub Actions配備準備中／実機受入未完了**。
+更新: 2026-10-03。対象: `0.6.0-beta.8`候補。**D1・Worker・Site本番反映完了／公開版確認済み／実機・実Agent往復の受入は継続**。
 
-## GitHub Actions経由の本番反映（2026-10-03）
+## 本番反映と公開版の確認（2026-10-03）
 
-GitHubのproduction環境に既存のAPPWRITE_DEPLOY_KEYを確認。最新mainのQuest参照・依存関係表示・モバイル操作・公開メール保護・upload再試行を維持して今回の変更を統合。専用作業ツリーで453テスト、型検査、デザイン・ブランド検査、契約再生成、ビルド、同期15、静かな更新7、Human Relay34、公開用起動40が成功。元の作業ツリーは保持する。
+GitHubの`production`環境に保存済みの`APPWRITE_DEPLOY_KEY`を確認し、ユーザー承認済みの本番反映を既存Actionsで完了した。ローカルキーでは`sites.write`不足の401となったが、キーの取り出しや再登録はせず、Actions内で既存Secretを利用した。公開HTMLのcache guardを通過し、キャッシュ設定は変更していない。
 
-## 本番反映の進捗（2026-10-02）
+- 配備ソース: `dbdb1124353629763abd1719987c3a76a8345878`、専用ブランチ`codex/refresh-shared-agents-release`。最新main `100f86e`のQuest参照・依存関係表示・モバイル操作・公開メール保護・upload再試行を維持して統合。元の作業ツリーの未コミット変更とmainは保持した。
+- D1: `0011_shared_mcp_agents.sql`適用済み、未適用migrationなし。既存接続・データを保持する追加列のみ。
+- Worker: version `3bbeadd9-5eaa-4e88-bc62-09165442e30d`を100%配備。直前は`2c686f88-61b6-4a24-a0bf-0798f5ed1843`。本番変数・D1/KV/R2・配置の前後一致を照合。`APPWRITE_REVISION_BATCH=true`を維持し、任意の準備transactionは有効化していない。配備したbackendと統合版の27ファイルは改行正規化後に一致。
+- Worker確認: health 200（2.7.0／Schema 7／Agent保存D1）、OAuth metadata 200、未認証REST/MCP 401、App originのCORS 204。実MCPの`get_current_agent_context`で`allowedAgentIds:["codex"]`・`requiresAgentSelection:false`を確認。
+- Site: [Actions 37024673402](https://github.com/ELRdn/Guilduo/actions/runs/37024673402)成功。Appwrite deployment `6abfc9479192501efbe7`、ready／activation完了。現行64＋保持21の85 assetを配信。旧タブ向けasset保持検査と公開前起動40条件も成功。
+- 公開確認: 正式App root・互換path・LP・Privacy・TermsはHTTP 200、cacheはすべてDYNAMIC。配信entryは`relayForge-hz17VrHF.js`（504348 bytes、SHA-256 `b992bd28400e86bc2883c85b4929180cd672c36a5971ad290af787ea94b22935`）。静かな更新／引いて更新／共有Agent設定／手動更新の実装を含む現行bundleを確認。
+- 表示確認: 実Chromeの1440／412pxで`admin`と現行DOM・bundle内の固定個人名不在を確認。page errorなし、スクリーンショットも目視。manifest掲載85 assetのサイズ・SHA-256を公開URLから照合し、旧画面も起動。初回はChromeのDNSエラーで中断し、変更なしの再実行で全項目成功。旧assetの内容は互換保持しており、過去の配布物からの個人名完全消去を意味しない。
+- 統合版検査: 453テスト・型・デザイン・ブランド・API契約再生成・ビルド、同期15／静かな更新7／Human Relay34／公開用起動40／アクセシビリティ343成功。Actions自身のcheck／ブランド／unit／build／launchも成功。Relay Forgeの504.34 kB（gzip 154.89 kB）chunk警告は残る。
+- Guilduoロードマップ: 親計画とLP-R07のnotes／nextActionを更新し再取得で照合。変更はnotes／nextAction／updatedAtのみ、担当・期限・依存関係・完了条件・active／done=falseを保持。
 
-ユーザーから本番反映の承認とキャッシュ無効化の連絡を受領。公開HTMLのcache guardも通過し、キャッシュ設定は変更していない。全450テスト・型検査・公開用起動40条件を直前に確認した。
+配備証拠は元の作業ツリーの`.qa-artifacts/deploy-2026-10-02/`に保存。`migration.log`、`worker-deploy.log`、`worker-public-checks.json`、`actions-37024673402.log`、`public-verification.json`、`public-admin-{1440,412}.png`、`roadmap-final.json`を参照。統合版の検査ログは専用作業ツリーの`.qa-artifacts/release-check/`。公開キャッシュは無効のまま維持した。
 
-- D1: `0011_shared_mcp_agents.sql`適用成功。既存接続・データを保持する追加列のみ。
-- Worker: version `3bbeadd9-5eaa-4e88-bc62-09165442e30d`を100%配備。直前は`2c686f88-61b6-4a24-a0bf-0798f5ed1843`。本番から読み取った変数・D1/KV/R2・配置を照合し、反映後も一致。`APPWRITE_REVISION_BATCH=true`を維持し、任意の準備transactionは有効化していない。
-- Worker検証: health 200（2.7.0／Schema 7／Agent保存D1）、OAuth metadata 200、未認証REST/MCP 401、App originのCORS 204、実MCPの`get_current_agent_context`で`allowedAgentIds:["codex"]`・`requiresAgentSelection:false`を確認。
-- Site: 現行64 asset＋旧23 assetを含むarchiveを準備し、旧HTML／asset保持検査成功。既存キーでのアップロードは`general_unauthorized_scope`／`sites.write`不足のHTTP 401。Siteの配備・activationは行われていない。`sites.read`も不足し、GitHub production環境に配備用`APPWRITE_DEPLOY_KEY`が存在することを確認。SecretはActions内で利用し、専用ブランチから配備する。
-- モック名: 表示・ID・メール例・履歴を`admin`へ統一。認証失敗→デモをChromeの1440／412pxで確認、関連77テスト成功。旧assetを取り込む前の現行ビルドのテキスト50ファイルに固定個人名なし。互換用に保持した旧assetの内容は変更していないため、過去の配布物からの完全消去を意味しない。
-
-配備証拠は`.qa-artifacts/deploy-2026-10-02/`の`migration.log`、`worker-deploy.log`、`worker-public-checks.json`、`retention.log`、`archive-check.log`、`site-upload.log`。モック確認は`.qa-artifacts/demo-admin-2026-10-02/`。元の作業ツリーは保持し、最新mainへ統合した専用ブランチからGitHub Actions配備を行う。Site反映が終わるまで、以下のUI改善を公開済みとは扱わない。配備再開時は公開manifestとcache guardを再確認し、準備後1時間を超えたarchiveは再生成する。
+実Chat／Codex／Dotsでの共有接続・明示`actingAgentId`指定、物理Pixel 9の同期／ナビ／TalkBack、実Google同期・R2・Human依頼→回答→FB→再開、本番性能・窓口／削除依頼運用・法的確認は未受入。これらを配備成功だけで完了扱いしない。以下は各作業時点の履歴で、未配備・未commit等の記述は本節より前の状態を示す。
 
 ## 静かな更新・共有MCP・スマホ更新の追加確認（2026-10-02）
 
