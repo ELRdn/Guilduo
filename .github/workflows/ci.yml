@@ -50,3 +50,4 @@ jobs:
           trap 'kill "$dev_pid"' EXIT
           for attempt in {1..30}; do curl -fsS http://127.0.0.1:4174/tests/browser/production-relay.html >/dev/null && break; sleep 1; done
           npm run sync:verify -- http://127.0.0.1:4174
+          node --import tsx tools/verify-relay-settings.mts http://127.0.0.1:4174

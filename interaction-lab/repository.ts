@@ -506,6 +506,12 @@ export class QuestForgeRepository {
     return this.request("/v1/agent-connections");
   }
 
+  async deleteMcpConnection(clientId: string): Promise<JsonRecord> {
+    // Repair any remaining legacy Agent relation before deleting history.
+    await this.revokeMcpConnection(clientId);
+    return this.request(`/v1/agent-connections/${encodeURIComponent(clientId)}/permanent`, { method: "DELETE" });
+  }
+
   async revokeMcpConnection(clientId: string): Promise<JsonRecord> {
     return this.request(`/v1/agent-connections/${encodeURIComponent(clientId)}`, { method: "DELETE" });
   }

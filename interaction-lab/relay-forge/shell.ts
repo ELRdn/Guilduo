@@ -2351,28 +2351,41 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
   }
 
-  async function revokeMcpConnection(clientId: string): Promise<void> {
+  async function revokeMcpConnection(clientId: string, remove = false): Promise<void> {
     const settings = state.screens.settings;
     if (runtime === null || clientId === "" || screenWriteHeld()) return;
+    const row = sharedAgentConnections.find(connection => connection.clientId === clientId);
+    if (!row || (remove && row.authorized)) return;
     settings.connectionBusyId = clientId;
     settings.connectionMessage = () => "";
     settings.connectionTone = null;
     render();
     try {
-      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.revokeMcpConnection(clientId));
-      await refreshAgentConnections();
+      await runLifecycleStep(lifecycle, () => remove ? runtime!.agentConnectionPort.deleteMcpConnection(clientId) : runtime!.agentConnectionPort.revokeMcpConnection(clientId));
+      try {
+        await refreshAgentConnections();
+      } catch {
+        agentConnectionsLoadError = relayText("mcpListFailed");
+      }
       delete settings.connectionDrafts[clientId];
       settings.connectionTone = "success";
-      settings.connectionMessage = () => relayText("mcpRevoked");
-      announce(relayText("mcpRevoked"));
+      settings.connectionMessage = () => relayText(remove ? "mcpDeleted" : "mcpRevoked");
+      announce(settings.connectionMessage());
     } catch (error) {
       if (lifecycle.disposed) return;
       settings.connectionTone = "error";
-      settings.connectionMessage = () => profileErrorMessage(error, relayText("mcpRevokeFailed"));
+      settings.connectionMessage = () => profileErrorMessage(error, relayText(remove ? "mcpDeleteFailed" : "mcpRevokeFailed"));
+      // A lifecycle write may have committed before a network failure.
+      agentConnectionsLoadError = relayText("mcpListFailed");
     } finally {
       if (lifecycle.disposed) return;
       settings.connectionBusyId = null;
       render();
+      if (remove) {
+        (document.querySelector<HTMLButtonElement>('.rf-set-mcp-connections .rf-screen-notice button')
+          ?? document.querySelector<HTMLButtonElement>('.rf-set-connection-actions button:not(:disabled)')
+          ?? document.querySelector<HTMLElement>('.rf-set-mcp-subhead h3'))?.focus({ preventScroll: true });
+      }
     }
   }
 
@@ -3141,6 +3154,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onLinkAgent: (clientId: string, agentId: string) => { void linkAgent(clientId, agentId); },
         onUnlinkAgent: (clientId: string, agentId: string) => { void unlinkAgent(clientId, agentId); },
         onRevokeConnection: (clientId: string) => { void revokeMcpConnection(clientId); },
+        onDeleteConnection: (clientId: string) => { void revokeMcpConnection(clientId, true); },
         canManageAgents: runtime !== null,
         onCreateAgent: openCreateAgent,
         onEditAgent: openEditAgent,

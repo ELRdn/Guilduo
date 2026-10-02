@@ -22,6 +22,7 @@ import { el } from "../primitives/dom.ts";
 import { relayOnboarding, relayPreferences } from "./relay-onboarding.ts";
 import type { ThemePreference } from "../theme.ts";
 import {
+  effectiveConnectionScopes,
   type SettingsAgentRow,
   type SettingsCallbacks,
   type SettingsModel,
@@ -321,7 +322,7 @@ function connectionAgentSummary(
     : model.agents.find((candidate) => candidate.agentId === row.linkedAgentId) ?? null;
   return {
     agent,
-    stale: row.linkedAgentId !== null && (row.linkRevokedAt !== null || agent === null || agent.status !== "active"),
+    stale: row.linkedAgentId !== null && (!row.authorized || row.linkRevokedAt !== null || agent === null || agent.status !== "active"),
   };
 }
 
@@ -339,7 +340,8 @@ function connectionRow(
   const activeAgents = model.agents.filter((agent) => agent.status === "active");
   const busy = state.connectionBusyId === row.clientId || context.writeLocked;
   const canLink = row.authorized && callbacks.canManageAgents && !busy;
-  const canRevoke = row.authorized && !busy;
+  const canRevoke = row.authorized;
+  const scopes = effectiveConnectionScopes(model, row);
   const avatar = summary.agent === null
     ? el("span", { class: "rf-set-connection-agent-placeholder", "aria-hidden": "true" }, "—")
     : (() => {
@@ -357,6 +359,12 @@ function connectionRow(
     : null;
   revoke?.addEventListener("click", () => {
     if (window.confirm(relayText("disconnectConfirm"))) callbacks.onRevokeConnection(row.clientId);
+  });
+  const remove = !row.authorized
+    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-delete", disabled: busy }, busy ? relayText("executing") : relayText("mcpDelete"))
+    : null;
+  remove?.addEventListener("click", () => {
+    if (window.confirm(relayText("mcpDeleteConfirm"))) callbacks.onDeleteConnection(row.clientId);
   });
   const picker = pickerOpen
     ? el(
@@ -391,7 +399,6 @@ function connectionRow(
         "div",
         { class: "rf-set-connection-copy" },
         el("strong", { class: "rf-set-connection-name" }, row.clientName),
-        el("span", { class: "rf-set-connection-id" }, row.clientId),
       ),
       row.authorized
         ? stateChip({ tone: "done", label: relayText("authorized"), mark: "OK" })
@@ -406,9 +413,16 @@ function connectionRow(
         "div",
         { class: "rf-set-connection-agent-copy" },
         el("strong", {}, activeLink ? summary.agent!.displayName : row.linkedAgentId !== null && summary.stale ? relayText("agentUnavailable") : relayText("noAgentLinked")),
-        el("span", {}, activeLink ? relayText("linkedAgentHint") : row.linkedAgentId !== null && summary.stale ? relayText("staleAgentHint") : relayText("noAgentHint")),
+        el("span", {}, !row.authorized ? t("integration.status.reconnect_required") : activeLink ? relayText("linkedAgentHint") : row.linkedAgentId !== null && summary.stale ? relayText("staleAgentHint") : relayText("noAgentHint")),
       ),
-      el("div", { class: "rf-set-connection-actions" }, openPicker, unlink, revoke),
+      el("div", { class: "rf-set-connection-actions" }, openPicker, unlink, revoke, remove),
+    ),
+    el("p", { class: "rf-set-connection-permissions" }, relayText(scopes.includes("quests:write") ? (scopes.includes("quests:read") ? "mcpQuestReadWrite" : "mcpQuestWrite") : scopes.includes("quests:read") ? "mcpQuestRead" : "mcpNoQuestAccess")),
+    el("details", { class: "rf-set-connection-details" },
+      el("summary", {}, relayText("mcpDetails")),
+      el("p", {}, el("span", { class: "rf-set-connection-id" }, row.clientId)),
+      el("p", {}, relayText("effectiveScopes")),
+      scopes.length === 0 ? el("p", {}, relayText("noScopes")) : el("ul", {}, ...scopes.map(scope => el("li", {}, el("code", {}, scope)))),
     ),
     picker,
     state.connectionMessage() === "" || state.connectionBusyId !== row.clientId
@@ -461,7 +475,7 @@ function mcpRegion(model: SettingsModel, state: SettingsState, context: ScreenCo
       el(
         "div",
         { class: "rf-set-mcp-connections" },
-        el("div", { class: "rf-set-mcp-subhead" }, el("h3", {}, relayText("linkedAgent")), el("p", {}, relayText("linkedAgentSetupHint"))),
+        el("div", { class: "rf-set-mcp-subhead" }, el("h3", { tabindex: "-1" }, relayText("linkedAgent")), el("p", {}, relayText("linkedAgentSetupHint"))),
         state.connectionMessage() === ""
           ? null
           : el("p", { class: "rf-set-connection-status", "data-tone": state.connectionTone, role: state.connectionTone === "error" ? "alert" : "status" }, state.connectionMessage()),
