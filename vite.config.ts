@@ -55,7 +55,7 @@ function injectPublicBrandMetadata(): Plugin {
           return `<p>${block}</p>`;
         }).join("\n").replace(/`([^`]+)`/g, "<code>$1</code>")
           .replace(/\[([^\]\n]+)\]\(((?:https:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2">$1</a>');
-        html = html.replace(marker, content);
+        html = html.replace(marker, `<!--email_off-->${content}<!--/email_off-->`);
       }
       return html
         .replaceAll("__GUILDUO_PUBLIC_ORIGIN__", getPublicSiteOrigin())

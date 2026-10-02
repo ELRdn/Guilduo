@@ -196,3 +196,7 @@ Guilduo MCPで本追加結果と次の受入を親計画へ保存し、再取得
 - ひろなおからcommit・push・本番反映の依頼を受領。最新main 0729f43070ce06bc0eeb803401af0df78b2aeca4のモバイル・実データ・配備chunk retry修正を独立worktreeへ統合。未公開のprepared transactionコード・テスト・設定は元の作業ツリーへ保持し、公開対象から除外。
 - 全439テスト・型・デザイン・ビルド成功。従来の444結果は元の作業ツリーの記録で、transaction関連を除外し最新mainの追加テストを含む今回の公開候補とは件数が異なる。
 - 公式rootとcompatibility pathのHTMLキャッシュはEXPIRED／HITで有効。既存Cloudflare API tokenはzoneの参照が可能だがrulesetsの読み取りはHTTP403。文書どおり両HTMLルール停止とDYNAMIC／BYPASS確認が配備前に必要。retention manifestはHTTP200 application/jsonを確認。
+
+
+- PR #46をmain 5df20a938133e3cd034fa0e0465c792db56c87abへ統合。PR CI36967142686・main CI36967432960成功、Site配備36967433844成功。両HTMLキャッシュルールはひろなおが停止し、DYNAMICを確認。公開候補のCommand122・画面70・入口12・launch40・accessibility343成功。
+- 配備後の実URL検査で、Cloudflare email obfuscationが公開メールをdata-cfemailとemail-protectionへ変換し、JavaScriptなしのmailtoが失われることを確認。静的policy本文へCloudflare標準のemail_offコメントを加え、built launch検査でも除外コメントが保たれることを検査する。本番の窓口再確認と新旧GUI起動、キャッシュ復帰は再配備後に続行する。

@@ -34,6 +34,7 @@ try {
       assert.equal(await staticPage.locator("h1").textContent(), title);
       assert.ok((await staticPage.locator("main").innerText()).includes("Effective date: 2026-10-02"));
       assert.ok((await staticPage.locator("main").innerText()).includes("operated by Radon"));
+      if (built) assert.match(await response!.text(), /<!--email_off-->[\s\S]*<!--\/email_off-->/);
       const contact = staticPage.locator('main a[href="mailto:el2radon2official@gmail.com"]');
       assert.equal(await contact.textContent(), "el2radon2official@gmail.com");
       assert.equal(await staticPage.locator('main a[href="https://github.com/ELRdn/Guilduo/issues"]').textContent(), "Guilduo GitHub Issues");
