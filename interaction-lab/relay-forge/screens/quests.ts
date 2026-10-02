@@ -19,6 +19,7 @@
  */
 
 import type { Actor } from "../model.ts";
+import { formatDate, t } from "../../../i18n.ts";
 import { relayText } from "../relay-copy.ts";
 import { actorAvatar } from "../primitives/avatar.ts";
 import { el } from "../primitives/dom.ts";
@@ -37,6 +38,7 @@ import {
   instantLabel,
   type Metric,
   metricRow,
+  radioGroupKeyboard,
   type ScreenContext,
   type ScreenRender,
   screenEmpty,
@@ -70,10 +72,10 @@ export function initialQuestsState(): QuestsState {
 }
 
 const SORT_LABEL: Readonly<Record<QuestsState["sort"], string>> = {
-  priority: "介入優先",
-  due: "期限",
-  updated: "更新",
-  impact: "影響度",
+  get priority() { return relayText("sortPriority"); },
+  get due() { return relayText("sortDue"); },
+  get updated() { return relayText("sortUpdated"); },
+  get impact() { return relayText("sortImpact"); },
 };
 
 const IMPACT_WEIGHT: Readonly<Record<Impact, number>> = { high: 0, medium: 1, low: 2 };
@@ -141,7 +143,7 @@ function archiveToggle(model: QuestsModel, state: QuestsState, context: ScreenCo
       "aria-pressed": state.showArchived ? "true" : "false",
       disabled: count === 0,
     },
-    state.showArchived ? `アーカイブを隠す (${count})` : `アーカイブを表示 (${count})`,
+    `${relayText(state.showArchived ? "archiveHide" : "archiveShow")} (${count})`,
   );
   button.addEventListener("click", () => {
     state.showArchived = !state.showArchived;
@@ -166,7 +168,7 @@ function actorFor(context: ScreenContext, id: string): Actor | null {
 function ownerCell(context: ScreenContext, row: QuestRow): HTMLElement {
   const actor = actorFor(context, row.ownerActorId);
   if (actor === null) {
-    return el("div", { class: "rf-q-owner" }, el("span", { class: "rf-srow-sub" }, "未割り当て"));
+    return el("div", { class: "rf-q-owner" }, el("span", { class: "rf-srow-sub" }, relayText("unassigned")));
   }
   return el(
     "div",
@@ -189,11 +191,11 @@ function impactCell(row: QuestRow): HTMLElement {
     el(
       "span",
       { class: "rf-q-impact-down", "data-heavy": row.downstreamTotal >= 3 ? "true" : "false" },
-      row.downstreamTotal === 0 ? "下流なし" : `下流 ${row.downstreamTotal}`,
+      row.downstreamTotal === 0 ? relayText("noDownstream") : `${relayText("downstream")} ${row.downstreamTotal}`,
     ),
     row.blockedByIds.length === 0
       ? null
-      : el("span", { class: "rf-q-impact-up" }, `待ち ${row.blockedByIds.length}`),
+      : el("span", { class: "rf-q-impact-up" }, `${relayText("waiting")} ${row.blockedByIds.length}`),
   );
 }
 
@@ -201,7 +203,7 @@ function dueCell(row: QuestRow): HTMLElement {
   return el(
     "span",
     { class: "rf-q-due", "data-overdue": row.overdue ? "true" : "false" },
-    row.dueDate === "" ? "期限なし" : row.dueDate.slice(5).replace("-", "/"),
+    row.dueDate === "" ? relayText("noDue") : formatDate(new Date(`${row.dueDate}T00:00:00Z`), { year: undefined, month: "2-digit", day: "2-digit", timeZone: "UTC" }),
   );
 }
 
@@ -243,8 +245,8 @@ function relayLine(context: ScreenContext, row: QuestRow): HTMLElement {
       el(
         "div",
         { class: "rf-q-relay-copy" },
-        el("span", { class: "rf-srow-title" }, owner === null ? "未割り当て" : owner.name),
-        el("span", { class: "rf-srow-sub" }, `保持 ${elapsedLabel(row.relay.heldForMinutes)}`),
+        el("span", { class: "rf-srow-title" }, owner === null ? relayText("unassigned") : owner.name),
+        el("span", { class: "rf-srow-sub" }, `${relayText("held")} ${elapsedLabel(row.relay.heldForMinutes)}`),
       ),
     ),
     el("span", { class: "rf-q-relay-arrow", "aria-hidden": "true" }),
@@ -255,8 +257,8 @@ function relayLine(context: ScreenContext, row: QuestRow): HTMLElement {
       el(
         "div",
         { class: "rf-q-relay-copy" },
-        el("span", { class: "rf-srow-title" }, reviewer === null ? "レビュアー未設定" : reviewer.name),
-        el("span", { class: "rf-srow-sub" }, row.bucket === "review" ? "判断待ち" : "次の受け手"),
+        el("span", { class: "rf-srow-title" }, reviewer === null ? relayText("noReviewer") : reviewer.name),
+        el("span", { class: "rf-srow-sub" }, row.bucket === "review" ? relayText("awaitingDecision") : relayText("nextRecipient")),
       ),
     ),
   );
@@ -272,40 +274,40 @@ function detailRail(
   const row = model.rows.find((entry) => entry.id === selectedId) ?? null;
   if (row === null) {
     return screenRegion(
-      "選択中のQuest",
+      relayText("selectedQuest"),
       { variant: "detail" },
-      screenEmpty("Questを選んでください", "左の一覧から1件選ぶと、受け渡し、停止理由、下流への影響がここに出ます。"),
+      screenEmpty(relayText("chooseQuest"), relayText("chooseQuestHint")),
     );
   }
 
   const sendToCommand = el(
     "button",
     { type: "button", class: "rf-primary-button rf-q-send" },
-    row.humanRequest ? relayText("inbox") : "Commandで判断する",
+    row.humanRequest ? relayText("inbox") : relayText("decideCommand"),
   );
   sendToCommand.addEventListener("click", () => callbacks.onSendToCommand(row.id));
 
-  const inspect = el("button", { type: "button", class: "rf-secondary-button" }, "依存を追跡");
+  const inspect = el("button", { type: "button", class: "rf-secondary-button" }, relayText("traceDependencies"));
   inspect.addEventListener("click", () => callbacks.onInspectNetwork(row.id));
-  const edit = el("button", { type: "button", class: "rf-secondary-button" }, "Questを編集");
+  const edit = el("button", { type: "button", class: "rf-secondary-button" }, relayText("editQuest"));
   edit.hidden = row.humanRequest === true;
   if (callbacks.onEdit !== undefined) edit.addEventListener("click", () => callbacks.onEdit?.(row.id));
 
   return screenRegion(
-    "選択中のQuest",
+    relayText("selectedQuest"),
     { variant: "detail", scroll: true },
     el(
       "div",
       { class: "rf-q-detail-head" },
       el("span", { class: "rf-srow-id" }, row.ref),
       bucketChip(row.bucket),
-      row.overdue ? stateChip({ tone: "danger", label: "期限超過", mark: "!!" }) : null,
+      row.overdue ? stateChip({ tone: "danger", label: t("task.summary.overdue"), mark: "!!" }) : null,
     ),
     el("h3", { class: "rf-q-detail-title" }, row.title),
-    row.nextAction === "" ? null : el("p", { class: "rf-q-detail-next" }, el("b", { class: "rf-inline-label" }, "次の一手 "), row.nextAction),
-    el("h4", { class: "rf-q-detail-label" }, "受け渡し"),
+    row.nextAction === "" ? null : el("p", { class: "rf-q-detail-next" }, el("b", { class: "rf-inline-label" }, `${t("ui.nextAction")} `), row.nextAction),
+    el("h4", { class: "rf-q-detail-label" }, relayText("handoff")),
     relayLine(context, row),
-    el("h4", { class: "rf-q-detail-label" }, "停止と影響"),
+    el("h4", { class: "rf-q-detail-label" }, relayText("blockersImpact")),
     el(
       "ul",
       { class: "rf-q-detail-facts" },
@@ -313,27 +315,27 @@ function detailRail(
         "li",
         null,
         row.blockedByIds.length === 0
-          ? "待っている依存はありません。"
-          : `${row.blockedByIds.length}件の依存が未完了です（${row.blockedByIds.join(", ")}）。`,
+          ? relayText("noPendingDependencies")
+          : `${relayText("pendingDependencies")}: ${countLabel(row.blockedByIds.length)} (${row.blockedByIds.join(", ")})`,
       ),
       el(
         "li",
         null,
         row.downstreamTotal === 0
-          ? "このQuestを待っているQuestはありません。"
-          : `${row.downstreamTotal}件が下流で待機しています（直接 ${row.downstreamIds.length}件）。`,
+          ? relayText("noWaitingQuests")
+          : `${relayText("downstream")}: ${countLabel(row.downstreamTotal)} (${relayText("direct")}: ${countLabel(row.downstreamIds.length)})`,
       ),
-      row.blockedReason === "" ? null : el("li", null, `停止理由: ${row.blockedReason}`),
-      el("li", null, row.hasEvidence ? "Evidenceが登録されています。" : "Evidenceはまだありません。"),
-      el("li", null, `最終更新 ${instantLabel(row.updatedAt)}`),
+      row.blockedReason === "" ? null : el("li", null, `${relayText("blockedReason")}: ${row.blockedReason}`),
+      el("li", null, row.hasEvidence ? relayText("evidencePresent") : relayText("evidenceMissing")),
+      el("li", null, `${relayText("lastUpdated")} ${instantLabel(row.updatedAt)}`),
     ),
-    el("h4", { class: "rf-q-detail-label" }, "次の操作"),
+    el("h4", { class: "rf-q-detail-label" }, relayText("nextOperation")),
     row.interventionCandidate
       ? el("div", { class: "rf-q-detail-actions" }, callbacks.onEdit === undefined || row.archived ? null : edit, sendToCommand, inspect)
       : el("div", { class: "rf-q-detail-actions" }, callbacks.onEdit === undefined || row.archived ? null : edit, inspect),
     row.interventionCandidate
       ? null
-      : el("p", { class: "rf-q-detail-note" }, "このQuestは人間の判断待ちではないため、Commandへは送りません。"),
+      : el("p", { class: "rf-q-detail-note" }, relayText("noIntervention")),
     ...model.unavailable.map((entry) => unavailableAction(entry.what, entry.why)),
   );
 }
@@ -343,8 +345,8 @@ function detailRail(
  * ------------------------------------------------------------------ */
 
 function portfolioMetrics(model: QuestsModel, state: QuestsState, context: ScreenContext): readonly Metric[] {
-  const overdue = model.rows.filter((row) => row.overdue).length;
-  const blockedDownstream = model.rows
+  const overdue = scopedRows(model, state).filter((row) => row.overdue).length;
+  const blockedDownstream = scopedRows(model, state)
     .filter((row) => row.bucket === "blocked")
     .reduce((total, row) => total + row.downstreamTotal, 0);
   const select = (segment: QuestsState["segment"]) => () => {
@@ -352,16 +354,16 @@ function portfolioMetrics(model: QuestsModel, state: QuestsState, context: Scree
     context.rerender();
   };
   return [
-    { label: "要判断", value: String(scopedBucketCount(model, state, "review")), note: "Commandへ送れます", tone: "review", onAct: select("review") },
-    { label: "停止", value: String(scopedBucketCount(model, state, "blocked")), note: `下流 ${blockedDownstream}件が待機`, tone: "blocked", onAct: select("blocked") },
-    { label: "進行中", value: String(scopedBucketCount(model, state, "working")), note: "Agent / 自分が実行中", tone: "working", onAct: select("working") },
-    { label: "期限超過", value: String(overdue), note: "完了以外", tone: overdue > 0 ? "danger" : "neutral" },
-    { label: "全体", value: String(scopedRows(model, state).length), note: state.showArchived ? "アーカイブを含む" : `アーカイブ ${model.rows.filter((row) => row.archived).length}件を除外`, tone: "neutral", onAct: select("all") },
+    { label: relayText("stateReview"), value: String(scopedBucketCount(model, state, "review")), note: relayText("canReviewCommand"), tone: "review", onAct: select("review") },
+    { label: relayText("stateBlocked"), value: String(scopedBucketCount(model, state, "blocked")), note: `${relayText("downstream")}: ${countLabel(blockedDownstream)}`, tone: "blocked", onAct: select("blocked") },
+    { label: relayText("stateWorking"), value: String(scopedBucketCount(model, state, "working")), note: relayText("actorWorking"), tone: "working", onAct: select("working") },
+    { label: t("task.summary.overdue"), value: String(overdue), note: relayText("excludingCompleted"), tone: overdue > 0 ? "danger" : "neutral" },
+    { label: relayText("overall"), value: String(scopedRows(model, state).length), note: state.showArchived ? relayText("includingArchive") : `${relayText("excludingArchive")}: ${countLabel(model.rows.filter((row) => row.archived).length)}`, tone: "neutral", onAct: select("all") },
   ];
 }
 
 function filterBar(model: QuestsModel, state: QuestsState, context: ScreenContext): HTMLElement {
-  const sort = el("div", { class: "rf-q-sort", role: "radiogroup", "aria-label": "並び順" });
+  const sort = el("div", { class: "rf-q-sort", role: "radiogroup", "aria-label": relayText("sortBy") });
   for (const key of ["priority", "due", "updated", "impact"] as const) {
     const button = el(
       "button",
@@ -380,13 +382,14 @@ function filterBar(model: QuestsModel, state: QuestsState, context: ScreenContex
     });
     sort.append(button);
   }
+  radioGroupKeyboard(sort);
   return el(
     "div",
     { class: "rf-q-filters" },
     segmentControl(
-      "状態で絞り込む",
+      relayText("filterStatus"),
       [
-        { id: "all", label: "すべて", count: scopedRows(model, state).length },
+        { id: "all", label: relayText("all"), count: scopedRows(model, state).length },
         { id: "review", label: BUCKET_LABEL.review, count: scopedBucketCount(model, state, "review") },
         { id: "blocked", label: BUCKET_LABEL.blocked, count: scopedBucketCount(model, state, "blocked") },
         { id: "working", label: BUCKET_LABEL.working, count: scopedBucketCount(model, state, "working") },
@@ -400,7 +403,7 @@ function filterBar(model: QuestsModel, state: QuestsState, context: ScreenContex
       },
     ),
     archiveToggle(model, state, context),
-    searchField("Questを検索", state.query, "タイトル / QF-ID", (value) => {
+    searchField(relayText("questSearch"), state.query, relayText("searchHint"), (value) => {
       state.query = value;
       context.rerender();
     }),
@@ -420,6 +423,7 @@ function portfolioRow(
     {
       type: "button",
       class: "rf-srow rf-q-row",
+      tabindex: -1,
       role: "row",
       "data-selected": selected ? "true" : "false",
       "data-bucket": row.bucket,
@@ -445,7 +449,7 @@ function portfolioRow(
     el("span", { class: "rf-q-cell rf-q-cell-impact", role: "cell" }, impactCell(row)),
     el("span", { class: "rf-q-cell rf-q-cell-due", role: "cell" }, dueCell(row)),
     el("span", { class: "rf-q-cell rf-q-cell-evidence", role: "cell" }, evidenceCell(row)),
-    selected ? el("span", { class: "rf-visually-hidden" }, "選択中") : null,
+    selected ? el("span", { class: "rf-visually-hidden" }, relayText("selected")) : null,
   );
   element.addEventListener("click", () => onSelect(row.id));
   return element;
@@ -496,7 +500,7 @@ export function renderQuestsDesktop(
   const rows = visibleRows(model, state);
   const visibleSelectedId = rows.some((row) => row.id === selectedId) ? selectedId : rows[0]?.id ?? null;
 
-  const create = el("button", { type: "button", class: "rf-primary-button" }, "Questを作成");
+  const create = el("button", { type: "button", class: "rf-primary-button" }, relayText("createQuest"));
   if (callbacks.onCreate !== undefined) create.addEventListener("click", () => callbacks.onCreate?.());
 
   const table = el(
@@ -515,25 +519,25 @@ export function renderQuestsDesktop(
     el(
       "div",
       { class: "rf-q-head", role: "row" },
-      el("span", { class: "rf-col-label", role: "columnheader" }, "状態"),
+      el("span", { class: "rf-col-label", role: "columnheader" }, relayText("status")),
       el("span", { class: "rf-col-label", role: "columnheader" }, "ID"),
       el("span", { class: "rf-col-label", role: "columnheader" }, "Quest"),
-      el("span", { class: "rf-col-label", role: "columnheader" }, "担当"),
-      el("span", { class: "rf-col-label", role: "columnheader" }, "影響"),
-      el("span", { class: "rf-col-label", role: "columnheader" }, "期限"),
-      el("span", { class: "rf-col-label", role: "columnheader" }, "証拠"),
+      el("span", { class: "rf-col-label", role: "columnheader" }, t("task.assignee")),
+      el("span", { class: "rf-col-label", role: "columnheader" }, relayText("impact")),
+      el("span", { class: "rf-col-label", role: "columnheader" }, relayText("due")),
+      el("span", { class: "rf-col-label", role: "columnheader" }, relayText("evidence")),
     ),
     loading
       ? screenSkeleton(8, "row")
       : rows.length === 0
         ? screenEmpty(
-          state.query === "" ? "この条件のQuestはありません" : "検索に一致しませんでした",
+          state.query === "" ? relayText("noMatchingQuests") : relayText("noSearchMatches"),
           state.query === ""
-            ? "別の状態タブを選ぶか、新しいQuestを作成してください。"
-            : "検索語を短くするか、状態タブを「すべて」に戻してください。",
+            ? relayText("emptyQuestsHint")
+            : relayText("resetFiltersHint"),
           state.query === "" && callbacks.onCreate !== undefined
-            ? { label: "Questを作成", onAct: () => callbacks.onCreate?.() }
-            : { label: "条件をリセット", onAct: () => { state.query = ""; state.segment = "all"; context.rerender(); } },
+            ? { label: relayText("createQuest"), onAct: () => callbacks.onCreate?.() }
+            : { label: relayText("resetFilters"), onAct: () => { state.query = ""; state.segment = "all"; context.rerender(); } },
         )
         : el(
           "div",
@@ -542,7 +546,7 @@ export function renderQuestsDesktop(
             const element = findPortfolioRow(id);
             if (element !== null) selectPortfolioRow(element, id, context);
             else context.onSelectQuest(id);
-            context.announce(`${row.ref} を選択しました`);
+            context.announce(`${relayText("selected")}: ${row.ref}`);
           })),
         ),
   );
@@ -573,10 +577,10 @@ export function renderQuestsDesktop(
     { class: "rf-screen rf-screen--quests" },
     screenHeader({
       title: "Quests",
-      question: "何を進め、何が止まり、次に何を選ぶべきか。",
+      question: relayText("questsQuestion"),
       meta: [
-        { label: "対象", value: countLabel(scopedRows(model, state).length) },
-        { label: "表示中", value: countLabel(rows.length) },
+        { label: relayText("scope"), value: countLabel(scopedRows(model, state).length) },
+        { label: relayText("displayed"), value: countLabel(rows.length) },
       ],
       actions: callbacks.onCreate === undefined ? [] : [create],
     }),
@@ -619,16 +623,16 @@ function mobileCard(
       { class: "rf-q-card-top" },
       bucketChip(row.bucket),
       el("span", { class: "rf-srow-id" }, row.ref),
-      row.overdue ? stateChip({ tone: "danger", label: "超過", mark: "!!" }) : null,
+      row.overdue ? stateChip({ tone: "danger", label: t("task.summary.overdue"), mark: "!!" }) : null,
     ),
     el("span", { class: "rf-q-card-title" }, row.title),
     el(
       "span",
       { class: "rf-q-card-bottom" },
-      owner === null ? el("span", { class: "rf-srow-sub" }, "未割り当て") : actorAvatar(owner, { size: "row" }),
+      owner === null ? el("span", { class: "rf-srow-sub" }, relayText("unassigned")) : actorAvatar(owner, { size: "row" }),
       el("span", { class: "rf-srow-sub" }, owner === null ? "" : owner.name),
       el("span", { class: "rf-q-card-spacer" }),
-      el("span", { class: "rf-srow-sub" }, row.downstreamTotal === 0 ? "下流なし" : `下流 ${row.downstreamTotal}`),
+      el("span", { class: "rf-srow-sub" }, row.downstreamTotal === 0 ? relayText("noDownstream") : `${relayText("downstream")} ${row.downstreamTotal}`),
     ),
   );
   card.addEventListener("click", () => onOpen(row.id));
@@ -650,7 +654,7 @@ export function renderQuestsMobile(
    * screen a stacked detail means the list is never reachable again without a
    * long scroll, and a second scroll owner appears. */
   if (state.mobileDetailOpen && selectedRow !== null) {
-    const back = el("button", { type: "button", class: "rf-secondary-button rf-q-back" }, "一覧へ戻る");
+    const back = el("button", { type: "button", class: "rf-secondary-button rf-q-back" }, relayText("backToList"));
     back.addEventListener("click", () => {
       state.mobileDetailOpen = false;
       context.rerender();
@@ -659,7 +663,7 @@ export function renderQuestsMobile(
         document.querySelector<HTMLElement>(`.rf-q-card[data-quest-id="${selectedRow.id}"]`)?.focus();
       });
     });
-    const send = el("button", { type: "button", class: "rf-primary-button" }, "Commandで判断する");
+    const send = el("button", { type: "button", class: "rf-primary-button" }, selectedRow.humanRequest ? relayText("inbox") : relayText("decideCommand"));
     send.addEventListener("click", () => callbacks.onSendToCommand(selectedRow.id));
     return {
       main: el(
@@ -674,7 +678,7 @@ export function renderQuestsMobile(
     };
   }
 
-  const create = el("button", { type: "button", class: "rf-primary-button" }, "Questを作成");
+  const create = el("button", { type: "button", class: "rf-primary-button" }, relayText("createQuest"));
   if (callbacks.onCreate !== undefined) create.addEventListener("click", () => callbacks.onCreate?.());
 
   const main = el(
@@ -682,17 +686,17 @@ export function renderQuestsMobile(
     { class: "rf-screen rf-screen--quests", "data-mobile-view": "list" },
     screenHeader({
       title: "Quests",
-      question: "何を進め、何が止まり、次に何を選ぶべきか。",
+      question: relayText("questsQuestion"),
       meta: [
-        { label: "要判断", value: String(scopedBucketCount(model, state, "review")) },
-        { label: "停止", value: String(scopedBucketCount(model, state, "blocked")) },
+        { label: relayText("stateReview"), value: String(scopedBucketCount(model, state, "review")) },
+        { label: relayText("stateBlocked"), value: String(scopedBucketCount(model, state, "blocked")) },
       ],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     segmentControl(
-      "状態で絞り込む",
+      relayText("filterStatus"),
       [
-        { id: "all", label: "すべて", count: scopedRows(model, state).length },
+        { id: "all", label: relayText("all"), count: scopedRows(model, state).length },
         { id: "review", label: BUCKET_LABEL.review, count: scopedBucketCount(model, state, "review") },
         { id: "blocked", label: BUCKET_LABEL.blocked, count: scopedBucketCount(model, state, "blocked") },
         { id: "working", label: BUCKET_LABEL.working, count: scopedBucketCount(model, state, "working") },
@@ -706,7 +710,7 @@ export function renderQuestsMobile(
       },
     ),
     archiveToggle(model, state, context),
-    searchField("Questを検索", state.query, "タイトル / QF-ID", (value) => {
+    searchField(relayText("questSearch"), state.query, relayText("searchHint"), (value) => {
       state.query = value;
       context.rerender();
     }),
@@ -714,9 +718,9 @@ export function renderQuestsMobile(
       ? screenSkeleton(5, "card")
       : rows.length === 0
         ? screenEmpty(
-          state.query === "" ? "この条件のQuestはありません" : "検索に一致しませんでした",
-          "状態タブを切り替えるか、検索語を短くしてください。",
-          { label: "条件をリセット", onAct: () => { state.query = ""; state.segment = "all"; context.rerender(); } },
+          state.query === "" ? relayText("noMatchingQuests") : relayText("noSearchMatches"),
+          relayText("resetFiltersHint"),
+          { label: relayText("resetFilters"), onAct: () => { state.query = ""; state.segment = "all"; context.rerender(); } },
         )
         : el(
           "div",

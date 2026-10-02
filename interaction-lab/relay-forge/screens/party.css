@@ -97,6 +97,15 @@
 
 .rf-p-last { display: flex; flex-direction: column; gap: var(--qf-space-2); align-items: flex-start; min-width: 0; }
 
+
+.rf-screen--party .rf-chip {
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: var(--qf-control-compact);
+  white-space: normal;
+}
+.rf-screen--party .rf-chip-label { overflow-wrap: anywhere; }
 /* ---------------- workload ---------------- */
 
 .rf-p-workload { display: flex; flex-direction: column; gap: var(--qf-space-2); min-width: 0; }
@@ -230,6 +239,12 @@
   }
 }
 
+@media (max-width: 1300px) and (min-width: 901px) {
+  .rf-p-head,
+  .rf-p-row { grid-template-columns: minmax(0, 1.3fr) minmax(104px, 1fr); }
+  .rf-p-row .rf-srow-title,
+  .rf-p-row .rf-srow-sub { white-space: normal; overflow-wrap: anywhere; }
+}
 /* ---------------- mobile ---------------- */
 
 @media (max-width: 900px) {

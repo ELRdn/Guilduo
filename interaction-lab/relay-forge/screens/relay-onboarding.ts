@@ -29,7 +29,10 @@ export function relayOnboarding(model: SettingsModel, callbacks: SettingsCallbac
 export function relayPreferences(): HTMLElement {
   const language = el("select", { "aria-label": t("language"), class: "rf-set-theme-select" }, ...SUPPORTED_LOCALES.map((locale) => el("option", { value: locale }, LOCALE_METADATA[locale].label)));
   language.value = getLocale();
-  language.addEventListener("change", () => setLocale(language.value));
+  language.addEventListener("change", () => {
+    setLocale(language.value);
+    queueMicrotask(() => document.querySelector<HTMLSelectElement>(".rf-set-theme-select")?.focus({ preventScroll: true }));
+  });
   const motion = el("input", { type: "checkbox" });
   try { motion.checked = localStorage.getItem("questforge-relay-motion") !== "off"; } catch { motion.checked = true; }
   motion.addEventListener("change", () => { try { localStorage.setItem("questforge-relay-motion", motion.checked ? "on" : "off"); } catch { /* Optional preference. */ } });

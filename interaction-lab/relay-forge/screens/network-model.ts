@@ -9,6 +9,8 @@
 import type { Quest } from "../../../types/questforge.ts";
 import type { Actor } from "../model.ts";
 import type { ScreenNotice } from "./screen-state.ts";
+import { countLabel } from "./screen-state.ts";
+import { relayText, type RelayCopyKey } from "../relay-copy.ts";
 
 /* ------------------------------------------------------------------ *
  * ViewModel
@@ -72,11 +74,15 @@ export interface NetworkModel {
  * ------------------------------------------------------------------ */
 
 export const EDGE_LABEL: Readonly<Record<EdgeKind, string>> = {
-  dependency: "依存",
-  contains: "包含",
-  assignment: "担当",
-  sync: "同期",
+  get dependency() { return relayText("networkDependency"); },
+  get contains() { return relayText("networkContains"); },
+  get assignment() { return relayText("networkAssignment"); },
+  get sync() { return relayText("networkSync"); },
 };
+
+function relationText(key: RelayCopyKey, values: Readonly<Record<string, string>>): string {
+  return relayText(key).replace(/\{(\w+)\}/g, (token: string, name: string) => values[name] ?? token);
+}
 
 function questState(quest: Quest, unmet: number): NetworkNode["state"] {
   if (quest.done || quest.lifecycleState === "completed") return "done";
@@ -121,13 +127,14 @@ function ownerId(quest: Quest, selfUid: string): string {
 export function normalizeNetworkModel(options: NormalizeNetworkOptions): NetworkModel {
   const nodes = new Map<string, NetworkNode>();
   const edges: NetworkEdge[] = [];
+  const active = options.quests.filter(quest => quest.lifecycleState !== "archived");
   const byId = new Map(options.quests.map((quest) => [quest.id, quest]));
   const isDone = (id: string): boolean => {
     const quest = byId.get(id);
     return quest !== undefined && (quest.done || quest.lifecycleState === "completed");
   };
 
-  for (const quest of options.quests) {
+  for (const quest of active) {
     const unmet = quest.dependencyIds.filter((id) => !isDone(id));
     const state = questState(quest, unmet.length);
     nodes.set(quest.id, {
@@ -144,7 +151,7 @@ export function normalizeNetworkModel(options: NormalizeNetworkOptions): Network
 
   /* Actor nodes are added only for actors that actually hold a Quest here, so
    * the graph never shows an Agent with nothing attached to it. */
-  const holders = new Set(options.quests.map((quest) => ownerId(quest, options.selfUid)));
+  const holders = new Set(active.map((quest) => ownerId(quest, options.selfUid)));
   for (const id of holders) {
     const actor = options.actors.get(id);
     if (actor === undefined) continue;
@@ -161,30 +168,28 @@ export function normalizeNetworkModel(options: NormalizeNetworkOptions): Network
   }
 
   for (const connection of options.connections) {
-    if (connection.questIds.length === 0) continue;
+    if (!connection.questIds.some(id => nodes.get(id)?.kind === "quest")) continue;
     nodes.set(connection.id, {
       id: connection.id,
       kind: "connection",
       ref: "SYNC",
       label: connection.name,
-      sub: connection.status,
+      get sub() { return relayText(connection.status === "connected" ? "networkConnected" : connection.status === "reconnect_required" ? "networkReconnectRequired" : connection.status === "disconnected" ? "unconnected" : "networkAttention"); },
       state: connection.status === "connected" ? "healthy" : "degraded",
       blocked: false,
       destination: "connections",
     });
   }
 
-  for (const quest of options.quests) {
+  for (const quest of active) {
     for (const dependencyId of quest.dependencyIds) {
       if (!nodes.has(dependencyId)) continue;
-      const blocking = !isDone(dependencyId);
+      const blocking = !isDone(quest.id) && !isDone(dependencyId);
       edges.push({
         fromId: dependencyId,
         toId: quest.id,
         kind: "dependency",
-        reason: blocking
-          ? `${questRef(dependencyId)} が未完了のため ${questRef(quest.id)} は進めません`
-          : `${questRef(dependencyId)} は完了済みで、${questRef(quest.id)} の前提を満たしています`,
+        get reason() { return relationText(isDone(quest.id) ? "networkDependencyClosed" : blocking ? "networkDependencyBlocked" : "networkDependencyDone", { source:questRef(dependencyId), target:questRef(quest.id) }); },
         blocking,
       });
     }
@@ -193,7 +198,7 @@ export function normalizeNetworkModel(options: NormalizeNetworkOptions): Network
         fromId: quest.parentQuestId,
         toId: quest.id,
         kind: "contains",
-        reason: `${questRef(quest.id)} は ${questRef(quest.parentQuestId)} の子Questです（停止はしません）`,
+        get reason() { return relationText("networkContainsReason", { target:questRef(quest.id), source:questRef(quest.parentQuestId) }); },
         blocking: false,
       });
     }
@@ -204,7 +209,7 @@ export function normalizeNetworkModel(options: NormalizeNetworkOptions): Network
         fromId: owner,
         toId: quest.id,
         kind: "assignment",
-        reason: `${actor?.name ?? owner} が ${questRef(quest.id)} を保持しています（${quest.assignee.handoffState}）`,
+        get reason() { return relationText("networkAssignmentReason", { actor:actor?.name ?? owner, quest:questRef(quest.id) }); },
         blocking: false,
       });
     }
@@ -217,10 +222,8 @@ export function normalizeNetworkModel(options: NormalizeNetworkOptions): Network
         fromId: connection.id,
         toId: questId,
         kind: "sync",
-        reason: connection.status === "connected"
-          ? `${connection.name} が ${questRef(questId)} を同期しています`
-          : `${connection.name} は ${connection.status} のため ${questRef(questId)} の同期が止まっています`,
-        blocking: connection.status !== "connected",
+        get reason() { return relationText(connection.status === "connected" ? "networkSyncReason" : "networkSyncStopped", { connection:connection.name, quest:questRef(questId) }); },
+        blocking: connection.status !== "connected" && !isDone(questId),
       });
     }
   }
@@ -229,19 +232,19 @@ export function normalizeNetworkModel(options: NormalizeNetworkOptions): Network
    * root cause; everything reachable downstream of it is what the block costs. */
   const downstreamOf = new Map<string, string[]>();
   for (const edge of edges) {
-    if (edge.kind !== "dependency") continue;
+    if (edge.kind !== "dependency" || !edge.blocking) continue;
     const list = downstreamOf.get(edge.fromId);
     if (list === undefined) downstreamOf.set(edge.fromId, [edge.toId]);
     else list.push(edge.toId);
   }
   const chains: BlockedChain[] = [];
-  for (const quest of options.quests) {
+  for (const quest of active) {
     const node = nodes.get(quest.id);
     if (node === undefined || !node.blocked) continue;
     const upstreamBlocked = quest.dependencyIds.some((id) => nodes.get(id)?.blocked === true);
     if (upstreamBlocked) continue;
     const waiting: string[] = [];
-    const seen = new Set<string>();
+    const seen = new Set<string>([quest.id]);
     const queue = [...(downstreamOf.get(quest.id) ?? [])];
     while (queue.length > 0) {
       const next = queue.shift() as string;
@@ -253,9 +256,11 @@ export function normalizeNetworkModel(options: NormalizeNetworkOptions): Network
     chains.push({
       rootId: quest.id,
       rootRef: questRef(quest.id),
-      reason: quest.handoff.blockedReason !== ""
+      get reason() { return quest.handoff.blockedReason !== ""
         ? quest.handoff.blockedReason
-        : `${quest.dependencyIds.filter((id) => !isDone(id)).length}件の依存が未完了です`,
+        : quest.dependencyIds.some(id => !isDone(id))
+          ? relationText("networkDependenciesPending", { count:countLabel(quest.dependencyIds.filter((id) => !isDone(id)).length) })
+          : relayText("networkUnknownBlockCause"); },
       waitingIds: waiting,
     });
   }

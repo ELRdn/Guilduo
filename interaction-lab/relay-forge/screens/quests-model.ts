@@ -8,6 +8,7 @@
 
 import type { HandoffState, Impact, Quest } from "../../../types/questforge.ts";
 import type { ScreenNotice } from "./screen-state.ts";
+import { relayText } from "../relay-copy.ts";
 
 /* ------------------------------------------------------------------ *
  * ViewModel
@@ -79,11 +80,11 @@ export interface QuestsModel {
  * ------------------------------------------------------------------ */
 
 export const BUCKET_LABEL: Readonly<Record<PortfolioBucket, string>> = {
-  review: "要判断",
-  blocked: "停止",
-  working: "進行中",
-  scheduled: "予定",
-  done: "完了",
+  get review() { return relayText("stateReview"); },
+  get blocked() { return relayText("stateBlocked"); },
+  get working() { return relayText("stateWorking"); },
+  get scheduled() { return relayText("stateScheduled"); },
+  get done() { return relayText("stateDone"); },
 };
 
 export const BUCKET_MARK: Readonly<Record<PortfolioBucket, string>> = {

@@ -1,4 +1,5 @@
 export default Object.freeze({
+  "relay.count": "{count, number}件",
   "locale.label": "表示言語",
   "nav.tasks": "クエスト",
   "nav.bosses": "ボス",

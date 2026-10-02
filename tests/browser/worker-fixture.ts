@@ -8,13 +8,14 @@ import { readState, writeState } from "../../worker/src/appwrite-store.ts";
 import { migrateState } from "../../server/questforge-domain.ts";
 import type { WorkerEnv } from "../../worker/src/worker-types.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
+import { FakeR2Bucket } from "../test-helpers.ts";
 
 /** A real Worker HTTP bridge using isolated in-memory stores and test credentials. */
 export async function startRelayWorkerFixture(origin: string) {
   const uid = `relay-browser-${crypto.randomUUID()}`;
   const humanToken = "local-relay-human-test-token";
-  const agentToken = "local-relay-agent-test-token";
-  const env: WorkerEnv = { DEV_BEARER_TOKEN: humanToken, DEV_USER_ID: uid, ALLOWED_ORIGINS: origin };
+  const agentToken = `local-relay-agent-test-token:${uid}`;
+  const env: WorkerEnv = { DEV_BEARER_TOKEN: humanToken, DEV_USER_ID: uid, ALLOWED_ORIGINS: origin, AGENT_AVATARS: new FakeR2Bucket() };
   const context = { waitUntil(promise: Promise<unknown>) { promise.catch(() => {}); } };
   const state = migrateState({ schemaVersion: 7 } as QuestForgeState);
   const previous = await readState(env, uid);
@@ -61,5 +62,5 @@ export async function startRelayWorkerFixture(origin: string) {
     return { source, quest };
   }
   const first = await receive("first");
-  return { baseUrl, uid, first, receive, mcp, web, close: () => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }) };
+  return { baseUrl, uid, env, first, receive, mcp, web, close: () => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }) };
 }

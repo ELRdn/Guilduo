@@ -5,6 +5,8 @@ import type { Quest } from "../types/questforge.ts";
 import { fixtureActors } from "../interaction-lab/relay-forge/fixtures.ts";
 import { normalizeQuestsModel } from "../interaction-lab/relay-forge/screens/quests-model.ts";
 import { normalizeNetworkModel } from "../interaction-lab/relay-forge/screens/network-model.ts";
+import { setLocale, SUPPORTED_LOCALES } from "../i18n.ts";
+import { relayText } from "../interaction-lab/relay-forge/relay-copy.ts";
 import {
   centreNetworkCamera,
   fitNetworkCamera,
@@ -12,10 +14,11 @@ import {
   zoomNetworkCameraAt,
 } from "../interaction-lab/relay-forge/screens/network-layout.ts";
 import { normalizePartyModel } from "../interaction-lab/relay-forge/screens/party-model.ts";
-import { normalizeBattleModel } from "../interaction-lab/relay-forge/screens/battle-model.ts";
-import { FixtureBattlePort, fixtureBattleState } from "../interaction-lab/relay-forge/screens/battle-port.ts";
+import { normalizeBattleModel, previewCommand, executeCommand, refreshBattle, cancelBattlePreview, initialBattleState, explainBattleFailure, type BattleOutcome, type BattleCallbacks } from "../interaction-lab/relay-forge/screens/battle-model.ts";
+import { FixtureBattlePort, RepositoryBattlePort, fixtureBattleState } from "../interaction-lab/relay-forge/screens/battle-port.ts";
+import { executeBattleCommand } from "../shared/battle-rules.ts";
 import { normalizeConnectionsModel } from "../interaction-lab/relay-forge/screens/connections-model.ts";
-import { FixtureConnectionsPort, REQUIRED_SCOPES } from "../interaction-lab/relay-forge/screens/connections-port.ts";
+import { FixtureConnectionsPort, RepositoryConnectionsPort, REQUIRED_SCOPES, type ConnectionsRepository } from "../interaction-lab/relay-forge/screens/connections-port.ts";
 
 /**
  * These tests exercise the five screen adapters against real domain values —
@@ -256,6 +259,48 @@ test("Network: an actor with no Quests is not drawn", () => {
   assert.equal(kinds.filter((kind) => kind === "connection").length, 0, "an integration with no Quests is not a node");
 });
 
+test("Network: archived Quests and completed dependencies never inflate blocked chains", () => {
+  const model = normalizeNetworkModel({
+    quests:[
+      quest({ id:"root", title:"Root", assignee:{ type:"agent", id:"a-forge", label:"F", handoffState:"blocked" } }),
+      quest({ id:"closed", title:"Closed", done:true, lifecycleState:"completed", dependencyIds:["root"] }),
+      quest({ id:"child", title:"Child", dependencyIds:["closed"] }),
+      quest({ id:"archive", title:"Archived", lifecycleState:"archived", dependencyIds:["root"] }),
+    ], actors:fixtureActors, connections:[{ id:"notion", name:"Notion", status:"disconnected", questIds:["closed"] }, { id:"old", name:"Old", status:"connected", questIds:["archive"] }], selfUid:"hironao",
+  });
+  assert.equal(model.nodes.has("archive"), false);
+  assert.equal(model.nodes.has("old"), false);
+  assert.equal(model.nodes.get("child")?.state, "working");
+  assert.deepEqual(model.chains.find(chain => chain.rootId === "root")?.waitingIds, []);
+  assert.equal(model.chains.find(chain => chain.rootId === "root")?.reason, relayText("networkUnknownBlockCause"));
+  assert.equal(model.edges.filter(edge => edge.toId === "closed").every(edge => !edge.blocking), true);
+});
+
+test("Network: overlapping roots retain each relation without counting the root itself", () => {
+  const model = normalizeNetworkModel({ quests:[
+    ...["first", "second"].map(id => quest({ id, title:id, assignee:{ type:"agent", id:"a-forge", label:"F", handoffState:"blocked" } })),
+    quest({ id:"shared", title:"Shared", dependencyIds:["first", "second"] }),
+  ], actors:fixtureActors, connections:[], selfUid:"hironao" });
+  assert.equal(model.chains.length, 2);
+  assert.deepEqual(model.chains.map(chain => chain.waitingIds), [["shared"], ["shared"]]);
+  assert.equal(new Set(model.chains.flatMap(chain => chain.waitingIds)).size, 1);
+});
+
+test("Network: existing edge reasons follow locale changes and preserve user text", () => {
+  const actors = new Map(fixtureActors);
+  const actor = actors.get("a-forge")!;
+  actors.set("a-forge", { ...actor, name:"My {quest} $& Agent" });
+  const model = normalizeNetworkModel({ quests:[quest({ id:"one", title:"User text", assignee:{ type:"agent", id:"a-forge", label:"F", handoffState:"working" } })], actors, connections:[], selfUid:"hironao" });
+  const edge = model.edges.find(edge => edge.kind === "assignment")!;
+  try {
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(locale);
+      assert.equal(edge.reason, relayText("networkAssignmentReason", locale).replace(/\{(actor|quest)\}/g, (_token, name:string) => name === "actor" ? "My {quest} $& Agent" : "QF-ONE"));
+      assert.equal(model.nodes.get("one")?.label, "User text");
+    }
+  } finally { setLocale("ja"); }
+});
+
 test("Network: a 50-node neighbourhood uses a non-overlapping four-column world grid", () => {
   const downstream = Array.from({ length: 50 }, (_, index) => `q-${index + 1}`);
   const layout = layoutNetworkWorld(["up-1", "up-2"], "focus", downstream);
@@ -299,7 +344,8 @@ test("Party: workload counts are real Quests and no capacity ceiling is invented
       quest({ id: "q-2", title: "b", assignee: { type: "agent", id: "a-forge", label: "F", handoffState: "review_required" } }),
       quest({ id: "q-3", title: "c", assignee: { type: "agent", id: "a-forge", label: "F", handoffState: "blocked" } }),
       quest({ id: "q-4", title: "d", assignee: { type: "human", id: "mika", label: "Mika", handoffState: "working" } }),
-      quest({ id: "q-5", title: "closed", done: true, lifecycleState: "completed", assignee: { type: "agent", id: "a-forge", label: "F", handoffState: "accepted" } }),
+      quest({ id: "q-5", title: "closed", done: true, lifecycleState: "completed", assignee: { type: "agent", id: "a-forge", label: "F", handoffState: "accepted" }, handoff: { note:"", blockedReason:"", artifactUrl:"", startedAt:"2026-08-26T08:00:00.000Z", reviewRequestedAt:"2026-08-26T10:00:00.000Z", reviewedAt:"2026-08-26T11:00:00.000Z", reviewedBy:"hironao" } }),
+      quest({ id: "q-6", title: "archived", lifecycleState: "archived", assignee: { type: "agent", id: "a-forge", label: "F", handoffState: "blocked" }, handoff: { note:"", blockedReason:"", artifactUrl:"", startedAt:"2026-08-26T11:10:00.000Z", reviewRequestedAt:"", reviewedAt:"", reviewedBy:"" } }),
     ],
     actors: fixtureActors,
     members: [{ uid: "mika", displayName: "Mika", handle: "mika", role: "member", joinedAt: "2026-06-14T10:30:00.000Z", level: 17 }],
@@ -309,7 +355,9 @@ test("Party: workload counts are real Quests and no capacity ceiling is invented
     now: NOW,
   });
   const forge = model.members.find((member) => member.actorId === "a-forge");
-  assert.equal(forge?.workload.total, 3, "a completed Quest is not current workload");
+  assert.equal(forge?.workload.total, 3, "completed and archived Quests are not current workload");
+    assert.equal(forge?.lastHandoffAt, "2026-08-26T11:00:00.000Z", "completed handoff history survives without archived workload");
+    assert.match(forge?.lastHandoffSummary ?? "", /QF-5/);
   assert.equal(forge?.workload.working, 1);
   assert.equal(forge?.workload.review, 1);
   assert.equal(forge?.workload.blocked, 1);
@@ -337,7 +385,7 @@ test("Party: Humans lead the roster and Agent capability comes from the registry
   const warden = model.members.find((member) => member.actorId === "a-warden");
   assert.equal(warden?.reviewRequired, true);
   const labels = (warden?.capabilities ?? []).map((capability) => capability.label);
-  assert.deepEqual(labels, ["Provider", "Role", "権限スコープ", "既定の受け渡し", "既定 dry-run"]);
+  assert.deepEqual(labels, ["Provider", "役職", "権限スコープ", "既定の受け渡し", "既定 dry-run"]);
   const scopes = warden?.capabilities.find((capability) => capability.label === "権限スコープ");
   assert.equal(scopes?.value, "quests:read, handoff:write", "the registry's scopes verbatim");
 });
@@ -436,6 +484,138 @@ test("Battle: execution and decision events stay separate channels", () => {
   }
 });
 
+test("Battle: preview pending cannot cancel, switch or submit; rejected Promise unlocks", async () => {
+  const domain = new FixtureBattlePort(fixtureBattleState([]));
+  const model = normalizeBattleModel({ session:domain.session() });
+  const state = initialBattleState();
+  let resolve!: (value: BattleOutcome) => void;
+  const gate = new Promise<BattleOutcome>(done => { resolve = done; });
+  let calls = 0;
+  const callbacks: BattleCallbacks = { port:{ runCommand:async () => { calls++; return gate; } }, onSession:() => {} };
+  const pending = previewCommand(model, state, callbacks, "attack", () => {});
+  assert.equal(cancelBattlePreview(state), false);
+  await previewCommand(model, state, callbacks, "guard", () => {});
+  await executeCommand(model, state, callbacks, () => {}, () => {});
+  assert.equal(calls, 1);
+  assert.equal(state.pendingCommand, "attack");
+  resolve(await domain.runCommand({ command:"attack", expectedTurn:model.turn, commandId:"preview", dryRun:true }));
+  await pending;
+  assert.equal(state.phase, "previewed");
+  assert.equal(cancelBattlePreview(state), true);
+  await previewCommand(model, state, { ...callbacks, port:{ runCommand:async () => { throw new Error("private provider error"); } } }, "attack", () => {});
+  assert.equal(state.phase, "failed");
+  assert.doesNotMatch(state.failure?.message || "", /private/);
+  assert.equal(cancelBattlePreview(state), true);
+});
+
+test("Battle: executing requires the previewed snapshot and respects shared write holds", async () => {
+  const domain = new FixtureBattlePort(fixtureBattleState([]));
+  const model = normalizeBattleModel({ session:domain.session() });
+  let calls = 0;
+  const callbacks: BattleCallbacks = { port:{ runCommand:async input => { calls++; return domain.runCommand(input); } }, onSession:() => {} };
+  for (const patch of [{ turn:model.turn+1 }, { mp:model.mp+1 }, { playerHp:model.playerHp+1 }, { bossHp:model.bossHp-1 }, { writeHeld:true }]) {
+    const state = initialBattleState();
+    await previewCommand(model, state, callbacks, "attack", () => {});
+    const before = calls;
+    await executeCommand({ ...model, ...patch }, state, callbacks, () => {}, () => {});
+    assert.equal(calls, before);
+    assert.equal(state.phase, "failed");
+  }
+});
+
+test("Battle: execution stays busy and command IDs are unique across independent UI instances", async () => {
+  const domain = new FixtureBattlePort(fixtureBattleState([]));
+  const model = normalizeBattleModel({ session:domain.session() });
+  const ids: string[] = [];
+  for (let i=0; i<2; i++) {
+    const state = initialBattleState();
+    let release!: () => void;
+    const gate = new Promise<void>(done => { release = done; });
+    const callbacks: BattleCallbacks = { port:{ runCommand:async input => {
+      if (!input.dryRun) { ids.push(input.commandId); await gate; }
+      return new FixtureBattlePort(fixtureBattleState([])).runCommand(input);
+    } }, onSession:() => {} };
+    await previewCommand(model, state, callbacks, "attack", () => {});
+    const pending = executeCommand(model, state, callbacks, () => {}, () => {});
+    assert.equal(cancelBattlePreview(state), false);
+    await executeCommand(model, state, callbacks, () => {}, () => {});
+    release(); await pending;
+    assert.equal(state.phase, "idle");
+    assert.equal(state.decisions.length, 1);
+  }
+  assert.equal(ids.length, 2);
+  assert.notEqual(ids[0], ids[1]);
+});
+
+test("Battle: an uncertain execution holds further moves until a successful read", async () => {
+  const domain = new FixtureBattlePort(fixtureBattleState([]));
+  const model = normalizeBattleModel({ session:domain.session() });
+  const state = initialBattleState();
+  let calls = 0, reads = 0, readOk = false;
+  const callbacks: BattleCallbacks = { port:{ runCommand:async input => {
+    calls++;
+    const response = await domain.runCommand(input);
+    if (!input.dryRun) throw new Error("response lost after write");
+    return response;
+  } }, onSession:() => {}, onRefresh:async () => { reads++; return readOk; } };
+  await previewCommand(model, state, callbacks, "attack", () => {});
+  await executeCommand(model, state, callbacks, () => {}, () => {});
+  assert.equal(state.needsRefresh, true);
+  assert.equal(cancelBattlePreview(state), false);
+  await previewCommand(model, state, callbacks, "guard", () => {});
+  assert.equal(calls, 2);
+  await refreshBattle(state, callbacks, () => {});
+  assert.equal(state.needsRefresh, true);
+  assert.equal(state.failure?.code, "load_failed");
+  readOk = true;
+  await refreshBattle(state, callbacks, () => {});
+  assert.equal(reads, 2);
+  assert.equal(state.phase, "idle");
+  assert.equal(state.needsRefresh, false);
+  assert.equal(state.preview, null);
+  assert.equal(normalizeBattleModel({ session:domain.session() }).turn, model.turn+1);
+});
+
+test("Battle: read refresh refuses duplicate requests and fixed copy follows all locales", async () => {
+  const state = initialBattleState();
+  let resolve!: (ok: boolean) => void, reads = 0;
+  const callbacks: BattleCallbacks = { port:new FixtureBattlePort(fixtureBattleState([])), onSession:() => {}, onRefresh:() => { reads++; return new Promise(done => { resolve = done; }); } };
+  const pending = refreshBattle(state, callbacks, () => {});
+  await refreshBattle(state, callbacks, () => {});
+  assert.equal(reads, 1);
+  assert.equal(cancelBattlePreview(state), false);
+  resolve(true); await pending;
+  try {
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(locale);
+      const model = normalizeBattleModel({ session:callbacks.port instanceof FixtureBattlePort ? callbacks.port.session() : null });
+      assert.equal(explainBattleFailure("battle_turn_stale"), relayText("battleStale", locale));
+      assert.equal(model.objective, relayText("battleDefeatBoss", locale).replace("{boss}", model.bossName));
+      assert.equal(model.mpSources.every(source => source.mpGain >= 0), true);
+    }
+  } finally { setLocale("ja"); }
+});
+
+test("Battle: repository accepts real engine responses and rejects malformed or mismatched success", async () => {
+  const domain = fixtureBattleState([]);
+  const real = executeBattleCommand(domain, { command:"attack", expectedTurn:7, commandId:"real-preview", dryRun:true }) as unknown as Record<string, unknown>;
+  let result = real;
+  const port = new RepositoryBattlePort({ previewBattleCommand:async () => result, battleCommand:async () => result });
+  const input = { command:"attack", expectedTurn:7, commandId:"expected-id", dryRun:true };
+  assert.equal((await port.runCommand(input)).ok, true);
+  for (const patch of [{ before:null }, { after:{} }, { effects:[null] }, { effects:[{ type:"heal", source:"a", amount:NaN }] }, { cost:-1 }, { command:"guard" }, { dryRun:false }, { session:null }]) {
+    result = { ...real, ...patch };
+    assert.equal((await port.runCommand(input)).code, "invalid_response");
+  }
+  result = { ...real, before:{ ...(real.before as object), mp:Infinity } };
+  assert.equal((await port.runCommand(input)).ok, false);
+  result = { ...real, session:{ ...(real.session as object), commands:[null] } };
+  assert.equal((await port.runCommand(input)).ok, false);
+  result = executeBattleCommand(domain, { ...input, dryRun:false }) as unknown as Record<string, unknown>;
+  assert.equal((await port.runCommand({ ...input, dryRun:false })).ok, true);
+  assert.equal((await port.runCommand({ ...input, dryRun:false, commandId:"different-id" })).ok, false);
+});
+
 /* ------------------------------------------------------------------ *
  * Connections
  * ------------------------------------------------------------------ */
@@ -482,7 +662,7 @@ test("Connections: health is derived from the fields the gateway actually return
 test("Connections: affected Quests come from externalLinks, and only live connections can sync", () => {
   const model = normalizeConnectionsModel({
     integrations: [
-      { id: "notion", name: "Notion", auth: "oauth2", capabilities: [], configurationStatus: "ready", status: "reconnect_required", account: { status: "reconnect_required", providerAccountName: "w", lastSyncedAt: "", lastError: "失効" } },
+      { id: "notion", name: "Notion", auth: "OAuth 2.0", capabilities: [], configurationStatus: "ready", status: "reconnect_required", account: { status: "reconnect_required", providerAccountName: "w", lastSyncedAt: "", lastError: "失効" } },
       { id: "google-tasks", name: "Google Tasks", auth: "oauth2", capabilities: [], configurationStatus: "ready", status: "connected", account: { status: "connected", providerAccountName: "a", lastSyncedAt: "2026-08-26T11:05:00.000Z", lastError: "" } },
     ],
     requiredScopes: REQUIRED_SCOPES,
@@ -547,4 +727,80 @@ test("Connections: permission, offline and conflict all refuse every action", as
       assert.doesNotMatch(result.message, /https?:\/\//);
     }
   }
+});
+
+test("Connections: real Worker counts and directions are required before reporting success", async () => {
+  let response: Record<string, unknown> = {};
+  const calls: string[] = [];
+  const repository: ConnectionsRepository = {
+    previewSync: async (id, direction) => { calls.push(`${id}:${direction}`); return response; },
+    syncService: async () => response,
+    connectIntegration: async () => response,
+    disconnectIntegration: async () => response,
+  };
+  const port = new RepositoryConnectionsPort(repository, () => {});
+  const valid = { service:"notion", direction:"export", dryRun:true, created:3, updated:2, skipped:1, conflicts:4 };
+  response = valid;
+  assert.deepEqual((await port.previewSync("notion")).preview, { imported:3, updated:2, skipped:1, conflicts:4 });
+  assert.equal(calls[0], "notion:export");
+  for (const patch of [{ created:-1 }, { created:NaN }, { created:1.5 }, { created:undefined }, { conflicts:undefined }, { service:"google-tasks" }, { direction:"import" }, { dryRun:false }]) {
+    response = { ...valid, ...patch };
+    assert.equal((await port.previewSync("notion")).code, "invalid_response");
+  }
+  response = { ...valid, dryRun:false };
+  assert.equal((await port.runSync("notion")).ok, true);
+  response = { ...valid, service:"google-tasks", direction:"bidirectional" };
+  assert.equal((await port.previewSync("google-tasks")).ok, true);
+  assert.equal(calls.at(-1), "google-tasks:bidirectional");
+  response = { ...response, direction:"import" };
+  assert.equal((await port.previewSync("google-tasks")).ok, false);
+  response = { disconnected:["google-calendar", "google-tasks"] };
+  assert.equal((await port.disconnect("google-tasks")).ok, true);
+  response = { disconnected:["notion"] };
+  assert.equal((await port.disconnect("google-tasks")).ok, false);
+});
+
+test("Connections: reconnect navigates only to the matching HTTPS provider and keeps URLs out of results", async () => {
+  let response: Record<string, unknown> = {};
+  const navigation: string[] = [];
+  const repository: ConnectionsRepository = {
+    previewSync: async () => ({}), syncService: async () => ({}), disconnectIntegration: async () => ({}),
+    connectIntegration: async () => response,
+  };
+  const port = new RepositoryConnectionsPort(repository, url => navigation.push(url));
+  for (const [service, authorizationUrl] of [
+    ["google-calendar", "https://accounts.google.com/o/oauth2/v2/auth?state=test-state"],
+    ["notion", "https://api.notion.com/v1/oauth/authorize?state=test-state"],
+  ]) {
+    response = { service, authorizationUrl };
+    const result = await port.reconnect(service!);
+    assert.equal(result.ok, true);
+    assert.equal(navigation.at(-1), authorizationUrl);
+    assert.doesNotMatch(JSON.stringify(result), /https:|test-state/);
+  }
+  for (const authorizationUrl of ["javascript:alert(1)", "http://accounts.google.com/o/oauth2/v2/auth?state=s", "https://evil.test/?state=s", "https://accounts.google.com@evil.test/o/oauth2/v2/auth?state=s", "https://accounts.google.com/o/oauth2/v2/auth", "https://accounts.google.com/o/oauth2/v2/auth?state=s#fragment", "https://api.notion.com/v1/oauth/authorize?state=s"]) {
+    response = { service:"google-calendar", authorizationUrl };
+    assert.equal((await port.reconnect("google-calendar")).ok, false);
+  }
+  assert.equal(navigation.length, 2);
+  repository.connectIntegration = async () => { throw new Error("secret provider URL"); };
+  assert.doesNotMatch((await port.reconnect("notion")).message, /secret/);
+});
+
+test("Connections: archived links and dedicated Toggl operations are excluded, copy follows locale", () => {
+  const model = normalizeConnectionsModel({
+    integrations:[{ id:"toggl-focus", name:"Toggl Focus", auth:"personal_api_key", capabilities:[], configurationStatus:"ready", status:"connected", account:null }],
+    requiredScopes:REQUIRED_SCOPES, agents:[],
+    questLinks:[{ id:"archived", title:"Old work", services:["toggl-focus"], lifecycleState:"archived" }, { id:"active", title:"Current work", services:["toggl-focus"] }],
+  });
+  const connection = model.connections[0]!;
+  assert.deepEqual(connection.affectedQuests.map(quest => quest.id), ["active"]);
+  assert.equal(connection.canSync, false);
+  assert.equal(connection.canReconnect, false);
+  try {
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(locale);
+      assert.equal(connection.summary, relayText("connectionHealthy", locale));
+    }
+  } finally { setLocale("ja"); }
 });

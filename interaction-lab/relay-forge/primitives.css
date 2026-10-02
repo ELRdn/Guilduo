@@ -124,7 +124,7 @@
   background: var(--qf-color-selected);
 }
 
-.rf-shelf-head { grid-area: head; display: flex; align-items: center; gap: var(--qf-space-4); }
+.rf-shelf-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: center; gap: var(--qf-space-4); }
 .rf-shelf-body { grid-area: body; display: flex; flex-direction: column; gap: var(--qf-space-3); min-width: 0; }
 .rf-shelf-actor { grid-area: actor; display: flex; flex-direction: column; align-items: center; gap: var(--qf-space-2); }
 

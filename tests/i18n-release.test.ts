@@ -20,7 +20,7 @@ const localeFiles = Object.freeze({
 });
 
 function placeholderNames(message: string): string[] {
-  return [...String(message).matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]).sort();
+  return [...new Set([...String(message).matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\s*[,}]/g)].map((match) => match[1]))].sort();
 }
 
 test("i18n supports nine locales with BCP 47 resolution and Intl formatting", async () => {
@@ -52,7 +52,7 @@ test("all locale catalogs have complete keys, placeholders, and valid ICU messag
   const { IntlMessageFormat } = await import("intl-messageformat");
   const english = (await import("../locales/en.ts")).default as Record<string, string>;
   const englishKeys = Object.keys(english);
-  assert.equal(englishKeys.length, 484);
+  assert.equal(englishKeys.length, 485);
 
   for (const [locale, filename] of Object.entries(localeFiles)) {
     const catalog = (await import(`../locales/${filename}`)).default as Record<string, string>;
@@ -65,6 +65,32 @@ test("all locale catalogs have complete keys, placeholders, and valid ICU messag
       assert.doesNotThrow(() => new IntlMessageFormat(catalog[key], locale).format(values), `${locale}:${key} ICU`);
     }
   }
+});
+
+test("Relay formatters preserve locale plurals, duration boundaries and missing dates", async () => {
+  const i18n = await import("../i18n.ts");
+  const { countLabel, elapsedLabel, instantLabel } = await import("../interaction-lab/relay-forge/screens/screen-state.ts");
+  const { BUCKET_LABEL } = await import("../interaction-lab/relay-forge/screens/quests-model.ts");
+  const initial = i18n.getLocale();
+  try {
+    i18n.setLocale("en");
+    assert.equal(countLabel(1), "1 item");
+    assert.equal(countLabel(2), "2 items");
+    assert.equal(BUCKET_LABEL.review, "Needs review");
+    assert.equal(elapsedLabel(0), "Just now");
+    assert.equal(elapsedLabel(59.8), "1 hr");
+    assert.equal(elapsedLabel(1439.8), "1 day");
+    assert.equal(elapsedLabel(Number.NaN), "—");
+    assert.equal(instantLabel(""), "—");
+    assert.equal(instantLabel("invalid"), "—");
+    const stamp = new Date("2026-10-02T13:05:00Z");
+    assert.equal(instantLabel(stamp.toISOString()), i18n.formatDate(stamp, { year: undefined, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }));
+    i18n.setLocale("ru");
+    for (const [count, text] of [[1, "1 запись"], [2, "2 записи"], [5, "5 записей"], [21, "21 запись"]] as const) assert.equal(countLabel(count), text);
+    i18n.setLocale("ja");
+    assert.equal(BUCKET_LABEL.review, "要判断");
+    assert.equal(countLabel(2), "2件");
+  } finally { i18n.setLocale(initial); }
 });
 
 test("all locale catalogs use the Guilduo and Appwrite public names", async () => {

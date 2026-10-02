@@ -13,10 +13,12 @@
  * reports what the preview said it would do.
  *
  * `RepositoryConnectionsPort` calls the real endpoints. No token, code or
- * authorization URL passes through this module in either direction.
+ * authorization URL is exposed in the returned action result.
  */
 
-import type { ConnectionActionResult, ConnectionsPort } from "./connections-model.ts";
+import { connectionSyncDirection, type ConnectionActionResult, type ConnectionsPort } from "./connections-model.ts";
+import { relayText, type RelayCopyKey } from "../relay-copy.ts";
+import { countLabel } from "./screen-state.ts";
 
 /** Keyed by adapter id. Source of truth: api/integration-adapters.json. */
 export const REQUIRED_SCOPES: Readonly<Record<string, readonly string[]>> = {
@@ -34,15 +36,25 @@ export const REQUIRED_SCOPES: Readonly<Record<string, readonly string[]>> = {
 
 export type ConnectionFailure = "none" | "permission" | "network" | "conflict";
 
-const FAILURE_COPY: Readonly<Record<string, string>> = {
-  insufficient_scope: "この操作に必要なスコープが付与されていません。",
-  offline: "接続がありません。復帰してからやり直してください。",
-  integration_conflict: "別のセッションがこの接続を更新しました。最新を読み込んでください。",
-  reconnect_required: "アクセス権が失効しています。先に再接続してください。",
+const FAILURE_COPY: Readonly<Record<string, RelayCopyKey>> = {
+  insufficient_scope: "connectionScopeMissing",
+  offline: "statusOffline",
+  integration_conflict: "statusConflict",
+  reconnect_required: "connectionExpiredHint",
+  integration_not_connected: "connectionDisconnectedHint",
+  provider_not_configured: "connectionHeld",
+  integration_busy: "executing",
+  busy: "executing",
+  invalid_response: "connectionInvalidResponse",
+  integration_uses_dedicated_api: "connectionDedicated",
 };
 
 function failure(code: string): ConnectionActionResult {
-  return { ok: false, code, message: FAILURE_COPY[code] ?? "操作を完了できませんでした。" };
+  return { ok: false, code, get message() { return relayText(FAILURE_COPY[code] ?? "connectionFailed"); } };
+}
+
+function success(code: string, key: RelayCopyKey, preview?: ConnectionActionResult["preview"]): ConnectionActionResult {
+  return { ok:true, code, preview, get message() { return relayText(key) + (preview === undefined ? "" : ` ${relayText("connectionCreated")}: ${countLabel(preview.imported)}, ${relayText("connectionUpdated")}: ${countLabel(preview.updated)}, ${relayText("connectionConflicts")}: ${countLabel(preview.conflicts ?? 0)}`); } };
 }
 
 export class FixtureConnectionsPort implements ConnectionsPort {
@@ -54,7 +66,7 @@ export class FixtureConnectionsPort implements ConnectionsPort {
     if (this.mode === "permission") return failure("insufficient_scope");
     if (this.mode === "network") return failure("offline");
     if (this.mode === "conflict") return failure("integration_conflict");
-    if (this.inFlight) return { ok: false, code: "busy", message: "実行中です。完了までお待ちください。" };
+    if (this.inFlight) return failure("busy");
     return null;
   }
 
@@ -68,12 +80,7 @@ export class FixtureConnectionsPort implements ConnectionsPort {
   async previewSync(id: string): Promise<ConnectionActionResult> {
     const blocked = this.guard();
     if (blocked !== null) return blocked;
-    return {
-      ok: true,
-      code: "preview_ok",
-      message: "確認のみ実行しました。まだ何も書き込んでいません。",
-      preview: this.counts(id),
-    };
+    return success("preview_ok", "connectionPreviewOnly", this.counts(id));
   }
 
   async runSync(id: string): Promise<ConnectionActionResult> {
@@ -84,11 +91,7 @@ export class FixtureConnectionsPort implements ConnectionsPort {
       // The execution reports exactly what the preview promised: the same
       // counts, from the same function, not a second independent calculation.
       const counts = this.counts(id);
-      return {
-        ok: true,
-        code: "sync_ok",
-        message: `同期しました。取り込み ${counts.imported}件、更新 ${counts.updated}件。`,
-      };
+      return success("sync_ok", "connectionDemo", counts);
     } finally {
       this.inFlight = false;
     }
@@ -99,11 +102,7 @@ export class FixtureConnectionsPort implements ConnectionsPort {
     if (blocked !== null) return blocked;
     /* A real reconnect leaves the app for the provider's consent screen. The
      * fixture says so rather than pretending the connection is now live. */
-    return {
-      ok: true,
-      code: "reconnect_started",
-      message: "再接続を開始しました。プロバイダの許可画面で承認すると接続が回復します。",
-    };
+    return success("reconnect_started", "connectionDemo");
   }
 
   async disconnect(_id: string): Promise<ConnectionActionResult> {
@@ -111,11 +110,7 @@ export class FixtureConnectionsPort implements ConnectionsPort {
     if (blocked !== null) return blocked;
     this.inFlight = true;
     try {
-      return {
-        ok: true,
-        code: "disconnect_ok",
-        message: "接続を解除しました。Questは削除されていません。",
-      };
+      return success("disconnect_ok", "connectionDemo");
     } finally {
       this.inFlight = false;
     }
@@ -131,51 +126,58 @@ export interface ConnectionsRepository {
 }
 
 function counts(result: Record<string, unknown>): ConnectionActionResult["preview"] {
-  const read = (key: string): number => (typeof result[key] === "number" ? result[key] as number : 0);
-  return { imported: read("imported"), updated: read("updated"), skipped: read("skipped") };
+  const read = (key: string): number => {
+    const value = result[key];
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw Object.assign(new Error(), { code:"invalid_response" });
+    return value;
+  };
+  return { imported: read("created"), updated: read("updated"), skipped: read("skipped"), conflicts: read("conflicts") };
 }
 
 export class RepositoryConnectionsPort implements ConnectionsPort {
-  constructor(private readonly repository: ConnectionsRepository) {}
+  constructor(private readonly repository: ConnectionsRepository, private readonly navigate: (url: string) => void = url => (globalThis as unknown as { location: { assign(url: string): void } }).location.assign(url)) {}
 
   private async call(
     work: () => Promise<Record<string, unknown>>,
-    code: string,
-    message: string,
-    withPreview = false,
+    id: string,
+    code: "preview_ok" | "sync_ok" | "disconnect_ok",
   ): Promise<ConnectionActionResult> {
     try {
       const result = await work();
-      return withPreview
-        ? { ok: true, code, message, preview: counts(result) }
-        : { ok: true, code, message };
+      if (code === "disconnect_ok") {
+        if (!Array.isArray(result.disconnected) || !result.disconnected.includes(id)) throw Object.assign(new Error(), { code:"invalid_response" });
+        return success(code, "connectionDisconnected");
+      }
+      if (result.service !== id || result.direction !== connectionSyncDirection(id) || result.dryRun !== (code === "preview_ok")) throw Object.assign(new Error(), { code:"invalid_response" });
+      return success(code, code === "preview_ok" ? "connectionPreviewOnly" : "connectionSyncDone", counts(result));
     } catch (error) {
-      const domain = error as { code?: string; status?: number };
-      return failure(domain.code ?? `http_${domain.status ?? 0}`);
+      const domain = error as { code?: string } | null;
+      return failure(domain?.code ?? "failed");
     }
   }
 
   previewSync(id: string): Promise<ConnectionActionResult> {
-    return this.call(() => this.repository.previewSync(id), "preview_ok", "確認のみ実行しました。", true);
+    return this.call(() => this.repository.previewSync(id, connectionSyncDirection(id)), id, "preview_ok");
   }
 
   runSync(id: string): Promise<ConnectionActionResult> {
-    return this.call(() => this.repository.syncService(id), "sync_ok", "同期しました。");
+    return this.call(() => this.repository.syncService(id, connectionSyncDirection(id)), id, "sync_ok");
   }
 
-  reconnect(id: string): Promise<ConnectionActionResult> {
-    return this.call(
-      () => this.repository.connectIntegration(id),
-      "reconnect_started",
-      "再接続を開始しました。プロバイダの許可画面で承認してください。",
-    );
+  async reconnect(id: string): Promise<ConnectionActionResult> {
+    try {
+      const result = await this.repository.connectIntegration(id);
+      const expected = id === "google-calendar" || id === "google-tasks" ? "https://accounts.google.com/o/oauth2/v2/auth" : id === "notion" ? "https://api.notion.com/v1/oauth/authorize" : "";
+      const url = new URL(typeof result.authorizationUrl === "string" ? result.authorizationUrl : "");
+      if (result.service !== id || `${url.origin}${url.pathname}` !== expected || url.username || url.password || url.hash || !url.searchParams.get("state")) return failure("invalid_response");
+      this.navigate(url.href);
+      return success("reconnect_started", "connectionReconnectStarted");
+    } catch (error) {
+      return failure((error as { code?: string } | null)?.code ?? "invalid_response");
+    }
   }
 
   disconnect(id: string): Promise<ConnectionActionResult> {
-    return this.call(
-      () => this.repository.disconnectIntegration(id),
-      "disconnect_ok",
-      "接続を解除しました。Questは削除されていません。",
-    );
+    return this.call(() => this.repository.disconnectIntegration(id), id, "disconnect_ok");
   }
 }

@@ -13,6 +13,8 @@ interface Draft { text: string; checked: boolean; version: string; }
 interface Options {
   quests: readonly Quest[];
   port: Port | null;
+  writeHeld?: () => boolean;
+  onBusy?: (busy: boolean) => void;
   onQuest: (quest: Quest) => void;
   onSource: (questId: string) => void;
   onCount: (pending: number, unread: number) => void;
@@ -41,7 +43,7 @@ export function humanInbox(options: Options) {
 
   function button(label: string, run: () => void, disabled = false) {
     const element = el("button", { type: "button", disabled }, label);
-    element.addEventListener("click", run);
+    element.addEventListener("click", () => { if (!element.disabled) run(); });
     return element;
   }
 
@@ -59,6 +61,7 @@ export function humanInbox(options: Options) {
   function render() {
     dialog.querySelector("h2")!.textContent = t("inbox");
     close.textContent = t("close");
+    close.disabled = busy;
     refreshButton.textContent = t("refresh");
     hint.textContent = t("hint");
     filters.setAttribute("aria-label", t("inbox"));
@@ -74,9 +77,11 @@ export function humanInbox(options: Options) {
     const visible = requests.filter((quest) => quest.humanRequest?.status === filter).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     list.replaceChildren(...(visible.length ? visible.map(card) : [el("p", { class: "rf-human-inbox-empty" }, t("empty"))]));
     if (!options.port) notice.textContent = t("demo");
+    else if (options.writeHeld?.() && !busy) notice.textContent = t("connectionHeld");
   }
 
   function card(quest: Quest): HTMLElement {
+    const writeHeld = busy || !options.port || options.writeHeld?.() === true;
     const request = quest.humanRequest!;
     const details = el("details", { class: "rf-human-request", "data-request-id": quest.id });
     details.open = expanded.has(quest.id);
@@ -88,14 +93,14 @@ export function humanInbox(options: Options) {
     for (const [label, value] of [[t("reason"), request.reason], [t("target"), request.checkTarget], [t("criteria"), quest.completionCriteria]]) {
       body.append(el("h3", {}, label), el("p", { class: "rf-human-request-text" }, value));
     }
-    const source = button(t("source"), () => { dialog.close(); options.onSource(request.sourceQuestId); });
+    const source = button(t("source"), () => { dialog.close(); options.onSource(request.sourceQuestId); }, busy);
     body.append(source);
     if (safeExternal(request.artifactUrl)) body.append(el("a", { href: request.artifactUrl, target: "_blank", rel: "noopener noreferrer", class: "rf-human-external" }, t("external"), " ↗"));
     body.append(el("p", { class: "rf-human-request-separate" }, t("separate")));
     if (request.status === "answered") {
       body.append(el("p", { class: "rf-human-request-text" }, request.response || t("approved")), el("time", { datetime: request.respondedAt }, new Date(request.respondedAt).toLocaleString()));
     } else if (request.status === "deferred") {
-      body.append(button(t("resume"), () => { void respond(quest, "resume"); }, busy || !options.port));
+      body.append(button(t("resume"), () => { void respond(quest, "resume"); }, writeHeld));
     } else {
       const draft = draftFor(quest);
       const checked = el("input", { type: "checkbox", disabled: busy || !options.port });
@@ -105,14 +110,14 @@ export function humanInbox(options: Options) {
       const approve = button(t("approve"), () => { void respond(quest, "approve"); });
       const revise = button(t("revise"), () => { void respond(quest, "revise"); });
       const syncButtons = () => {
-        approve.disabled = busy || !options.port || !draft.checked;
-        revise.disabled = busy || !options.port || !draft.checked || !draft.text.trim();
+        approve.disabled = busy || !options.port || options.writeHeld?.() === true || !draft.checked;
+        revise.disabled = busy || !options.port || options.writeHeld?.() === true || !draft.checked || !draft.text.trim();
       };
       checked.addEventListener("change", () => { draft.checked = checked.checked; syncButtons(); });
       field.addEventListener("input", () => { draft.text = field.value; syncButtons(); });
       syncButtons();
       body.append(el("label", { class: "rf-human-request-check" }, checked, t("checked")), el("label", { class: "rf-human-request-feedback" }, t("feedback"), field));
-      body.append(el("div", { class: "rf-human-request-actions" }, approve, revise, button(t("defer"), () => { void respond(quest, "defer"); }, busy || !options.port), !request.seenAt ? button(t("markSeen"), () => { void respond(quest, "seen"); }, busy || !options.port) : null));
+      body.append(el("div", { class: "rf-human-request-actions" }, approve, revise, button(t("defer"), () => { void respond(quest, "defer"); }, writeHeld), !request.seenAt ? button(t("markSeen"), () => { void respond(quest, "seen"); }, writeHeld) : null));
     }
     details.append(body);
     return details;
@@ -120,9 +125,11 @@ export function humanInbox(options: Options) {
 
   async function respond(quest: Quest, action: Action) {
     if (busy || !options.port) return;
+    if (options.writeHeld?.()) { notice.textContent = t("connectionHeld"); return; }
     const draft = draftFor(quest);
     if ((action === "approve" || action === "revise") && (!draft.checked || (action === "revise" && !draft.text.trim()))) return;
     busy = true;
+    options.onBusy?.(true);
     notice.textContent = t("sending");
     const input = { action, response: draft.text, confirmed: draft.checked, expectedUpdatedAt: quest.updatedAt };
     render();
@@ -143,6 +150,7 @@ export function humanInbox(options: Options) {
       if (code === "quest_conflict" || code === "human_request_answered") draft.checked = false;
     } finally {
       busy = false;
+      options.onBusy?.(false);
       if (!disposed) { render(); notice.tabIndex = -1; notice.focus(); }
     }
   }

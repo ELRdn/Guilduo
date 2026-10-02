@@ -27,46 +27,91 @@ interface DomainError {
 }
 
 function effectsOf(value: unknown): readonly BattleEffectView[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) throw invalidResponse();
   return value.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw invalidResponse();
     const record = entry as Record<string, unknown>;
+    if (typeof record.type !== "string" || !record.type || typeof record.source !== "string") throw invalidResponse();
     return {
-      type: typeof record.type === "string" ? record.type : "effect",
-      amount: typeof record.amount === "number" ? record.amount : 0,
-      source: typeof record.source === "string" ? record.source : "",
+      type: record.type,
+      amount: record.amount === undefined ? 0 : integer(record.amount),
+      source: record.source,
     };
   });
 }
 
 function snapshotOf(value: unknown): BattleOutcome["before"] {
-  if (value === null || typeof value !== "object") return null;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw invalidResponse();
   const record = value as Record<string, unknown>;
-  const read = (key: string): number => (typeof record[key] === "number" ? record[key] as number : 0);
+  const read = (key: string): number => integer(record[key], key === "turn" ? 1 : 0);
   return { turn: read("turn"), mp: read("mp"), playerHp: read("playerHp"), bossHp: read("bossHp") };
 }
 
+function invalidResponse(): Error & { code: string } {
+  return Object.assign(new Error(), { code:"invalid_response" });
+}
+
+function integer(value: unknown, min = 0): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min) throw invalidResponse();
+  return value;
+}
+
+export function validateBattleSession(value: unknown): asserts value is BattleSession {
+  const session = value as BattleSession | null;
+  if (!session || session.schemaVersion !== 1 || !session.character || !session.boss || !session.battle || !Array.isArray(session.commands) || !Array.isArray(session.quests) || !Array.isArray(session.battle.log)) throw invalidResponse();
+  integer(session.character.hp); integer(session.character.maxHp, 1);
+  integer(session.boss.hp); integer(session.boss.maxHp, 1);
+  integer(session.battle.mp); integer(session.battle.maxMp, 1); integer(session.battle.turn, 1);
+  if (typeof session.battle.ended !== "boolean" || Number(session.character.hp) > Number(session.character.maxHp) || session.boss.hp > session.boss.maxHp || session.battle.mp > session.battle.maxMp) throw invalidResponse();
+  for (const command of session.commands) {
+    if (!command || typeof command.id !== "string" || typeof command.label !== "string" || typeof command.enabled !== "boolean") throw invalidResponse();
+    integer(command.mpCost);
+  }
+  for (const quest of session.quests) {
+    if (!quest || typeof quest.id !== "string" || typeof quest.title !== "string" || typeof quest.eligible !== "boolean") throw invalidResponse();
+    integer(quest.mpGain);
+  }
+  for (const key of ["focus", "guard", "shield", "rage", "vulnerable", "poison"]) integer(session.battle[key]);
+  for (const [record, keys] of [[session.character, ["name", "role"]], [session.boss, ["id", "name", "label", "weakKind"]]] as const) {
+    for (const key of keys) if (typeof record[key] !== "string") throw invalidResponse();
+  }
+  const commandIds = session.commands.map(command => command.id);
+  if (new Set(commandIds).size !== commandIds.length || commandIds.some(id => !["attack", "skill", "guard", "heal", "burst"].includes(id))) throw invalidResponse();
+  if (session.quests.some(quest => !["habit", "daily", "todo", "reward"].includes(quest.kind))) throw invalidResponse();
+  for (const entry of session.battle.log as unknown[]) {
+    if (!entry || typeof entry !== "object" || typeof (entry as Record<string, unknown>).text !== "string") throw invalidResponse();
+  }
+}
+
 function outcomeFrom(result: Record<string, unknown>): BattleOutcome {
+  if (typeof result.command !== "string" || !["attack", "skill", "guard", "heal", "burst"].includes(result.command) || typeof result.dryRun !== "boolean" || typeof result.replayed !== "boolean") throw invalidResponse();
+  const before = snapshotOf(result.before)!;
+  const after = snapshotOf(result.after)!;
+  validateBattleSession(result.session);
+  const session = result.session;
+  if (after.turn !== before.turn + 1 || (!result.replayed && (session.battle.turn !== after.turn || session.battle.mp !== after.mp || session.character.hp !== after.playerHp || session.boss.hp !== after.bossHp))) throw invalidResponse();
   return {
     ok: true,
     code: "",
     message: "",
     dryRun: result.dryRun === true,
     command: typeof result.command === "string" ? result.command : "",
-    cost: typeof result.cost === "number" ? result.cost : 0,
-    before: snapshotOf(result.before),
-    after: snapshotOf(result.after),
+    cost: integer(result.cost),
+    before,
+    after,
     effects: effectsOf(result.effects),
-    session: (result.session ?? null) as BattleSession | null,
+    session,
+    replayed: result.replayed,
   };
 }
 
-function failureOutcome(code: string, message?: string): BattleOutcome {
+function failureOutcome(code: string): BattleOutcome {
   return {
     ok: false,
     code,
     // Domain messages are English and technical; the user-facing copy is ours.
     // A raw payload, URL or token is never surfaced.
-    message: message ?? explainBattleFailure(code),
+    get message() { return explainBattleFailure(code); },
     dryRun: false,
     command: "",
     cost: 0,
@@ -101,7 +146,7 @@ export class FixtureBattlePort implements BattlePort {
     if (this.failure === "permission") return failureOutcome("insufficient_scope");
     if (this.failure === "network") return failureOutcome("offline");
     if (!input.dryRun) {
-      if (this.inFlight) return failureOutcome("battle_command_invalid", "実行中です。完了までお待ちください。");
+      if (this.inFlight) return failureOutcome("busy");
       this.inFlight = true;
     }
     try {
@@ -118,8 +163,8 @@ export class FixtureBattlePort implements BattlePort {
       // works on a clone for a dry run, so nothing has to be copied back here.
       return outcomeFrom(result);
     } catch (error) {
-      const domain = error as DomainError;
-      return failureOutcome(domain.code ?? "battle_command_invalid");
+      const domain = error as DomainError | null;
+      return failureOutcome(domain?.code ?? "battle_command_invalid");
     } finally {
       if (!input.dryRun) this.inFlight = false;
     }
@@ -146,10 +191,12 @@ export class RepositoryBattlePort implements BattlePort {
       const result = input.dryRun
         ? await this.repository.previewBattleCommand(input.command, input.expectedTurn)
         : await this.repository.battleCommand(input.command, input.expectedTurn, input.commandId);
-      return outcomeFrom(result);
+      const outcome = outcomeFrom(result);
+      if (outcome.command !== input.command || outcome.dryRun !== input.dryRun || outcome.before?.turn !== input.expectedTurn || (!input.dryRun && result.commandId !== input.commandId)) throw invalidResponse();
+      return outcome;
     } catch (error) {
-      const domain = error as DomainError;
-      return failureOutcome(domain.code ?? `http_${domain.status ?? 0}`);
+      const domain = error as DomainError | null;
+      return failureOutcome(domain?.code ?? "failed");
     }
   }
 }

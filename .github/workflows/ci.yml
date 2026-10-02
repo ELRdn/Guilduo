@@ -19,6 +19,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: cp appwrite-config.example.js appwrite-config.js
+      # Synthetic public project ID lets the real SDK run without real accounts.
+      - run: node -e "const fs=require('node:fs');const p='appwrite-config.js';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replaceAll('YOUR_APPWRITE_PROJECT_ID','local-entry-test'))"
       - run: cp runtime-config.example.js runtime-config.js
       - run: cp wrangler.example.jsonc wrangler.jsonc
       - run: npm run api:generate
@@ -37,3 +39,14 @@ jobs:
           trap 'kill "$preview_pid"' EXIT
           for attempt in {1..30}; do curl -fsS http://127.0.0.1:4173/lp/ >/dev/null && break; sleep 1; done
           npm run lp:verify -- http://127.0.0.1:4173
+          npm run launch:verify -- http://127.0.0.1:4173 --built
+          npm run accessibility:verify -- http://127.0.0.1:4173 --built
+          npm run entry:verify -- http://127.0.0.1:4173 --built
+      - name: Verify workspace refresh against isolated Worker
+        shell: bash
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4174 > /tmp/guilduo-sync-dev.log 2>&1 &
+          dev_pid=$!
+          trap 'kill "$dev_pid"' EXIT
+          for attempt in {1..30}; do curl -fsS http://127.0.0.1:4174/tests/browser/production-relay.html >/dev/null && break; sleep 1; done
+          npm run sync:verify -- http://127.0.0.1:4174
