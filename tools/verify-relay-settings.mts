@@ -5,9 +5,10 @@ import { startRelayWorkerFixture } from "../tests/browser/worker-fixture.ts";
 import { getKv } from "../worker/src/security.ts";
 import { linkAgentConnection } from "../worker/src/agent-store.ts";
 import { relayText } from "../interaction-lab/relay-forge/relay-copy.ts";
-import { SUPPORTED_LOCALES } from "../i18n.ts";
+import { setLocale, SUPPORTED_LOCALES } from "../i18n.ts";
 
 const base = process.argv[2] || "http://127.0.0.1:5183";
+setLocale("ja");
 assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
 const output = ".qa-artifacts/settings";
 await mkdir(output, { recursive: true });
