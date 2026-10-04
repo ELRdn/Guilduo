@@ -24,6 +24,19 @@ Appwrite Sitesのdomain-level redirectはpath/queryを保持しないため、ro
 
 ## Appwrite Siteの設定状態
 
+### 静的ページの404 (2026-10-05)
+
+Guilduoの公開入口は実HTMLファイルを持ち、アプリの画面移動はhash navigationを使う。
+SiteのSPA用`fallbackFile: index.html`は存在しないDocsにもアプリをHTTP 200で返すため、
+静的Siteでは`fallbackFile: ""`を使用する。手動Site workflowは配備後に
+`tools/ensure-static-site-routing.mts`で設定を確認する。対象Site、static adapter、
+全公開入口のHTMLを検査し、既知のindex.html fallbackだけを解除する。
+それ以外の設定とactive deploymentは維持し、未知のfallbackやSSRへは適用しない。
+配備後に既存LP・Web App・互換pathと、存在しないDocsの実HTTP 404を確認する。
+
+Appwrite公式の[静的SiteとSPA fallback](https://appwrite.io/docs/products/sites/rendering/static)
+および[Site更新API](https://appwrite.io/docs/references/cloud/server-rest/sites#update)を参照。
+
 - [x] 既存のAppwrite Siteで、`app.guilduo.com`を**Active deployment**のCustom Domainとして維持する。
 - [x] 同じSiteへ`guilduo.com`を追加し、**Active deployment**を使用する。Redirect設定にはしない。
 - [x] Appwriteが提示するapex向けのDNS設定をCloudflareへ反映する。
