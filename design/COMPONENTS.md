@@ -69,3 +69,7 @@ default -> hover -> active -> focus-visible
 3. Assetを使う場合は[`ASSET_MANIFEST.md`](ASSET_MANIFEST.md)の許可Surfaceを確認する。
 4. 9言語の最長ラベルと390px幅でレイアウトを確認する。
 5. `prefers-reduced-motion`とキーボード操作を確認する。
+
+## Public Docs components (2026-10-05)
+
+`/docs/`だけに適用する。分類別ナビは現在の記事に`aria-current="page"`を付け、Mobileでは標準`details`で開閉する。検索inputには可視label、結果一覧には通常のリンク、件数・失敗には`role="status"`を提供する。記事内のcodeは横スクロールをcode領域内に閉じ、コピー成功・失敗を読み上げる。本文と出典のリンクは下線を付け、44px相当の主要操作・明確なfocus-visible・8px以下の角丸を維持する。検索・コピー以外はJavaScriptを前提にしない。

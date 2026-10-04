@@ -29,6 +29,8 @@
 
 ### Surface rules
 
+- Public Documentation `/docs/`と`/docs/en/`はLPと同じ公開資料Surfaceとして`guilduo-mark-gold.svg`、既存favicon / Apple touch icon / `og-guilduo.png`を使用できる。マークは幅30px・高さ40pxで縦横比を維持する。
+
 - PWA、favicon、Apple touch icon、OG、GitHubは角丸を焼き込んだフルカラー版を使う。Android `maskable`だけはOSマスク用に背景を端まで敷き、中央66%安全領域へ前景を縮小する。
 - Web UIとLPは背景なし単色版を使う。LPの既存カラーパレットとGolden Referenceはブランドマーク差し替え以外に変更しない。
 - 旧キャラクターアイコンはブランド識別へ戻さず、Astra等の人格表現に限定する。

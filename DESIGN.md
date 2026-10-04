@@ -614,3 +614,15 @@ error
 2026-09-06: LPv2.1の承認済み体験・モーションを公式`/lp/`と`/lp/en/`へ採用する。14節の旧スクリーンショット中心の仕様を、この公式LPでは15〜16節の体験仕様で置き換える。日本語canonicalは`https://guilduo.com/`、英語は`https://guilduo.com/lp/en/`。既存のhost rewriteとWeb Appは維持する。LPv2とLPv2.1の比較URLも維持し、検索エンジンにはnoindexを指定する。
 
 - `/privacy/`と`/terms/`は正本文書から静的生成し、運営者・個別窓口・バグ報告先もJavaScriptなしで読める。本文中のリンクは下線で操作可能と示し、メールアドレスと長いURLは320pxでも折り返す。既存LPのパレットと文字・余白を継承する。
+
+## 18. Public Documentation `/docs/`
+
+2026-10-05: 公式サイト配下の`/docs/`を日本語Docs、`/docs/en/`を英語Docsのcanonical候補とする。公開済みGitHub資料から利用者向けの記事を編集し、既存Appwrite Siteの静的配備に同梱する。実装・ローカル確認と本番公開は別に記録する。
+
+- LPの色・字体・ブランド素材を継承し、独立したDocs用CSSだけを適用する。Dark / Light / Systemを提供する。
+- 左は分類別記事ナビ、中央は読みやすい本文、右はページ内目次。本文は最大74ch、モバイルではナビを標準detailsへ畳み、目次を本文の前へ移す。
+- 各記事の本文・ナビ・出典・関連記事・言語切替はJavaScriptなしでも利用可能。検索とコードコピーだけを段階的に追加する。
+- 検索はローカルindexで行い、入力を外部送信しない。読み込み・空・該当なし・失敗を明示し、検索失敗時も分類ナビを使える。
+- 各記事に固有title / description / canonical / hreflang、OG、BreadcrumbListとTechArticleを付与する。未承認の価格、架空機能、実環境未受入の保証を記事に載せない。
+- 320px、キーボード、Reduced Motion、両言語、JavaScript無効を確認する。DocsはPWAやアプリの状態・認証・データ保存に触れない。
+- FAQは本文と同じ質問・回答だけを構造化する。記事末尾に内容確認日と公開資料の版を表示し、根拠を辿れるようにする。`llms.txt`は任意の資料索引で、検索順位やAI引用を保証するものではない。

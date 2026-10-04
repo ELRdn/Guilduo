@@ -46,7 +46,8 @@
     "typecheck:watch": "tsc -b --watch",
     "generate-types": "wrangler types",
     "lpv2:verify": "tsx tools/verify-lpv2.mts",
-    "lpv21:verify": "tsx tools/verify-lpv21.mts"
+    "lpv21:verify": "tsx tools/verify-lpv21.mts",
+    "docs:verify": "tsx tools/verify-public-docs.mts"
   },
   "bin": {
     "questforge": "cli/questforge.ts"
