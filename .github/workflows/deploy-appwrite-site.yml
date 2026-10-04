@@ -71,6 +71,13 @@ jobs:
         run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+      - name: Ensure missing static documents return 404
+        env:
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
+          APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
+        run: node --import tsx tools/ensure-static-site-routing.mts dist
       - name: Upload and activate Appwrite Site
         shell: bash
         env:
@@ -88,10 +95,19 @@ jobs:
           archive="$RUNNER_TEMP/guilduo-site.tar.gz"
           tar -czf "$archive" -C dist .
           bash tools/deploy-appwrite-site.sh "$archive"
-      - name: Ensure missing static documents return 404
+      - name: Verify published Docs and missing-path status
         env:
-          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
-          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
-          APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
-        run: node --import tsx tools/ensure-static-site-routing.mts dist
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const origin = process.env.PUBLIC_SITE_URL;
+          for (const path of ['/docs/', '/docs/en/']) {
+            const response = await fetch(new URL(path, origin));
+            assert.equal(response.status, 200);
+            assert.ok((await response.text()).includes('class="doc-main"'), 'Static Docs body missing');
+          }
+          const missing = await fetch(new URL('/docs/deployment-404-check/', origin));
+          assert.equal(missing.status, 404, 'Missing Docs path must return HTTP 404');
+          console.log('Published bilingual Docs and real HTTP 404 verified.');
+          NODE

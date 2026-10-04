@@ -28,11 +28,14 @@ Appwrite Sitesのdomain-level redirectはpath/queryを保持しないため、ro
 
 Guilduoの公開入口は実HTMLファイルを持ち、アプリの画面移動はhash navigationを使う。
 SiteのSPA用`fallbackFile: index.html`は存在しないDocsにもアプリをHTTP 200で返すため、
-静的Siteでは`fallbackFile: ""`を使用する。手動Site workflowは配備後に
+静的Siteでは`fallbackFile: ""`を使用する。手動Site workflowは配備前に
 `tools/ensure-static-site-routing.mts`で設定を確認する。対象Site、static adapter、
 全公開入口のHTMLを検査し、既知のindex.html fallbackだけを解除する。
 それ以外の設定とactive deploymentは維持し、未知のfallbackやSSRへは適用しない。
 配備後に既存LP・Web App・互換pathと、存在しないDocsの実HTTP 404を確認する。
+fallback設定は新しいdeployment作成時に取り込まれるため、設定更新だけでは
+既存deploymentの応答は変わらない。新deploymentを作成・有効化してから
+workflowが日英Docs本文と未知のDocs pathのHTTP 404を検査する。
 
 Appwrite公式の[静的SiteとSPA fallback](https://appwrite.io/docs/products/sites/rendering/static)
 および[Site更新API](https://appwrite.io/docs/references/cloud/server-rest/sites#update)を参照。
