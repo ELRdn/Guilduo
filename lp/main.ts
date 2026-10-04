@@ -1,2 +1,2 @@
-// Official LP and preview share the approved interaction and motion implementation.
-import "../lpv2-1/main";
+// Official LP adopts the approved LPv3 surface, demo and motion.
+import "../lpv3/main";

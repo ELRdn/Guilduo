@@ -340,3 +340,26 @@ Skillsでは、何を人へ頼むか、依頼理由、完了条件、回答待�
 2026-09-06: LPv2.1を公式LPへ採用。`/lp/`と`/lp/en/`は`lpv2-1`のスタイル・モーションと`lpv2`の体験ロジックを共有する。公式日本語URLは`https://guilduo.com/`、英語は`https://guilduo.com/lp/en/`。比較用URLはnoindexで保持し、本体・MCP・host rewriteは変更しない。
 
 2026-09-07追記: LP-R01〜R06・R08を本体/MCP/Skillsへ実装し、HTTP結合・9言語・スマホ幅の自動受入を用意した。新機能は本番未配備で、実Codex/OpenClaw・Pixel 9の受入はLP-R07へ残す。[実装・受入記録](docs/human-relay-acceptance.md)。LPの体験デモ表示と製品境界は維持する。
+
+## LPv3 比較版 `/lpv3/`
+
+2026-10-05: 参入率を上げるための作り直し案。`/lpv3/`・`/lpv3/en/`（noindex）で既存LPと並存させ、比較後に公式`/lp/`へ採用するかを決める。体験デモのロジックとモーション切替は`lpv2`・`lpv2-1`をそのまま使う。
+
+| 課題（v2.1） | LPv3での対応 |
+| --- | --- |
+| 何の製品か3秒で伝わらない | Heroに実際のCommand画面と、依頼→確認→判断の3点注釈を置く。説明文を1つ追加する |
+| 名前と見た目が噛み合わない | LP配色をRelay Forgeと同じE2ブランドパレット（Night Surface・Forge Teal・Antique Gold・Ivory Text）へ揃える。グラデーション・glowは使わず、Forge Tealの面で区切る |
+| 主CTAが下へのスクロールだけ | Heroの主CTAを**Join the Guild**、副を「30秒で体験する」にする |
+| 事実が埋もれている | MCPツール数（契約から算出）・双方向・REST/CLI・AGPL-3.0を帯で表示。MCP節にendpoint設定例を置く |
+| 単調で抑揚がない | スクロール連動のmotionを2つだけ加える（下記） |
+| デモ注記が未完成に読める | 「仕事の受け渡しの流れを、体験用データで再現しています」へ変更 |
+
+**Motion**（参考：linear.appのHero、dayos.comの固定ステージ。素材・コードは流用しない）
+
+- Hero：製品画面が奥へ傾いた状態からスクロールで正面に起き、注釈1→2→3が依頼の順に金の線でつながる。
+- Relay scene：画面に固定したステージで、巨大な「任せる。／頼まれる。／一緒に完了。」に合わせてQuestカードが人→AI→人と往復し、最後に2者が合流する。
+- LPv3はヘッダーの動きON/OFFボタンを置かず、端末のReduced Motion設定に従う。Reduced Motionでは固定を解除し、3語と完了状態を静止表示する。
+- 言語切替は「日本語 / English」を並べ、現在の言語を塗りで示す。
+- Join the GuildとView on GitHubは、実行時設定にURLがない場合もHTMLに書いた公開URLへ遷移する。
+
+2026-10-05: LPv3を公式LPへ採用。`/lp/`と`/lp/en/`は`lpv3`のスタイル・スクロール演出と、`lpv2`の体験ロジックを共有する。公式URL・canonical・OG素材は維持し、比較用`/lpv3/`はnoindexで保持する。
