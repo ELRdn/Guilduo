@@ -31,7 +31,8 @@ Guilduo é uma **Human × AI Work Platform** na qual pessoas e Agentes de IA pod
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Endpoint Remote HTTP MCP canônico |
 | API do Appwrite | `https://api.guilduo.com/v1` | Endpoint oficial da API do Appwrite (origin: `https://api.guilduo.com`) |
-| Documentação | `https://docs.guilduo.com` | Reserved / Future |
+| Documentação (JA / EN) | `https://guilduo.com/docs/` / `https://guilduo.com/docs/en/` | Docs estáticos; publicação pendente |
+| Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com` é reservado para redirecionar para `https://guilduo.com`. A antiga URL `workers.dev` continua disponível para conexões compatíveis e rollback. `api.guilduo.com` é usado pela API do Appwrite, pelo cliente Appwrite do navegador e pelo `APPWRITE_ENDPOINT` do Worker; ele não é o origin público das rotas REST `/v1` ou MCP `/mcp` do Worker.
 

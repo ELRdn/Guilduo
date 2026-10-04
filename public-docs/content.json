@@ -1,0 +1,2816 @@
+{
+  "sourceRevision": "5125178d48e94be8d8a16d401fd992da5d8a2b5d",
+  "ja": [
+    {
+      "slug": "",
+      "group": "start",
+      "title": "Guilduo Docs：人間とAIで進めるQuestとRelay",
+      "description": "Guilduoの使い方を解説。最初のQuest、Codex・ClaudeのMCP接続、Agentへの担当割り当て、Human Relayの確認と回答まで、目的に合った手順を探せます。",
+      "lead": "Guilduo（ギルデュオ）は、人間とAI Agentが仕事を依頼し、担当し、受け渡し、レビューするためのワークスペースです。最初の小さなQuestから、人の確認を挟むAI作業までを案内します。",
+      "sections": [
+        {
+          "id": "choose-a-guide",
+          "title": "目的からガイドを選ぶ",
+          "bullets": [
+            "初めて使う：はじめにでログインと最初のQuestを確認し、Questガイドで予定・完了・保管を学びます。",
+            "AIを接続する：MCP接続を読み、CodexまたはClaudeへ進みます。接続後はAgentリンクと権限を確認します。",
+            "仕事を受け渡す：Agentsで担当とHandoffを設定し、Human Relayで確認依頼・回答・再開を学びます。",
+            "失敗を解決する：トラブルシューティングで症状を切り分け、権限とAPIで必要な契約を確認します。"
+          ]
+        },
+        {
+          "id": "work-model",
+          "title": "Quest・Agent・Relayの役割",
+          "paragraphs": [
+            "登録はAIの自動起動を意味しません。モデル・ツール・実行環境は接続元が担当し、Guilduoは作業データと受け渡しを管理します。"
+          ],
+          "table": {
+            "headers": [
+              "用語",
+              "役割",
+              "例"
+            ],
+            "rows": [
+              [
+                "Quest",
+                "目的、完了条件、担当を持つ作業",
+                "スマホのメニューを改善する"
+              ],
+              [
+                "Agent",
+                "登録済みAIの役割と許可範囲",
+                "実装担当、Quest読み書き可能"
+              ],
+              [
+                "Handoff",
+                "担当間の受け渡し状態",
+                "workingからreview_requiredへ"
+              ],
+              [
+                "Human Relay",
+                "人の確認と回答を挟む流れ",
+                "実機確認後、修正点をテキストで返す"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "first-relay",
+          "title": "最初のRelayを小さく試す",
+          "steps": [
+            "「ヘルプ文を1か所改善する」というQuestを作り、完了条件を「変更前後を比較できること」にします。",
+            "登録済みAgentをリンクしたクライアントからQuestを読み、担当割り当てをプレビューして保存します。",
+            "接続元で作業し、結果をreview_requiredとして返します。人の判断が必要なら具体的な確認依頼を作ります。",
+            "人の保存済み回答をAgentが読み、修正または受け入れへ進めます。Handoff承認と元Quest完了は別に行います。"
+          ]
+        },
+        {
+          "id": "beta-scope",
+          "title": "公開βと正式入口",
+          "paragraphs": [
+            "公開資料はQuest管理、Quest Tree、Agent Registry、OAuth MCP、Handoffを案内しています。Human確認は公開契約に含まれますが、実際のクライアントで必要なツールが見えることを確認してから使います。",
+            "Google Calendar、Google Tasks、Notion、TogglのProvider OAuthは準備中です。自律Agent実行、ネイティブAndroid・iOS、Unity Battle Labは後続工程です。",
+            "ブラウザの正式入口はhttps://app.guilduo.com/、AIの接続先はhttps://mcp.guilduo.com/mcpです。"
+          ]
+        }
+      ],
+      "related": [
+        "getting-started",
+        "mcp-connection",
+        "quests",
+        "human-relay",
+        "faq"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "docs/public-urls.md",
+          "label": "docs/public-urls.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        }
+      ],
+      "navTitle": "Guilduo Docsの概要"
+    },
+    {
+      "slug": "getting-started",
+      "group": "start",
+      "title": "Guilduoの始め方：ログインから最初のQuestまで",
+      "description": "Guilduo / Relay Forgeでログインし、最初のQuestを保存する手順。AI接続前の準備、担当割り当て、保存の確認、再接続時の診断を解説します。",
+      "lead": "まずは自分で完了を確かめられる作業を1件登録します。AI接続は、そのQuestを読み取れる状態にしてから追加すると、ログイン・接続・担当の問題を切り分けやすくなります。",
+      "sections": [
+        {
+          "id": "open-and-sign-in",
+          "title": "Web Appを開いてログインする",
+          "paragraphs": [
+            "端末ゲスト保存は従来のルートUIの機能です。公式Relay Forgeのアカウント作業やMCP接続と同じ保存先だと考えないでください。"
+          ],
+          "steps": [
+            "https://app.guilduo.com/を開き、Guilduo / Relay Forgeのログイン導線からGoogleログインを進めます。",
+            "作業用アカウントを選びます。MCPのOAuthも同じアカウントで許可します。",
+            "認証と同期が終わり、Questを操作できることを確認します。同期中は編集や完了を繰り返さず待ちます。"
+          ]
+        },
+        {
+          "id": "save-first-quest",
+          "title": "確認しやすいQuestを保存する",
+          "steps": [
+            "単発To Doを作り、タイトルを「ヘルプ文を1か所改善する」にします。",
+            "完了条件は「変更前後を比較し、意味が通じることを確認する」、次の行動は「改善対象の文を選ぶ」にします。",
+            "実行日が未定ならBacklog、決まっていれば予定日を設定し、担当を自分にします。",
+            "保存後に一覧から開き直し、タイトル・担当・完了条件が保存されたことを確認します。"
+          ]
+        },
+        {
+          "id": "add-your-agent",
+          "title": "AIを使う場合の準備",
+          "steps": [
+            "PartyでAgentを登録します。例：表示名「Docs担当」、役割「文の改善と確認結果の報告」。",
+            "必要な読み取り権限を選び、更新を任せるなら書き込み権限も検討します。モデルAPIキーは登録しません。",
+            "MCP接続ガイドに沿ってOAuth接続し、Connectionsで対象Agentへリンクします。",
+            "get_current_agent_contextと対象Questの取得を確認します。担当割り当てはプレビュー後に保存し、再取得します。"
+          ]
+        },
+        {
+          "id": "finish-and-recover",
+          "title": "完了・再接続の確認",
+          "paragraphs": [
+            "文を改善し、完了条件を満たしてからQuestを完了にします。単発To Doは完了時に保管されるので、Todayから消えたらArchiveを確認します。",
+            "前回のQuestが見えていても再接続中は読み取り専用のことがあります。同じアカウントで再接続し、保存状態を読み直します。",
+            "成功応答が不明な操作は、保存状態を確認してから再実行を判断します。画面の表示だけで完了や保存成功を決めないでください。"
+          ],
+          "bullets": [
+            "最初の到達点：保存したQuestを再取得でき、担当と完了条件が一致する。",
+            "AI接続の到達点：linkedがtrue、必要な実行スコープがあり、対象Questを取得できる。"
+          ]
+        }
+      ],
+      "related": [
+        "quests",
+        "agents",
+        "mcp-connection",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        }
+      ],
+      "navTitle": "最初のQuestを作る"
+    },
+    {
+      "slug": "mcp-connection",
+      "group": "integrations",
+      "title": "Guilduo MCP接続：OAuth認証とAgentリンク",
+      "description": "GuilduoのRemote HTTP MCPをOAuthで接続する手順。正式endpoint、同一アカウント認証、Agentリンク、読み取りテスト、401と未リンクの診断を解説します。",
+      "lead": "GuilduoのMCP接続先は https://mcp.guilduo.com/mcp です。OAuthで接続し、Web AppのConnectionsで登録Agentへリンクしてから、読み取りで権限を確認します。",
+      "sections": [
+        {
+          "id": "prerequisites",
+          "title": "接続前の確認",
+          "bullets": [
+            "クライアントがRemote HTTP MCPとOAuthに対応していることを確認します。設定名や利用条件はクライアントの版によって異なります。",
+            "Web Appで作業用アカウントにログインし、Questを読めることを確認します。",
+            "担当AIを使うならPartyでAgentを登録し、表示名とは別のAgent IDを確認します。"
+          ]
+        },
+        {
+          "id": "oauth-setup",
+          "title": "正式endpointでOAuth接続する",
+          "steps": [
+            "MCP・Apps・Connectors設定で、接続名Guilduo、種類Remote HTTP MCPを選びます。",
+            "URLに上記endpointを入力します。通常接続に/mcp-nextやAppwrite APIのURLは使いません。",
+            "認証方式を選べる場合はOAuthにします。API Key、Bearer Token、Client Secretを貼り付けません。",
+            "Web Appと同じアカウントで認可画面にログインし、要求された権限を確認して許可します。",
+            "クライアントへ戻り、接続済みまたは利用可能の表示を確認します。"
+          ],
+          "code": {
+            "language": "text",
+            "text": "https://mcp.guilduo.com/mcp"
+          }
+        },
+        {
+          "id": "link-agent",
+          "title": "接続をAgentへリンクする",
+          "paragraphs": [
+            "linkedがfalse、agentがnullなら、OAuth認証後でもAgent未リンクです。OAuthをやり直す前にConnectionsのリンクを確認します。"
+          ],
+          "steps": [
+            "Web AppのConnectionsで、今回接続したClientを確認します。",
+            "意図した登録済みAgentへリンクします。接続元の名前からAgentを推測しないでください。",
+            "クライアントを再読み込みし、get_current_agent_contextでlinked、Agent ID、effectiveExecutionScopesを確認します。"
+          ]
+        },
+        {
+          "id": "read-only-test",
+          "title": "書き込まずに検証する",
+          "paragraphs": [
+            "一覧が0件でも同じアカウントの保存状態と一致すれば正常です。ツール名の発見だけでは、呼び出し権限や書き込み成功を確認できません。"
+          ],
+          "code": {
+            "language": "text",
+            "text": "Guilduoの接続を読み取りだけで確認してください。\nget_current_agent_contextでリンク状態、Agent ID、Role、effectiveExecutionScopesを報告してください。\n次にlist_questsをview=all、limit=5で取得し、件数だけ報告してください。\nToken、Client ID、UID、Quest本文は表示せず、変更や追加のモデル実行はしないでください。"
+          }
+        },
+        {
+          "id": "connection-diagnosis",
+          "title": "接続失敗の診断",
+          "paragraphs": [
+            "移行前の接続が原因なら旧接続を外して正式endpointで再登録します。動いている接続でツールだけが古い場合は、まずRefreshを試し、重複接続を作らないでください。"
+          ],
+          "table": {
+            "headers": [
+              "症状",
+              "確認点",
+              "対応"
+            ],
+            "rows": [
+              [
+                "401",
+                "旧認可、失効、接続先",
+                "endpoint確認後、必要ならOAuth再認可"
+              ],
+              [
+                "OAuthから戻れない",
+                "アカウント、callbackを妨げる拡張",
+                "同じアカウントとクライアントへの復帰を確認"
+              ],
+              [
+                "linked: false",
+                "Connectionsのリンク",
+                "対象Agentへリンクし再取得"
+              ],
+              [
+                "agents:read不足",
+                "OAuth認可内容",
+                "権限を確認して再認可"
+              ],
+              [
+                "Humanツールがない",
+                "クライアントのツールカタログ",
+                "Refresh後、新しいチャットで確認"
+              ]
+            ]
+          }
+        }
+      ],
+      "related": [
+        "codex",
+        "claude",
+        "agents",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "MCPを接続する"
+    },
+    {
+      "slug": "codex",
+      "group": "integrations",
+      "title": "CodexとGuilduoを接続する：MCPとWorkflow Skill",
+      "description": "CodexからGuilduoのQuestを読み、Agentに担当を割り当てる手順。OAuth MCP、既存Appを使うローカルplugin、Skillの読み込み、Human Relayの準備を解説します。",
+      "lead": "Codexからは https://mcp.guilduo.com/mcp へOAuth接続し、Web AppのConnectionsでAgentをリンクします。既存Guilduo Appの接続があれば再登録せずに読み取りで確認し、Workflow Skillは別に追加します。",
+      "sections": [
+        {
+          "id": "connect-codex",
+          "title": "Codexの接続を用意する",
+          "paragraphs": [
+            "既存デスクトップAppを使う方式と直接MCPを登録する方式は選択肢です。同じ用途で両方を重ねる必要はありません。"
+          ],
+          "steps": [
+            "既存Guilduo Appの接続先とアカウントを確認します。なければMCP接続ガイドに沿ってRemote HTTP MCPを登録します。",
+            "正式URLはhttps://mcp.guilduo.com/mcp、認証はOAuthです。CLIや別ホストの直接MCPでも、そのホストでOAuthを完了します。",
+            "PartyでAgentを登録し、Connectionsで今回の接続へリンクします。"
+          ]
+        },
+        {
+          "id": "verify-codex",
+          "title": "最初は読み取りだけで確認する",
+          "paragraphs": [
+            "Web Appと同じQuestを取得でき、linkedがtrueなら、アカウントとAgentの読み取り確認ができています。書き込みは対象と変更内容を決めて別に検証します。"
+          ],
+          "code": {
+            "language": "text",
+            "text": "Guilduoでget_current_agent_contextとlist_questsを読み取りだけで実行してください。\nリンク状態、effectiveExecutionScopes、取得件数を報告してください。\n作成・更新・完了・担当変更や追加のモデル実行はしないでください。\nToken、Client ID、UIDは出力しないでください。"
+          }
+        },
+        {
+          "id": "install-workflow-skill",
+          "title": "既存AppにWorkflow Skillを追加する",
+          "paragraphs": [
+            "任意のローカル手順です。Guilduoソースリポジトリと、pluginコマンドに対応したCodex環境が必要です。YOUR_REGISTERED_GUILDUO_APP_IDは実際のGuilduo App IDへ置き換えます。OAuthトークンではありません。",
+            "リポジトリのルートで実行します。生成先.qa-artifacts/guilduo-pluginは、ローカルmarketplaceの登録中に保持してください。"
+          ],
+          "steps": [
+            "Codexを再起動し、新しいチャットでGuilduo Workflowsを有効にします。",
+            "読み込まれたSkill一覧にguilduo-workflows:questforge-workflowsがあることを確認します。",
+            "Human Relayにはrequest_human_reviewとlist_human_requestsの両方が必要です。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "npx tsx tools/prepare-guilduo-plugin.mts --app-id YOUR_REGISTERED_GUILDUO_APP_ID\ncodex plugin marketplace add .qa-artifacts/guilduo-plugin\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
+          }
+        },
+        {
+          "id": "first-codex-task",
+          "title": "Questを担当してレビューへ返す",
+          "steps": [
+            "「ヘルプ文を1か所改善する」をget_questで読み、完了条件と担当を確認します。",
+            "任された範囲でassign_quest_to_agentをプレビューし、実際のAgent IDと最新expectedUpdatedAtで保存します。",
+            "開始時にHandoffをworkingへ進め、Codexの作業環境で修正と検証を行います。",
+            "結果と残る確認点をreview_requiredで返します。実機確認や好みの判断が必要ならHuman Relayを使います。"
+          ]
+        },
+        {
+          "id": "codex-diagnosis",
+          "title": "接続・Skill・実作業を切り分ける",
+          "bullets": [
+            "MCPは使えるがSkillがない：MCP単体ではSkillは読み込まれません。pluginと新しいチャットの読み込みを確認します。",
+            "Humanツールがない：既存AppのメタデータをRefreshします。普通のQuest更新で人の回答を代用しません。",
+            "pluginの認識成功はローカル読み込みの確認です。公開ディレクトリ掲載やOpenAI公式審査の完了ではありません。",
+            "担当保存は作業開始の証拠ではありません。workingへの遷移と実際の結果を別に確認します。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "plugins/questforge/README.md",
+          "label": "plugins/questforge/README.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Codexとの連携"
+    },
+    {
+      "slug": "claude",
+      "group": "integrations",
+      "title": "ClaudeとGuilduoを接続する：OAuth MCPの設定",
+      "description": "ClaudeのConnectorsからGuilduo MCPへ接続する手順。OAuthのアカウント選択、Agentリンク、最初のQuest取得、書き込み前の確認と接続失敗の診断を解説します。",
+      "lead": "ClaudeのRemote MCP対応Connectorsに https://mcp.guilduo.com/mcp を登録し、OAuthで認証します。Web AppのConnectionsでAgentをリンクしたあと、Claudeから同じQuestを読み取れるか確認します。",
+      "sections": [
+        {
+          "id": "claude-connector",
+          "title": "ConnectorsでOAuthを設定する",
+          "steps": [
+            "ClaudeのSettingsからConnectorsを開きます。画面名やカスタムConnectorの利用条件は使用している版で確認します。",
+            "Remote MCP接続を追加し、名前をGuilduo、URLをhttps://mcp.guilduo.com/mcpにします。",
+            "OAuth認証を進め、Web版Guilduoと同じアカウントで許可します。秘密情報を会話や設定欄に貼り付けません。",
+            "Claudeへ戻り、接続が利用可能になっていることを確認します。"
+          ]
+        },
+        {
+          "id": "claude-agent-link",
+          "title": "Claude接続とAgentを対応させる",
+          "paragraphs": [
+            "OAuthが成功してもAgent未リンクのことがあります。Agentは接続元の名前では決まらないため、別の担当へ意図せずリンクしていないか確認します。"
+          ],
+          "steps": [
+            "GuilduoのPartyで担当Agentを登録します。例：表示名「文章レビュー」、役割「文意と表現の確認」。",
+            "Connectionsで今回のClaude接続を対象Agentへリンクします。",
+            "Claudeでget_current_agent_contextを取得し、linked、Agent ID、effectiveExecutionScopesを確認します。"
+          ]
+        },
+        {
+          "id": "claude-first-read",
+          "title": "読み取りと最初の更新を分ける",
+          "paragraphs": [
+            "例として「公開前に説明文を見直す」Questを選び、get_questで完了条件を確認します。レビューを任せるなら、ユーザーが許可した担当割り当てをプレビューして保存します。",
+            "更新結果は再取得して確認し、成果をreview_requiredとして返します。好みの判断が必要ならHuman確認を依頼し、保存された回答を読んで再開します。"
+          ],
+          "code": {
+            "language": "text",
+            "text": "Guilduoのget_current_agent_contextを取得してください。\n次にlist_questsでBacklogを最大5件読み、タイトルだけを報告してください。\n変更はせず、Token、Client ID、UIDは表示しないでください。"
+          }
+        },
+        {
+          "id": "claude-troubleshooting",
+          "title": "Claudeで接続できないとき",
+          "bullets": [
+            "Connectorsに接続追加の入口がない：Remote MCPとカスタム接続に対応した版・利用条件を確認します。別形式の秘密キーで代用しません。",
+            "401：正式endpointとOAuthアカウントを確認します。移行前の接続なら再登録と再認可が必要です。",
+            "読めるが更新できない：OAuth認可とAgent allowedScopesの両方にquests:writeがあるか確認します。",
+            "Humanツールが見えない：Connectorのメタデータ更新機能を確認し、新しい会話で再確認します。Codex用ローカルpluginがClaudeにも自動で読み込まれるとは考えないでください。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "agents",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Claudeとの連携"
+    },
+    {
+      "slug": "quests",
+      "group": "workflows",
+      "title": "GuilduoのQuest管理：予定・Quest Tree・完了・保管",
+      "description": "GuilduoのQuestを実行可能な作業にする方法。To Do・Daily・Habitの違い、Backlogと予定、Quest Treeと依存関係、完了時の保管、見つからないQuestの確認を解説します。",
+      "lead": "Questはタイトルだけでなく、完了条件と次の行動まで決めると受け渡しやすくなります。予定、保管、担当、Handoffはそれぞれ別の状態として確認します。",
+      "sections": [
+        {
+          "id": "quest-types",
+          "title": "作業に合った種類を選ぶ",
+          "paragraphs": [
+            "例のTo Doには完了条件「修正文をレビューし、保存を確認する」と次の行動「現状の文を読む」を追加します。RewardはQuest Treeの親子に含めません。"
+          ],
+          "table": {
+            "headers": [
+              "種類",
+              "使いどころ",
+              "例"
+            ],
+            "rows": [
+              [
+                "To Do",
+                "一度終われば完了する作業",
+                "公開前にヘルプ文を直す"
+              ],
+              [
+                "Daily",
+                "定期的に行う日課",
+                "毎朝の作業計画を確認する"
+              ],
+              [
+                "Habit",
+                "繰り返す行動の記録",
+                "資料を読んだことを記録する"
+              ],
+              [
+                "Reward",
+                "Gemで購入する報酬",
+                "自分への休憩のご褒美"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "planning-and-views",
+          "title": "Backlogと予定日を使い分ける",
+          "paragraphs": [
+            "上のJSONはcreate_questの入力例です。このツールは実際に作成するため、作成の指示がある場合だけ使います。dryRunを受け付けないツールに追加してもプレビューにはなりません。"
+          ],
+          "steps": [
+            "まだ実行日を決めないTo DoはplanningStateをbacklogにします。",
+            "特定日に行う作業はscheduledとon_dateにし、scheduledDateを設定します。",
+            "期限まで表示したい作業はuntil_dueとdueDateを使います。",
+            "保存後はToday、Week、Future、Backlogなど対象の表示から読み直します。予定の変更と完了・保管を混同しません。"
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"kind\": \"todo\",\n  \"title\": \"Review the help message\",\n  \"planningState\": \"backlog\",\n  \"completionCriteria\": \"Compare old and new text and verify the saved result\",\n  \"nextAction\": \"Read the current message\"\n}"
+          }
+        },
+        {
+          "id": "trees-and-dependencies",
+          "title": "Quest Treeと依存関係を分ける",
+          "paragraphs": [
+            "Quest Treeは大きな目的を親子で整理する構造です。例：「Docsを公開する」を親に、「接続手順を書く」と「文章を確認する」を子にします。作成前にget_quest_treeで既存の構造を確認します。",
+            "依存関係は作業順序の条件です。「接続手順を書く」が終わってから「文章を確認する」を行う場合、親子構造とは別に依存を扱います。",
+            "親子にできるのはhabit、daily、todoです。循環や自己参照は不可、最大深さは8階層です。保管済みの子を調べるときはincludeArchivedを使います。"
+          ]
+        },
+        {
+          "id": "complete-and-archive",
+          "title": "完了・保管・報酬の扱い",
+          "bullets": [
+            "単発To Doは完了時に保管へ移ります。Todayから消えても削除されたとは限りません。",
+            "Daily、Habit、繰り返しTo Doは完了記録を残してactiveへ戻ります。次の実行と過去の完了を分けて確認します。",
+            "子Questの完了は親を自動完了しません。HandoffのacceptedやHuman確認の回答も元Questを自動完了しません。",
+            "完了報酬は同じQuestの同じ回に一度だけ付与します。MP取得後のBattleコマンドは別操作です。",
+            "不要なQuestは保管し、必要ならactiveへ復元します。履歴を保つため、削除を既定の整理方法にしません。"
+          ]
+        },
+        {
+          "id": "quest-diagnosis",
+          "title": "Questが見つからない・更新できない",
+          "steps": [
+            "TodayだけでなくAll、Backlog、Archiveを確認します。kind、日付、タグなどのフィルターを見直します。",
+            "別アカウントや再接続中の読み取り専用表示ではないか確認します。",
+            "MCP一覧にnextCursorがある場合は続きを取得します。最初のページだけを全件とみなしません。",
+            "競合したら最新のQuestを読み、担当割り当てや確認依頼で使うexpectedUpdatedAtを更新して再プレビューします。"
+          ]
+        }
+      ],
+      "related": [
+        "getting-started",
+        "agents",
+        "human-relay",
+        "api",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Questの管理"
+    },
+    {
+      "slug": "agents",
+      "group": "workflows",
+      "title": "Guilduo Agents：登録・接続リンク・Quest担当とHandoff",
+      "description": "GuilduoのAgent Registryで役割と権限を登録し、MCP接続をリンクしてQuestを渡す手順。割り当てプレビュー、Handoff状態、担当IDと権限不足の診断を解説します。",
+      "lead": "Agentは、仕事を担当するAIの役割と許可範囲を記録する台帳エントリです。登録、接続、担当割り当て、実作業の開始は別々に確認します。",
+      "sections": [
+        {
+          "id": "register-agent",
+          "title": "役割と必要な権限を登録する",
+          "steps": [
+            "https://app.guilduo.com/へログインし、PartyのAgent登録を開きます。",
+            "表示名、Provider、役割、作業指示を設定します。例：表示名「実装担当」、指示「変更前に対象を読み、検証結果をレビューへ返す」。",
+            "必要なallowedScopesを選びます。Questを扱うならquests:read、更新を任せるならquests:writeも検討します。",
+            "保存後、登録されたAgent IDとactive状態を確認します。モデルAPIキーや実行URLは登録しません。"
+          ]
+        },
+        {
+          "id": "link-agent-client",
+          "title": "MCP接続を登録Agentへリンクする",
+          "paragraphs": [
+            "公開ツールにはget_agent_link、link_agent、unlink_agentもあります。link_agentはOAuthのagents:writeを必要としますが、Agent登録やAgentの許可範囲拡張を行うツールではありません。"
+          ],
+          "steps": [
+            "MCP接続ガイドに沿って、同じアカウントでOAuth接続を完了します。",
+            "Connectionsで対象Clientを意図したAgentへリンクします。",
+            "get_current_agent_contextでAgent IDとeffectiveExecutionScopesを確認します。OAuth認可とAgent許可の共通部分が実行権限です。"
+          ]
+        },
+        {
+          "id": "preview-assignment",
+          "title": "Quest担当をプレビューして保存する",
+          "paragraphs": [
+            "list_registered_agentsで実際のAgent IDを取得し、get_questで対象の担当とupdatedAtを読みます。次のJSONはassign_quest_to_agentのプレビュー入力です。プレースホルダーを取得した値へ置き換えます。"
+          ],
+          "steps": [
+            "プレビューで対象Quest、Agent、変更後のHandoffを確認します。readyは作業準備が整った場合に使います。",
+            "許可された範囲内で、同じ入力に最新expectedUpdatedAtを付け、dryRunをfalseにして保存します。",
+            "get_questで再取得し、担当とHandoffが保存されたことを確認します。"
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"questId\": \"REPLACE_WITH_QUEST_ID\",\n  \"agentId\": \"replace-with-agent-id\",\n  \"handoffState\": \"ready\",\n  \"note\": \"Improve one help message and return a review summary.\",\n  \"dryRun\": true\n}"
+          }
+        },
+        {
+          "id": "handoff-states",
+          "title": "Handoffを進めて成果を返す",
+          "paragraphs": [
+            "遷移はtransition_quest_handoffでプレビューし、保存時はexpectedStateに読み取った現在状態を渡します。古い状態のまま上書きしません。",
+            "readyは自動配信やAgent起動の証明ではありません。実際の作業はCodexやClaudeなどの接続元で行います。"
+          ],
+          "table": {
+            "headers": [
+              "状態",
+              "意味",
+              "次の行動"
+            ],
+            "rows": [
+              [
+                "none",
+                "受け渡し未開始",
+                "条件と担当を決める"
+              ],
+              [
+                "ready",
+                "Agentが着手できる",
+                "対象を読み、開始を明示"
+              ],
+              [
+                "working",
+                "作業中",
+                "接続元で修正と検証"
+              ],
+              [
+                "blocked",
+                "進められない",
+                "理由を記録し、解決後に再開"
+              ],
+              [
+                "review_required",
+                "人へレビューを返した",
+                "成果・残る確認を読む"
+              ],
+              [
+                "accepted",
+                "Handoffを受け入れた",
+                "元Questの完了条件を別に確認"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "agent-diagnosis",
+          "title": "Agentの問題を切り分ける",
+          "bullets": [
+            "Agentが一覧にない：ログインアカウント、登録状態、activeかどうかを確認します。古い自由入力担当名は登録Agentと同じではありません。",
+            "割り当てで競合：対象Questを再取得してupdatedAtを更新し、再プレビューします。",
+            "読めるが書けない：OAuthとAgentの両方に必要な書き込みスコープがあるか確認します。",
+            "リンク先が違う：意図したAgent IDを確認し、ユーザーの許可範囲でリンクを変更してcontextを再取得します。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "quests",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "AgentとHandoff"
+    },
+    {
+      "slug": "human-relay",
+      "group": "workflows",
+      "title": "Human Relay：Agentの確認依頼・人の回答・作業再開",
+      "description": "GuilduoでAgentから人へ確認を依頼し、テキスト回答を読んで再開する手順。requestKeyによる再送、保留、修正フィードバック、Handoff承認とQuest完了の違いを解説します。",
+      "lead": "実機の操作感、好み、本人が決める選択など、Agentだけでは確かめられない点を人へ返します。成果物は外部の環境で確認し、回答はGuilduoへテキストで保存します。",
+      "sections": [
+        {
+          "id": "when-to-ask",
+          "title": "人へ頼る前に確認する",
+          "paragraphs": [
+            "例：「スマホ幅の自動確認は通ったが、片手でメニューを閉じやすいかは実機で判断してほしい」。通常のlintを人へ依頼する理由にはしません。"
+          ],
+          "steps": [
+            "接続元でrequest_human_reviewとlist_human_requestsが見えることを確認します。",
+            "元Questとget_current_agent_contextを読み、自分が担当する登録済みAgentであることを確認します。",
+            "自動テストやビルドなど実行できる確認を済ませます。人が必要な理由を具体的に残します。",
+            "list_human_requestsをsourceQuestIdとstatus=allで読み、未回答・保留中の依頼がないか確認します。"
+          ]
+        },
+        {
+          "id": "request-review",
+          "title": "確認対象を明記して依頼する",
+          "paragraphs": [
+            "次のJSONはrequest_human_reviewのプレビューです。questIdは元Questの実際のIDに置き換えます。requestKeyは同じ確認ラウンドで固定します。"
+          ],
+          "steps": [
+            "プレビューで依頼先と元Questを確認します。必要な成果物リンクはartifactUrlへHTTPSで付けられます。",
+            "最新の元QuestのupdatedAtをexpectedUpdatedAtに付け、許可された依頼をdryRun=falseで保存します。",
+            "人へ確認場所と回答先を案内します。外部リンクを開いただけでは確認済みや承認にしません。"
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"questId\": \"REPLACE_WITH_SOURCE_QUEST_ID\",\n  \"requestKey\": \"mobile-menu-review-1\",\n  \"title\": \"スマホのメニュー操作を確認\",\n  \"reason\": \"自動検証は通ったが、片手の操作感は実機確認が必要\",\n  \"checkTarget\": \"普段のスマホで対象画面を開き、メニューを開閉してリンクを押す\",\n  \"completionCriteria\": \"変更不要か、修正したい場所と理由をテキストで回答する\",\n  \"dryRun\": true\n}"
+          }
+        },
+        {
+          "id": "human-answer",
+          "title": "人が確認して回答を保存する",
+          "paragraphs": [
+            "回答は対象の本人がWeb認証で行います。Agentは普通のQuest更新やscore_questで代筆・確認完了にできません。"
+          ],
+          "steps": [
+            "Web Appの自分宛て確認依頼を開き、理由・確認対象・完了条件を読みます。",
+            "指定の外部画面や実機で確認します。今できない場合は保留にし、後で再開します。",
+            "変更不要ならその結果を、修正が必要なら「閉じるボタンが押しにくいので位置を変えてほしい」など具体的なテキストを保存します。",
+            "確認したことを明示して回答します。既読、保留、リンクを開いたことは回答完了と別です。"
+          ]
+        },
+        {
+          "id": "read-feedback-and-resume",
+          "title": "回答を読んで修正・再開する",
+          "steps": [
+            "Agentはlist_human_requestsで元Questの回答を再取得し、humanRequest.responseとoutcomeを読みます。",
+            "changes_requestedなら元のHandoffをworkingへ戻し、保存された指摘に沿って修正・検証します。",
+            "再確認は新しいrequestKeyで別ラウンドを作ります。過去の回答は上書きしません。",
+            "approvedなら承認内容を確認します。確認Quest完了、Handoff accepted、元Quest完了は、それぞれの条件に沿って別操作として扱います。"
+          ]
+        },
+        {
+          "id": "review-diagnosis",
+          "title": "再送・競合・未回答の診断",
+          "table": {
+            "headers": [
+              "状態",
+              "意味",
+              "対応"
+            ],
+            "rows": [
+              [
+                "pending / deferred",
+                "未回答または保留",
+                "既存依頼を待つ・再開する"
+              ],
+              [
+                "同じrequestKeyと同じ内容",
+                "同じ依頼の再送",
+                "同じkeyを維持して既存結果を確認"
+              ],
+              [
+                "request_key_conflict",
+                "同じkeyに異なる内容",
+                "元の依頼を確認し、次ラウンドは新key"
+              ],
+              [
+                "human_request_pending",
+                "未回答の依頼が既にある",
+                "重複作成せず既存依頼を再開"
+              ],
+              [
+                "quest_conflict",
+                "元Questが変わった",
+                "再取得してexpectedUpdatedAtを更新"
+              ],
+              [
+                "quest_assignee_mismatch",
+                "依頼Agentが担当と違う",
+                "リンクAgentと元Quest担当を確認"
+              ]
+            ]
+          }
+        }
+      ],
+      "related": [
+        "agents",
+        "quests",
+        "permissions",
+        "troubleshooting",
+        "api"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "api/openapi.json",
+          "label": "api/openapi.json"
+        },
+        {
+          "path": "server/human-requests.ts",
+          "label": "server/human-requests.ts"
+        },
+        {
+          "path": "docs/human-relay-acceptance.md",
+          "label": "docs/human-relay-acceptance.md"
+        }
+      ],
+      "navTitle": "人への確認依頼"
+    },
+    {
+      "slug": "permissions",
+      "group": "reference",
+      "title": "Guilduoの権限：OAuth・Agentスコープ・安全な書き込み",
+      "description": "GuilduoのOAuth認可とAgent allowedScopesの関係を解説。読み取り専用になる理由、agents:writeのリンク管理、dry-runと競合検知、人の回答と秘密情報の境界を確認できます。",
+      "lead": "Agentの実行権限は、OAuthで許可したスコープとAgent側の許可範囲の共通部分です。片側だけ広げても、もう片側で許可されない操作は実行できません。",
+      "sections": [
+        {
+          "id": "scope-intersection",
+          "title": "二つの許可範囲を比較する",
+          "paragraphs": [
+            "get_current_agent_contextはconnectionScopes、agentAllowedScopes、effectiveExecutionScopesを返します。effectiveScopesは実効権限の互換フィールドです。まずこの応答で不足している側を確かめます。"
+          ],
+          "table": {
+            "headers": [
+              "OAuth認可",
+              "Agent許可",
+              "実行結果"
+            ],
+            "rows": [
+              [
+                "quests:read / quests:write",
+                "quests:read",
+                "読み取りのみ"
+              ],
+              [
+                "quests:read",
+                "quests:read / quests:write",
+                "読み取りのみ"
+              ],
+              [
+                "quests:read / quests:write",
+                "quests:read / quests:write",
+                "両方の範囲で読み書き可能"
+              ],
+              [
+                "agents:readなし",
+                "agents:readあり",
+                "context取得のOAuth権限不足"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "link-management",
+          "title": "リンク管理と実行権限を分ける",
+          "paragraphs": [
+            "get_current_agent_contextにはOAuthのagents:readが必要です。link_agentとunlink_agentはOAuthのagents:writeを使って、その接続のAgentリンクを管理します。",
+            "agents:writeがAgentの実行スコープに見えないことだけで、リンク権限が失われたとは判断しません。接続管理にはconnectionScopes、作業実行にはeffectiveExecutionScopesを確認します。",
+            "Agentの作成・編集・権限変更はログイン済みWeb Appで行います。AgentやSkillがOAuth認可を自動拡張することはありません。"
+          ],
+          "steps": [
+            "OAuthに必要スコープがない：人が認可内容を見直し、必要なら再認可します。",
+            "Agentに必要スコープがない：Web Appで役割に必要な範囲だけ許可します。",
+            "両方変更後も失敗する：contextを再取得し、対象Agentと実効権限を確認します。"
+          ]
+        },
+        {
+          "id": "safe-mutations",
+          "title": "プレビューと保存条件を確認する",
+          "bullets": [
+            "assign_quest_to_agentとrequest_human_reviewはdryRun=trueで確認し、保存時に最新expectedUpdatedAtを使います。",
+            "transition_quest_handoffはプレビュー後にexpectedStateを指定します。古いworking状態などで上書きしません。",
+            "create_questとupdate_questは公開スキーマにdryRunがありません。対応していない入力を足さず、変更内容と既存のユーザー指示を確認して実行します。",
+            "同じ範囲をすでに任されている場合、毎回同じ承認を求める必要はありません。未決の判断や任された範囲外の操作は人へ確認します。"
+          ]
+        },
+        {
+          "id": "human-and-private-data",
+          "title": "人の回答と秘密情報の境界",
+          "paragraphs": [
+            "Human確認への回答は、対象の本人がWeb認証で保存します。Agentは確認Questを普通の更新や完了ツールで回答済みにできません。",
+            "公開プロフィールは表示名、handle、紹介文、アバター、レベルなどに限られます。Quest本文、メモ、認証情報は公開プロフィールに含めません。",
+            "Token、API Key、Client Secret、モデルキー、完全なUIDをQuest本文、成果物URL、公開報告へ入れません。共有ログは秘密情報と個人情報を除いてください。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "human-relay",
+        "troubleshooting",
+        "api"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "api/openapi.json",
+          "label": "api/openapi.json"
+        },
+        {
+          "path": "worker/src/security.ts",
+          "label": "worker/src/security.ts"
+        }
+      ],
+      "navTitle": "認証と権限"
+    },
+    {
+      "slug": "troubleshooting",
+      "group": "reference",
+      "title": "Guilduoのトラブルシューティング：接続・権限・保存の診断",
+      "description": "Guilduoの401、未リンクAgent、見えないHumanツール、書き込み権限不足、Quest競合を症状別に診断。安全な再取得、OAuth再認可、問題報告の手順を解説します。",
+      "lead": "まず、URLへの到達、OAuth認証、Agentリンク、ツール発見、実行権限、保存結果のどこで止まるかを分けます。接続設定の変更前に、失敗した読み取りとエラーを確認します。",
+      "sections": [
+        {
+          "id": "authentication-errors",
+          "title": "401・OAuth復帰・アカウント違い",
+          "paragraphs": [
+            "認証なしでMCPやRESTを開いて401になることは、認証が必要な経路では正常です。ブラウザでURLを開けたことだけで接続成功とは判断しません。"
+          ],
+          "steps": [
+            "MCP URLがhttps://mcp.guilduo.com/mcpか確認します。https://api.guilduo.com/v1はAppwrite APIです。",
+            "Web AppとOAuth画面で選んだアカウントが一致するか確認します。別アカウントのQuestを見ている可能性があります。",
+            "移行前の接続や失効した認可が原因ならOAuthをやり直します。旧GrantやTokenは使い回しません。",
+            "OAuthから戻れない場合は、callbackを妨げる拡張やクライアントの復帰状態を確認します。"
+          ]
+        },
+        {
+          "id": "missing-tools-or-skill",
+          "title": "ツールやSkillが見えない",
+          "paragraphs": [
+            "/healthが報告するツール数と、認証済みクライアントが実際に扱えるツールは別の確認です。数の違いだけでAgentの権限を広げません。"
+          ],
+          "steps": [
+            "必要なツール名を確認します。Human Relayにはrequest_human_reviewとlist_human_requestsが必要です。",
+            "クライアントの接続メタデータをRefreshし、必要なら再起動して新しいチャットを始めます。",
+            "Skillの読み込みは別に確認します。Codexのローカルcompanionはインストール済みでも、進行中の会話へ自動追加されたとは限りません。",
+            "Refreshが失敗したら、クライアント版、見えているツール名、エラーを記録します。動作中の接続をすぐ削除したり重複登録したりしません。"
+          ]
+        },
+        {
+          "id": "link-and-scope-errors",
+          "title": "未リンク・読み取り専用・403",
+          "table": {
+            "headers": [
+              "症状",
+              "確認する値",
+              "対応"
+            ],
+            "rows": [
+              [
+                "linked=false / agent=null",
+                "Connectionsのリンク",
+                "対象Agentへリンクしcontext再取得"
+              ],
+              [
+                "agents:read不足",
+                "connectionScopes",
+                "OAuth認可を見直す"
+              ],
+              [
+                "リンク変更が拒否される",
+                "OAuth agents:write",
+                "接続管理の許可を確認"
+              ],
+              [
+                "Quest更新だけ失敗",
+                "OAuthとAgent両方のquests:write",
+                "不足側だけ必要範囲を許可"
+              ],
+              [
+                "Human回答が拒否される",
+                "本人Web認証か",
+                "Agentではなく本人がWeb Appで回答"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "conflicts-and-uncertain-writes",
+          "title": "409・再送・保存結果不明",
+          "bullets": [
+            "quest_conflict：対象Questを再取得し、最新expectedUpdatedAtで再プレビューします。",
+            "Handoff競合：実際の状態を読み、expectedStateを更新します。すでに承認された仕事を古い状態へ戻しません。",
+            "request_key_conflict：同じkeyに異なる依頼内容が指定されています。既存依頼を確認し、次ラウンドなら新keyを使います。",
+            "human_request_pending：未回答・保留の依頼を再開します。新しいkeyで重複を作りません。",
+            "保存応答が失われた・5xx：まず再取得します。一般のQuest作成までrequestKeyで冪等になっているとは考えず、保存状態を確かめてから再送を判断します。"
+          ]
+        },
+        {
+          "id": "sync-and-reporting",
+          "title": "再接続と問題報告",
+          "paragraphs": [
+            "同期中は前回データが読み取り専用で残る場合があります。同じアカウントで再接続し、保存済み状態を確認します。単発To Doの完了後はArchiveも確認してください。",
+            "公開GitHub Issuesはhttps://github.com/ELRdn/Guilduo/issuesです。下の項目を揃えると、認証・UI・ツール契約のどの問題か判断しやすくなります。"
+          ],
+          "bullets": [
+            "クライアント名と版、発生日時、期待した動作、実際の結果。",
+            "失敗したツール名またはREST経路、HTTP status、エラーコード。",
+            "読み取り・プレビュー・保存のどこで失敗したか、再取得した状態。",
+            "秘密情報やQuest本文を除いた最小の再現手順。Token、完全なUID、Client IDは公開しません。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "human-relay",
+        "quests",
+        "api"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "server/human-requests.ts",
+          "label": "server/human-requests.ts"
+        },
+        {
+          "path": "docs/public-urls.md",
+          "label": "docs/public-urls.md"
+        }
+      ],
+      "navTitle": "トラブルシューティング"
+    },
+    {
+      "slug": "faq",
+      "group": "reference",
+      "title": "Guilduo FAQ：AI実行・保存・承認・外部連携の疑問",
+      "description": "Guilduoのよくある質問に回答。Agent登録と自動実行の違い、Questの保管、Human確認とHandoff承認、外部サービスの準備状況、pluginとMCPの関係を解説します。",
+      "lead": "接続済み、担当済み、作業開始、確認済み、完了はそれぞれ別の状態です。最初につまずきやすい違いを、具体例と確認先で説明します。",
+      "sections": [
+        {
+          "id": "does-guilduo-run-ai",
+          "title": "Agentを登録すればAIが自動で動きますか？",
+          "paragraphs": [
+            "自動では動きません。Agent Registryは表示名、役割、指示、許可範囲を記録します。CodexやClaudeなどの接続元がモデルと作業環境を担当します。",
+            "Questをreadyにしても、作業が自動配信された証明にはなりません。例：「説明文を直す」を渡したら、クライアントでQuestを読み、workingへの遷移と結果を確認します。",
+            "Astraは相棒キャラクターで、登録Agentやログインユーザーとは別です。Agentページで役割と接続を確認してください。"
+          ]
+        },
+        {
+          "id": "where-is-my-quest",
+          "title": "完了したQuestが消えたのはなぜですか？",
+          "paragraphs": [
+            "単発To Doは完了時に保管へ移るため、Todayから消えます。まずArchiveを確認します。保管は履歴を残す操作です。",
+            "Daily、Habit、繰り返しTo Doは完了履歴を残して次回へ戻ります。子Questを終えても親は自動完了しません。",
+            "まだ見つからない場合はAllやBacklog、フィルター、ログインアカウントを確認します。MCP一覧のnextCursorがあれば続きも取得します。"
+          ]
+        },
+        {
+          "id": "what-does-approval-complete",
+          "title": "Human確認への回答で元Questも完了しますか？",
+          "paragraphs": [
+            "Human確認への回答は、元Questを自動完了にしません。回答は独立した確認Questへ保存され、Handoffの承認と元の仕事の完了は別の明示操作です。",
+            "例：スマホのメニューを確認して「変更不要」と答えても、元Questの完了条件に説明文の修正が残っていれば、Agentはその作業を終えてから元Questを完了にします。",
+            "外部リンクを開いた、既読にした、保留にしただけでは回答完了ではありません。人の本人Web認証による回答が必要です。"
+          ]
+        },
+        {
+          "id": "external-services",
+          "title": "Google CalendarやNotionと自動連携できますか？",
+          "paragraphs": [
+            "公開資料ではGoogle Calendar、Google Tasks、Notion、TogglのProvider OAuthは準備中です。APIやツールの契約があることだけで、本番接続や自動同期が使えるとは判断しません。",
+            "外部サービスの秘密キーをMCP会話へ送らないでください。接続状態は、使う前にWeb Appと対応する読み取りツールで確認します。"
+          ]
+        },
+        {
+          "id": "paid-plans",
+          "title": "有料プランの料金やCreditsはどこで確認できますか？",
+          "paragraphs": [
+            "このDocsでは、未承認の有料プラン価格やCredits付与を案内しません。購入前に、承認・公開された販売条件を確認してください。",
+            "このDocsは公開資料で確認できる操作を対象にし、未承認の販売価格、Credits付与、割引、紹介特典を案内しません。購入判断は公開・承認済みの販売条件がある場合にその内容で行います。"
+          ]
+        },
+        {
+          "id": "mcp-skills-and-plugin",
+          "title": "MCP・Workflow Skill・pluginの違いは何ですか？",
+          "paragraphs": [
+            "MCPはツール接続、Workflow Skillは操作の進め方、pluginはSkillや接続設定をまとめるパッケージです。MCPだけでSkillが読み込まれたり、SkillでOAuth権限が増えたりはしません。",
+            "Codexのローカルcompanionは既存Guilduo AppへSkillを追加できます。ローカルインストールと公開ディレクトリ掲載・公式審査は別です。"
+          ]
+        },
+        {
+          "id": "legacy-name",
+          "title": "GuilduoとQuestForgeは別の製品ですか？",
+          "paragraphs": [
+            "Guilduoは現在の公開製品名で、QuestForgeは旧名称です。接続設定などの技術識別子には、互換性のため旧名称が残っています。",
+            "Guilduoが現在の製品名です。questforgeというMCP ID、ファイル名、CLI変数などは互換性のため残ります。表示名だけを理由に設定内の識別子を置き換えないでください。"
+          ]
+        }
+      ],
+      "related": [
+        "agents",
+        "quests",
+        "human-relay",
+        "codex",
+        "mcp-connection"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "plugins/questforge/README.md",
+          "label": "plugins/questforge/README.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        }
+      ],
+      "navTitle": "よくある質問"
+    },
+    {
+      "slug": "api",
+      "group": "reference",
+      "title": "Guilduo API・MCPリファレンス：endpointと操作例",
+      "description": "Guilduo REST APIとMCPの正式接続先、OAuth認証、主要ツール、Quest一覧の取得例を解説。公開OpenAPI、入力スキーマ、ページネーションと409競合の確認方法を案内します。",
+      "lead": "RESTとMCPは同じ作業ルールを使います。実際の入力は、このDocsの根拠となる公開OpenAPIとMCPスキーマを確認し、接続中サーバーの契約に合わせてください。",
+      "sections": [
+        {
+          "id": "api-endpoints",
+          "title": "REST・MCP・Appwriteを区別する",
+          "paragraphs": [
+            "通常のMCP接続は/mcpを使います。/mcp-nextは検証レーンです。Appwrite APIへWorkerのQuest経路を送る設定に置き換えません。"
+          ],
+          "table": {
+            "headers": [
+              "用途",
+              "URL",
+              "利用方法"
+            ],
+            "rows": [
+              [
+                "ブラウザ",
+                "https://app.guilduo.com/",
+                "Guilduo / Relay Forge"
+              ],
+              [
+                "Remote MCP",
+                "https://mcp.guilduo.com/mcp",
+                "OAuth対応AIクライアント"
+              ],
+              [
+                "Worker REST",
+                "https://mcp.guilduo.com/v1/quests",
+                "OpenAPIの/v1経路"
+              ],
+              [
+                "Appwrite API",
+                "https://api.guilduo.com/v1",
+                "Appwrite SDKとWorkerの接続先"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "api-authentication",
+          "title": "認証とスキーマを確認する",
+          "paragraphs": [
+            "一般のMCP利用者はOAuthを使います。OpenAPIはOAuthとAppwrite JWTのBearer認証を定義しています。固定APIキーを通常利用者へ配る方式ではありません。",
+            "api/openapi.jsonがRESTの経路・入力・応答を、api/mcp-tools.jsonがツール名・入力・出力を定義します。必須フィールド、enum、文字数制限は呼び出し前に確認します。",
+            "ツール発見は認証・Agent許可の代わりではありません。get_current_agent_contextで接続主体と実効スコープを読み、操作対象の現在状態を取得します。"
+          ]
+        },
+        {
+          "id": "first-api-read",
+          "title": "Quest一覧を読み取る",
+          "paragraphs": [
+            "以下はlist_questsの読み取り入力です。結果のquests、total、nextCursorを確認します。nextCursorがあればcursorとして次の呼び出しへ渡します。"
+          ],
+          "steps": [
+            "OAuth MCPを接続し、get_current_agent_contextで本人のAgentと必要なquests:readを確認します。",
+            "上記入力でlist_questsを呼び、Web AppのBacklogと比較します。",
+            "対象IDをget_questのquestIdへ渡し、詳細とupdatedAtを読みます。IDを表示名から推測しません。",
+            "RESTなら認証済みでGET /v1/quests?view=backlog&kind=todo&limit=5を使います。未認証の401を保存や通信の失敗と混同しません。"
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"view\": \"backlog\",\n  \"kind\": \"todo\",\n  \"limit\": 5\n}"
+          }
+        },
+        {
+          "id": "operation-map",
+          "title": "用途別のツールとREST経路",
+          "paragraphs": [
+            "CLIは人間・CI向けのRESTクライアントです。書き込みは--executeを付けた場合に実行します。OAuth MCPのツール発見とCLIを同じ接続方式として扱いません。"
+          ],
+          "table": {
+            "headers": [
+              "用途",
+              "MCP",
+              "REST"
+            ],
+            "rows": [
+              [
+                "一覧・詳細",
+                "list_quests / get_quest",
+                "GET /v1/quests / GET /v1/quests/{questId}"
+              ],
+              [
+                "階層",
+                "get_quest_tree",
+                "GET /v1/quests/tree"
+              ],
+              [
+                "作成・編集",
+                "create_quest / update_quest",
+                "POST /v1/quests / PATCH /v1/quests/{questId}"
+              ],
+              [
+                "Handoff",
+                "transition_quest_handoff",
+                "POST /v1/quests/{questId}/handoff"
+              ],
+              [
+                "Human依頼",
+                "request_human_review",
+                "POST /v1/quests/{questId}/review-requests"
+              ],
+              [
+                "Human一覧",
+                "list_human_requests",
+                "GET /v1/human-requests"
+              ],
+              [
+                "人の回答",
+                "MCP書き込みなし",
+                "本人Web認証のPOST /v1/quests/{questId}/review-response"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "writes-and-errors",
+          "title": "書き込みとエラーの契約",
+          "bullets": [
+            "assign_quest_to_agentとrequest_human_reviewはプレビュー後に最新expectedUpdatedAtで実行します。transition_quest_handoffはexpectedStateを使います。",
+            "create_questとupdate_questに未定義のdryRunを追加しません。入力がadditionalProperties=falseのツールは未定義フィールドを許しません。",
+            "401は認証、403は許可や主体、409は競合を確認します。requestKeyはHuman依頼の同じラウンドの再送用で、一般のQuest作成の再送保証ではありません。",
+            "競合時は最新状態を読み、再プレビューします。古いtimestampで連続再送したり、一般更新で人の回答を作ったりしません。",
+            "ツール数と版数は更新されます。接続中のtools/listと公開契約を比較し、必要なツール名とスキーマで互換性を確認します。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "quests",
+        "agents",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "api/openapi.json",
+          "label": "api/openapi.json"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ],
+      "navTitle": "API・MCPリファレンス"
+    }
+  ],
+  "en": [
+    {
+      "slug": "",
+      "group": "start",
+      "title": "Guilduo Docs: Quests, Agents and Human Relay",
+      "description": "Guilduo documentation for your first Quest, Codex and Claude MCP connections, Agent assignments, Human Relay feedback, permissions and API troubleshooting.",
+      "lead": "Guilduo is a workspace where people and AI Agents commission, own, hand off and review work. Start with a small Quest, then add an Agent workflow with human feedback.",
+      "sections": [
+        {
+          "id": "choose-a-guide",
+          "title": "Choose a guide for your goal",
+          "bullets": [
+            "New to Guilduo: use Getting started for sign-in and your first Quest, then Quests for planning, completion and archiving.",
+            "Connect an AI client: start with MCP connection, then Codex or Claude. Verify the linked Agent and permissions afterward.",
+            "Delegate work: use Agents for assignment and Handoff, then Human Relay for review requests, saved answers and resumption.",
+            "Resolve an error: isolate the symptom with Troubleshooting, then check the relevant Permissions and API contracts."
+          ]
+        },
+        {
+          "id": "work-model",
+          "title": "Understand Quest, Agent and Relay",
+          "paragraphs": [
+            "Registration does not start an AI automatically. The connected client supplies the model, tools and execution environment; Guilduo manages work data and handovers."
+          ],
+          "table": {
+            "headers": [
+              "Term",
+              "Purpose",
+              "Example"
+            ],
+            "rows": [
+              [
+                "Quest",
+                "Work with a goal, completion criteria and assignee",
+                "Improve the mobile menu"
+              ],
+              [
+                "Agent",
+                "A registered AI role and permission policy",
+                "An implementation Agent with Quest read/write access"
+              ],
+              [
+                "Handoff",
+                "The state of a work handover",
+                "working to review_required"
+              ],
+              [
+                "Human Relay",
+                "A workflow with a person's check and saved answer",
+                "Test on a phone and return text feedback"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "first-relay",
+          "title": "Try a small first Relay",
+          "steps": [
+            "Create a Quest called Improve one help message, with a completion criterion of being able to compare the old and new text.",
+            "Read the Quest from a client linked to a registered Agent, preview the assignment and save it.",
+            "Do the work in the connected environment and return it as review_required. Create a precise review request if human judgment is needed.",
+            "The Agent reads the human's saved answer and proceeds with changes or acceptance. Accept the Handoff and complete the source Quest separately."
+          ]
+        },
+        {
+          "id": "beta-scope",
+          "title": "Public beta scope and canonical entry points",
+          "paragraphs": [
+            "Published documentation covers Quest management, Quest Trees, Agent Registry, OAuth MCP and Handoff. Human review is in the public contract; verify the necessary tools in your actual client before using it.",
+            "Provider OAuth for Google Calendar, Google Tasks, Notion and Toggl is in preparation. Autonomous Agent execution, native Android/iOS apps and Unity Battle Lab remain future work.",
+            "Use https://app.guilduo.com/ in your browser and https://mcp.guilduo.com/mcp for AI connections."
+          ]
+        }
+      ],
+      "related": [
+        "getting-started",
+        "mcp-connection",
+        "quests",
+        "human-relay",
+        "faq"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "docs/public-urls.md",
+          "label": "docs/public-urls.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        }
+      ],
+      "navTitle": "Guilduo Docs overview"
+    },
+    {
+      "slug": "getting-started",
+      "group": "start",
+      "title": "Getting started with Guilduo: your first Quest",
+      "description": "Open Guilduo / Relay Forge, sign in and save your first Quest. Prepare an Agent connection and verify assignment, persistence and reconnection step by step.",
+      "lead": "Start with one task whose completion you can verify yourself. Add AI after you can read that Quest, so account, connection and assignment issues remain easy to distinguish.",
+      "sections": [
+        {
+          "id": "open-and-sign-in",
+          "title": "Open the Web App and sign in",
+          "paragraphs": [
+            "Device guest storage belongs to the legacy root UI. Do not assume it is the same storage as an authenticated Relay Forge workspace or an MCP connection."
+          ],
+          "steps": [
+            "Open https://app.guilduo.com/ and follow the Google sign-in flow in Guilduo / Relay Forge.",
+            "Choose your working account. Grant MCP OAuth access with this same account later.",
+            "Wait for authentication and synchronization to finish and check that Quests are usable. Avoid repeated edits or completion attempts while syncing."
+          ]
+        },
+        {
+          "id": "save-first-quest",
+          "title": "Save a verifiable Quest",
+          "steps": [
+            "Create a one-off To Do titled Improve one help message.",
+            "Set the completion criterion to Compare the old and new text and verify the meaning is clear. Set the next action to Choose the message to improve.",
+            "Use Backlog if the execution date is undecided; otherwise set a scheduled date. Assign it to yourself.",
+            "Open it from the list after saving and verify its title, assignee and completion criteria."
+          ]
+        },
+        {
+          "id": "add-your-agent",
+          "title": "Prepare an AI connection",
+          "steps": [
+            "Register an Agent in Party. For example: display name Docs helper, role Improve text and report verification results.",
+            "Choose the read permissions you need and consider write access if the Agent will update work. Do not enter a model API key.",
+            "Connect through OAuth using the MCP connection guide and link the intended Agent in Connections.",
+            "Verify get_current_agent_context and read the target Quest. Preview an assignment, save it and read it again."
+          ]
+        },
+        {
+          "id": "finish-and-recover",
+          "title": "Check completion and reconnection",
+          "paragraphs": [
+            "Improve the message and complete the Quest after meeting its criteria. A one-off To Do is archived on completion, so check Archive if it leaves Today.",
+            "Previously loaded Quests may be read-only during reconnection. Reconnect with the same account and reread the saved state.",
+            "If success is uncertain, check the saved state before deciding to repeat an operation. A screen change alone does not establish completion or persistence."
+          ],
+          "bullets": [
+            "First milestone: the saved Quest can be reread with the expected assignee and completion criteria.",
+            "AI milestone: linked is true, the required execution scopes are present and the target Quest can be read."
+          ]
+        }
+      ],
+      "related": [
+        "quests",
+        "agents",
+        "mcp-connection",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        }
+      ],
+      "navTitle": "Your first Quest"
+    },
+    {
+      "slug": "mcp-connection",
+      "group": "integrations",
+      "title": "Connect Guilduo MCP with OAuth and Agent linking",
+      "description": "Connect Guilduo Remote HTTP MCP using OAuth. Verify the endpoint, account, Agent link and read access, and diagnose 401 errors or an unlinked connection.",
+      "lead": "Connect to https://mcp.guilduo.com/mcp using OAuth, link the connection to a registered Agent in Web App Connections, then verify permissions with a read-only request.",
+      "sections": [
+        {
+          "id": "prerequisites",
+          "title": "Check prerequisites",
+          "bullets": [
+            "Check that your client supports Remote HTTP MCP and OAuth. Setting names and availability depend on the client version.",
+            "Sign in to your working account in the Web App and verify that you can read Quests.",
+            "Register an Agent in Party for delegated work and check its Agent ID, which differs from its display name."
+          ]
+        },
+        {
+          "id": "oauth-setup",
+          "title": "Connect to the canonical OAuth endpoint",
+          "steps": [
+            "In MCP, Apps or Connectors settings, name the connection Guilduo and choose Remote HTTP MCP.",
+            "Enter the endpoint above. Do not use /mcp-next or the Appwrite API URL for a normal connection.",
+            "Choose OAuth if an authentication option is offered. Do not paste an API key, Bearer token or client secret.",
+            "Sign in to the authorization flow with the same account as the Web App, review the permissions and grant access.",
+            "Return to the client and verify that the connection is marked connected or available."
+          ],
+          "code": {
+            "language": "text",
+            "text": "https://mcp.guilduo.com/mcp"
+          }
+        },
+        {
+          "id": "link-agent",
+          "title": "Link the connection to an Agent",
+          "paragraphs": [
+            "linked: false with agent: null means the Agent is unlinked even after OAuth authentication. Check the Connections link before restarting OAuth."
+          ],
+          "steps": [
+            "Find the client you just connected in the Web App's Connections screen.",
+            "Link it to the intended registered Agent. Do not infer Agent identity from the client's name.",
+            "Reload the client and use get_current_agent_context to check linked, the Agent ID and effectiveExecutionScopes."
+          ]
+        },
+        {
+          "id": "read-only-test",
+          "title": "Verify without writing",
+          "paragraphs": [
+            "An empty list can be valid if it matches that account's saved state. Discovering tool names alone does not verify call permissions or successful writes."
+          ],
+          "code": {
+            "language": "text",
+            "text": "Verify my Guilduo connection using reads only.\nUse get_current_agent_context and report the link state, Agent ID, role and effectiveExecutionScopes.\nRead list_quests with view=all and limit=5; report only the result count.\nDo not display tokens, Client IDs, UIDs or Quest content.\nDo not change data or start additional model runs."
+          }
+        },
+        {
+          "id": "connection-diagnosis",
+          "title": "Diagnose connection failures",
+          "paragraphs": [
+            "If an old migration-era connection is the cause, remove it and register the canonical endpoint again. For a working connection with stale tools, try Refresh first and avoid duplicates."
+          ],
+          "table": {
+            "headers": [
+              "Symptom",
+              "Check",
+              "Action"
+            ],
+            "rows": [
+              [
+                "401",
+                "Old grant, expiry and endpoint",
+                "Check the endpoint, then re-authorize if needed"
+              ],
+              [
+                "OAuth callback does not return",
+                "Account and blocking extensions",
+                "Verify the account and return to the client"
+              ],
+              [
+                "linked: false",
+                "Connections link",
+                "Link the intended Agent and read again"
+              ],
+              [
+                "Missing agents:read",
+                "OAuth grant",
+                "Review permissions and re-authorize"
+              ],
+              [
+                "Human tools missing",
+                "Client catalogue",
+                "Refresh and check in a new chat"
+              ]
+            ]
+          }
+        }
+      ],
+      "related": [
+        "codex",
+        "claude",
+        "agents",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Connect with MCP"
+    },
+    {
+      "slug": "codex",
+      "group": "integrations",
+      "title": "Connect Codex to Guilduo: MCP and Workflow Skill",
+      "description": "Connect Codex to Guilduo, verify Agent context and use Quests. Install the local Workflow Skill companion for an existing App and prepare a Human Relay.",
+      "lead": "Connect Codex to https://mcp.guilduo.com/mcp using OAuth and link its Agent in Web App Connections. If a Guilduo App connection already exists, verify it instead of registering another one; add the Workflow Skill separately.",
+      "sections": [
+        {
+          "id": "connect-codex",
+          "title": "Set up the Codex connection",
+          "paragraphs": [
+            "Reusing a desktop App and registering direct MCP are alternatives. You do not need both for the same purpose."
+          ],
+          "steps": [
+            "Check the endpoint and account of your existing Guilduo App. Otherwise register Remote HTTP MCP using the connection guide.",
+            "Use https://mcp.guilduo.com/mcp with OAuth. For direct MCP in a CLI or another host, complete OAuth there.",
+            "Register an Agent in Party and link this connection in Connections."
+          ]
+        },
+        {
+          "id": "verify-codex",
+          "title": "Start with a read-only check",
+          "paragraphs": [
+            "Reading the same Quests as the Web App with linked: true verifies account and Agent read access. Test writing separately after choosing the exact target and change."
+          ],
+          "code": {
+            "language": "text",
+            "text": "Use Guilduo get_current_agent_context and list_quests with reads only.\nReport the link state, effectiveExecutionScopes and result count.\nDo not create, update, complete or reassign work, or run another model.\nDo not output tokens, Client IDs or UIDs."
+          }
+        },
+        {
+          "id": "install-workflow-skill",
+          "title": "Add the Workflow Skill to an existing App",
+          "paragraphs": [
+            "This optional local procedure requires the Guilduo source repository and Codex with plugin command support. Replace YOUR_REGISTERED_GUILDUO_APP_ID with your registered Guilduo App ID, not an OAuth token.",
+            "Run from the repository root. Keep the generated .qa-artifacts/guilduo-plugin directory while the local marketplace is registered."
+          ],
+          "steps": [
+            "Restart Codex and enable Guilduo Workflows in a new chat.",
+            "Verify that the loaded Skill list includes guilduo-workflows:questforge-workflows.",
+            "A Human Relay requires both request_human_review and list_human_requests."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "npx tsx tools/prepare-guilduo-plugin.mts --app-id YOUR_REGISTERED_GUILDUO_APP_ID\ncodex plugin marketplace add .qa-artifacts/guilduo-plugin\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
+          }
+        },
+        {
+          "id": "first-codex-task",
+          "title": "Take a Quest and return it for review",
+          "steps": [
+            "Read Improve one help message with get_quest and check its criteria and assignee.",
+            "Within delegated scope, preview assign_quest_to_agent and save using the actual Agent ID and current expectedUpdatedAt.",
+            "Move the Handoff to working when starting, then edit and verify in the Codex work environment.",
+            "Return the result and remaining checks as review_required. Use Human Relay for device testing or subjective judgment."
+          ]
+        },
+        {
+          "id": "codex-diagnosis",
+          "title": "Separate connection, Skill and execution issues",
+          "bullets": [
+            "MCP works but the Skill is missing: MCP alone does not load a Skill. Check the plugin and loading in a new chat.",
+            "Human tools are missing: refresh existing App metadata. Do not substitute ordinary Quest updates for a human answer.",
+            "Plugin discovery verifies local loading; it is not public-directory publication or OpenAI approval.",
+            "A saved assignment does not prove execution started. Check the working transition and actual result separately."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "plugins/questforge/README.md",
+          "label": "plugins/questforge/README.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Connect Codex"
+    },
+    {
+      "slug": "claude",
+      "group": "integrations",
+      "title": "Connect Claude to Guilduo with OAuth MCP",
+      "description": "Set up Guilduo in Claude Connectors with OAuth. Link the correct Agent, read your first Quest, preview authorized writes and diagnose connection problems.",
+      "lead": "Add https://mcp.guilduo.com/mcp in a Claude Connector that supports Remote MCP and authenticate with OAuth. Link its Agent in Web App Connections, then verify that Claude can read the same Quest.",
+      "sections": [
+        {
+          "id": "claude-connector",
+          "title": "Configure OAuth in Connectors",
+          "steps": [
+            "Open Connectors from Claude Settings. Check your version for the setting name and custom connector availability.",
+            "Add a Remote MCP connection named Guilduo with URL https://mcp.guilduo.com/mcp.",
+            "Complete OAuth using the same account as the Guilduo Web App. Do not paste credentials into chat or configuration fields.",
+            "Return to Claude and confirm that the connection is available."
+          ]
+        },
+        {
+          "id": "claude-agent-link",
+          "title": "Match the Claude connection to an Agent",
+          "paragraphs": [
+            "OAuth can succeed while the Agent remains unlinked. Client names do not determine identity; verify that the connection is not linked to a different assignee."
+          ],
+          "steps": [
+            "Register the intended Agent in Guilduo Party. For example: display name Text reviewer, role Check meaning and wording.",
+            "Link this Claude connection to the intended Agent in Connections.",
+            "Call get_current_agent_context in Claude and check linked, the Agent ID and effectiveExecutionScopes."
+          ]
+        },
+        {
+          "id": "claude-first-read",
+          "title": "Separate the first read from the first write",
+          "paragraphs": [
+            "For example, choose Review the description before publication and use get_quest to check its criteria. Preview and save an assignment only within the user's authorization.",
+            "Reread the saved update and return the result as review_required. Request a Human review for subjective judgment and read the saved answer before resuming."
+          ],
+          "code": {
+            "language": "text",
+            "text": "Read my Guilduo get_current_agent_context.\nThen use list_quests to read at most five Backlog Quests and report only their titles.\nDo not change anything or display tokens, Client IDs or UIDs."
+          }
+        },
+        {
+          "id": "claude-troubleshooting",
+          "title": "Troubleshoot the Claude connection",
+          "bullets": [
+            "No connector entry is available: check version support and requirements for Remote MCP and custom connections. Do not substitute a secret-key configuration.",
+            "401: check the canonical endpoint and OAuth account. An old pre-migration connection requires registration and authorization again.",
+            "Reads work but writes fail: check that both the OAuth grant and Agent allowedScopes contain quests:write.",
+            "Human tools are missing: check the connector's metadata refresh and verify in a new conversation. Do not assume a Codex local plugin loads automatically in Claude."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "agents",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Connect Claude"
+    },
+    {
+      "slug": "quests",
+      "group": "workflows",
+      "title": "Manage Guilduo Quests: planning, trees and completion",
+      "description": "Plan Guilduo Quests with To Dos, Dailies, Habits and Backlog. Use Quest Trees and dependencies, understand completion and archiving, and find missing work.",
+      "lead": "A Quest is easier to hand over when its completion criteria and next action are explicit. Check scheduling, lifecycle, assignment and Handoff as separate states.",
+      "sections": [
+        {
+          "id": "quest-types",
+          "title": "Choose the right Quest kind",
+          "paragraphs": [
+            "For the example To Do, add Review the revised message and verify it is saved as the criterion, and Read the current message as the next action. Rewards cannot be Quest Tree parents or children."
+          ],
+          "table": {
+            "headers": [
+              "Kind",
+              "Use",
+              "Example"
+            ],
+            "rows": [
+              [
+                "To Do",
+                "A task completed once",
+                "Fix the help message before publication"
+              ],
+              [
+                "Daily",
+                "A scheduled recurring routine",
+                "Review the work plan each morning"
+              ],
+              [
+                "Habit",
+                "A repeated behavior",
+                "Record a reading session"
+              ],
+              [
+                "Reward",
+                "A reward purchased with Gems",
+                "A break as a personal reward"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "planning-and-views",
+          "title": "Use Backlog and scheduling",
+          "paragraphs": [
+            "The JSON above is a create_quest input example. This tool creates work, so use it only with authorization to create a Quest. Adding dryRun to a tool that does not accept it does not make a preview."
+          ],
+          "steps": [
+            "Use planningState: backlog for a To Do without an execution date.",
+            "Use scheduled with on_date and a scheduledDate for work on a specific day.",
+            "Use until_due and dueDate for work that should remain visible through its deadline.",
+            "After saving, reread the appropriate Today, Week, Future or Backlog view. A schedule change is distinct from completion or archiving."
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"kind\": \"todo\",\n  \"title\": \"Review the help message\",\n  \"planningState\": \"backlog\",\n  \"completionCriteria\": \"Compare old and new text and verify the saved result\",\n  \"nextAction\": \"Read the current message\"\n}"
+          }
+        },
+        {
+          "id": "trees-and-dependencies",
+          "title": "Separate Quest Trees from dependencies",
+          "paragraphs": [
+            "A Quest Tree organizes a larger goal into parents and children. For example, Publish the docs can contain Write the connection guide and Review the copy. Read the existing tree with get_quest_tree before changing it.",
+            "Dependencies describe ordering conditions. If Review the copy follows Write the connection guide, treat that relationship separately from the tree.",
+            "Only habit, daily and todo can form trees. Cycles and self-parenting are rejected; maximum depth is eight levels. Use includeArchived when reviewing stored children."
+          ]
+        },
+        {
+          "id": "complete-and-archive",
+          "title": "Understand completion, archiving and rewards",
+          "bullets": [
+            "A one-off To Do moves to Archive on completion. Leaving Today does not mean it was deleted.",
+            "Dailies, Habits and recurring To Dos return to active while keeping completion history. Separate the next occurrence from past completion.",
+            "Completing a child does not complete its parent. An accepted Handoff or Human answer does not automatically complete the source Quest.",
+            "Completion rewards are granted once per Quest occurrence. Battle commands after earning MP are separate actions.",
+            "Archive unneeded work and restore it to active if needed. Preserve history instead of using deletion as routine cleanup."
+          ]
+        },
+        {
+          "id": "quest-diagnosis",
+          "title": "Find missing work and diagnose update failures",
+          "steps": [
+            "Check All, Backlog and Archive as well as Today. Review kind, date and tag filters.",
+            "Check for an account mismatch or a read-only reconnection state.",
+            "Follow nextCursor in MCP results. Do not treat the first page as the complete list.",
+            "On a conflict, read the latest Quest, refresh expectedUpdatedAt for assignment or review requests, and preview again."
+          ]
+        }
+      ],
+      "related": [
+        "getting-started",
+        "agents",
+        "human-relay",
+        "api",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Manage Quests"
+    },
+    {
+      "slug": "agents",
+      "group": "workflows",
+      "title": "Guilduo Agents: registration, linking and Handoff",
+      "description": "Register an Agent, link an OAuth MCP connection and delegate a Quest. Preview assignment, follow Handoff states and diagnose identity or permission errors.",
+      "lead": "An Agent is a registry entry for an AI role and permission policy. Verify registration, connection, assignment and actual work as separate stages.",
+      "sections": [
+        {
+          "id": "register-agent",
+          "title": "Register a role and permissions",
+          "steps": [
+            "Sign in at https://app.guilduo.com/ and open Agent registration in Party.",
+            "Set the display name, provider, role and instructions. For example: name Implementation helper; instruction Read the target before editing and return verification results for review.",
+            "Choose the required allowedScopes. Use quests:read for Quest access and consider quests:write for delegated updates.",
+            "After saving, verify the registered Agent ID and active status. Do not register model API keys or execution URLs."
+          ]
+        },
+        {
+          "id": "link-agent-client",
+          "title": "Link an MCP connection to the registered Agent",
+          "paragraphs": [
+            "Public tools also include get_agent_link, link_agent and unlink_agent. link_agent requires the OAuth agents:write scope; it does not register an Agent or expand its policy."
+          ],
+          "steps": [
+            "Complete MCP OAuth using the same account and the connection guide.",
+            "Link the intended client to the Agent in Connections.",
+            "Use get_current_agent_context to check the Agent ID and effectiveExecutionScopes. Execution permissions are the intersection of OAuth and Agent policies."
+          ]
+        },
+        {
+          "id": "preview-assignment",
+          "title": "Preview and save a Quest assignment",
+          "paragraphs": [
+            "Read the actual Agent ID with list_registered_agents and the assignee and updatedAt with get_quest. The JSON below previews assign_quest_to_agent. Replace placeholders with values you read."
+          ],
+          "steps": [
+            "Check the Quest, Agent and resulting Handoff in the preview. Use ready only when the work is ready for the Agent.",
+            "Within authorized scope, add the current expectedUpdatedAt to the same input and set dryRun to false to save.",
+            "Reread with get_quest to verify the saved assignee and Handoff."
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"questId\": \"REPLACE_WITH_QUEST_ID\",\n  \"agentId\": \"replace-with-agent-id\",\n  \"handoffState\": \"ready\",\n  \"note\": \"Improve one help message and return a review summary.\",\n  \"dryRun\": true\n}"
+          }
+        },
+        {
+          "id": "handoff-states",
+          "title": "Move through Handoff and return results",
+          "paragraphs": [
+            "Preview transitions with transition_quest_handoff and pass the current state as expectedState when saving. Do not overwrite using stale state.",
+            "ready does not prove delivery or Agent startup. Actual work happens in the connected Codex, Claude or other environment."
+          ],
+          "table": {
+            "headers": [
+              "State",
+              "Meaning",
+              "Next action"
+            ],
+            "rows": [
+              [
+                "none",
+                "No handover started",
+                "Agree on criteria and assignee"
+              ],
+              [
+                "ready",
+                "Work is ready for the Agent",
+                "Read it and explicitly start"
+              ],
+              [
+                "working",
+                "Work is in progress",
+                "Edit and verify in the connected client"
+              ],
+              [
+                "blocked",
+                "Work cannot continue",
+                "Record the reason and resume after resolution"
+              ],
+              [
+                "review_required",
+                "Returned for human review",
+                "Read the result and remaining checks"
+              ],
+              [
+                "accepted",
+                "The Handoff was accepted",
+                "Check source Quest completion separately"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "agent-diagnosis",
+          "title": "Diagnose Agent issues",
+          "bullets": [
+            "Agent missing from the list: check the account, registration and active status. A legacy free-form assignee is not a registered Agent.",
+            "Assignment conflict: reread the Quest, refresh updatedAt and preview again.",
+            "Reads work but writes fail: check that both OAuth and the Agent include the required write scope.",
+            "Wrong linked identity: verify the intended Agent ID, relink within authorization and reread context."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "quests",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        }
+      ],
+      "navTitle": "Agents and Handoffs"
+    },
+    {
+      "slug": "human-relay",
+      "group": "workflows",
+      "title": "Human Relay: review requests, answers and resumption",
+      "description": "Ask a human to check Agent work in Guilduo, save text feedback and resume. Handle request keys, deferral, changes, Handoff acceptance and separate completion.",
+      "lead": "Ask a person to verify device behavior, preferences or decisions the Agent cannot establish alone. Check artifacts in their external environment and save text feedback in Guilduo.",
+      "sections": [
+        {
+          "id": "when-to-ask",
+          "title": "Check before asking a human",
+          "paragraphs": [
+            "Example: Automated viewport checks passed, but please judge whether the menu is easy to close one-handed on your phone. Routine lint is not a reason to ask a human."
+          ],
+          "steps": [
+            "Verify that the client exposes request_human_review and list_human_requests.",
+            "Read the source Quest and get_current_agent_context. Verify that you are its assigned registered Agent.",
+            "Complete automated tests or builds you can run and state exactly why a human is needed.",
+            "Read list_human_requests with sourceQuestId and status=all to check for an existing pending or deferred request."
+          ]
+        },
+        {
+          "id": "request-review",
+          "title": "Create a specific review request",
+          "paragraphs": [
+            "The JSON below previews request_human_review. Replace questId with the actual source Quest ID. Keep requestKey stable within this review round."
+          ],
+          "steps": [
+            "Check the recipient and source Quest in the preview. Add an HTTPS artifactUrl if a result link is needed.",
+            "Add the latest source Quest updatedAt as expectedUpdatedAt and save the authorized request with dryRun=false.",
+            "Tell the human where to check and answer. Opening an external link alone does not establish verification or approval."
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"questId\": \"REPLACE_WITH_SOURCE_QUEST_ID\",\n  \"requestKey\": \"mobile-menu-review-1\",\n  \"title\": \"Check the mobile menu\",\n  \"reason\": \"Automated checks passed; one-handed comfort needs a real-device check\",\n  \"checkTarget\": \"Open the target screen on your usual phone, open and close the menu, and try its links\",\n  \"completionCriteria\": \"Reply with no changes, or the element to change and the reason\",\n  \"dryRun\": true\n}"
+          }
+        },
+        {
+          "id": "human-answer",
+          "title": "The human checks and saves an answer",
+          "paragraphs": [
+            "Only the intended human answers through Web authentication. An Agent cannot impersonate an answer through ordinary Quest updates or score_quest."
+          ],
+          "steps": [
+            "Open your Human request in the Web App and read its reason, check target and completion criteria.",
+            "Check the specified external screen or device. Defer if you cannot do it now and resume later.",
+            "Save approval if no changes are needed, or specific text such as Please move the close button; it is hard to reach.",
+            "Explicitly confirm that you checked the work when answering. Seen, deferred and opening a link are distinct from answering."
+          ]
+        },
+        {
+          "id": "read-feedback-and-resume",
+          "title": "Read feedback and resume",
+          "steps": [
+            "The Agent rereads the source Quest's requests with list_human_requests and reads humanRequest.response and outcome.",
+            "For changes_requested, return the source Handoff to working, then implement and verify the saved feedback.",
+            "Use a new requestKey for the next review round. Do not overwrite earlier answers.",
+            "For approved, check what was accepted. Confirmation Quest completion, Handoff accepted and source Quest completion remain separate operations with their own criteria."
+          ]
+        },
+        {
+          "id": "review-diagnosis",
+          "title": "Diagnose retries, conflicts and unanswered requests",
+          "table": {
+            "headers": [
+              "State",
+              "Meaning",
+              "Action"
+            ],
+            "rows": [
+              [
+                "pending / deferred",
+                "Unanswered or deferred",
+                "Wait for or resume the existing request"
+              ],
+              [
+                "Same key and content",
+                "Retry of the same request",
+                "Keep the key and check the existing result"
+              ],
+              [
+                "request_key_conflict",
+                "Different content under the same key",
+                "Check the original; use a new key for a new round"
+              ],
+              [
+                "human_request_pending",
+                "An unanswered request exists",
+                "Resume it instead of creating a duplicate"
+              ],
+              [
+                "quest_conflict",
+                "The source Quest changed",
+                "Reread and refresh expectedUpdatedAt"
+              ],
+              [
+                "quest_assignee_mismatch",
+                "Requesting Agent is not the assignee",
+                "Check linked identity and source assignee"
+              ]
+            ]
+          }
+        }
+      ],
+      "related": [
+        "agents",
+        "quests",
+        "permissions",
+        "troubleshooting",
+        "api"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "api/openapi.json",
+          "label": "api/openapi.json"
+        },
+        {
+          "path": "server/human-requests.ts",
+          "label": "server/human-requests.ts"
+        },
+        {
+          "path": "docs/human-relay-acceptance.md",
+          "label": "docs/human-relay-acceptance.md"
+        }
+      ],
+      "navTitle": "Ask a human to review"
+    },
+    {
+      "slug": "permissions",
+      "group": "reference",
+      "title": "Guilduo permissions: OAuth, Agent scopes and safe writes",
+      "description": "Understand Guilduo OAuth grants and Agent scopes. Diagnose read-only access, distinguish link management from execution, and use previews and conflict checks.",
+      "lead": "Agent execution permissions are the intersection of the OAuth grant and Agent policy. Expanding one side cannot authorize an operation missing from the other.",
+      "sections": [
+        {
+          "id": "scope-intersection",
+          "title": "Compare the two permission sets",
+          "paragraphs": [
+            "get_current_agent_context returns connectionScopes, agentAllowedScopes and effectiveExecutionScopes. effectiveScopes is a compatibility field for effective permissions. Read this response to identify which side is missing access."
+          ],
+          "table": {
+            "headers": [
+              "OAuth grant",
+              "Agent policy",
+              "Execution result"
+            ],
+            "rows": [
+              [
+                "quests:read / quests:write",
+                "quests:read",
+                "Read only"
+              ],
+              [
+                "quests:read",
+                "quests:read / quests:write",
+                "Read only"
+              ],
+              [
+                "quests:read / quests:write",
+                "quests:read / quests:write",
+                "Read/write within both policies"
+              ],
+              [
+                "No agents:read",
+                "Includes agents:read",
+                "OAuth scope missing for context inspection"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "link-management",
+          "title": "Separate linking from execution permissions",
+          "paragraphs": [
+            "get_current_agent_context requires OAuth agents:read. link_agent and unlink_agent use OAuth agents:write to manage this connection's Agent association.",
+            "The absence of agents:write from Agent execution scopes alone does not imply link management was lost. Check connectionScopes for connection control and effectiveExecutionScopes for work.",
+            "Create, edit and change Agent permissions in the authenticated Web App. Agents and Skills do not automatically expand an OAuth grant."
+          ],
+          "steps": [
+            "Missing OAuth scope: the human reviews consent and re-authorizes if needed.",
+            "Missing Agent scope: allow only the access needed for its role in the Web App.",
+            "Still failing after changes: reread context and verify the intended Agent and effective access."
+          ]
+        },
+        {
+          "id": "safe-mutations",
+          "title": "Check preview support and save conditions",
+          "bullets": [
+            "Preview assign_quest_to_agent and request_human_review with dryRun=true; save with the current expectedUpdatedAt.",
+            "After previewing transition_quest_handoff, pass expectedState. Do not overwrite from a stale working or other state.",
+            "create_quest and update_quest have no dryRun in the published schema. Do not add unsupported inputs; verify the change and existing authorization before executing.",
+            "Existing authorization for the same scope does not require repeated approval. Ask for missing decisions or operations outside that scope."
+          ]
+        },
+        {
+          "id": "human-and-private-data",
+          "title": "Respect human answers and private data",
+          "paragraphs": [
+            "The intended human saves review answers through Web authentication. An Agent cannot mark a confirmation answered with ordinary update or completion tools.",
+            "Public profiles contain display name, handle, bio, avatar, level and similar fields. Quest content, notes and authentication data are not public profile fields.",
+            "Do not put tokens, API keys, client secrets, model keys or complete UIDs in Quest text, artifact URLs or public reports. Remove credentials and personal data from shared logs."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "human-relay",
+        "troubleshooting",
+        "api"
+      ],
+      "sources": [
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "api/openapi.json",
+          "label": "api/openapi.json"
+        },
+        {
+          "path": "worker/src/security.ts",
+          "label": "worker/src/security.ts"
+        }
+      ],
+      "navTitle": "Authentication and permissions"
+    },
+    {
+      "slug": "troubleshooting",
+      "group": "reference",
+      "title": "Guilduo troubleshooting: connections, scopes and saving",
+      "description": "Diagnose Guilduo 401 errors, unlinked Agents, missing Human tools, write permission failures and Quest conflicts. Recover safely and report useful evidence.",
+      "lead": "First identify whether the failure is endpoint access, OAuth, Agent linking, discovery, permissions or persistence. Inspect the failed read and error before changing connection settings.",
+      "sections": [
+        {
+          "id": "authentication-errors",
+          "title": "401, OAuth callback and account mismatches",
+          "paragraphs": [
+            "A 401 on an unauthenticated protected MCP or REST route can be expected. Opening a URL in a browser alone does not verify a client connection."
+          ],
+          "steps": [
+            "Check that the MCP URL is https://mcp.guilduo.com/mcp. https://api.guilduo.com/v1 is the Appwrite API.",
+            "Verify that the Web App and OAuth flow use the same account. You may be reading another account's workspace.",
+            "Re-authorize OAuth if an old migration-era connection or expired grant is the cause. Do not reuse old grants or tokens.",
+            "If OAuth does not return, inspect extensions blocking the callback and the client's return state."
+          ]
+        },
+        {
+          "id": "missing-tools-or-skill",
+          "title": "Tools or Skills are missing",
+          "paragraphs": [
+            "The /health tool count and actual authenticated client tools are separate checks. Do not expand Agent scopes solely because counts differ."
+          ],
+          "steps": [
+            "Identify the required tools. Human Relay needs request_human_review and list_human_requests.",
+            "Refresh connection metadata, then restart and begin a new chat if needed.",
+            "Check Skill loading separately. An installed Codex companion is not necessarily loaded into an already running conversation.",
+            "If Refresh fails, record the client version, exposed tools and error. Do not immediately remove a working connection or create duplicates."
+          ]
+        },
+        {
+          "id": "link-and-scope-errors",
+          "title": "Unlinked, read-only and 403 failures",
+          "table": {
+            "headers": [
+              "Symptom",
+              "Value to inspect",
+              "Action"
+            ],
+            "rows": [
+              [
+                "linked=false / agent=null",
+                "Connections link",
+                "Link the intended Agent and reread context"
+              ],
+              [
+                "Missing agents:read",
+                "connectionScopes",
+                "Review OAuth consent"
+              ],
+              [
+                "Relinking refused",
+                "OAuth agents:write",
+                "Check connection control permission"
+              ],
+              [
+                "Quest writes alone fail",
+                "quests:write in both policies",
+                "Allow the necessary scope on the missing side"
+              ],
+              [
+                "Human answer refused",
+                "Authenticated human Web session",
+                "The human must answer in the Web App"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "conflicts-and-uncertain-writes",
+          "title": "409, retries and uncertain save results",
+          "bullets": [
+            "quest_conflict: reread the Quest and preview with the current expectedUpdatedAt.",
+            "Handoff conflict: read the actual state and refresh expectedState. Do not revert accepted work using an old state.",
+            "request_key_conflict: different request content reused the same key. Inspect the existing request and use a new key for a new round.",
+            "human_request_pending: resume the pending or deferred request. Do not create a duplicate under another key.",
+            "Lost save response or 5xx: read the state first. General Quest creation is not made idempotent by a Human request key; decide on a retry after inspecting persistence."
+          ]
+        },
+        {
+          "id": "sync-and-reporting",
+          "title": "Reconnect and report the issue",
+          "paragraphs": [
+            "Previous data can remain read-only during synchronization. Reconnect with the same account and verify saved state. Check Archive after completing a one-off To Do.",
+            "Public GitHub Issues are at https://github.com/ELRdn/Guilduo/issues. Include the following to help distinguish authentication, UI and tool-contract issues."
+          ],
+          "bullets": [
+            "Client name and version, time, expected behavior and actual result.",
+            "Failed tool or REST path, HTTP status and error code.",
+            "Whether reading, previewing or saving failed, and the state observed on reread.",
+            "A minimal reproduction without credentials or Quest content. Do not publish tokens, complete UIDs or Client IDs."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "human-relay",
+        "quests",
+        "api"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "server/human-requests.ts",
+          "label": "server/human-requests.ts"
+        },
+        {
+          "path": "docs/public-urls.md",
+          "label": "docs/public-urls.md"
+        }
+      ],
+      "navTitle": "Troubleshooting"
+    },
+    {
+      "slug": "faq",
+      "group": "reference",
+      "title": "Guilduo FAQ: AI execution, storage and approvals",
+      "description": "Answers to common Guilduo questions about Agent execution, archived Quests, Human review, Handoff approval, external integrations, MCP and Workflow Skills.",
+      "lead": "Connected, assigned, started, reviewed and completed are different states. These answers explain the distinctions with examples and practical checks.",
+      "sections": [
+        {
+          "id": "does-guilduo-run-ai",
+          "title": "Does registering an Agent start AI automatically?",
+          "paragraphs": [
+            "No. Agent Registry records a display name, role, instructions and permissions. A connected client such as Codex or Claude supplies the model and work environment.",
+            "Setting a Quest to ready does not prove automatic delivery. After delegating Fix the description, read it in the client and verify the working transition and result.",
+            "Astra is a companion character, distinct from a registered Agent and the signed-in user. Use the Agents guide to check roles and connections."
+          ]
+        },
+        {
+          "id": "where-is-my-quest",
+          "title": "Why did my completed Quest disappear?",
+          "paragraphs": [
+            "A one-off To Do moves to Archive on completion and leaves Today. Check Archive first; archiving preserves history.",
+            "Dailies, Habits and recurring To Dos retain completion history and return for the next occurrence. Completing a child does not automatically complete its parent.",
+            "If it is still missing, check All, Backlog, filters and the signed-in account. Follow nextCursor when reading MCP lists."
+          ]
+        },
+        {
+          "id": "what-does-approval-complete",
+          "title": "Does a Human answer complete the original Quest?",
+          "paragraphs": [
+            "A Human review response does not automatically complete the original Quest. The response is saved to a separate review Quest; accepting the Handoff and completing the original work are separate explicit actions.",
+            "For example, approving the mobile menu does not finish a source Quest that still requires a description change. The Agent must meet the remaining criteria first.",
+            "Opening a link, marking it seen or deferring it does not answer the request. The intended human must save an answer through Web authentication."
+          ]
+        },
+        {
+          "id": "external-services",
+          "title": "Can Guilduo automatically sync Google Calendar or Notion?",
+          "paragraphs": [
+            "Published documentation marks Provider OAuth for Google Calendar, Google Tasks, Notion and Toggl as preparation. API or tool contracts alone do not establish live connections or automatic synchronization.",
+            "Do not send external service keys through an MCP chat. Verify connection state in the Web App and relevant read tools before use."
+          ]
+        },
+        {
+          "id": "paid-plans",
+          "title": "Where can I check paid plan prices and Credits?",
+          "paragraphs": [
+            "These Docs do not publish unapproved plan prices or Credit allowances. Check approved, published sale terms before making a purchase.",
+            "These docs cover operations supported by published sources and do not quote unapproved prices, Credit grants, discounts or referral benefits. Base purchase decisions on published, approved sales terms when available."
+          ]
+        },
+        {
+          "id": "mcp-skills-and-plugin",
+          "title": "How do MCP, Workflow Skills and plugins differ?",
+          "paragraphs": [
+            "MCP connects tools, a Workflow Skill teaches the operating sequence and a plugin packages Skills or connection configuration. MCP alone does not load a Skill, and a Skill does not grant OAuth permissions.",
+            "The local Codex companion can add the Skill to an existing Guilduo App. Local installation is separate from directory publication and official review."
+          ]
+        },
+        {
+          "id": "legacy-name",
+          "title": "Are Guilduo and QuestForge different products?",
+          "paragraphs": [
+            "Guilduo is the current public product name; QuestForge is the legacy name. Technical identifiers in connection settings retain the legacy name for compatibility.",
+            "Guilduo is the current product name. questforge MCP IDs, file paths and CLI variables remain for compatibility. Do not rename configuration identifiers merely to match the public name."
+          ]
+        }
+      ],
+      "related": [
+        "agents",
+        "quests",
+        "human-relay",
+        "codex",
+        "mcp-connection"
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "label": "README.md"
+        },
+        {
+          "path": "README.jp.md",
+          "label": "README.jp.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "plugins/questforge/README.md",
+          "label": "plugins/questforge/README.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-setup.md",
+          "label": "docs/guilduo-plugin-setup.md"
+        },
+        {
+          "path": "skills/questforge-workflows/SKILL.md",
+          "label": "skills/questforge-workflows/SKILL.md"
+        }
+      ],
+      "navTitle": "Frequently asked questions"
+    },
+    {
+      "slug": "api",
+      "group": "reference",
+      "title": "Guilduo API and MCP reference: endpoints and examples",
+      "description": "Use the Guilduo REST API and MCP with canonical endpoints, OAuth, tool schemas and Quest reads. Follow pagination and handle preview and conflict contracts.",
+      "lead": "REST and MCP share the same work rules. Use the published OpenAPI and MCP schemas as references and match inputs to the contract exposed by your connected server.",
+      "sections": [
+        {
+          "id": "api-endpoints",
+          "title": "Distinguish REST, MCP and Appwrite",
+          "paragraphs": [
+            "Use /mcp for normal MCP connections. /mcp-next is a validation lane. Do not redirect Worker Quest routes to the Appwrite API."
+          ],
+          "table": {
+            "headers": [
+              "Purpose",
+              "URL",
+              "Usage"
+            ],
+            "rows": [
+              [
+                "Browser",
+                "https://app.guilduo.com/",
+                "Guilduo / Relay Forge"
+              ],
+              [
+                "Remote MCP",
+                "https://mcp.guilduo.com/mcp",
+                "OAuth-capable AI clients"
+              ],
+              [
+                "Worker REST",
+                "https://mcp.guilduo.com/v1/quests",
+                "OpenAPI /v1 routes"
+              ],
+              [
+                "Appwrite API",
+                "https://api.guilduo.com/v1",
+                "Appwrite SDK and Worker endpoint"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "api-authentication",
+          "title": "Check authentication and schemas",
+          "paragraphs": [
+            "Ordinary MCP users use OAuth. OpenAPI defines OAuth and Appwrite JWT Bearer authentication. Fixed API-key distribution is not the normal user flow.",
+            "api/openapi.json defines REST paths, inputs and responses; api/mcp-tools.json defines tool names and schemas. Check required fields, enums and length limits before calling.",
+            "Tool discovery does not replace authentication or Agent policy. Read identity and effective scopes with get_current_agent_context, then read the target's current state."
+          ]
+        },
+        {
+          "id": "first-api-read",
+          "title": "Read the Quest list",
+          "paragraphs": [
+            "The following input reads list_quests. Inspect quests, total and nextCursor. If nextCursor is present, pass it as cursor in the next call."
+          ],
+          "steps": [
+            "Connect OAuth MCP and verify the intended Agent and required quests:read with get_current_agent_context.",
+            "Call list_quests with the input above and compare it with Backlog in the Web App.",
+            "Pass an actual returned ID to get_quest as questId and read details and updatedAt. Do not infer IDs from display names.",
+            "For REST, use an authenticated GET /v1/quests?view=backlog&kind=todo&limit=5. Do not confuse an unauthenticated 401 with a storage or network failure."
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"view\": \"backlog\",\n  \"kind\": \"todo\",\n  \"limit\": 5\n}"
+          }
+        },
+        {
+          "id": "operation-map",
+          "title": "Map operations to tools and REST routes",
+          "paragraphs": [
+            "The CLI is a REST client for people and CI. Writes execute when --execute is supplied. CLI usage and OAuth MCP discovery are distinct interfaces."
+          ],
+          "table": {
+            "headers": [
+              "Purpose",
+              "MCP",
+              "REST"
+            ],
+            "rows": [
+              [
+                "List and detail",
+                "list_quests / get_quest",
+                "GET /v1/quests / GET /v1/quests/{questId}"
+              ],
+              [
+                "Hierarchy",
+                "get_quest_tree",
+                "GET /v1/quests/tree"
+              ],
+              [
+                "Create and edit",
+                "create_quest / update_quest",
+                "POST /v1/quests / PATCH /v1/quests/{questId}"
+              ],
+              [
+                "Handoff",
+                "transition_quest_handoff",
+                "POST /v1/quests/{questId}/handoff"
+              ],
+              [
+                "Human request",
+                "request_human_review",
+                "POST /v1/quests/{questId}/review-requests"
+              ],
+              [
+                "Human list",
+                "list_human_requests",
+                "GET /v1/human-requests"
+              ],
+              [
+                "Human answer",
+                "No MCP write tool",
+                "Human Web-authenticated POST /v1/quests/{questId}/review-response"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "writes-and-errors",
+          "title": "Understand writes and error contracts",
+          "bullets": [
+            "Execute assign_quest_to_agent and request_human_review after preview with the current expectedUpdatedAt. transition_quest_handoff uses expectedState.",
+            "Do not add undefined dryRun fields to create_quest or update_quest. Tools with additionalProperties=false reject undefined properties.",
+            "For 401 inspect authentication; for 403 permissions and identity; for 409 conflicts. requestKey retries the same Human review round and is not a general Quest-creation retry guarantee.",
+            "On conflict, read current state and preview again. Do not repeatedly resend stale timestamps or fabricate a Human answer through general updates.",
+            "Tool counts and versions change. Compare the connected tools/list with the published contract and verify compatibility by required names and schemas."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "permissions",
+        "quests",
+        "agents",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "API_MCP_SETUP.md",
+          "label": "API_MCP_SETUP.md"
+        },
+        {
+          "path": "api/openapi.json",
+          "label": "api/openapi.json"
+        },
+        {
+          "path": "api/mcp-tools.json",
+          "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "skills/questforge-workflows/references/tools.md",
+          "label": "skills/questforge-workflows/references/tools.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ],
+      "navTitle": "API and MCP reference"
+    }
+  ],
+  "reviewedAt": "2026-10-05"
+}

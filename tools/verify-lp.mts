@@ -1,4 +1,3 @@
-// Run the same interaction and motion acceptance on the official documents.
-process.argv[3] = "official";
-await import("./verify-lpv21.mts");
+// Official LP uses LPv3. Keep the LPv2.1 verifier for its comparison routes.
+await import("./verify-lp-v3.mts");
 export {};

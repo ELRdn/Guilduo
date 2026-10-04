@@ -13,7 +13,9 @@
 | Web App | https://app.guilduo.com/ | **Guilduo / Relay Forge**の正式Web App | READY |
 | MCP | https://mcp.guilduo.com/mcp | OAuth対応Remote HTTP MCP | READY |
 | Appwrite API | https://api.guilduo.com/v1 | Appwrite SDKとWorkerが使うAPI endpoint | READY |
-| Documentation | https://docs.guilduo.com/ | 将来のドキュメントサイト | Reserved / Future |
+| Documentation | https://guilduo.com/docs/ | 日本語Docsの正式URL候補（同じSiteに静的生成） | IMPLEMENTED / PUBLICATION PENDING |
+| English Documentation | https://guilduo.com/docs/en/ | 英語Docsの正式URL候補 | IMPLEMENTED / PUBLICATION PENDING |
+| Documentation subdomain | https://docs.guilduo.com/ | 将来の移行・redirect用予約 | Reserved / Future |
 | Privacy | https://guilduo.com/privacy/ | `PRIVACY.md`を正本とする静的ページ | LOCAL VERIFIED / DEPLOYMENT PENDING |
 | Terms | https://guilduo.com/terms/ | `TERMS.md`を正本とする静的ページ | LOCAL VERIFIED / DEPLOYMENT PENDING |
 | バグ報告 | https://github.com/ELRdn/Guilduo/issues | 公開GitHub Issues | READY |
@@ -63,3 +65,8 @@ WorkerのRESTとMCP、Appwrite Auth/TablesDB、Agent Registryの保存先を混�
 - QuestForgeという名前は、CLI、MCP ID、storage key、環境変数、既存route、schema、型、ファイル名などのtechnical identifierでは維持する。
 - URLやrouteを変更するときは、先に site-routing.ts と tests/site-routing.test.ts を確認し、この文書と docs/appwrite-site-routing.md を同期する。
 - Token、API Key、Client Secret、完全なUIDはURL、ログ、接続例へ書かない。
+
+
+## Public Docs implementation (2026-10-05)
+
+公開先は`https://guilduo.com/docs/`、英語は`https://guilduo.com/docs/en/`。既存Siteへ静的同梱し、DNS追加とroot rewrite変更は不要。`docs.guilduo.com`は予約維持。配備後の実本文・canonical・リンク確認までは公開GitHubが入口。商品・正式ReleaseのGoとは別に扱う。[更新と公開確認](../public-docs/README.md)。

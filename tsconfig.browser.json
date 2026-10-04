@@ -21,6 +21,7 @@
     "ui/**/*.tsx",
     "lpv2/**/*.ts",
     "lpv2-1/**/*.ts",
+    "public-docs/client.ts",
     "lpv3/**/*.ts",
     "tests/browser/human-relay.ts",
     "tests/browser/production-relay.ts",

@@ -18,6 +18,7 @@ const sourceRoots = [
   "cli",
   "mcp-local",
   "tools",
+  "public-docs",
   "tests",
   "interaction-lab",
   "questforge-battle-prototype/battle.ts",
