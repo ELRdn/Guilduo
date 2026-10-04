@@ -1,0 +1,7 @@
+.legal-document { max-width: 760px; padding-block: 48px; overflow-wrap: anywhere; }
+.legal-document h1 { font-size: clamp(30px, 6vw, 48px); margin-bottom: 24px; }
+.legal-document h2 { font-size: 24px; margin-top: 32px; }
+.legal-document p, .legal-document ul { margin-block: 16px; line-height: 1.7; }
+.legal-document ul { padding-left: 24px; }
+.legal-document li { margin-block: 8px; }
+.legal-document a { text-decoration: underline; }

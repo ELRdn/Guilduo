@@ -7,7 +7,7 @@ import {
   type ProfileRecord,
 } from "./adapter.ts";
 import type { CommandModel } from "./model.ts";
-import { RepositoryBattlePort } from "./screens/battle-port.ts";
+import { RepositoryBattlePort, validateBattleSession } from "./screens/battle-port.ts";
 import type { BattlePort } from "./screens/battle-model.ts";
 import {
   RepositoryConnectionsPort,
@@ -16,12 +16,15 @@ import type { ConnectionsPort } from "./screens/connections-model.ts";
 import type { AgentRecord, PartyMemberRecord } from "./screens/party-model.ts";
 import type { IntegrationRecord } from "./screens/connections-model.ts";
 import type { SettingsMcpConnectionRow } from "./screens/settings-model.ts";
+import { relayText } from "./relay-copy.ts";
+import { t } from "../../i18n.ts";
 
 type JsonRecord = Record<string, unknown>;
 
 export interface RelayForgeRuntime {
   readonly mode: "production";
   readonly loadDeferred?: () => Promise<RelayForgeRuntime>;
+  readonly refreshWorkspace?: () => Promise<RelayForgeRuntime>;
   readonly panelErrors?: readonly { index: number; message: string }[];
   readonly model: CommandModel;
   readonly profile: ProfileRecord | null;
@@ -33,19 +36,20 @@ export interface RelayForgeRuntime {
   readonly agents: readonly AgentRecord[];
   readonly integrations: readonly IntegrationRecord[];
   readonly partyName: string;
-  readonly questPort: Pick<QuestForgeRepository, "createQuest" | "updateQuest">;
+  readonly questPort: Pick<QuestForgeRepository, "createQuest" | "updateQuest" | "scoreQuest" | "getBattleSession">;
   readonly humanRequestPort?: Pick<QuestForgeRepository, "getQuest" | "listHumanRequests" | "respondHumanReview" | "requestHumanReview">;
   readonly agentPort: Pick<QuestForgeRepository, "createAgent" | "updateAgent">;
   readonly handoffPort: HandoffPort;
   readonly battlePort: BattlePort;
   readonly battleSession: BattleSession | null;
   readonly connectionsPort: ConnectionsPort;
+  readonly refreshConnections?: () => Promise<{ integrations: readonly IntegrationRecord[]; quests: readonly Quest[] }>;
   /** The Gateway base URL actually in use — Settings derives the MCP URL from this. */
   readonly gatewayUrl: string;
   readonly profilePort: Pick<QuestForgeRepository, "getProfile" | "updateProfile">;
   readonly profileAvatarPort: Pick<QuestForgeRepository, "uploadProfileAvatar" | "fetchProfileAvatar" | "deleteProfileAvatar">;
   readonly agentAvatarPort: Pick<QuestForgeRepository, "uploadAgentAvatar" | "fetchAgentAvatar">;
-  readonly agentConnectionPort: Pick<QuestForgeRepository, "listAgentConnections" | "linkAgentConnection" | "unlinkAgentConnection" | "revokeMcpConnection">;
+  readonly agentConnectionPort: Pick<QuestForgeRepository, "listAgentConnections" | "linkAgentConnection" | "unlinkAgentConnection" | "revokeMcpConnection" | "deleteMcpConnection">;
   readonly agentConnections: readonly SettingsMcpConnectionRow[];
   readonly agentConnectionsLoadError: string | null;
   readonly mcpToolsPort: Pick<QuestForgeRepository, "listMcpTools">;
@@ -151,7 +155,7 @@ export function normalizePartyMembers(
   if (selfUid !== "" && !members.some((member) => member.uid === selfUid)) {
     members.unshift({
       uid: selfUid,
-      displayName: text(profile.displayName) || text(profile.handle) || "あなた",
+      get displayName() { return text(profile.displayName) || text(profile.handle) || t("task.assignee.self"); },
       handle: text(profile.handle),
       role: "owner",
       joinedAt: "",
@@ -228,9 +232,15 @@ export async function createProductionRuntime(
 }
 
 function runtimeFromSnapshot(snapshot: Awaited<ReturnType<QuestForgeRepository["loadSnapshot"]>>, repository: QuestForgeRepository, selfUid: string, email: string): RelayForgeRuntime {
+  let battleSession: BattleSession | null = null;
+  const panelErrors = [...snapshot.panelErrors];
+  if (Object.keys(snapshot.battle).length > 0) {
+    try { validateBattleSession(snapshot.battle); battleSession = snapshot.battle; }
+    catch { panelErrors.push({ index:1, get message() { return relayText("connectionInvalidResponse"); } }); }
+  }
   const quests = snapshot.quests as Quest[];
   const profile = normalizeProfileRecord(snapshot.profile);
-  const effectiveProfile: ProfileRecord = profile ?? { uid: selfUid, displayName: "あなた" };
+  const effectiveProfile: ProfileRecord = profile ?? { uid: selfUid };
   const agents = normalizeAgents(snapshot.agents);
   const integrations = normalizeIntegrations(snapshot.integrations);
   const party = record(snapshot.party);
@@ -243,8 +253,12 @@ function runtimeFromSnapshot(snapshot: Awaited<ReturnType<QuestForgeRepository["
 
   return {
     mode: "production",
+    refreshWorkspace: async () => {
+      const next = await createProductionRuntime(repository, selfUid, email);
+      return next.loadDeferred ? next.loadDeferred() : next;
+    },
     ...(snapshot.loadDeferred ? { loadDeferred: async () => runtimeFromSnapshot(await snapshot.loadDeferred!(), repository, selfUid, email) } : {}),
-    panelErrors: snapshot.panelErrors,
+    panelErrors,
     model,
     profile,
     email: email.trim(),
@@ -260,8 +274,14 @@ function runtimeFromSnapshot(snapshot: Awaited<ReturnType<QuestForgeRepository["
     agentPort: repository,
     handoffPort: repository,
     battlePort: new RepositoryBattlePort(repository),
-    battleSession: Object.keys(snapshot.battle).length === 0 ? null : snapshot.battle as unknown as BattleSession,
+    battleSession,
     connectionsPort: new RepositoryConnectionsPort(repository),
+    refreshConnections: async () => {
+      const integrationResponse = await repository.request("/v1/integrations");
+      if (!Array.isArray(integrationResponse.integrations)) throw new Error("Invalid integrations response");
+      const page = await repository.listAllQuests();
+      return { integrations:normalizeIntegrations(integrationResponse.integrations), quests:page.quests as Quest[] };
+    },
     gatewayUrl: repository.baseUrl,
     profilePort: repository,
     profileAvatarPort: repository,

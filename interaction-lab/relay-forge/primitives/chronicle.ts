@@ -12,6 +12,8 @@
 import { type Actor, type ChronicleEvent } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el } from "./dom.ts";
+import { relayText } from "../relay-copy.ts";
+import { countLabel } from "../screens/screen-state.ts";
 
 /** Section 14.4: only low-risk System noise may be grouped. */
 const COLLAPSIBLE: ReadonlySet<ChronicleEvent["kind"]> = new Set(["system_event"]);
@@ -59,7 +61,7 @@ function eventRow(event: ChronicleEvent, actors: ReadonlyMap<string, Actor>): HT
       el(
         "span",
         { class: "rf-chronicle-sentence" },
-        el("b", { class: "rf-chronicle-name" }, actor?.name ?? "Unknown"),
+        el("b", { class: "rf-chronicle-name" }, actor?.name ?? relayText("unknown")),
         el("span", { class: "rf-chronicle-verb" }, ` ${event.verb} `),
         el("span", { class: "rf-chronicle-object" }, event.object),
       ),
@@ -88,10 +90,10 @@ function groupRow(events: readonly ChronicleEvent[], actors: ReadonlyMap<string,
         "span",
         { class: "rf-chronicle-sentence" },
         el("b", { class: "rf-chronicle-name" }, actor?.name ?? "System"),
-        el("span", { class: "rf-chronicle-verb" }, " recorded "),
-        el("span", { class: "rf-chronicle-object" }, `${events.length} system events`),
+        el("span", { class: "rf-chronicle-verb" }, " · "),
+        el("span", { class: "rf-chronicle-object" }, relayText("commandSystemEvents").replace("{count}", countLabel(events.length))),
       ),
-      el("span", { class: "rf-chronicle-detail" }, "低リスクのため折りたたみ済み"),
+      el("span", { class: "rf-chronicle-detail" }, relayText("commandLowRisk")),
     ),
   );
   return el("li", { class: "rf-chronicle-item" }, el("details", { class: "rf-chronicle-group" }, summary, details));
@@ -103,7 +105,7 @@ export function executionChronicle(
 ): HTMLElement {
   return el(
     "ol",
-    { class: "rf-chronicle", "aria-label": "Execution Chronicle", "aria-live": "polite" },
+    { class: "rf-chronicle", "aria-label": relayText("commandHistory"), "aria-live": "polite" },
     ...group(events).map((entry) => (
       entry.type === "group"
         ? groupRow(entry.events, actors)
@@ -132,32 +134,34 @@ export function chronicleStrip(
     {
       type: "button",
       class: "rf-icon-button rf-chronicle-toggle",
+      "data-command-control": "history-toggle",
+      "aria-controls": "rf-command-history",
       "aria-expanded": options.expanded ? "true" : "false",
-      title: options.expanded ? "Collapse Execution Chronicle" : "Expand Execution Chronicle",
+      title: relayText(options.expanded ? "commandHideHistory" : "commandShowHistory"),
     },
-    el("span", { class: "rf-visually-hidden" }, options.expanded ? "Collapse Execution Chronicle" : "Expand Execution Chronicle"),
+    el("span", { class: "rf-visually-hidden" }, relayText(options.expanded ? "commandHideHistory" : "commandShowHistory")),
     el("span", { class: "rf-chevron-mark", "aria-hidden": "true" }),
   );
   toggle.addEventListener("click", options.onToggle);
 
   const viewAll = el(
     "button",
-    { type: "button", class: "rf-quiet-button rf-chronicle-viewall" },
-    "View all",
+    { type: "button", class: "rf-quiet-button rf-chronicle-viewall", "data-command-control": "history-all", "aria-controls": "rf-command-history", "aria-expanded": String(options.expanded) },
+    relayText(options.expanded ? "commandHideHistory" : "commandShowHistory"),
     el("span", { class: "rf-chevron-inline", "aria-hidden": "true" }),
   );
   viewAll.addEventListener("click", options.onToggle);
 
   return el(
     "section",
-    { class: "rf-chronicle-strip", "aria-label": "Execution Chronicle" },
+    { class: "rf-chronicle-strip", "aria-label": relayText("commandHistory") },
     toggle,
-    el("span", { class: "rf-region-label" }, "Execution Chronicle"),
+    el("span", { class: "rf-region-label" }, relayText("commandHistory")),
     options.newCount > 0
-      ? el("span", { class: "rf-chronicle-new" }, `${options.newCount} new`)
+      ? el("span", { class: "rf-chronicle-new" }, `${relayText("new")} · ${countLabel(options.newCount)}`)
       : null,
     latest === undefined
-      ? el("span", { class: "rf-chronicle-empty" }, "履歴はまだありません")
+      ? el("span", { class: "rf-chronicle-empty" }, relayText("battleNoHistory"))
       : el(
         "span",
         { class: "rf-chronicle-latest" },
@@ -166,7 +170,7 @@ export function chronicleStrip(
         el(
           "span",
           { class: "rf-chronicle-sentence" },
-          el("b", { class: "rf-chronicle-name" }, actor?.name ?? "Unknown"),
+          el("b", { class: "rf-chronicle-name" }, actor?.name ?? relayText("unknown")),
           el("span", { class: "rf-chronicle-verb" }, ` ${latest.verb} `),
           el("span", { class: "rf-chronicle-object" }, latest.object),
         ),

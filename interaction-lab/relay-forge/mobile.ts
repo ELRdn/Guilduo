@@ -23,7 +23,6 @@ import {
   type Actor,
   type CommandModel,
   type EvidenceArtifact,
-  formatWaiting,
   type Intervention,
   type SelectedQuestView,
 } from "./model.ts";
@@ -32,9 +31,12 @@ import { el } from "./primitives/dom.ts";
 import { externalCheck } from "./primitives/external-check.ts";
 import { questContext } from "./primitives/quest-context.ts";
 import { relayText } from "./relay-copy.ts";
-import type { QuestActionId, QuestActionState } from "./quest-actions.ts";
+import { questActionLabel, type QuestActionId, type QuestActionState } from "./quest-actions.ts";
+import { t } from "../../i18n.ts";
+import { countLabel, elapsedLabel } from "./screens/screen-state.ts";
 
 export interface MobileCallbacks {
+  readonly onRefreshWorkspace?: () => void;
   readonly onExternalChecked?: (value: boolean) => void;
   readonly onInbox?: (trigger: HTMLElement) => void;
   readonly onSelect: (questId: string, trigger: HTMLElement) => void;
@@ -62,6 +64,7 @@ export interface MobileState {
   readonly supportingOpen: boolean;
   readonly chronicleOpen: boolean;
   readonly writeLocked: boolean;
+  readonly syncState?: CommandModel["syncState"];
   /** `null` when the decision may run; otherwise the reason it may not. */
   readonly blockedReason: string | null;
   /** Short verification summary derived from the real Evidence result. */
@@ -78,11 +81,11 @@ export interface MobileState {
   readonly loading: boolean;
 }
 
-const SEVERITY_LABEL: Readonly<Record<Intervention["severity"], string>> = {
-  blocked: "Blocked",
-  review: "Review",
-  waiting: "Waiting",
-};
+const SEVERITY_LABEL = {
+  blocked: "stateBlocked",
+  review: "stateReview",
+  waiting: "waiting",
+} as const;
 
 /* ------------------------------------------------------------------ *
  * Header
@@ -90,8 +93,12 @@ const SEVERITY_LABEL: Readonly<Record<Intervention["severity"], string>> = {
 
 function mobileHeader(state: MobileState, callbacks: MobileCallbacks): HTMLElement {
   const attention = state.model.interventions.length;
+  const syncState = state.syncState ?? state.model.syncState;
+  const syncLabel = syncState === "stale" ? relayText("statusStale") : syncState === "error" ? relayText("loadFailed") : t(`sync.${syncState}`);
   const inbox = el("button", { type: "button", class: "rf-quiet-button rf-human-inbox-trigger" }, `${relayText("inbox")} · ${state.humanPending || 0}`);
   inbox.addEventListener("click", () => callbacks.onInbox?.(inbox));
+  const sync = el(callbacks.onRefreshWorkspace ? "button" : "span", { class:"rf-m-sync", "data-state":syncState, ...(callbacks.onRefreshWorkspace ? { type:"button", title:relayText("refresh"), "aria-label":`${relayText("refresh")} · ${syncLabel}`, disabled:syncState === "syncing" } : {}) }, `${syncLabel} · ${state.model.lastSyncLabel}`);
+  if (callbacks.onRefreshWorkspace) sync.addEventListener("click", callbacks.onRefreshWorkspace);
   return el(
     "header",
     { class: "rf-m-header" },
@@ -104,13 +111,9 @@ function mobileHeader(state: MobileState, callbacks: MobileCallbacks): HTMLEleme
         "span",
         { class: "rf-m-attention" },
         el("span", { class: "rf-m-attention-count" }, String(attention)),
-        el("span", { class: "rf-m-attention-label" }, "要判断"),
+        el("span", { class: "rf-m-attention-label" }, relayText("awaitingDecision")),
       ),
-      el(
-        "span",
-        { class: "rf-m-sync", "data-state": state.writeLocked ? "stale" : state.model.syncState },
-        state.writeLocked ? `Stale · ${state.model.lastSyncLabel}` : `Synced · ${state.model.lastSyncLabel}`,
-      ),
+      sync,
     ),
   );
 }
@@ -124,16 +127,17 @@ function mobileShelf(state: MobileState, callbacks: MobileCallbacks): HTMLElemen
     const rank: Record<Intervention["severity"], number> = { blocked: 0, review: 1, waiting: 2 };
     return rank[left.severity] - rank[right.severity];
   });
+  const selectedIndex = ordered.findIndex(item => item.questId === state.selectedQuestId);
+  const tabIndex = Math.max(0, selectedIndex);
 
   const track = el(
     "ul",
     {
       class: "rf-m-shelf-track",
       role: "listbox",
-      "aria-label": "Attention Shelf",
-      "aria-activedescendant": state.selectedQuestId === null ? null : `rf-m-shelf-${state.selectedQuestId}`,
+      "aria-label": relayText("commandAttention"),
     },
-    ...ordered.map((intervention) => {
+    ...ordered.map((intervention, index) => {
       const owner = state.model.actors.get(intervention.ownerActorId);
       const selected = state.selectedQuestId === intervention.questId;
       const card = el(
@@ -143,6 +147,7 @@ function mobileShelf(state: MobileState, callbacks: MobileCallbacks): HTMLElemen
           class: "rf-m-shelf-card",
           role: "option",
           id: `rf-m-shelf-${intervention.questId}`,
+          tabindex: index === tabIndex ? 0 : -1,
           "data-severity": intervention.severity,
           "data-selected": selected ? "true" : "false",
           "aria-selected": selected ? "true" : "false",
@@ -152,9 +157,9 @@ function mobileShelf(state: MobileState, callbacks: MobileCallbacks): HTMLElemen
           "span",
           { class: "rf-m-shelf-head" },
           el("span", { class: "rf-shelf-mark", "data-severity": intervention.severity, "aria-hidden": "true" }),
-          el("span", { class: "rf-shelf-severity" }, SEVERITY_LABEL[intervention.severity]),
-          selected ? el("span", { class: "rf-shelf-selected" }, "SELECTED") : null,
-          el("span", { class: "rf-shelf-age" }, formatWaiting(intervention.waitingMinutes)),
+          el("span", { class: "rf-shelf-severity" }, relayText(SEVERITY_LABEL[intervention.severity])),
+          selected ? el("span", { class: "rf-shelf-selected" }, relayText("selected")) : null,
+          el("span", { class: "rf-shelf-age" }, elapsedLabel(intervention.waitingMinutes)),
         ),
         el("span", { class: "rf-m-shelf-reason" }, intervention.reason),
         el(
@@ -165,7 +170,15 @@ function mobileShelf(state: MobileState, callbacks: MobileCallbacks): HTMLElemen
         ),
       );
       card.addEventListener("click", () => callbacks.onSelect(intervention.questId, card));
-      return el("li", { class: "rf-m-shelf-item" }, card);
+      card.addEventListener("keydown", event => {
+        const target = event.key === "Home" ? 0 : event.key === "End" ? ordered.length - 1
+          : event.key === "ArrowRight" || event.key === "ArrowDown" ? Math.min(ordered.length - 1, index + 1)
+          : event.key === "ArrowLeft" || event.key === "ArrowUp" ? Math.max(0, index - 1) : null;
+        if (target === null) return;
+        event.preventDefault();
+        track.querySelectorAll<HTMLButtonElement>(".rf-m-shelf-card")[target]?.click();
+      });
+      return el("li", { class: "rf-m-shelf-item", role: "presentation" }, card);
     }),
   );
 
@@ -179,27 +192,27 @@ function mobileShelf(state: MobileState, callbacks: MobileCallbacks): HTMLElemen
   };
   const previous = el(
     "button",
-    { type: "button", class: "rf-icon-button", title: "前の介入" },
-    el("span", { class: "rf-visually-hidden" }, "前の介入"),
+    { type: "button", class: "rf-icon-button", disabled: ordered.length === 0 || selectedIndex === 0, title: relayText("commandPrevious") },
+    el("span", { class: "rf-visually-hidden" }, relayText("commandPrevious")),
     el("span", { class: "rf-chevron-inline rf-m-prev", "aria-hidden": "true" }),
   );
   previous.addEventListener("click", () => step(-1));
   const forward = el(
     "button",
-    { type: "button", class: "rf-icon-button", title: "次の介入" },
-    el("span", { class: "rf-visually-hidden" }, "次の介入"),
+    { type: "button", class: "rf-icon-button", disabled: ordered.length === 0 || selectedIndex === ordered.length - 1, title: relayText("commandNext") },
+    el("span", { class: "rf-visually-hidden" }, relayText("commandNext")),
     el("span", { class: "rf-chevron-inline", "aria-hidden": "true" }),
   );
   forward.addEventListener("click", () => step(1));
 
   return el(
     "section",
-    { class: "rf-m-shelf", "aria-label": "Attention Shelf" },
+    { class: "rf-m-shelf", "aria-label": relayText("commandAttention") },
     el(
       "div",
       { class: "rf-m-section-head" },
-      el("h2", { class: "rf-region-label" }, "Attention Shelf"),
-      el("span", { class: "rf-region-count" }, `${state.model.interventions.length} ${state.model.interventions.length === 1 ? "intervention" : "interventions"}`),
+      el("h2", { class: "rf-region-label" }, relayText("commandAttention")),
+      el("span", { class: "rf-region-count" }, countLabel(ordered.length)),
       el("span", { class: "rf-m-shelf-controls" }, previous, forward),
     ),
     track,
@@ -218,25 +231,26 @@ function mobileSelected(
   const holder = view.responsibility.find((step) => step.state === "review" || step.state === "blocked" || step.state === "executing")
     ?? view.responsibility[view.responsibility.length - 1];
   const holderActor = state.model.actors.get(holder?.actorId ?? "");
+  const hasPreview = view.evidence.find(artifact => artifact.primary)?.preview !== undefined;
 
   const questFlow = el(
     "button",
     { type: "button", class: "rf-secondary-button rf-m-questflow", "aria-haspopup": "dialog" },
-    "Quest flow",
+    relayText("commandFlow"),
   );
   questFlow.addEventListener("click", () => callbacks.onOpenQuestFlow(questFlow));
 
   const reviewOutput = el(
     "button",
-    { type: "button", class: "rf-review-button rf-m-review", "aria-expanded": state.evidenceOpen ? "true" : "false" },
+    { type: "button", class: "rf-review-button rf-m-review", id: "rf-m-review", "aria-expanded": hasPreview ? String(state.evidenceOpen) : null, "aria-controls": hasPreview ? "rf-m-output" : null, disabled: !hasPreview },
     el("span", { class: "rf-review-glyph", "aria-hidden": "true" }),
-    state.evidenceOpen ? "Hide output" : "Review output",
+    relayText(state.evidenceOpen ? "commandHideOutput" : "commandReviewOutput"),
   );
   reviewOutput.addEventListener("click", callbacks.onToggleEvidence);
 
   return el(
     "section",
-    { class: "rf-m-selected", "aria-label": `Selected Quest ${view.ref}` },
+    { class: "rf-m-selected", "aria-label": `${relayText("selectedQuest")} ${view.ref}` },
     el(
       "div",
       { class: "rf-selected-eyebrow" },
@@ -252,7 +266,7 @@ function mobileSelected(
       el(
         "span",
         { class: "rf-m-holder-copy" },
-        el("span", { class: "rf-m-holder-name" }, holderActor?.name ?? "未割当"),
+        el("span", { class: "rf-m-holder-name" }, holderActor?.name ?? relayText("unassigned")),
         el("span", { class: "rf-m-holder-state" }, holder?.stateLabel ?? ""),
       ),
     ),
@@ -270,8 +284,8 @@ function mobileRelay(view: SelectedQuestView, actors: ReadonlyMap<string, Actor>
   } as const;
   return el(
     "section",
-    { class: "rf-m-relay", "aria-label": "Responsibility relay" },
-    el("h2", { class: "rf-region-label" }, "Responsibility"),
+    { class: "rf-m-relay", "aria-label": relayText("commandResponsibility") },
+    el("h2", { class: "rf-region-label" }, relayText("commandResponsibility")),
     el(
       "ol",
       { class: "rf-m-relay-list" },
@@ -326,27 +340,29 @@ function mobileEvidence(
     {
       type: "button",
       class: "rf-quiet-button rf-m-supporting-toggle",
+      id: "rf-m-supporting-toggle",
+      "aria-controls": "rf-m-supporting",
       "aria-expanded": state.supportingOpen ? "true" : "false",
       disabled: supporting.length === 0 ? true : null,
     },
-    `Supporting evidence (${supporting.length})`,
+    `${relayText("commandSupportingEvidence")} (${countLabel(supporting.length)})`,
     el("span", { class: "rf-chevron-inline", "aria-hidden": "true" }),
   );
   supportingToggle.addEventListener("click", callbacks.onToggleSupporting);
 
   return el(
     "section",
-    { class: "rf-m-evidence", "aria-label": "Primary evidence" },
-    el("h2", { class: "rf-region-label" }, "Primary Evidence"),
+    { class: "rf-m-evidence", "aria-label": relayText("commandPrimaryEvidence") },
+    el("h2", { class: "rf-region-label" }, relayText("commandPrimaryEvidence")),
     primary === null
-      ? el("p", { class: "rf-m-evidence-empty" }, "この Quest に提出された成果物はまだありません")
+      ? el("p", { class: "rf-m-evidence-empty" }, relayText("commandNoOutput"))
       : el(
         "div",
         { class: "rf-m-evidence-primary", "data-verdict": preview?.verdict ?? "none" },
         el(
           "div",
           { class: "rf-m-evidence-head" },
-          el("span", { class: "rf-evidence-badge" }, "PRIMARY"),
+          el("span", { class: "rf-evidence-badge" }, relayText("commandPrimary")),
           el("span", { class: "rf-evidence-name" }, primary.name),
           primary.verified === null
             ? null
@@ -365,14 +381,14 @@ function mobileEvidence(
             preview.verdict === "unavailable" ? preview.unavailableReason : preview.verdictLabel,
           ),
         // The expanded body is the same decision-grade content desktop shows.
-        !state.evidenceOpen || preview === undefined
+        preview === undefined
           ? null
           : el(
             "div",
-            { class: "rf-m-evidence-detail" },
-            el("p", { class: "rf-details-sub" }, "変更された field"),
+            { class: "rf-m-evidence-detail", id: "rf-m-output", hidden: !state.evidenceOpen },
+            el("p", { class: "rf-details-sub" }, relayText("commandChangedFields")),
             preview.changed.length === 0
-              ? el("p", { class: "rf-preview-empty" }, "差分はありません")
+              ? el("p", { class: "rf-preview-empty" }, relayText("commandNoChanges"))
               : el(
                 "ul",
                 { class: "rf-preview-changes" },
@@ -383,7 +399,7 @@ function mobileEvidence(
                   el("span", { class: "rf-preview-change-detail" }, change.detail),
                 )),
               ),
-            el("p", { class: "rf-details-sub" }, "検証結果"),
+            el("p", { class: "rf-details-sub" }, relayText("commandChecks")),
             el(
               "ul",
               { class: "rf-preview-checks" },
@@ -399,14 +415,12 @@ function mobileEvidence(
               )),
             ),
             el("p", { class: "rf-preview-affected" }, preview.affected.length === 0
-              ? "影響を受ける Quest はありません"
-              : `${preview.affected.join(", ")} が待機中`),
+              ? relayText("noWaitingQuests")
+              : relayText("commandAffectedWaiting").replace("{quests}", preview.affected.join(", "))),
           ),
       ),
     supportingToggle,
-    state.supportingOpen && supporting.length > 0
-      ? el("ul", { class: "rf-m-evidence-list" }, ...supporting.map(evidenceLine))
-      : null,
+    el("ul", { class: "rf-m-evidence-list", id: "rf-m-supporting", hidden: !state.supportingOpen || supporting.length === 0 }, ...supporting.map(evidenceLine)),
   );
 }
 
@@ -418,24 +432,26 @@ function mobileChronicle(state: MobileState, callbacks: MobileCallbacks): HTMLEl
     {
       type: "button",
       class: "rf-quiet-button rf-m-chronicle-toggle",
+      id: "rf-m-chronicle-toggle",
+      "aria-controls": "rf-m-history",
       "aria-expanded": state.chronicleOpen ? "true" : "false",
     },
-    state.chronicleOpen ? "Hide history" : "View history",
+    relayText(state.chronicleOpen ? "commandHideHistory" : "commandShowHistory"),
     el("span", { class: "rf-chevron-inline", "aria-hidden": "true" }),
   );
   toggle.addEventListener("click", callbacks.onToggleChronicle);
 
   return el(
     "section",
-    { class: "rf-m-chronicle", "aria-label": "Execution Chronicle" },
+    { class: "rf-m-chronicle", "aria-label": relayText("commandHistory") },
     el(
       "div",
       { class: "rf-m-section-head" },
-      el("h2", { class: "rf-region-label" }, "Execution Chronicle"),
+      el("h2", { class: "rf-region-label" }, relayText("commandHistory")),
       toggle,
     ),
     latest === undefined
-      ? el("p", { class: "rf-m-evidence-empty" }, "履歴はまだありません")
+      ? el("p", { class: "rf-m-evidence-empty" }, relayText("battleNoHistory"))
       : el(
         "div",
         { class: "rf-m-chronicle-latest" },
@@ -444,15 +460,14 @@ function mobileChronicle(state: MobileState, callbacks: MobileCallbacks): HTMLEl
         el(
           "span",
           { class: "rf-chronicle-sentence" },
-          el("b", { class: "rf-chronicle-name" }, actor?.name ?? "Unknown"),
+          el("b", { class: "rf-chronicle-name" }, actor?.name ?? relayText("unknown")),
           el("span", { class: "rf-chronicle-verb" }, ` ${latest.verb} `),
           el("span", { class: "rf-chronicle-object" }, latest.object),
         ),
       ),
-    state.chronicleOpen
-      ? el(
+    el(
         "ol",
-        { class: "rf-m-chronicle-list" },
+        { class: "rf-m-chronicle-list", id: "rf-m-history", hidden: !state.chronicleOpen },
         ...state.model.chronicle.slice(1, 7).map((event) => {
           const eventActor = state.model.actors.get(event.actorId);
           return el(
@@ -463,8 +478,7 @@ function mobileChronicle(state: MobileState, callbacks: MobileCallbacks): HTMLEl
             el("span", { class: "rf-chronicle-sentence" }, `${eventActor?.name ?? ""} ${event.verb} ${event.object}`),
           );
         }),
-      )
-      : null,
+      ),
   );
 }
 
@@ -493,8 +507,8 @@ export function mobileDecisionBar(
   if (view === null) {
     return el(
       "div",
-      { class: "rf-m-decision", "data-shape": "compact", role: "region", "aria-label": "Decision" },
-      el("p", { class: "rf-decision-status" }, "Quest を選択してください"),
+      { class: "rf-m-decision", "data-shape": "compact", role: "region", "aria-label": relayText("decisionTitle") },
+      el("p", { class: "rf-decision-status" }, relayText("chooseQuest")),
     );
   }
 
@@ -512,23 +526,20 @@ export function mobileDecisionBar(
     );
 
   if (state.questActions.mode !== "handoff-decision") {
-    const labels: Readonly<Record<QuestActionId, string>> = {
-      start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive", reply: relayText("inbox"),
-    };
     const buttons = state.questActions.actions.map((action, index) => {
       const button = el("button", {
         type: "button",
         class: index === 0 ? "rf-decision-approve" : "rf-secondary-button",
         disabled: state.submitting || state.writeLocked ? true : null,
         "data-quest-action": action,
-      }, labels[action]);
+      }, questActionLabel(action));
       button.addEventListener("click", () => callbacks.onQuestAction(action));
       return button;
     });
     return el(
       "div",
-      { class: "rf-m-decision", "data-shape": buttons.length > 0 ? "ready" : "compact", role: "region", "aria-label": "Task actions" },
-      el("div", { class: "rf-m-decision-copy" }, el("p", { class: "rf-decision-status" }, state.questActions.statusLabel)),
+      { class: "rf-m-decision", "data-shape": buttons.length > 0 ? "ready" : "compact", role: "region", "aria-label": relayText("taskActions") },
+      el("div", { class: "rf-m-decision-copy" }, el("p", { class: "rf-decision-status" }, state.submitting ? state.resultMessage : state.questActions.statusLabel)),
       result,
       buttons.length === 0 ? null : el("div", { class: "rf-decision-actions rf-task-actions" }, ...buttons),
     );
@@ -538,8 +549,9 @@ export function mobileDecisionBar(
       class: "rf-revision-input",
       id: "rf-m-revision-reason",
       rows: 2,
+      disabled: state.submitting,
       maxlength: 500,
-      placeholder: "どこを修正してほしいかを書いてください",
+      placeholder: relayText("revisionPlaceholder"),
       "aria-invalid": state.revisionError === null ? null : "true",
       "aria-describedby": state.revisionError === null ? null : "rf-m-revision-error",
     }) as HTMLTextAreaElement;
@@ -554,18 +566,18 @@ export function mobileDecisionBar(
         disabled: state.submitting || reason !== null ? true : null,
         "aria-busy": state.submitting ? "true" : null,
       },
-      state.submitting ? "送信中…" : "Send revision request",
+      state.submitting ? relayText("sending") : relayText("sendRevision"),
     );
     send.addEventListener("click", callbacks.onSubmitRevision);
 
-    const cancel = el("button", { type: "button", class: "rf-secondary-button" }, "Cancel");
+    const cancel = el("button", { type: "button", class: "rf-secondary-button", disabled: state.submitting }, relayText("dialogCancel"));
     cancel.addEventListener("click", callbacks.onCancelRevision);
 
     return el(
       "div",
-      { class: "rf-m-decision", "data-shape": "revision", role: "region", "aria-label": "Decision" },
+      { class: "rf-m-decision", "data-shape": "revision", role: "region", "aria-label": relayText("decisionTitle") },
       externalCheck(state.externalChecked === true, state.submitting || state.writeLocked, callbacks.onExternalChecked),
-      el("label", { class: "rf-revision-label", for: "rf-m-revision-reason" }, "修正内容"),
+      el("label", { class: "rf-revision-label", for: "rf-m-revision-reason" }, relayText("revisionContent")),
       field,
       state.revisionError === null
         ? null
@@ -578,19 +590,13 @@ export function mobileDecisionBar(
   // Compact: the decision is not yet available, so the bar stays one line and
   // points at what unblocks it instead of occupying the viewport.
   if (reason !== null) {
-    const jump = el(
-      "button",
-      { type: "button", class: "rf-quiet-button rf-m-decision-jump" },
-      state.evidenceOpen ? "Evidence へ移動" : "Review output",
-    );
-    jump.addEventListener("click", callbacks.onToggleEvidence);
     return el(
       "div",
-      { class: "rf-m-decision", "data-shape": "checking", role: "region", "aria-label": "Decision" },
+      { class: "rf-m-decision", "data-shape": "checking", role: "region", "aria-label": relayText("decisionTitle") },
       el(
         "div",
         { class: "rf-m-decision-copy" },
-        el("p", { class: "rf-decision-status" }, view.decision.statusLabel),
+        el("p", { class: "rf-decision-status" }, relayText("humanDecision")),
         el("p", { class: "rf-decision-blocked", role: "status" }, reason),
       ),
       result,
@@ -607,27 +613,27 @@ export function mobileDecisionBar(
       "aria-busy": state.submitting ? "true" : null,
     },
     el("span", { class: "rf-review-glyph", "aria-hidden": "true" }),
-    state.submitting ? "送信中…" : view.decision.approveLabel,
+    state.submitting ? relayText("sending") : relayText("approveHandoff"),
   );
   approve.addEventListener("click", callbacks.onApprove);
 
   const revise = el(
     "button",
     { type: "button", class: "rf-secondary-button", disabled: state.submitting ? true : null },
-    view.decision.reviseLabel,
+    relayText("requestRevision"),
   );
   revise.addEventListener("click", callbacks.onRequestRevision);
 
   return el(
     "div",
-    { class: "rf-m-decision", "data-shape": "ready", role: "region", "aria-label": "Decision" },
+    { class: "rf-m-decision", "data-shape": "ready", role: "region", "aria-label": relayText("decisionTitle") },
     externalCheck(state.externalChecked === true, state.submitting || state.writeLocked, callbacks.onExternalChecked),
     el(
       "div",
       { class: "rf-m-decision-copy" },
-      el("p", { class: "rf-decision-status" }, view.decision.statusLabel),
+      el("p", { class: "rf-decision-status" }, relayText("humanDecision")),
       state.verification === null
-        ? el("p", { class: "rf-decision-impact" }, view.decision.impactLabel)
+        ? el("p", { class: "rf-decision-impact" }, relayText("handoffApprovalImpact"))
         : el("p", { class: "rf-decision-verified" }, state.verification),
     ),
     result,
@@ -649,14 +655,14 @@ export function mobileCommand(state: MobileState, callbacks: MobileCallbacks): H
       el("div", { class: "rf-skeleton", "data-variant": "queue", "aria-hidden": "true" },
         el("span", { class: "rf-skeleton-row" }),
         el("span", { class: "rf-skeleton-row" })),
-      el("p", { class: "rf-visually-hidden", role: "status" }, "Quest を読み込んでいます"),
+      el("p", { class: "rf-visually-hidden", role: "status" }, relayText("statusLoading")),
     ));
   } else if (state.model.interventions.length === 0 && state.view === null) {
     body.push(el(
       "section",
       { class: "rf-m-selected" },
-      el("p", { class: "rf-state-title" }, "介入待ちの作業はありません"),
-      el("p", { class: "rf-state-body" }, "Agent の実行は継続しています。Quest flow から進行中の Quest を確認できます。"),
+      el("p", { class: "rf-state-title" }, relayText("commandNoAttention")),
+      el("p", { class: "rf-state-body" }, relayText("commandBrowseHint")),
     ));
   } else if (state.view !== null) {
     body.push(mobileSelected(state.view, state, callbacks));

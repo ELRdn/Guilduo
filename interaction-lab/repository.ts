@@ -277,14 +277,38 @@ export class QuestForgeRepository {
         if (error instanceof QuestForgeApiError && error.status === 404) return legacyLoad();
         throw error;
       }) : await legacyLoad();
-    const snapshot = this.snapshotFromEntries(questPage, optionalEntries);
+    const completePage = await this.listAllQuests(questPage);
+    const snapshot = this.snapshotFromEntries(completePage, optionalEntries);
     if (options.deferPanels) snapshot.loadDeferred = async () => {
       const entries = await Promise.allSettled(loaders.map((load, index) => index === 3 || index === 5
         ? optionalEntries[index].status === "fulfilled" ? Promise.resolve(optionalEntries[index].value) : Promise.reject(optionalEntries[index].reason)
         : load()));
-      return this.snapshotFromEntries(questPage, entries);
+      return this.snapshotFromEntries(completePage, entries);
     };
     return snapshot;
+  }
+
+  async listAllQuests(firstPage?: JsonRecord): Promise<JsonRecord> {
+    const quests: unknown[] = [];
+    const cursors = new Set<string>();
+    const ids = new Set<string>();
+    let cursor = "";
+    let page = firstPage;
+    do {
+      page ??= await this.request<JsonRecord>(`/v1/quests?view=all&limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      if (!Array.isArray(page.quests) || (page.nextCursor != null && typeof page.nextCursor !== "string")) throw new QuestForgeApiError(502, "invalid_quest_page", "Invalid Quest page");
+      for (const raw of page.quests) {
+        const quest = raw as { id?: unknown } | null;
+        if (!quest || typeof quest.id !== "string" || ids.has(quest.id)) throw new QuestForgeApiError(502, "invalid_quest_page", "Invalid or repeated Quest");
+        ids.add(quest.id);
+        quests.push(raw);
+      }
+      cursor = typeof page.nextCursor === "string" ? page.nextCursor : "";
+      if (cursor && cursors.has(cursor)) throw new QuestForgeApiError(502, "invalid_quest_page", "Repeated Quest cursor");
+      cursors.add(cursor);
+      page = undefined;
+    } while (cursor);
+    return { quests, total:quests.length };
   }
 
   private async loadWorkspaceBootstrap(): Promise<[JsonRecord, PromiseSettledResult<JsonRecord>[]]> {
@@ -394,6 +418,10 @@ export class QuestForgeRepository {
     return this.request(`/v1/quests/${encodeURIComponent(questId)}/score`, { method: "POST", body: JSON.stringify({ direction, source: "interaction-lab" }) });
   }
 
+  async getBattleSession(): Promise<JsonRecord> {
+    return this.request("/v1/battle/session");
+  }
+
   async batchScoreQuests(questIds: string[], direction: "up" | "down" = "up", dryRun = true): Promise<JsonRecord> {
     return this.request("/v1/quests/batch-score", { method: "POST", body: JSON.stringify({ questIds, direction, dryRun, source: "interaction-lab" }) });
   }
@@ -476,6 +504,12 @@ export class QuestForgeRepository {
 
   async listAgentConnections(): Promise<JsonRecord> {
     return this.request("/v1/agent-connections");
+  }
+
+  async deleteMcpConnection(clientId: string): Promise<JsonRecord> {
+    // Repair any remaining legacy Agent relation before deleting history.
+    await this.revokeMcpConnection(clientId);
+    return this.request(`/v1/agent-connections/${encodeURIComponent(clientId)}/permanent`, { method: "DELETE" });
   }
 
   async revokeMcpConnection(clientId: string): Promise<JsonRecord> {

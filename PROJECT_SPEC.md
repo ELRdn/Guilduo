@@ -2,7 +2,7 @@
 
 > **English summary:** Guilduo is a Human × AI Work Platform where humans and AI agents coordinate work in the same workspace. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).
 
-最終更新: 2026-08-30
+最終更新: 2026-10-02
 対象: `0.6.0-beta.8`候補 / REST・MCP `2.7.0` / Schema `7`
 文書の位置づけ: アーキテクチャ、ドメイン、API、認証、安全性、運用の正本
 
@@ -103,6 +103,7 @@ flowchart LR
 - APIの入力・出力は`api/openapi.json`、MCPのツール契約は`api/mcp-tools.json`を正本にする。
 - `/`と`/next/`はAppwrite Authで本人を識別し、Worker RESTから本体スナップショットを取得する。ブラウザへAppwrite API Keyを渡さない。
 - Workerは短命なAppwrite JWTを検証し、サーバー専用API KeyでTablesDBを読み書きする。`user_states`の行IDはAppwrite UIDとし、直接クライアント権限を付けない。
+- 認証済みAppwriteユーザーのWorkspace初回読込では、本人の保存行とFirebase移行元が存在しない場合だけ、空のSchema 7状態を本人UIDで作成する。既存の読めない保存行・移行元、移行元の権限/通信エラーは初期化せずエラーにする。同時ログインの作成競合では保存済みの状態を読み直す。MCP/OAuthクライアントによる初期化は許可しない。
 - `user_states`と`legacy_states`の`stateJson`は必須の`longtext`列とする。スナップショットはgzip＋Base64で保存し、旧形式のJSONも読み込める状態を維持する。旧string列を想定した60,000文字制限で通常の保存・移行を拒否しない。容量対策としてQuest、履歴、報酬、移行スナップショットを間引かず、revisionによる競合検知とトランザクションを維持する。
 - Firebase移行データは`legacy_states`へ暗号学的メールハッシュをキーとして一時格納し、同じメールでの初回Appwriteログイン時に`user_states`へ一度だけ移管する。移行元は検証期間中だけロールバック用に保持する。
 - Next版のローカル保存はゲスト利用、表示設定、前回スナップショットのためだけに使う。ログイン済みユーザーの本体データを別ユーザーへ表示しない。
@@ -230,6 +231,18 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 
 ## 7. 開発・変更・リリースルール
 
+### Launch behavior and private caching (2026-10-02)
+
+- Relay Forge Quest completion uses the existing score endpoint, preserving canonical rewards and archival rules. Handoff acceptance and Human-review completion remain separate from completion of the source Quest. The UI refreshes canonical Battle state after scoring and rejects older deferred snapshots; a missing session is never replaced with demo data.
+- Editing a Quest preserves its planning state, scheduled date, unchanged assignee/handoff state and zero-minute estimate. Pending Quest and Agent writes cannot be submitted twice or cancelled by closing the editor; failures retain the draft.
+- The Service Worker bypasses authenticated requests and private API/OAuth/MCP/telemetry paths. Static Privacy, Terms and LP navigation cannot replace the cached application shell. Old caches are invalidated by the v23 upgrade. This does not enable offline private data storage or register a new Service Worker for Relay Forge.
+- `PRIVACY.md` and `TERMS.md` are the content sources for the static `/privacy/` and `/terms/` pages. Local output does not establish production availability, handling of deletion requests or legal acceptance. See `docs/launch-readiness.md`.
+- The official service operator is Radon. Public bug reports go to the existing Guilduo GitHub Issues page; individual inquiries and account/data deletion requests go to `el2radon2official@gmail.com`. Self-hosted instances publish their own operator contact. Policy pages render the canonical documents' HTTPS and mailto links without requiring JavaScript. Publishing this contact does not establish legal review or completion of a deletion request.
+
+- CI, manual Site deployment and tagged release run the existing launch verifier against the built candidate in a local preview before publication. Privacy/Terms must contain their canonical content and Radon contact links without JavaScript; signed-out entry and demo return must pass in nine languages. A failed verifier stops deployment before remote migrations, uploads or activation. This local gate does not establish live OAuth, production policy delivery or legal/operational acceptance.
+
+- Mobile Quest Flow uses a native modal dialog: background controls are excluded from accessibility and cannot receive focus. Explicit close, Escape, scrim dismissal, selection and desktop resize release modality; focus returns to the current trigger. Queued opening after disposal is ignored. Browser accessibility-tree evidence does not establish physical screen-reader acceptance.
+
 ### GUI latency repair (2026-09-07)
 
 - Relay Forge boots from Quests, profile and Agent identity; auxiliary panels load after mount and expose loading/error/retry without replacing edited Quests.
@@ -238,7 +251,7 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 - State mutations overlap the independent initial state read and transaction creation. Transactional revision recheck, staging, commit and conflict retry remain mandatory; failed attempts release the transaction. No state/Quest schema migration.
 - Optional `APPWRITE_REVISION_BATCH=true` replaces the separate transactional read with an exact revision guard replayed atomically at commit: increment by 1 capped at expected+1, decrement by 1 floored at expected, then update the full state and expected+1 revision. Failed bounds roll back the whole batch. Only known bound/conflict responses retry; uncertain failures do not. This removes one HTTP round trip without removing the revision check. The flag is off by default and release generation validates true/false; production Worker and full-release workflows forward it. A live isolated-row probe verified rollback, overlapping competing commits, persistence and cleanup; CI median storage latency was 2820ms existing vs 1733ms batch, not a GUI acceptance result. Appwrite emits multiple final-state update events; integrations must handle duplicates. See `docs/atomic-revision-batch.md` for rollout evidence and rollback.
 - CORS preflight reuse is bounded and origin-specific. Read requests have a deadline; writes are never automatically retried on timeout.
-- Public Web App HTML may be edge-cached for 120 seconds with a further 120-second background-revalidation window under the narrow request and response rules in `docs/appwrite-site-routing.md`; authenticated APIs and OAuth query URLs are excluded. The response rule only matches public 200 HTML without Set-Cookie or private/no-store/no-cache directives, and changes Cache-Control for Cloudflare only. Browser revalidation remains unchanged. Site deployment with a public origin must reject cacheable HTML before upload, because older hashed assets are not retained. Disable both rules before replacing assets and only re-enable them after verification and expiry of the previous shell (240 seconds after disable propagation).
+- Public Web App HTML uses the documented 120-second edge TTL plus 3600-second background-revalidation window (2026-09-21 policy in `docs/appwrite-site-routing.md`). Only public 200 HTML without Set-Cookie or private/no-store/no-cache directives qualifies; authenticated APIs and OAuth query URLs are excluded, and browser revalidation remains unchanged. Deployment must disable both HTML rules, verify DYNAMIC/BYPASS, retain previous hashed assets for 48 hours, validate the archive and start both old and new HTML after upload before re-enabling caching. Waiting 240 seconds alone does not establish safety for the 3720-second edge shell window.
 
 
 - 共有ドメイン、API、MCP、Appwrite Schemaを変更する前に、この文書を更新する。
@@ -271,3 +284,13 @@ DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互�
 | 作戦盤 | operations board |
 | 実行面 | execution plane |
 | 正本 | source of truth |
+
+### Relay Forge workspace refresh (2026-10-02)
+
+- The production Shell refreshes canonical REST snapshots every 30 seconds while visible and on focus, visibility return, online recovery, or explicit retry. It does not upload a whole client state. All Quest pages are read before applying a snapshot.
+- Existing data stays visible during refresh. Shared write guards prevent mutation during refresh, offline state or a failed primary read. Editors and active writes postpone automatic refresh; a detached mount never applies a late response. Selection, drafts, focus and cached authenticated avatar URLs are retained.
+- Failed primary reads keep the previous snapshot and offer retry. Optional panel failures retain previous panel data and stay explicit. Recovery uses reads only and never repeats an uncertain write.
+- A successful Appwrite account response must contain a nonblank string account ID. Invalid identity metadata is an authentication connection error: it clears cached identity/JWT and cannot release prepared workspace data. Speculative token subjects remain matching hints, never identity authority.
+- Self and Human assignments represent their actual single holder in Command; they do not imply an Agent handoff chain. Other Human IDs and saved names remain distinct from the signed-in account, without borrowing its authenticated avatar. Not-started and completed holders retain their real state.
+
+- Public policy output wraps the canonical content in Cloudflare email_off comments so the deliberately published operator email remains readable and mailto links work without JavaScript after edge processing. Local build checks preserve both comments; production checks validate the actual edge-delivered links. This exception is limited to public policy content.

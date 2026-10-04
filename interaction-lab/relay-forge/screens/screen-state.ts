@@ -7,6 +7,9 @@
  * project.
  */
 
+import { formatDate, getLocale, t } from "../../../i18n.ts";
+import { relayText } from "../relay-copy.ts";
+
 export type ScreenId = "quests" | "network" | "party" | "battle" | "connections" | "skills";
 
 /**
@@ -40,32 +43,27 @@ export interface ScreenNotice {
   readonly action?: { readonly label: string; readonly onAct: () => void };
 }
 
-/**
- * Everything a screen renderer is allowed to reach. Notably it does NOT get the
- * shell's state object: a screen cannot mutate selection or navigation directly,
- * it asks through these callbacks, which keeps the single-selection rule of
- * NEWDESIGNv2 section 10 intact across six screens instead of one.
- */
-
-/** `12` → `12件`. Kept here so counts read identically on every screen. */
+/** Counts use the shared ICU catalogue, including locale-specific plurals. */
 export function countLabel(value: number): string {
-  return `${value}件`;
+  return t("relay.count", { count: value });
 }
 
-/** Minutes since an event, phrased the way Command's Attention Shelf phrases it. */
+/** Elapsed duration since an event, in the selected locale. */
 export function elapsedLabel(minutes: number): string {
-  if (minutes < 1) return "たった今";
-  if (minutes < 60) return `${Math.round(minutes)}分`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}時間${Math.round(minutes % 60)}分`;
-  return `${Math.floor(hours / 24)}日`;
+  if (!Number.isFinite(minutes)) return "—";
+  if (minutes < 1) return relayText("justNow");
+  const wholeMinutes = Math.round(minutes);
+  const duration = (value: number, unit: "minute" | "hour" | "day") => new Intl.NumberFormat(getLocale(), { style: "unit", unit, unitDisplay: "short" }).format(value);
+  if (wholeMinutes < 60) return duration(wholeMinutes, "minute");
+  const hours = Math.floor(wholeMinutes / 60);
+  if (hours >= 24) return duration(Math.floor(hours / 24), "day");
+  return wholeMinutes % 60 === 0 ? duration(hours, "hour") : `${duration(hours, "hour")} ${duration(wholeMinutes % 60, "minute")}`;
 }
 
-/** ISO instant → `MM/DD HH:MM`, or `—` when the field is genuinely absent. */
+/** Locale-aware month/day/time, or `—` when absent or invalid. */
 export function instantLabel(iso: string): string {
   if (iso === "") return "—";
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "—";
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${pad(at.getMonth() + 1)}/${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  return formatDate(at, { year: undefined, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }

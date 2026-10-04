@@ -57,6 +57,14 @@ jobs:
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+      - name: Verify launch candidate before deployment
+        shell: bash
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4175 --strictPort > /tmp/guilduo-launch-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in {1..30}; do curl -fsS http://127.0.0.1:4175/privacy/ >/dev/null && break; sleep 1; done
+          npm run launch:verify -- http://127.0.0.1:4175 --built
       - name: Verify Web API route before enabling browser transport
         if: vars.WEB_API_BROWSER_ENABLED == 'true'
         run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"

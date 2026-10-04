@@ -7,6 +7,7 @@
  */
 
 import { el } from "../primitives/dom.ts";
+import { relayText } from "../relay-copy.ts";
 import {
   type SkillGroupView,
   type SkillToolView,
@@ -22,6 +23,8 @@ import {
   screenRegion,
   screenSkeleton,
   stateChip,
+  searchField,
+  countLabel,
 } from "./runtime.ts";
 
 export * from "./skills-model.ts";
@@ -34,8 +37,8 @@ export interface SkillsCallbacks {
 
 function toolAvailability(tool: SkillToolView): HTMLElement {
   return tool.availability === "available"
-    ? stateChip({ tone: "done", label: "Available", mark: "OK" })
-    : stateChip({ tone: "neutral", label: "Unavailable", mark: "--" });
+    ? stateChip({ tone: "done", label: relayText("skillsAvailable"), mark: "OK" })
+    : stateChip({ tone: "neutral", label: relayText("skillsUnavailable"), mark: "--" });
 }
 
 function toolRow(tool: SkillToolView): HTMLElement {
@@ -66,10 +69,10 @@ function groupCard(
       class: "rf-skills-group-toggle",
       "aria-expanded": expanded ? "true" : "false",
       "aria-controls": listId,
-      title: expanded ? "Tool一覧を折りたたむ" : "Tool一覧を展開する",
+      "data-group-toggle": group.id,
+      "aria-label": `${expanded ? relayText("skillsCollapse") : relayText("skillsExpand")}: ${group.title}`,
     },
     el("span", { class: "rf-skills-toggle-mark", "aria-hidden": "true" }, expanded ? "−" : "+"),
-    el("span", { class: "rf-visually-hidden" }, expanded ? "折りたたむ" : "展開する"),
   );
   toggle.addEventListener("click", () => callbacks.onToggleGroup(group.id));
   return el(
@@ -87,20 +90,18 @@ function groupCard(
       el(
         "div",
         { class: "rf-skills-group-meta" },
-        el("span", { class: "rf-skills-count" }, `${group.tools.length} tools`),
+        el("span", { class: "rf-skills-count" }, `${relayText("skillsTools")}: ${countLabel(group.tools.length)}`),
         group.availableCount === group.tools.length
           ? null
-          : el("span", { class: "rf-skills-availability" }, `${group.availableCount} available`),
+          : el("span", { class: "rf-skills-availability" }, `${relayText("skillsAvailable")}: ${countLabel(group.availableCount)}`),
         toggle,
       ),
     ),
-    expanded
-      ? el(
-        "ul",
-        { class: "rf-skills-tool-list", id: listId },
-        ...group.tools.map(toolRow),
-      )
-      : null,
+    el(
+      "ul",
+      { class: "rf-skills-tool-list", id: listId, hidden: !expanded },
+      ...group.tools.map(toolRow),
+    ),
   );
 }
 
@@ -111,32 +112,26 @@ function sourceBar(model: SkillsModel): HTMLElement {
     el(
       "div",
       { class: "rf-skills-source-copy" },
-      el("span", { class: "rf-skills-eyebrow" }, "MCP SOURCE"),
+      el("span", { class: "rf-skills-eyebrow" }, relayText("skillsSource")),
       el("strong", { class: "rf-skills-source-name" }, model.sourceLabel),
       model.sourceUrl === "" ? null : el("code", { class: "rf-skills-source-url" }, model.sourceUrl),
     ),
     el(
       "div",
       { class: "rf-skills-connection" },
-      el("span", { class: "rf-skills-eyebrow" }, "CONNECTION"),
+      el("span", { class: "rf-skills-eyebrow" }, relayText("skillsConnection")),
       el("span", { class: "rf-skills-connection-value" }, model.connectionLabel),
     ),
   );
 }
 
 function searchControl(model: SkillsModel, callbacks: SkillsCallbacks): HTMLElement {
-  const input = el("input", {
-    type: "search",
-    class: "rf-skills-search-input",
-    value: model.query,
-    placeholder: "Search capabilities or MCP tool names",
-    "aria-label": "Skillsを検索",
-    autocomplete: "off",
-    spellcheck: false,
-  });
-  input.addEventListener("input", () => callbacks.onSearch(input.value));
+  const field = searchField(relayText("skillsSearch"), model.query, relayText("skillsSearchPlaceholder"), callbacks.onSearch);
+  const input = field.querySelector<HTMLInputElement>("input")!;
+  input.classList.add("rf-skills-search-input");
+  input.spellcheck = false;
   return el(
-    "label",
+    "div",
     { class: "rf-skills-search" },
     el("span", { class: "rf-skills-search-glyph", "aria-hidden": "true" }),
     input,
@@ -147,25 +142,25 @@ function searchControl(model: SkillsModel, callbacks: SkillsCallbacks): HTMLElem
 function statusBody(model: SkillsModel, callbacks: SkillsCallbacks): HTMLElement {
   if (model.status === "loading") return screenSkeleton(4, "card");
   if (model.status === "unconnected") {
-    return screenEmpty("MCP server未接続", "Guilduo MCPへ接続すると、利用できるCapabilityとToolがここに表示されます。");
+    return screenEmpty(relayText("skillsNoConnection"), relayText("skillsConnectHint"));
   }
   if (model.status === "error") {
     return screenNotice({
       status: "error",
-      detail: "MCP Tool一覧を取得できませんでした。既存の操作には影響ありません。",
-      action: { label: "再試行", onAct: callbacks.onRetry },
+      detail: relayText("skillsLoadFailed"),
+      action: { label: relayText("retry"), onAct: callbacks.onRetry },
     });
   }
   if (model.status === "empty") {
-    return screenEmpty("利用できるMCP Toolはまだありません", "接続先にToolが公開されると、Capabilityごとに整理して表示します。");
+    return screenEmpty(relayText("skillsEmpty"), relayText("skillsEmptyHint"));
   }
   if (model.groups.length === 0) {
-    return screenEmpty("該当するToolがありません", "検索語を変えると、Capability名・説明・MCPの技術名から再検索できます。");
+    return screenEmpty(relayText("skillsNoMatches"), relayText("skillsNoMatchesHint"));
   }
   return screenNotice({
     status: "error",
-    detail: "Capabilityを表示できません。Tool一覧を再読み込みしてください。",
-    action: { label: "再試行", onAct: callbacks.onRetry },
+    detail: relayText("skillsLoadFailed"),
+    action: { label: relayText("retry"), onAct: callbacks.onRetry },
   });
 }
 
@@ -181,19 +176,15 @@ function renderSkillsMain(model: SkillsModel, state: SkillsState, context: Scree
       ...model.groups.map((group) => groupCard(group, state.expandedGroups[group.id] === true, callbacks)),
     )
     : statusBody(model, callbacks);
-  // Prune expansion state for categories that disappeared after a search, but
-  // leave it untouched for categories that remain so search does not surprise
-  // the user by collapsing their open group.
-  for (const key of Object.keys(state.expandedGroups)) if (!groups.includes(key)) delete state.expandedGroups[key];
   return el(
     "div",
     { class: "rf-screen rf-skills-screen", "data-scroll": "true" },
     screenHeader({
       title: "Skills",
-      question: "MCPで何ができるかを、Capabilityから探せます。",
+      question: relayText("skillsQuestion"),
       meta: [
-        { label: "TOOLS", value: model.query === "" ? String(model.totalToolCount) : `${model.visibleToolCount}/${model.totalToolCount}` },
-        { label: "GROUPS", value: String(model.groups.length) },
+        { label: relayText("skillsTools"), value: model.query === "" ? countLabel(model.totalToolCount) : `${model.visibleToolCount}/${model.totalToolCount}` },
+        { label: relayText("skillsGroups"), value: countLabel(model.groups.length) },
       ],
     }),
     sourceBar(model),
@@ -201,12 +192,12 @@ function renderSkillsMain(model: SkillsModel, state: SkillsState, context: Scree
       "div",
       { class: "rf-skills-toolbar" },
       searchControl(model, callbacks),
-      el("p", { class: "rf-skills-toolbar-note" }, "名前、説明、カテゴリ、technical nameを検索できます。"),
+      el("p", { class: "rf-skills-toolbar-note" }, relayText("skillsSearchHint")),
     ),
     screenRegion(
-      "Capabilities",
+      relayText("skillsCapabilities"),
       { variant: "skills" },
-      el("p", { class: "rf-skills-region-note" }, model.query === "" ? "Capability groupからToolを開いて確認できます。" : `${model.visibleToolCount}件のToolが検索に一致しました。`),
+      el("p", { class: "rf-skills-region-note", role:"status" }, model.query === "" ? relayText("skillsBrowse") : `${relayText("skillsTools")}: ${countLabel(model.visibleToolCount)}`),
       body,
     ),
   );

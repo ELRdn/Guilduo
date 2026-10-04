@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
@@ -42,6 +42,21 @@ function injectPublicBrandMetadata(): Plugin {
   return {
     name: "inject-guilduo-public-brand-metadata",
     transformIndexHtml(html) {
+      for (const policy of ["PRIVACY", "TERMS"]) {
+        const marker = `__GUILDUO_${policy}_CONTENT__`;
+        if (!html.includes(marker)) continue;
+        // Only the repository's two plain policy documents use this subset.
+        const escaped = readFileSync(join(root, `${policy}.md`), "utf8")
+          .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+        const content = escaped.trim().split(/\r?\n\r?\n/).map(block => {
+          if (block.startsWith("# ")) return `<h1>${block.slice(2)}</h1>`;
+          if (block.startsWith("## ")) return `<h2>${block.slice(3)}</h2>`;
+          if (block.startsWith("- ")) return `<ul>${block.split(/\r?\n/).map(line => `<li>${line.slice(2)}</li>`).join("")}</ul>`;
+          return `<p>${block}</p>`;
+        }).join("\n").replace(/`([^`]+)`/g, "<code>$1</code>")
+          .replace(/\[([^\]\n]+)\]\(((?:https:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2">$1</a>');
+        html = html.replace(marker, `<!--email_off-->${content}<!--/email_off-->`);
+      }
       return html
         .replaceAll("__GUILDUO_PUBLIC_ORIGIN__", getPublicSiteOrigin())
         .replaceAll("__GUILDUO_WEB_APP_ORIGIN__", getWebAppOrigin());
@@ -103,6 +118,8 @@ export default defineConfig({
         app: resolve(root, "index.html"),
         landingJa: resolve(root, "lp/index.html"),
         landingEn: resolve(root, "lp/en/index.html"),
+        privacy: resolve(root, "privacy/index.html"),
+        terms: resolve(root, "terms/index.html"),
         landingV2Ja: resolve(root, "lpv2/index.html"),
         landingV2En: resolve(root, "lpv2/en/index.html"),
         landingV21Ja: resolve(root, "lpv2-1/index.html"),

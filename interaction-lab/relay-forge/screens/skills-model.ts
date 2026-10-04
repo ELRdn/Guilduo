@@ -7,6 +7,8 @@
  * so grouping and search can be tested without a browser.
  */
 
+import { relayText } from "../relay-copy.ts";
+
 export type SkillsStatus = "loading" | "unconnected" | "empty" | "error" | "ready";
 export type SkillToolAvailability = "available" | "unavailable";
 
@@ -73,47 +75,47 @@ interface CategoryDefinition {
 export const SKILL_CATEGORIES: readonly CategoryDefinition[] = [
   {
     id: "quest-management",
-    title: "Quest Management",
-    description: "Questの作成・更新・担当・進行を管理します。",
+    get title() { return relayText("skillsQuestTitle"); },
+    get description() { return relayText("skillsQuestDescription"); },
     aliases: ["quest", "quests", "quest-management", "task", "tasks"],
   },
   {
     id: "agent-relay",
-    title: "Agent & Relay",
-    description: "Agent、接続、担当、Handoffを管理します。",
+    get title() { return relayText("skillsAgentTitle"); },
+    get description() { return relayText("skillsAgentDescription"); },
     aliases: ["agent", "agents", "agent-relay", "relay", "handoff"],
   },
   {
     id: "connections-sync",
-    title: "Connections & Sync",
-    description: "外部サービスの接続、同期、Toggl連携を扱います。",
+    get title() { return relayText("skillsSyncTitle"); },
+    get description() { return relayText("skillsSyncDescription"); },
     aliases: ["connection", "connections", "connections-sync", "sync", "integration", "integrations"],
   },
   {
     id: "profile-social",
-    title: "Profile & Social",
-    description: "プロフィール、Friends、Partyを管理します。",
+    get title() { return relayText("skillsSocialTitle"); },
+    get description() { return relayText("skillsSocialDescription"); },
     aliases: ["profile", "social", "friends"],
   },
-  { id: "party", title: "Party", description: "チームへの参加とメンバーを管理します。", aliases: ["party", "party-management"] },
-  { id: "toggl-focus", title: "Toggl Focus", description: "タイマー、作業時間、見積もりをつなぎます。", aliases: ["toggl", "focus"] },
-  { id: "character", title: "Character & Rewards", description: "成長、MP、報酬を確認します。", aliases: ["character", "character-growth"] },
+  { id: "party", title: "Party", get description() { return relayText("skillsPartyDescription"); }, aliases: ["party", "party-management"] },
+  { id: "toggl-focus", title: "Toggl Focus", get description() { return relayText("skillsFocusDescription"); }, aliases: ["toggl", "focus"] },
+  { id: "character", get title() { return relayText("skillsCharacterTitle"); }, get description() { return relayText("skillsCharacterDescription"); }, aliases: ["character", "character-growth"] },
   {
     id: "battle-rewards",
-    title: "Battle & Rewards",
-    description: "Character、Battle、Rewardの状態を扱います。",
+    get title() { return relayText("skillsBattleTitle"); },
+    get description() { return relayText("skillsBattleDescription"); },
     aliases: ["battle", "rewards", "reward"],
   },
   {
     id: "review-activity",
-    title: "Review & Activity",
-    description: "Daily brief、Review、Activityの履歴を確認します。",
+    get title() { return relayText("skillsReviewTitle"); },
+    get description() { return relayText("skillsReviewDescription"); },
     aliases: ["review", "activity", "brief"],
   },
   {
     id: "other",
-    title: "Other / Utilities",
-    description: "まだ分類できないToolをここにまとめています。",
+    get title() { return relayText("skillsOtherTitle"); },
+    get description() { return relayText("skillsOtherDescription"); },
     aliases: ["other", "utility", "utilities", "misc"],
   },
 ];
@@ -204,7 +206,7 @@ export function normalizeMcpTool(value: unknown): SkillToolView | null {
   return {
     name,
     title: text(source.title) || text(source.displayName) || humanizeToolName(name),
-    description: text(source.description) || "Guilduo MCPで利用できるToolです。",
+    description: text(source.description) || relayText("skillsFallbackDescription"),
     availability: availabilityFor(source),
     categoryId: category.id,
     categoryTitle: category.title,
@@ -222,7 +224,7 @@ function normalizedTools(values: readonly unknown[]): SkillToolView[] {
 
 function matches(tool: SkillToolView, category: CategoryDefinition, query: string): boolean {
   if (query === "") return true;
-  return [tool.title, tool.name, tool.description, category.title, category.description]
+  return [tool.title, tool.name, tool.description, category.title, category.description, ...category.aliases]
     .some((value) => value.toLocaleLowerCase().includes(query));
 }
 
@@ -233,7 +235,7 @@ function matches(tool: SkillToolView, category: CategoryDefinition, query: strin
 export function normalizeSkillsModel(options: NormalizeSkillsOptions): SkillsModel {
   const query = options.query?.trim().toLocaleLowerCase() ?? "";
   const tools = normalizedTools(options.tools);
-  const connected = options.connected ?? (options.sourceUrl?.trim() !== "");
+  const connected = options.connected ?? Boolean(options.sourceUrl?.trim());
   const error = options.error?.trim() || null;
   const status: SkillsStatus = options.loading === true
     ? "loading"
@@ -258,8 +260,8 @@ export function normalizeSkillsModel(options: NormalizeSkillsOptions): SkillsMod
     status,
     sourceLabel: options.sourceLabel?.trim() || "Guilduo MCP",
     sourceUrl: options.sourceUrl?.trim() || "",
-    connectionLabel: options.connectionLabel?.trim() || "Current authenticated session",
-    query: options.query?.trim() || "",
+    connectionLabel: options.connectionLabel?.trim() || relayText("skillsSession"),
+    query: options.query ?? "",
     totalToolCount: tools.length,
     visibleToolCount: groups.reduce((total, group) => total + group.tools.length, 0),
     groups,

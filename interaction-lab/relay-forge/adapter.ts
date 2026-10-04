@@ -19,6 +19,9 @@
  */
 
 import type { HandoffState, Quest } from "../../types/questforge.ts";
+import { relayText } from "./relay-copy.ts";
+import { t } from "../../i18n.ts";
+import { countLabel } from "./screens/screen-state.ts";
 import {
   type Actor,
   type ActorKind,
@@ -80,14 +83,14 @@ export function initialsFor(name: string): string {
  * never end up showing another account's cached portrait.
  */
 function humanActorFromProfile(profile: ProfileRecord): Actor {
-  const name = String(profile.displayName ?? profile.handle ?? "You").trim() || "You";
+  const name = String(profile.displayName ?? "").trim() || String(profile.handle ?? "").trim();
   const handle = String(profile.handle ?? "").trim().replace(/^@+/, "");
   const variant = profile.avatarVariant === "masc" ? "masc" : "femme";
   return {
     id: `u-${String(profile.uid ?? handle ?? "self")}`,
     kind: "human",
-    name,
-    role: handle === "" ? "Operator" : `@${handle}`,
+    get name() { return name || t("task.assignee.self"); },
+    get role() { return handle === "" ? t("role.operator.label") : `@${handle}`; },
     // This actor is always the signed-in account owner. A stable self marker
     // avoids clipping Japanese display names into awkward fragments such as
     // "あな", while the visible/accessibility name remains the real profile.
@@ -152,25 +155,35 @@ export function placeholderActor(id: string, kind: ActorKind = "system"): Actor 
 
 /** Verb-first state text derived from the Quest's own handoff state. */
 function stateLabelFor(quest: Quest, holder: Actor | undefined): string {
-  const holderName = holder?.name ?? quest.assignee.label ?? "Actor";
+  const holderName = holder?.name ?? quest.assignee.label ?? relayText("commandActor");
+  if (quest.done || quest.lifecycleState === "completed") return relayText("stateDone");
   switch (quest.assignee.handoffState) {
     case "working":
-      return `${holderName} is executing`;
+      return relayText("commandExecuting").replace("{actor}", holderName);
     case "review_required":
-      return `${holderName} requested review`;
+      return relayText("commandRequestedReview").replace("{actor}", holderName);
     case "blocked":
-      return quest.handoff.blockedReason === "" ? "Blocked" : `Blocked: ${quest.handoff.blockedReason}`;
+      return `${relayText("stateBlocked")}${quest.handoff.blockedReason === "" ? "" : `: ${quest.handoff.blockedReason}`}`;
     case "ready":
-      return "Ready to delegate";
+      return relayText("commandReady");
     case "accepted":
-      return `${holderName} accepted the output`;
+      return relayText("commandAccepted").replace("{actor}", holderName);
     default:
-      return quest.done || quest.lifecycleState === "completed" ? "Completed" : "Not started";
+      return relayText("commandPlanned");
   }
 }
 
 /** Relay derived from the Quest's own assignee and handoff record. */
-function spineFor(quest: Quest, selfActorId: string): RelaySpine {
+function spineFor(quest: Quest, selfActorId: string, holder: Actor | undefined): RelaySpine {
+  if (quest.assignee.type !== "agent") {
+    const closed = quest.done || quest.lifecycleState === "completed";
+    return {
+      legs:[{ actorId:holder?.id ?? selfActorId, connector:null,
+        nodeState:closed ? "completed" : quest.assignee.handoffState === "blocked" ? "blocked" : quest.assignee.handoffState === "review_required" ? "review" : quest.assignee.handoffState === "working" ? "current" : "idle",
+        get connectorNote() { return stateLabelFor(quest, holder); },
+      }], currentIndex:0, hiddenBefore:0,
+    };
+  }
   const agentId = quest.assignee.type === "agent" ? quest.assignee.id : selfActorId;
   if (quest.done || quest.lifecycleState === "completed") {
     return {
@@ -270,8 +283,14 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
     if (quest.assignee.type === "agent" && !known.has(quest.assignee.id)) {
       known.set(quest.assignee.id, placeholderActor(quest.assignee.id, "agent"));
     }
-    const holder = known.get(quest.assignee.type === "agent" ? quest.assignee.id : selfActor.id);
-    const relay = spineFor(quest, selfActor.id);
+    const holderId = quest.assignee.type === "agent" ? quest.assignee.id : quest.assignee.type === "human" ? `u-${quest.assignee.id}` : selfActor.id;
+    if (quest.assignee.type === "human" && !known.has(holderId)) {
+      const fallback = placeholderActor(holderId, "human");
+      const name = quest.assignee.label || fallback.name;
+      known.set(holderId, { ...fallback, name, initials:initialsFor(name) });
+    }
+    const holder = known.get(holderId);
+    const relay = spineFor(quest, selfActor.id, holder);
     // Same rule as the Quests portfolio: an unfinished dependency stops the Quest.
     const unmetDependencyIds = quest.dependencyIds.filter((id) => !completed(id));
     const blockedByDependency = unmetDependencyIds.length > 0
@@ -288,11 +307,9 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
         critical: quest.isBlockingOthers,
         blocking: quest.assignee.handoffState === "blocked" || (blockedByDependency && !completed(questId)),
       })),
-      stateLabel: blockedByDependency
-        ? `Blocked by ${unmetDependencyIds.map(questRef).join(", ")}`
-        : stateLabelFor(quest, holder),
+      get stateLabel() { return blockedByDependency ? relayText("commandBlockedBy").replace("{quest}", unmetDependencyIds.map(questRef).join(", ")) : stateLabelFor(quest, holder); },
       ...(blockedByDependency ? { overrideState: "blocked" as const } : {}),
-      actionLabel: quest.assignee.handoffState === "review_required" ? "Review output" : "Inspect",
+      get actionLabel() { return relayText(quest.assignee.handoffState === "review_required" ? "commandReviewOutput" : "commandInspect"); },
       context: quest.notes === "" ? quest.category : quest.notes,
     });
     loomQuests.push(loomQuest);
@@ -302,12 +319,12 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
         id: `iv-${quest.id}`,
         questId: quest.id,
         severity: loomQuest.state === "blocked" ? "blocked" : loomQuest.state === "waiting" ? "waiting" : "review",
-        reason: loomQuest.stateLabel,
+        get reason() { return loomQuest.stateLabel; },
         questRef: loomQuest.ref,
         questTitle: quest.title,
         waitingMinutes: minutesSince(quest.handoff.reviewRequestedAt || quest.handoff.startedAt || quest.updatedAt),
         ownerActorId: selfActor.id,
-        actionLabel: loomQuest.actionLabel,
+        get actionLabel() { return loomQuest.actionLabel; },
         affectedCount: 1,
       });
     }
@@ -315,8 +332,7 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
 
   const selectedViews = new Map(loomQuests.map((quest) => {
     const record = records.get(quest.id)!;
-    return [quest.id, {
-      ...deriveSelectedQuestView(quest),
+    return [quest.id, Object.assign(deriveSelectedQuestView(quest), {
       requester: record.requester ?? null,
       // Production Quests always show their actual text/link context, even when
       // empty. Evidence previews belong to the separate fixture surface.
@@ -325,7 +341,7 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
         note: record.humanRequest?.checkTarget || record.handoff.note || record.notes,
         criteria: record.completionCriteria,
       },
-    }];
+    })];
   }));
 
   return {
@@ -336,33 +352,33 @@ export function normalizeCommandModel(options: NormalizeOptions): CommandModel {
     capacity: [
       {
         id: "attention",
-        label: "Human attention",
-        shortLabel: "Attention",
-        value: `${interventions.filter((item) => item.severity === "review").length} review`,
+        get label() { return relayText("commandAttention"); },
+        get shortLabel() { return relayText("awaitingDecision"); },
+        get value() { return countLabel(interventions.filter(item => item.severity === "review").length); },
         tone: "review",
         filter: "review",
       },
       {
         id: "execution",
-        label: "Execution",
-        shortLabel: "Execution",
-        value: `${loomQuests.filter((quest) => quest.state === "working").length} executing`,
+        get label() { return relayText("stateWorking"); },
+        get shortLabel() { return relayText("stateWorking"); },
+        get value() { return countLabel(loomQuests.filter(quest => quest.state === "working").length); },
         tone: "agent",
         filter: null,
       },
       {
         id: "constraint",
-        label: "Blocked",
-        shortLabel: "Blocked",
-        value: `${loomQuests.filter((quest) => quest.state === "blocked").length} Quests`,
+        get label() { return relayText("stateBlocked"); },
+        get shortLabel() { return relayText("stateBlocked"); },
+        get value() { return countLabel(loomQuests.filter(quest => quest.state === "blocked").length); },
         tone: "danger",
         filter: "blocked",
       },
       {
         id: "health",
-        label: "System",
-        shortLabel: "System",
-        value: `Synced · ${options.syncLabel}`,
+        get label() { return relayText("networkSync"); },
+        get shortLabel() { return relayText("networkSync"); },
+        get value() { return `${t("sync.synced")} · ${options.syncLabel}`; },
         tone: "success",
         filter: "health",
       },
@@ -478,6 +494,9 @@ export async function runHandoff(
     const quest = result.quest !== undefined && result.quest !== null && typeof result.quest === "object"
       ? result.quest as Quest
       : null;
+    if (quest === null || Array.isArray(quest) || quest.id !== request.questId || quest.assignee?.handoffState !== request.state) {
+      return { ok:false, code:"invalid_handoff_response", message:relayText("saveUnverified"), quest:null, dryRun:false };
+    }
     return { ok: true, code: "applied", message: "Handoff applied.", quest, dryRun: false };
   } catch (error) {
     const described = describe(error);
@@ -488,24 +507,25 @@ export async function runHandoff(
 /** Human-readable, non-leaking explanation for a failed decision. */
 export function explainFailure(code: string): string {
   switch (code) {
+    case "invalid_handoff_response": return relayText("saveUnverified");
     case "stale_handoff_state":
-      return "他の Actor が先に状態を更新しました。最新の内容を確認してから再実行してください。";
+      return relayText("handoffConflict");
     case "invalid_handoff_transition":
-      return "この状態からは実行できない遷移です。最新の Relay を確認してください。";
+      return relayText("handoffInvalid");
     case "agent_assignee_required":
-      return "Agent が担当していない Quest では Handoff を操作できません。";
+      return relayText("handoffAgentRequired");
     case "quest_not_found":
-      return "Quest が見つかりません。一覧を再取得してください。";
+      return relayText("questMissing");
     case "gateway_url_missing":
-      return "API Gateway が未設定です。Connections で設定するとローカルモードから切り替わります。";
+      return relayText("handoffGatewayMissing");
     case "http_401":
     case "unauthorized":
-      return "サインインが必要です。";
+      return relayText("sessionExpired");
     case "http_403":
     case "forbidden":
     case "insufficient_scope":
-      return "この操作に必要な権限がありません。";
+      return relayText("actionPermission");
     default:
-      return "実行できませんでした。時間をおいて再試行してください。";
+      return relayText("actionFailed");
   }
 }

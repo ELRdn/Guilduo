@@ -23,7 +23,9 @@ import { actorAvatar } from "./avatar.ts";
 import { el } from "./dom.ts";
 import { externalCheck } from "./external-check.ts";
 import { relayText } from "../relay-copy.ts";
-import type { QuestActionId, QuestActionState } from "../quest-actions.ts";
+import { t } from "../../../i18n.ts";
+import { countLabel } from "../screens/screen-state.ts";
+import { questActionLabel, type QuestActionId, type QuestActionState } from "../quest-actions.ts";
 
 export type LensState = "closed" | "peek" | "open" | "pinned";
 
@@ -118,7 +120,7 @@ export function interventionLens(
   const header = el(
     "header",
     { class: "rf-lens-header" },
-    el("p", { class: "rf-region-label" }, "Intervention Lens"),
+    el("p", { class: "rf-region-label" }, relayText("commandLens")),
     el(
       "div",
       { class: "rf-lens-controls" },
@@ -128,10 +130,11 @@ export function interventionLens(
           {
             type: "button",
             class: "rf-icon-button",
+            "data-command-control": "lens-pin",
             "aria-pressed": options.state === "pinned" ? "true" : "false",
-            title: options.state === "pinned" ? "Unpin Lens" : "Pin Lens",
+            title: options.state === "pinned" ? relayText("unpinLens") : relayText("pinLens"),
           },
-          el("span", { class: "rf-visually-hidden" }, options.state === "pinned" ? "Unpin Lens" : "Pin Lens"),
+          el("span", { class: "rf-visually-hidden" }, options.state === "pinned" ? relayText("unpinLens") : relayText("pinLens")),
           el("span", { class: "rf-pin-mark", "aria-hidden": "true" }),
         );
         pin.addEventListener("click", options.onTogglePin);
@@ -140,8 +143,8 @@ export function interventionLens(
       (() => {
         const close = el(
           "button",
-          { type: "button", class: "rf-icon-button", title: "Close Lens" },
-          el("span", { class: "rf-visually-hidden" }, "Close Lens"),
+          { type: "button", class: "rf-icon-button", title: relayText("closeLens"), "data-command-control": "lens-close" },
+          el("span", { class: "rf-visually-hidden" }, relayText("closeLens")),
           el("span", { class: "rf-close-mark", "aria-hidden": "true" }),
         );
         close.addEventListener("click", options.onClose);
@@ -153,7 +156,7 @@ export function interventionLens(
   if (content === null) {
     return el(
       "aside",
-      { class: "rf-lens", "data-state": options.state, "aria-label": "Intervention Lens" },
+      { class: "rf-lens", "data-state": options.state, "aria-label": relayText("commandLens") },
       header,
       el(
         "div",
@@ -161,8 +164,8 @@ export function interventionLens(
         el(
           "div",
           { class: "rf-state rf-state--empty", role: "status" },
-          el("p", { class: "rf-state-title" }, "介入対象が選択されていません"),
-          el("p", { class: "rf-state-body" }, "Attention Shelf または Quest Loom の行を選ぶと、判断に必要な理由と証拠がここに集まります。"),
+          el("p", { class: "rf-state-title" }, relayText("shellChooseQuest")),
+          el("p", { class: "rf-state-body" }, relayText("shellChooseHint")),
         ),
       ),
     );
@@ -170,7 +173,7 @@ export function interventionLens(
 
   const { intervention, view } = content;
   const owner = intervention === null ? null : actors.get(intervention.ownerActorId) ?? null;
-  const holder = view.responsibility[view.responsibility.length - 1];
+  const holder = view.responsibility.find(step => step.state === "review" || step.state === "blocked" || step.state === "executing") ?? view.responsibility.at(-1);
   const primary = view.evidence.find((artifact) => artifact.primary) ?? null;
   const blockedReason = options.blockedReason ?? view.decision.blockedReason;
 
@@ -183,7 +186,7 @@ export function interventionLens(
       "aria-busy": options.submitting ? "true" : null,
     },
     el("span", { class: "rf-review-glyph", "aria-hidden": "true" }),
-    options.submitting ? "送信中…" : view.decision.approveLabel,
+    options.submitting ? relayText("sending") : relayText("approveHandoff"),
   );
   approve.addEventListener("click", options.onApprove);
 
@@ -195,7 +198,7 @@ export function interventionLens(
       "aria-expanded": options.revisionOpen ? "true" : "false",
       disabled: options.submitting ? true : null,
     },
-    view.decision.reviseLabel,
+    relayText("requestRevision"),
   );
   revise.addEventListener("click", options.onOpenRevision);
 
@@ -205,8 +208,9 @@ export function interventionLens(
     class: "rf-revision-input",
     id: "rf-revision-reason",
     rows: 3,
+    disabled: options.submitting,
     maxlength: 500,
-    placeholder: "どこを修正してほしいかを書いてください",
+    placeholder: relayText("revisionPlaceholder"),
     "aria-invalid": options.revisionError === null ? null : "true",
     "aria-describedby": options.revisionError === null ? null : "rf-revision-error",
   }) as HTMLTextAreaElement;
@@ -221,22 +225,22 @@ export function interventionLens(
       disabled: options.submitting || blockedReason !== null ? true : null,
       "aria-busy": options.submitting ? "true" : null,
     },
-    options.submitting ? "送信中…" : "Send revision request",
+    options.submitting ? relayText("sending") : relayText("sendRevision"),
   );
   submitRevision.addEventListener("click", options.onSubmitRevision);
 
-  const cancelRevision = el("button", { type: "button", class: "rf-secondary-button" }, "Cancel");
+  const cancelRevision = el("button", { type: "button", class: "rf-secondary-button", disabled: options.submitting }, relayText("dialogCancel"));
   cancelRevision.addEventListener("click", options.onCancelRevision);
 
   const revisionPanel = el(
     "div",
     { class: "rf-revision" },
-    el("label", { class: "rf-revision-label", for: "rf-revision-reason" }, "修正内容"),
+    el("label", { class: "rf-revision-label", for: "rf-revision-reason" }, relayText("revisionContent")),
     reasonField,
     el(
       "p",
       { class: "rf-revision-impact" },
-      `${view.ref} は ${actors.get(holder?.actorId ?? "")?.name ?? "担当"} へ差し戻され、実行中状態に戻ります`,
+      relayText("revisionImpact").replace("{ref}", view.ref).replace("{actor}", actors.get(holder?.actorId ?? "")?.name ?? relayText("unassigned")),
     ),
     options.revisionError === null
       ? null
@@ -244,14 +248,11 @@ export function interventionLens(
     el("div", { class: "rf-decision-actions" }, submitRevision, cancelRevision),
   );
 
-  const taskLabels: Readonly<Record<QuestActionId, string>> = {
-    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive", reply: relayText("inbox"),
-  };
   const taskFooter = el(
     "footer",
     { class: "rf-decision", "data-phase": options.submitting ? "submitting" : "idle" },
     el("div", { class: "rf-decision-head" },
-      el("h3", { class: "rf-region-label" }, "Task actions"),
+      el("h3", { class: "rf-region-label" }, relayText("taskActions")),
       el("span", { class: "rf-decision-info", "aria-hidden": "true" }),
     ),
     el("p", { class: "rf-decision-status" }, options.questActions.statusLabel),
@@ -266,59 +267,59 @@ export function interventionLens(
           class: index === 0 ? "rf-decision-approve" : "rf-secondary-button",
           disabled: options.submitting || options.writeLocked ? true : null,
           "data-quest-action": action,
-        }, taskLabels[action]);
+        }, questActionLabel(action));
         button.addEventListener("click", () => options.onQuestAction(action));
         return button;
       }),
     ),
-    options.writeLocked ? el("p", { class: "rf-decision-blocked", role: "status" }, "再接続まで書き込みは保留中です") : null,
+    options.writeLocked ? el("p", { class: "rf-decision-blocked", role: "status" }, relayText("writePaused")) : null,
   );
   return el(
     "aside",
-    { class: "rf-lens", "data-state": options.state, "aria-label": "Intervention Lens" },
+    { class: "rf-lens", "data-state": options.state, "aria-label": relayText("commandLens") },
     header,
     el(
       "div",
       { class: "rf-lens-body" },
       section(
-        "Why",
+        relayText("commandReason"),
         el("p", { class: "rf-lens-reason" }, view.reason),
         el(
           "p",
           { class: "rf-lens-age" },
           intervention === null
-            ? `担当 ${actors.get(holder?.actorId ?? "")?.name ?? "未割当"}`
-            : `${formatWaiting(intervention.waitingMinutes)} 待機 · 担当 ${owner?.name ?? "未割当"}`,
+            ? `${t("task.assignee")}: ${actors.get(holder?.actorId ?? "")?.name ?? relayText("unassigned")}`
+            : `${relayText("held")} ${formatWaiting(intervention.waitingMinutes)} · ${t("task.assignee")}: ${owner?.name ?? relayText("unassigned")}`,
         ),
       ),
       section(
-        "Affected Quest",
+        relayText("commandAffected"),
         el("p", { class: "rf-lens-ref" }, view.ref),
         el("p", { class: "rf-lens-object-title" }, view.title),
         el("p", { class: "rf-lens-state" }, intervention === null ? view.reason : intervention.reason),
         intervention !== null && intervention.affectedCount > 1
-          ? el("p", { class: "rf-lens-scope" }, `同じ原因で ${intervention.affectedCount} 件が停止しています`)
+          ? el("p", { class: "rf-lens-scope" }, relayText("commandSameBlocker").replace("{count}", countLabel(intervention.affectedCount)))
           : null,
       ),
       section("Relay", lensRelay(view, actors)),
       section(
-        "Evidence",
+        relayText("evidence"),
         primary === null
-          ? el("p", { class: "rf-lens-state" }, "Evidence はまだありません")
+          ? el("p", { class: "rf-lens-state" }, relayText("evidenceMissing"))
           : el(
             "dl",
             { class: "rf-evidence" },
-            el("dt", { class: "rf-evidence-label" }, "Artifact"),
+            el("dt", { class: "rf-evidence-label" }, relayText("commandArtifacts")),
             el("dd", { class: "rf-evidence-value", "data-operational": "true" }, primary.name),
-            el("dt", { class: "rf-evidence-label" }, "変更"),
+            el("dt", { class: "rf-evidence-label" }, relayText("commandChanged")),
             el("dd", { class: "rf-evidence-value", "data-operational": "true" }, primary.summary),
-            el("dt", { class: "rf-evidence-label" }, "実行"),
+            el("dt", { class: "rf-evidence-label" }, relayText("battleExecution")),
             el("dd", { class: "rf-evidence-value", "data-operational": "true" }, view.details.headline),
-            el("dt", { class: "rf-evidence-label" }, "検証"),
+            el("dt", { class: "rf-evidence-label" }, relayText("commandChecks")),
             el(
               "dd",
               { class: "rf-evidence-value", "data-operational": "true" },
-              primary.verified === null ? "未検証" : primary.verifiedLabel,
+              primary.verified === null ? relayText("commandUnverified") : primary.verifiedLabel,
             ),
           ),
       ),
@@ -329,10 +330,10 @@ export function interventionLens(
       el(
         "div",
         { class: "rf-decision-head" },
-        el("h3", { class: "rf-region-label" }, "Decision"),
+        el("h3", { class: "rf-region-label" }, relayText("decisionTitle")),
         el("span", { class: "rf-decision-info", "aria-hidden": "true" }),
       ),
-      el("p", { class: "rf-decision-status" }, view.decision.statusLabel),
+      el("p", { class: "rf-decision-status" }, relayText("humanDecision")),
       externalCheck(options.externalChecked === true, options.submitting || options.writeLocked, options.onExternalChecked),
       // Verification summary only appears when a real Evidence result says so.
       blockedReason === null && options.verification !== null
@@ -355,10 +356,10 @@ export function interventionLens(
       options.revisionOpen
         ? revisionPanel
         : el("div", { class: "rf-decision-actions" }, approve, revise),
-      options.revisionOpen ? null : el("p", { class: "rf-decision-impact" }, view.decision.impactLabel),
+      options.revisionOpen ? null : el("p", { class: "rf-decision-impact" }, relayText("handoffApprovalImpact")),
       primary === null || primary.verified !== false
         ? null
-        : el("p", { class: "rf-decision-impact" }, "Evidence を検証できていません"),
+        : el("p", { class: "rf-decision-impact" }, relayText("commandVerificationFailed")),
     ),
   );
 }

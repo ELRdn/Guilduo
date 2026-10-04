@@ -21,16 +21,16 @@ export interface ProfileDraft {
 export interface SettingsState {
   avatarSaving: boolean;
   avatarProgress: number | null;
-  avatarMessage: string;
+  avatarMessage: () => string;
   avatarTone: "success" | "error" | null;
   profileSaving: boolean;
-  profileMessage: string;
+  profileMessage: () => string;
   profileTone: "success" | "error" | null;
   profileDraft: ProfileDraft | null;
-  mcpCopyMessage: string;
+  mcpCopyMessage: () => string;
   mcpCopyTone: "success" | "error" | null;
   connectionBusyId: string | null;
-  connectionMessage: string;
+  connectionMessage: () => string;
   connectionTone: "success" | "error" | null;
   connectionDrafts: Record<string, string>;
   /** Section to bring into view on the next render — consumed once, then cleared. */
@@ -41,16 +41,16 @@ export function initialSettingsState(): SettingsState {
   return {
     avatarSaving: false,
     avatarProgress: null,
-    avatarMessage: "",
+    avatarMessage: () => "",
     avatarTone: null,
     profileSaving: false,
-    profileMessage: "",
+    profileMessage: () => "",
     profileTone: null,
     profileDraft: null,
-    mcpCopyMessage: "",
+    mcpCopyMessage: () => "",
     mcpCopyTone: null,
     connectionBusyId: null,
-    connectionMessage: "",
+    connectionMessage: () => "",
     connectionTone: null,
     connectionDrafts: {},
     pendingFocus: "top",
@@ -136,7 +136,7 @@ export function normalizeSettingsModel(options: NormalizeSettingsOptions): Setti
   return {
     isDemo: options.isDemo,
     profile: options.profile === null ? null : {
-      displayName: displayName === "" ? "あなた" : displayName,
+      displayName,
       handle,
       bio: options.profile?.bio?.trim() ?? "",
       hasHandle: handle !== "",
@@ -169,6 +169,7 @@ export interface SettingsCallbacks {
   readonly onLinkAgent: (clientId: string, agentId: string) => void;
   readonly onUnlinkAgent: (clientId: string, agentId: string) => void;
   readonly onRevokeConnection: (clientId: string) => void;
+  readonly onDeleteConnection: (clientId: string) => void;
   readonly canManageAgents: boolean;
   readonly onCreateAgent: () => void;
   readonly onEditAgent: (agentId: string) => void;

@@ -15,11 +15,14 @@
  * Settings costs nothing extra (brief Phase 4).
  */
 
+import { t } from "../../../i18n.ts";
+import { relayText } from "../relay-copy.ts";
 import { actorAvatar } from "../primitives/avatar.ts";
 import { el } from "../primitives/dom.ts";
 import { relayOnboarding, relayPreferences } from "./relay-onboarding.ts";
 import type { ThemePreference } from "../theme.ts";
 import {
+  effectiveConnectionScopes,
   type SettingsAgentRow,
   type SettingsCallbacks,
   type SettingsModel,
@@ -55,19 +58,19 @@ function accountRegion(
   const selfActor = [...context.actors.values()].find((actor) => actor.kind === "human") ?? null;
   const profile = model.profile;
   const draft: ProfileDraft = state.profileDraft ?? {
-    displayName: profile === null ? "" : profile.displayName === "あなた" ? "" : profile.displayName,
+    displayName: profile?.displayName ?? "",
     handle: profile?.handle ?? "",
     bio: profile?.bio ?? "",
   };
-  const profileBusy = state.profileSaving || model.profileLoadError !== null;
-  const controlsDisabled = model.isDemo || profileBusy;
+  const profileBusy = state.profileSaving || state.avatarSaving || model.profileLoadError !== null;
+  const controlsDisabled = model.isDemo || profileBusy || context.writeLocked;
   const fileInput = el("input", {
     type: "file",
     class: "rf-visually-hidden",
     accept: "image/png,image/jpeg,image/webp",
     id: "rf-set-avatar-input",
   }) as HTMLInputElement;
-  const canUpload = model.profile !== null && !model.isDemo && !state.avatarSaving && model.profileLoadError === null;
+  const canUpload = model.profile !== null && !model.isDemo && !profileBusy && !context.writeLocked;
   fileInput.disabled = !canUpload || state.avatarSaving;
   fileInput.addEventListener("change", () => {
     const file = fileInput.files?.[0];
@@ -76,16 +79,18 @@ function accountRegion(
   });
 
   const uploadButton = el(
-    "label",
-    { for: "rf-set-avatar-input", class: `rf-secondary-button rf-set-avatar-trigger${canUpload ? "" : " rf-set-disabled"}` },
-    state.avatarSaving ? "保存しています…" : profile?.hasCustomAvatar ? "画像を変更" : "画像をアップロード",
+    "button",
+    { type: "button", disabled: !canUpload, class: "rf-secondary-button rf-set-avatar-trigger" },
+    state.avatarSaving ? relayText("saving") : profile?.hasCustomAvatar ? relayText("imageChange") : relayText("imageUpload"),
   );
+  fileInput.tabIndex = -1;
+  uploadButton.addEventListener("click", () => fileInput.click());
 
   const removeButton = el("button", {
     type: "button",
     class: "rf-secondary-button rf-set-avatar-remove",
     disabled: !canUpload || !profile?.hasCustomAvatar,
-  }, "画像を削除");
+  }, relayText("imageRemove"));
   removeButton.addEventListener("click", () => callbacks.onRemoveAvatar());
 
   const progress = state.avatarProgress === null
@@ -93,19 +98,19 @@ function accountRegion(
     : el(
       "div",
       { class: "rf-set-avatar-progress", role: "status", "aria-live": "polite" },
-      el("progress", { max: 100, value: state.avatarProgress, "aria-label": "Avatarのアップロード進捗" }),
+      el("progress", { max: 100, value: state.avatarProgress, "aria-label": relayText("avatarProgress") }),
       el("span", {}, `${state.avatarProgress}%`),
     );
 
   const guidance = model.profileLoadError !== null
-    ? "プロフィールの通信に失敗しました。再試行してください。"
+    ? relayText("profileLoadFailed")
     : model.isDemo
-      ? "デモ表示です。Googleでサインインすると本人アイコンを変更できます。"
+      ? relayText("profileDemoHint")
       : model.profile === null
-        ? "プロフィールを設定して、Guilduoでの表示名を決めましょう。保存後にAvatarを追加できます。"
-        : "PNG、JPEG、WebPから選択できます。256×256のWebPに自動で縮小されます。";
+        ? relayText("profileSetupHint")
+        : relayText("avatarFormats");
 
-  const email = el("dd", { class: "rf-set-account-value" }, model.email || "未取得");
+  const email = el("dd", { class: "rf-set-account-value" }, model.email || relayText("notLoaded"));
   const profileForm = el("form", { class: "rf-set-profile-form" });
   const displayNameInput = el("input", {
     class: "rf-set-input",
@@ -143,22 +148,22 @@ function accountRegion(
   handleInput.addEventListener("input", () => callbacks.onProfileDraftChange("handle", handleInput.value));
   bioInput.addEventListener("input", () => callbacks.onProfileDraftChange("bio", bioInput.value));
   profileForm.append(
-    el("p", { class: "rf-set-form-title" }, "プロフィール情報"),
-    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, "Display Name"), displayNameInput, el("small", { class: "rf-set-field-hint" }, "1〜60文字")),
-    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, "Username / Handle"), el("span", { class: "rf-set-handle-input-wrap" }, el("span", { class: "rf-set-handle-prefix", "aria-hidden": "true" }, "@"), handleInput), el("small", { class: "rf-set-field-hint" }, "英数字と _、3〜20文字")),
-    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, "Bio"), bioInput, el("small", { class: "rf-set-field-hint" }, "160文字以内")),
+    el("p", { class: "rf-set-form-title" }, relayText("profileInformation")),
+    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, t("social.displayName")), displayNameInput, el("small", { class: "rf-set-field-hint" }, relayText("displayNameHint"))),
+    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, relayText("username")), el("span", { class: "rf-set-handle-input-wrap" }, el("span", { class: "rf-set-handle-prefix", "aria-hidden": "true" }, "@"), handleInput), el("small", { class: "rf-set-field-hint" }, `${relayText("handleHint")} · ${relayText("handleCooldown")}`)),
+    el("label", { class: "rf-set-field" }, el("span", { class: "rf-set-field-label" }, t("social.bio")), bioInput, el("small", { class: "rf-set-field-hint" }, relayText("bioHint"))),
   );
   const saveProfileButton = el("button", {
     type: "submit",
     class: "rf-primary-button rf-set-profile-submit",
     disabled: controlsDisabled,
-  }, state.profileSaving ? "保存しています…" : "保存");
+  }, state.profileSaving ? relayText("saving") : t("common.save"));
   profileForm.append(saveProfileButton);
-  if (state.profileMessage !== "") {
+  if (state.profileMessage() !== "") {
     profileForm.append(el(
       "p",
       { class: "rf-set-profile-status", "data-tone": state.profileTone, role: state.profileTone === "error" ? "alert" : "status" },
-      state.profileMessage,
+      state.profileMessage(),
     ));
   }
   profileForm.addEventListener("submit", (event) => {
@@ -171,13 +176,13 @@ function accountRegion(
     : el(
       "div",
       { class: "rf-set-profile-error", role: "alert" },
-      el("p", {}, "プロフィールを読み込めませんでした。通信状態を確認してください。"),
-      el("button", { type: "button", class: "rf-secondary-button" }, "再試行"),
+      el("p", {}, relayText("profileLoadFailed")),
+      el("button", { type: "button", class: "rf-secondary-button" }, relayText("retry")),
     );
   profileError?.querySelector("button")?.addEventListener("click", () => callbacks.onRetryProfile());
 
   return screenRegion(
-    "Account",
+    relayText("accountTitle"),
     {},
     el(
       "div",
@@ -193,16 +198,16 @@ function accountRegion(
       el(
         "div",
         { class: "rf-set-identity" },
-        el("p", { class: "rf-set-name" }, profile?.displayName ?? "あなた"),
-        el("p", { class: "rf-set-handle" }, profile !== null && profile.hasHandle ? `@${profile.handle}` : "@未設定"),
+        el("p", { class: "rf-set-name" }, profile?.displayName || relayText("you")),
+        el("p", { class: "rf-set-handle" }, profile !== null && profile.hasHandle ? `@${profile.handle}` : t("account.handleMissing")),
         el("dl", { class: "rf-set-account-info" }, el("dt", {}, "Email"), email),
         el("p", { class: "rf-set-guidance" }, guidance),
-        state.avatarMessage === ""
+        state.avatarMessage() === ""
           ? null
           : el(
             "p",
             { class: "rf-set-avatar-status", "data-tone": state.avatarTone, role: state.avatarTone === "error" ? "alert" : "status" },
-            state.avatarMessage,
+            state.avatarMessage(),
           ),
       ),
       profileError,
@@ -216,16 +221,16 @@ function accountRegion(
  * ------------------------------------------------------------------ */
 
 const THEME_OPTIONS: ReadonlyArray<{ readonly id: ThemePreference; readonly label: string }> = [
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
-  { id: "system", label: "System" },
+  { id: "light", get label() { return t("appearance.light"); } },
+  { id: "dark", get label() { return t("appearance.dark"); } },
+  { id: "system", get label() { return t("appearance.system"); } },
 ];
 
 function themeControl(model: SettingsModel, callbacks: SettingsCallbacks): HTMLElement {
   return el(
     "fieldset",
     { class: "rf-set-theme-group" },
-    el("legend", { class: "rf-visually-hidden" }, "テーマ"),
+    el("legend", { class: "rf-visually-hidden" }, t("appearance.menu")),
     ...THEME_OPTIONS.map((option) => {
       const checked = model.theme === option.id;
       const input = el("input", {
@@ -235,7 +240,10 @@ function themeControl(model: SettingsModel, callbacks: SettingsCallbacks): HTMLE
         value: option.id,
         checked,
       });
-      input.addEventListener("change", () => callbacks.onThemeSelect(option.id));
+      input.addEventListener("change", () => {
+        callbacks.onThemeSelect(option.id);
+        queueMicrotask(() => document.querySelector<HTMLInputElement>(`input[name="rf-set-theme"][value="${option.id}"]`)?.focus({ preventScroll: true }));
+      });
       return el(
         "label",
         { class: "rf-set-theme-option", "data-selected": checked ? "true" : "false" },
@@ -248,9 +256,9 @@ function themeControl(model: SettingsModel, callbacks: SettingsCallbacks): HTMLE
 }
 
 function appearanceRegion(model: SettingsModel, callbacks: SettingsCallbacks): HTMLElement {
-  const effectiveLabel = model.effectiveTheme === "dark" ? "Dark" : "Light";
+  const effectiveLabel = t(`appearance.${model.effectiveTheme}`);
   return screenRegion(
-    "Appearance",
+    relayText("appearanceTitle"),
     {},
     el(
       "div",
@@ -261,8 +269,8 @@ function appearanceRegion(model: SettingsModel, callbacks: SettingsCallbacks): H
         "p",
         { class: "rf-set-theme-status" },
         model.theme === "system"
-          ? `System を使用中 · 現在の表示は ${effectiveLabel}（OSの設定に追従します）`
-          : `${model.theme === "dark" ? "Dark" : "Light"} を使用中（OSの設定に関わらず固定です）`,
+          ? relayText("themeSystemStatus").replace("{mode}", effectiveLabel)
+          : relayText("themeFixedStatus").replace("{mode}", effectiveLabel),
       ),
     ),
   );
@@ -278,6 +286,7 @@ function agentOption(
   context: ScreenContext,
   clientId: string,
   callbacks: SettingsCallbacks,
+  busy: boolean,
 ): HTMLElement {
   const actor = context.actors.get(agent.agentId);
   const option = el(
@@ -285,9 +294,9 @@ function agentOption(
     {
       type: "button",
       class: "rf-set-agent-picker-option",
-      role: "option",
-      "aria-selected": selected ? "true" : "false",
+      "aria-pressed": selected ? "true" : "false",
       "data-agent-id": agent.agentId,
+      disabled: busy,
     },
     actor === undefined ? el("span", { class: "rf-set-agent-picker-fallback", "aria-hidden": "true" }, "A") : actorAvatar(actor, { size: "row", showMarker: false }),
     el(
@@ -313,7 +322,7 @@ function connectionAgentSummary(
     : model.agents.find((candidate) => candidate.agentId === row.linkedAgentId) ?? null;
   return {
     agent,
-    stale: row.linkedAgentId !== null && (row.linkRevokedAt !== null || agent === null || agent.status !== "active"),
+    stale: row.linkedAgentId !== null && (!row.authorized || row.linkRevokedAt !== null || agent === null || agent.status !== "active"),
   };
 }
 
@@ -329,39 +338,46 @@ function connectionRow(
   const pickerOpen = Object.prototype.hasOwnProperty.call(state.connectionDrafts, row.clientId);
   const selectedAgentId = state.connectionDrafts[row.clientId] ?? (activeLink ? row.linkedAgentId ?? "" : "");
   const activeAgents = model.agents.filter((agent) => agent.status === "active");
-  const busy = state.connectionBusyId === row.clientId;
+  const busy = state.connectionBusyId === row.clientId || context.writeLocked;
   const canLink = row.authorized && callbacks.canManageAgents && !busy;
-  const canRevoke = row.authorized && !busy;
+  const canRevoke = row.authorized;
+  const scopes = effectiveConnectionScopes(model, row);
   const avatar = summary.agent === null
     ? el("span", { class: "rf-set-connection-agent-placeholder", "aria-hidden": "true" }, "—")
     : (() => {
       const actor = context.actors.get(summary.agent!.agentId);
       return actor === undefined ? el("span", { class: "rf-set-connection-agent-placeholder", "aria-hidden": "true" }, "A") : actorAvatar(actor, { size: "row", showMarker: false });
     })();
-  const openPicker = el("button", { type: "button", class: "rf-secondary-button", disabled: canLink ? null : true }, activeLink ? "Agentを変更" : "Agentをリンク");
+  const openPicker = el("button", { type: "button", class: "rf-secondary-button", disabled: canLink ? null : true }, activeLink ? relayText("agentChange") : relayText("agentLink"));
   openPicker.addEventListener("click", () => callbacks.onOpenAgentPicker(row.clientId));
   const unlink = activeLink || (row.linkedAgentId !== null && row.linkRevokedAt === null)
-    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-unlink", disabled: busy ? true : null }, busy ? "処理中…" : "Unlink")
+    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-unlink", disabled: busy ? true : null }, busy ? relayText("executing") : relayText("agentUnlink"))
     : null;
   unlink?.addEventListener("click", () => callbacks.onUnlinkAgent(row.clientId, row.linkedAgentId ?? ""));
   const revoke = canRevoke
-    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-revoke", disabled: busy ? true : null }, busy ? "処理中…" : "Disconnect")
+    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-revoke", disabled: busy ? true : null }, busy ? relayText("executing") : relayText("mcpDisconnect"))
     : null;
   revoke?.addEventListener("click", () => {
-    if (window.confirm("このMCP接続を解除しますか？Agent本体は削除されません。")) callbacks.onRevokeConnection(row.clientId);
+    if (window.confirm(relayText("disconnectConfirm"))) callbacks.onRevokeConnection(row.clientId);
+  });
+  const remove = !row.authorized
+    ? el("button", { type: "button", class: "rf-secondary-button rf-set-connection-delete", disabled: busy }, busy ? relayText("executing") : relayText("mcpDelete"))
+    : null;
+  remove?.addEventListener("click", () => {
+    if (window.confirm(relayText("mcpDeleteConfirm"))) callbacks.onDeleteConnection(row.clientId);
   });
   const picker = pickerOpen
     ? el(
       "div",
-      { class: "rf-set-agent-picker", role: "listbox", "aria-label": `${row.clientName}のLinked Agent` },
+      { class: "rf-set-agent-picker", role: "group", "aria-label": `${relayText("linkedAgent")}: ${row.clientName}` },
       activeAgents.length === 0
-        ? el("p", { class: "rf-set-agent-picker-empty" }, "リンクできるActive Agentがありません。先にAgentsで登録してください。")
-        : activeAgents.map((agent) => agentOption(agent, selectedAgentId === agent.agentId, context, row.clientId, callbacks)),
+        ? el("p", { class: "rf-set-agent-picker-empty" }, relayText("noActiveAgents"))
+        : activeAgents.map((agent) => agentOption(agent, selectedAgentId === agent.agentId, context, row.clientId, callbacks, busy)),
       el(
         "div",
         { class: "rf-set-agent-picker-actions" },
-        el("button", { type: "button", class: "rf-primary-button", disabled: !canLink || selectedAgentId === "" ? true : null }, busy ? "保存中…" : activeLink ? "変更を保存" : "リンクする"),
-        el("button", { type: "button", class: "rf-secondary-button", disabled: busy ? true : null }, "キャンセル"),
+        el("button", { type: "button", class: "rf-primary-button", disabled: !canLink || selectedAgentId === "" ? true : null }, busy ? relayText("saving") : activeLink ? relayText("saveChanges") : relayText("link")),
+        el("button", { type: "button", class: "rf-secondary-button", disabled: busy ? true : null }, relayText("dialogCancel")),
       ),
     )
     : null;
@@ -375,7 +391,7 @@ function connectionRow(
   }
   return el(
     "article",
-    { class: "rf-set-connection-card", "data-authorized": row.authorized ? "true" : "false", "data-linked": activeLink ? "true" : "false" },
+    { class: "rf-set-connection-card", "data-client-id": row.clientId, "data-authorized": row.authorized ? "true" : "false", "data-linked": activeLink ? "true" : "false" },
     el(
       "div",
       { class: "rf-set-connection-head" },
@@ -383,48 +399,54 @@ function connectionRow(
         "div",
         { class: "rf-set-connection-copy" },
         el("strong", { class: "rf-set-connection-name" }, row.clientName),
-        el("span", { class: "rf-set-connection-id" }, row.clientId),
       ),
       row.authorized
-        ? stateChip({ tone: "done", label: "Authorized", mark: "OK" })
-        : stateChip({ tone: "neutral", label: "再接続が必要", mark: "--" }),
+        ? stateChip({ tone: "done", label: relayText("authorized"), mark: "OK" })
+        : stateChip({ tone: "neutral", label: t("integration.status.reconnect_required"), mark: "--" }),
     ),
     el(
       "div",
       { class: "rf-set-connection-link" },
-      el("span", { class: "rf-set-connection-label" }, "Linked Agent"),
+      el("span", { class: "rf-set-connection-label" }, relayText("linkedAgent")),
       avatar,
       el(
         "div",
         { class: "rf-set-connection-agent-copy" },
-        el("strong", {}, activeLink ? summary.agent!.displayName : row.linkedAgentId !== null && summary.stale ? "Agentを利用できません" : "No agent linked"),
-        el("span", {}, activeLink ? "このMCP接続はこのAgentとして動作します。" : row.linkedAgentId !== null && summary.stale ? "以前のリンク先が削除または無効になっています。" : "接続はAgentなしでも利用できます。"),
+        el("strong", {}, activeLink ? summary.agent!.displayName : row.linkedAgentId !== null && summary.stale ? relayText("agentUnavailable") : relayText("noAgentLinked")),
+        el("span", {}, !row.authorized ? t("integration.status.reconnect_required") : activeLink ? relayText("linkedAgentHint") : row.linkedAgentId !== null && summary.stale ? relayText("staleAgentHint") : relayText("noAgentHint")),
       ),
-      el("div", { class: "rf-set-connection-actions" }, openPicker, unlink, revoke),
+      el("div", { class: "rf-set-connection-actions" }, openPicker, unlink, revoke, remove),
+    ),
+    el("p", { class: "rf-set-connection-permissions" }, relayText(scopes.includes("quests:write") ? (scopes.includes("quests:read") ? "mcpQuestReadWrite" : "mcpQuestWrite") : scopes.includes("quests:read") ? "mcpQuestRead" : "mcpNoQuestAccess")),
+    el("details", { class: "rf-set-connection-details" },
+      el("summary", {}, relayText("mcpDetails")),
+      el("p", {}, el("span", { class: "rf-set-connection-id" }, row.clientId)),
+      el("p", {}, relayText("effectiveScopes")),
+      scopes.length === 0 ? el("p", {}, relayText("noScopes")) : el("ul", {}, ...scopes.map(scope => el("li", {}, el("code", {}, scope)))),
     ),
     picker,
-    state.connectionMessage === "" || state.connectionBusyId !== row.clientId
+    state.connectionMessage() === "" || state.connectionBusyId !== row.clientId
       ? null
-      : el("p", { class: "rf-set-connection-status", "data-tone": state.connectionTone, role: state.connectionTone === "error" ? "alert" : "status" }, state.connectionMessage),
+      : el("p", { class: "rf-set-connection-status", "data-tone": state.connectionTone, role: state.connectionTone === "error" ? "alert" : "status" }, state.connectionMessage()),
   );
 }
 
 function mcpRegion(model: SettingsModel, state: SettingsState, context: ScreenContext, callbacks: SettingsCallbacks): HTMLElement {
-  const copyButton = el("button", { type: "button", class: "rf-secondary-button" }, "Copy");
+  const copyButton = el("button", { type: "button", class: "rf-secondary-button" }, t("common.copy"));
   copyButton.addEventListener("click", () => callbacks.onCopyMcpUrl());
   const connectionBody = model.mcpConnectionLoadError !== null
     ? screenNotice({
       status: "error",
-      detail: "MCP接続の一覧を取得できませんでした。Tool利用自体は継続できます。",
-      action: { label: "再試行", onAct: callbacks.onRetryMcpConnections },
+      detail: relayText("mcpListFailed"),
+      action: { label: relayText("retry"), onAct: callbacks.onRetryMcpConnections },
     })
     : model.isDemo
-      ? screenEmpty("MCP接続はPreviewです", "Googleでサインインすると、OAuth MCP clientとLinked Agentをここで管理できます。")
+      ? screenEmpty(relayText("mcpDemoTitle"), relayText("mcpDemoHint"))
       : model.mcpConnections.length === 0
-        ? screenEmpty("接続済みMCP clientはまだありません", "MCP clientを接続すると、ここでどのAgentとして動作するかを設定できます。")
+        ? screenEmpty(relayText("mcpEmptyTitle"), relayText("mcpEmptyHint"))
         : el("div", { class: "rf-set-connection-list" }, ...model.mcpConnections.map((row) => connectionRow(row, model, state, context, callbacks)));
   return screenRegion(
-    "MCP Connection",
+    relayText("mcpConnectionTitle"),
     {},
     el(
       "div",
@@ -438,25 +460,25 @@ function mcpRegion(model: SettingsModel, state: SettingsState, context: ScreenCo
           class: "rf-set-mcp-url",
           value: model.mcpUrl,
           readonly: true,
-          "aria-label": "安定版 MCP URL",
+          "aria-label": relayText("stableMcpUrl"),
         }),
         copyButton,
       ),
-      state.mcpCopyMessage === ""
+      state.mcpCopyMessage() === ""
         ? null
         : el(
           "p",
           { class: "rf-set-mcp-status", "data-tone": state.mcpCopyTone, role: state.mcpCopyTone === "error" ? "alert" : "status" },
-          state.mcpCopyMessage,
+          state.mcpCopyMessage(),
         ),
-      el("p", { class: "rf-set-mcp-note" }, "OAuth接続です。APIキー、Bearer Token、Client Secretの入力は不要です。"),
+      el("p", { class: "rf-set-mcp-note" }, relayText("mcpOAuthHint")),
       el(
         "div",
         { class: "rf-set-mcp-connections" },
-        el("div", { class: "rf-set-mcp-subhead" }, el("h3", {}, "Linked Agent"), el("p", {}, "MCP clientがどのAgentとして動作するかを設定します。")),
-        state.connectionMessage === ""
+        el("div", { class: "rf-set-mcp-subhead" }, el("h3", { tabindex: "-1" }, relayText("linkedAgent")), el("p", {}, relayText("linkedAgentSetupHint"))),
+        state.connectionMessage() === ""
           ? null
-          : el("p", { class: "rf-set-connection-status", "data-tone": state.connectionTone, role: state.connectionTone === "error" ? "alert" : "status" }, state.connectionMessage),
+          : el("p", { class: "rf-set-connection-status", "data-tone": state.connectionTone, role: state.connectionTone === "error" ? "alert" : "status" }, state.connectionMessage()),
         connectionBody,
       ),
     ),
@@ -469,7 +491,7 @@ function mcpRegion(model: SettingsModel, state: SettingsState, context: ScreenCo
 
 function agentRow(row: SettingsAgentRow, context: ScreenContext, callbacks: SettingsCallbacks): HTMLElement {
   const actor = context.actors.get(row.agentId);
-  const edit = el("button", { type: "button", class: "rf-secondary-button" }, "編集");
+  const edit = el("button", { type: "button", class: "rf-secondary-button", disabled:context.writeLocked }, t("common.edit"));
   edit.addEventListener("click", () => callbacks.onEditAgent(row.agentId));
   return el(
     "div",
@@ -481,22 +503,22 @@ function agentRow(row: SettingsAgentRow, context: ScreenContext, callbacks: Sett
       el("span", { class: "rf-set-agent-name" }, row.displayName),
       el("span", { class: "rf-set-agent-meta" }, row.provider === "" ? row.role : `${row.role} · ${row.provider}`),
     ),
-    row.status === "disabled" ? stateChip({ tone: "neutral", label: "Disabled", mark: "‖" }) : null,
+    row.status === "disabled" ? stateChip({ tone: "neutral", label: relayText("disabled"), mark: "‖" }) : null,
     edit,
   );
 }
 
 function agentsRegion(model: SettingsModel, context: ScreenContext, callbacks: SettingsCallbacks): HTMLElement {
-  const create = el("button", { type: "button", class: "rf-primary-button" }, "Agentを登録");
+  const create = el("button", { type: "button", class: "rf-primary-button", disabled:context.writeLocked }, relayText("registerAgent"));
   create.addEventListener("click", () => callbacks.onCreateAgent());
   return screenRegion(
-    "Agents",
+    relayText("agentsTitle"),
     {},
-    metricRow([{ label: "登録済み", value: String(model.agents.length) } as Metric]),
+    metricRow([{ label: relayText("registered"), value: String(model.agents.length) } as Metric]),
     !callbacks.canManageAgents
-      ? el("p", { class: "rf-unavailable" }, "Googleでサインインすると Agent を登録・編集できます。")
+      ? el("p", { class: "rf-unavailable" }, relayText("agentSignInHint"))
       : model.agents.length === 0
-        ? el("p", { class: "rf-set-agent-empty" }, "登録済みの Agent はまだありません。")
+        ? el("p", { class: "rf-set-agent-empty" }, relayText("agentsEmpty"))
         : el("div", { class: "rf-set-agent-list" }, ...model.agents.map((row) => agentRow(row, context, callbacks))),
     callbacks.canManageAgents ? create : null,
   );
@@ -508,10 +530,10 @@ function agentsRegion(model: SettingsModel, context: ScreenContext, callbacks: S
 
 const SECTION_LABEL: Readonly<Record<SettingsSection, string>> = {
   top: "Settings",
-  account: "Account",
-  appearance: "Appearance",
-  mcp: "MCP Connection",
-  agents: "Agents",
+  get account() { return relayText("accountTitle"); },
+  get appearance() { return relayText("appearanceTitle"); },
+  get mcp() { return relayText("mcpConnectionTitle"); },
+  get agents() { return relayText("agentsTitle"); },
 };
 
 function settingsMain(
@@ -523,7 +545,7 @@ function settingsMain(
   const main = el(
     "div",
     { class: "rf-screen rf-set-screen", "data-scroll": "true" },
-    screenHeader({ title: "Settings", question: "アカウント、テーマ、MCP接続をここで管理します。" }),
+    screenHeader({ title: "Settings", question: relayText("settingsQuestion") }),
     accountRegion(model, state, context, callbacks),
     appearanceRegion(model, callbacks),
     mcpRegion(model, state, context, callbacks),
@@ -534,15 +556,18 @@ function settingsMain(
 
 /** Scrolls the requested section into view once, after the DOM is attached. */
 function applyPendingFocus(main: HTMLElement, section: SettingsSection | null): void {
-  if (section === null || section === "top") {
-    main.querySelector("h1")?.focus();
+  if (section === null) return;
+  if (section === "top") {
+    const heading = main.querySelector<HTMLElement>("h1");
+    if (heading) { heading.tabIndex = -1; heading.focus(); }
     return;
   }
   const label = SECTION_LABEL[section];
   const region = [...main.querySelectorAll<HTMLElement>(".rf-screen-region")]
     .find((node) => node.getAttribute("aria-label") === label);
   region?.scrollIntoView({ block: "start" });
-  region?.querySelector<HTMLElement>("h2")?.focus();
+  const heading = region?.querySelector<HTMLElement>("h2");
+  if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
 }
 
 export function renderSettingsDesktop(

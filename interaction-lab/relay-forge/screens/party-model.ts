@@ -7,6 +7,8 @@
 
 import type { Quest } from "../../../types/questforge.ts";
 import { type Actor, questRef } from "../model.ts";
+import { t } from "../../../i18n.ts";
+import { relayText } from "../relay-copy.ts";
 import { instantLabel, type ScreenNotice } from "./screen-state.ts";
 
 /* ------------------------------------------------------------------ *
@@ -140,8 +142,19 @@ export function normalizePartyModel(options: NormalizePartyOptions): PartyModel 
   const held = new Map<string, HeldQuest[]>();
   const lastHandoff = new Map<string, { at: string; summary: string }>();
   for (const quest of options.quests) {
-    if (quest.done || quest.lifecycleState === "completed") continue;
+    if (quest.lifecycleState === "archived") continue;
     const id = ownerId(quest, options.selfUid);
+    const stamp = quest.handoff.reviewedAt || quest.handoff.reviewRequestedAt || quest.handoff.startedAt;
+    if (stamp !== "") {
+      const previous = lastHandoff.get(id);
+      if (previous === undefined || previous.at < stamp) {
+        lastHandoff.set(id, {
+          at: stamp,
+          summary: `${questRef(quest.id)} · ${t(`task.handoffStates.${quest.assignee.handoffState}`)}`,
+        });
+      }
+    }
+    if (quest.done || quest.lifecycleState === "completed") continue;
     const unmet = quest.dependencyIds.filter((dependency) => !done.has(dependency)).length;
     const startedAt = quest.handoff.startedAt !== "" ? quest.handoff.startedAt : quest.updatedAt;
     const at = new Date(startedAt).getTime();
@@ -156,16 +169,6 @@ export function normalizePartyModel(options: NormalizePartyOptions): PartyModel 
     if (list === undefined) held.set(id, [entry]);
     else list.push(entry);
 
-    const stamp = quest.handoff.reviewRequestedAt !== "" ? quest.handoff.reviewRequestedAt : quest.handoff.startedAt;
-    if (stamp !== "") {
-      const previous = lastHandoff.get(id);
-      if (previous === undefined || previous.at < stamp) {
-        lastHandoff.set(id, {
-          at: stamp,
-          summary: `${questRef(quest.id)} を ${quest.assignee.handoffState} で受け取りました`,
-        });
-      }
-    }
   }
 
   const workloadOf = (id: string): Workload => {
@@ -188,15 +191,15 @@ export function normalizePartyModel(options: NormalizePartyOptions): PartyModel 
     members.push({
       actorId,
       kind: actor?.kind ?? "human",
-      standing: record.role === "owner" ? "オーナー" : "メンバー",
+      standing: relayText(record.role === "owner" ? "partyOwner" : "partyMember"),
       workload: workloadOf(actorId),
       held: (held.get(actorId) ?? []).slice().sort((left, right) => right.heldForMinutes - left.heldForMinutes),
       lastHandoffAt: handoff?.at ?? "",
       lastHandoffSummary: handoff?.summary ?? "",
       capabilities: [
-        { label: "ハンドル", value: record.handle === "" ? "—" : `@${record.handle}` },
-        { label: "参加", value: instantLabel(record.joinedAt) },
-        { label: "レベル", value: String(record.level) },
+        { label: relayText("partyHandle"), value: record.handle === "" ? "—" : `@${record.handle}` },
+        { label: relayText("partyJoined"), value: instantLabel(record.joinedAt) },
+        { label: relayText("partyLevel"), value: String(record.level) },
       ],
       reviewRequired: false,
     });
@@ -209,17 +212,17 @@ export function normalizePartyModel(options: NormalizePartyOptions): PartyModel 
     members.push({
       actorId: record.agentId,
       kind: actor?.kind ?? "agent",
-      standing: record.status === "disabled" ? "停止中" : record.status === "archived" ? "アーカイブ" : "稼働中",
+      standing: relayText(record.status === "disabled" ? "disabled" : record.status === "archived" ? "partyArchived" : "partyActive"),
       workload: workloadOf(record.agentId),
       held: (held.get(record.agentId) ?? []).slice().sort((left, right) => right.heldForMinutes - left.heldForMinutes),
       lastHandoffAt: handoff?.at ?? "",
       lastHandoffSummary: handoff?.summary ?? "",
       capabilities: [
         { label: "Provider", value: record.provider === undefined || record.provider === "" ? "—" : record.provider },
-        { label: "Role", value: record.role === undefined || record.role === "" ? "—" : record.role },
-        { label: "権限スコープ", value: scopes.length === 0 ? "付与なし" : scopes.join(", ") },
-        { label: "既定の受け渡し", value: record.defaultHandoffState ?? "—" },
-        { label: "既定 dry-run", value: record.dryRunDefault === true ? "有効" : "無効" },
+        { label: t("character.role"), value: record.role === undefined || record.role === "" ? "—" : record.role },
+        { label: relayText("partyScopes"), value: scopes.length === 0 ? relayText("partyNoScopes") : scopes.join(", ") },
+        { label: relayText("agentDefaultHandoff"), value: record.defaultHandoffState === undefined ? "—" : t(`task.handoffStates.${record.defaultHandoffState}`) },
+        { label: relayText("partyDryRun"), value: relayText(record.dryRunDefault === true ? "partyEnabled" : "disabled") },
       ],
       reviewRequired: record.reviewRequired === true,
     });

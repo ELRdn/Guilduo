@@ -14,6 +14,9 @@ import type { Quest } from "../types/questforge.ts";
 import { transitionQuestHandoff } from "../server/questforge-domain.ts";
 import { questActionState } from "../interaction-lab/relay-forge/quest-actions.ts";
 import { weaveQuestRows } from "../interaction-lab/relay-forge/primitives/spine-model.ts";
+import { relayText } from "../interaction-lab/relay-forge/relay-copy.ts";
+import { setLocale, SUPPORTED_LOCALES, t } from "../i18n.ts";
+import { countLabel } from "../interaction-lab/relay-forge/screens/screen-state.ts";
 
 /**
  * These tests run the Command adapter against the real domain, not against the
@@ -170,6 +173,50 @@ test("only one identity entry exists per actor id across every surface", () => {
   }
 });
 
+test("a cached Command snapshot follows locale changes while preserving real Quest and actor data", () => {
+  const quest = buildQuest({ id:"q-cached", title:"実際の作業", notes:"Keep this 日本語 note", requester:{ type:"agent", id:"forge-runner", label:"Forge Runner" }, completionCriteria:"Real criteria" });
+  const model = normalizeCommandModel({ profile:{ uid:"uid-1", displayName:"あなた", avatarUrl:"blob:real-avatar" }, agents:[{ agentId:"forge-runner", displayName:"Forge Runner" }], quests:[quest], syncLabel:"10:52" });
+  const view = model.selectedViews.get(quest.id)!;
+  const actors = model.actors;
+  const unnamed = resolveActors({ uid:"unnamed", displayName:"", handle:"" }, []).get("u-unnamed")!;
+  try {
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(locale);
+      assert.equal(model.quests[0].stateLabel, relayText("commandRequestedReview").replace("{actor}", "Forge Runner"));
+      assert.equal(model.interventions[0].reason, model.quests[0].stateLabel);
+      assert.equal(model.interventions[0].actionLabel, relayText("commandReviewOutput"));
+      assert.equal(view.reason, relayText("commandSummaryReview"));
+      assert.equal(view.responsibility[0].stateLabel, relayText("commandHandedOff"));
+      assert.equal(view.responsibility.at(-1)?.stateLabel, relayText("commandNextHolder"));
+      assert.ok(view.details.points[0].includes(relayText("due")));
+      assert.equal(view.evidencePoints[0], relayText("commandNoOutput"));
+      assert.equal(model.capacity[0].label, relayText("commandAttention"));
+      assert.equal(model.capacity[0].value, countLabel(1));
+      assert.equal(model.capacity[3].value, `${t("sync.synced")} · 10:52`);
+      assert.equal(model.selectedViews.get(quest.id), view);
+      assert.equal(model.actors, actors);
+      assert.equal(model.actors.get("u-uid-1")?.name, "あなた");
+      assert.equal(model.actors.get("u-uid-1")?.avatarUrl, "blob:real-avatar");
+      assert.equal(unnamed.name, t("task.assignee.self"));
+      assert.equal(unnamed.role, t("role.operator.label"));
+      assert.equal(view.title, quest.title);
+      assert.deepEqual(view.requester, quest.requester);
+      assert.equal(view.externalReview?.note, quest.notes);
+      assert.equal(view.externalReview?.criteria, quest.completionCriteria);
+    }
+  } finally { setLocale("ja"); }
+});
+
+test("completed Command work never claims it is executing, while an accepted active handoff remains open", () => {
+  const finished = buildQuest({ id:"q-finished", title:"Finished", done:true, lifecycleState:"completed", assignee:{ type:"agent", id:"forge-runner", label:"Forge Runner", handoffState:"working" } });
+  const accepted = buildQuest({ id:"q-accepted", title:"Accepted", assignee:{ type:"agent", id:"forge-runner", label:"Forge Runner", handoffState:"accepted" } });
+  const model = normalizeCommandModel({ profile:{ uid:"uid-1", displayName:"Human" }, agents:[], quests:[finished, accepted], syncLabel:"10:52" });
+  assert.equal(model.quests[0].stateLabel, relayText("stateDone"));
+  assert.ok(model.selectedViews.get(finished.id)!.responsibility.every(step => step.state === "completed"));
+  assert.equal(model.quests[1].state, "ready");
+  assert.equal(model.quests[1].stateLabel, relayText("commandAccepted").replace("{actor}", model.actors.get("forge-runner")!.name));
+});
+
 test("an archived Quest is excluded from the operational Command model", () => {
   const model = normalizeCommandModel({
     profile: { uid: "uid-1", displayName: "Hironao" },
@@ -196,6 +243,29 @@ test("accepting a Handoff keeps unfinished work open and uses the registered ide
   assert.ok([...model.actors.values()].some((actor) => actor.name === "My Name"));
   assert.ok([...model.actors.values()].some((actor) => actor.name === "My Codex"));
 });
+test("self and Human work show their real single holder without invented handoffs", () => {
+  for (const type of ["self", "human"] as const) {
+    for (const handoffState of ["none", "working", "blocked"] as const) {
+      for (const done of [false, true]) {
+        const name = type === "self" ? "Real owner" : "External reviewer";
+        const quest = buildQuest({ id:"holder-test", title:"Real work", done, lifecycleState:done ? "completed" : "active", assignee:{ type, id:type === "self" ? "owner" : "other-human", label:name, handoffState } });
+        const model = normalizeCommandModel({ profile:{ uid:"owner", displayName:"Real owner", avatarUrl:"blob:owner-only" }, agents:[], quests:[quest], syncLabel:"Now" });
+        const loom = model.quests[0];
+        const view = model.selectedViews.get(quest.id)!;
+        assert.equal(loom.relay.legs.length, 1);
+        assert.equal(loom.relay.currentIndex, 0);
+        const step = view.responsibility[0];
+        const actor = model.actors.get(step.actorId)!;
+        assert.equal(actor.kind, "human");
+        assert.equal(actor.name, name);
+        assert.equal(actor.avatarUrl, type === "self" ? "blob:owner-only" : undefined);
+        assert.equal(step.state, done ? "completed" : handoffState === "none" ? "pending" : handoffState === "blocked" ? "blocked" : "executing");
+        assert.notEqual(step.stateLabel, relayText("commandNextHolder"));
+        assert.equal(loom.stateLabel, done ? relayText("stateDone") : handoffState === "working" ? relayText("commandExecuting").replace("{actor}", name) : handoffState === "blocked" ? relayText("stateBlocked") : relayText("commandPlanned"));
+      }
+    }
+  }
+});
 test("a self-owned planned Quest exposes task actions instead of Handoff decisions", () => {
   const quest = buildQuest({
     id: "q-self",
@@ -204,7 +274,7 @@ test("a self-owned planned Quest exposes task actions instead of Handoff decisio
   });
   assert.deepEqual(questActionState(quest), {
     mode: "self-task",
-    statusLabel: "あなたの担当 Quest です",
+    statusLabel: "あなたの担当Questです",
     actions: ["start", "edit", "complete", "archive"],
   });
 });
@@ -219,7 +289,7 @@ test("Request revision remains exclusive to Agent review", () => {
   });
   assert.deepEqual(questActionState(working), {
     mode: "read-only",
-    statusLabel: "Agent がこの Quest を保持しています",
+    statusLabel: "AgentがこのQuestを保持しています",
     actions: ["edit"],
   });
   const accepted = buildQuest({
@@ -227,13 +297,55 @@ test("Request revision remains exclusive to Agent review", () => {
     title: "Accepted",
     assignee: { type: "agent", id: "forge-runner", label: "Forge Runner", handoffState: "accepted" },
   });
-  assert.equal(questActionState(accepted).statusLabel, "Agent の成果物を承認済みです");
+  assert.equal(questActionState(accepted).statusLabel, relayText("taskAgentAccepted"));
 });
 test("the transition table matches the domain", () => {
   assert.equal(canTransition("review_required", "accepted"), true);
   assert.equal(canTransition("review_required", "working"), true);
   assert.equal(canTransition("review_required", "ready"), false);
   assert.equal(canTransition("accepted", "accepted"), false);
+});
+
+test("closed and archived owners never expose mutation or Handoff decisions", () => {
+  for (const type of ["agent", "human", "self"] as const) {
+    for (const lifecycleState of ["completed", "archived"] as const) {
+      const state = questActionState(buildQuest({ id:"closed", title:"Closed", done:true, lifecycleState,
+        assignee:{ type, id:"owner", label:"Owner", handoffState:"review_required" } }));
+      assert.equal(state.mode, "read-only");
+      assert.deepEqual(state.actions, []);
+      assert.equal(state.statusLabel, relayText(lifecycleState === "archived" ? "taskArchived" : "taskClosed"));
+    }
+  }
+  const human = buildQuest({ id:"human", title:"Human work", assignee:{ type:"human", id:"human", label:"Human", handoffState:"working" } });
+  assert.equal(questActionState(human).statusLabel, relayText("taskHumanHolding"));
+  const history = { ...human, done:true, lifecycleState:"completed" as const, humanRequest:{ sourceQuestId:"source", requestKey:"review", recipientId:"human", reason:"Review", checkTarget:"Result", artifactUrl:"", status:"answered" as const, seenAt:"", respondedAt:"", response:"Approved", outcome:"approved" as const } };
+  assert.deepEqual(questActionState(history).actions, ["reply"], "answered requests keep a read-only entry to their response history");
+});
+
+test("Handoff execution requires the requested Quest and confirmed target state", async () => {
+  const accepted = buildQuest({ id:"q-1", title:"Accepted", assignee:{ type:"agent", id:"forge-runner", label:"Forge Runner", handoffState:"accepted" } });
+  for (const quest of [undefined, null, [], {}, { ...accepted, id:"another" }, { ...accepted, assignee:{ ...accepted.assignee, handoffState:"review_required" } }]) {
+    const calls: boolean[] = [];
+    const result = await runHandoff({ async transitionHandoff(_id, input) { calls.push(input.dryRun === true); return input.dryRun ? {} : { quest }; } },
+      { questId:"q-1", state:"accepted", expectedState:"review_required", dryRun:false });
+    assert.deepEqual(calls, [true, false]);
+    assert.equal(result.ok, false);
+    assert.equal(result.code, "invalid_handoff_response");
+    assert.equal(result.quest, null);
+  }
+});
+
+test("stored decision feedback follows the current locale", async () => {
+  const result = await submitDecision(domainPort([buildQuest({ id:"q-1", title:"Review" })]),
+    { kind:"approve", questId:"q-1", expectedState:"review_required", reason:"" },
+    { evidenceReviewed:true, writeLocked:false, permissionMissing:null, conflict:null }, "idle", () => {});
+  try {
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(locale);
+      assert.equal(result.message, relayText("handoffApproved", locale));
+      assert.equal(explainFailure("stale_handoff_state"), relayText("handoffConflict", locale));
+    }
+  } finally { setLocale("ja"); }
 });
 
 test("approve runs a dry run before it writes, and the domain applies it", async () => {
