@@ -17,8 +17,8 @@ test("official LP documents preserve public canonical and language URLs", () => 
     assert.match(html, /hreflang="x-default" href="__GUILDUO_PUBLIC_ORIGIN__\/"/);
     assert.doesNotMatch(html, /class="edition"|name="robots" content="noindex/);
   }
-  assert.match(ja, /class="language" href="\/lp\/en\/"/);
-  assert.match(en, /class="language" href="\/"/);
+  assert.match(ja, /class="lang-switch"[^]*?<a href="\/lp\/en\/" lang="en"/);
+  assert.match(en, /class="lang-switch"[^]*?<a href="\/" lang="ja"/);
   assert.match(ja, /<a class="wordmark" href="\/"/);
 });
 test("Web App metadata and host routing stay separate from the LP", () => {
@@ -28,15 +28,15 @@ test("Web App metadata and host routing stay separate from the LP", () => {
   assert.match(read("site-routing.ts"), /RELAY_FORGE_ENTRY_PATH = "\/next\/relay-forge\/"/);
 });
 test("official LP shares the approved demo and motion implementation", () => {
-  assert.match(read("lp/main.ts"), /import "\.\.\/lpv2-1\/main"/);
-  assert.match(read("lp/styles.css"), /@import "\.\.\/lpv2-1\/styles.css"/);
+  assert.match(read("lp/main.ts"), /import "\.\.\/lpv3\/main"/);
+  assert.match(read("lp/styles.css"), /@import "\.\.\/lpv3\/styles.css"/);
+  assert.match(read("lpv3/main.ts"), /import "\.\.\/lpv2-1\/main"/);
   assert.match(read("lpv2-1/main.ts"), /import "\.\.\/lpv2\/main"/);
   for (const html of [ja,en]) {
     let previous = -1;
-    for (const id of ["hero-title", "experience-title", "relationship-title", "mcp-title", "control-title", "guild-title", "open-title", "final-title"]) {
+    for (const id of ["hero-title", "relay-title", "experience-title", "mcp-title", "guild-title", "open-title", "final-title"]) {
       const index = html.indexOf(`id="${id}"`);assert.ok(index > previous, id);previous=index;
     }
-    assert.match(html, /<details class="mcp-details" open>/);
   }
 });
 test("approved copy and text-only Guilduo boundary remain explicit", () => {
@@ -46,7 +46,9 @@ test("approved copy and text-only Guilduo boundary remain explicit", () => {
   assert.match(ja, /AIに任せる。<br>判断まで任せない。/);
   assert.match(ja, /実際のAIへの接続やタスクの保存は行いません/);
   assert.match(ja, /外部の作業画面/);assert.match(en, /external workspace/i);
-  assert.doesNotMatch(ja+en, /assets\/lp\/|data-deferred-src/);
+  assert.doesNotMatch(ja+en, /data-deferred-src/);
+  for (const html of [ja,en]) for (const shot of ["command-dark","party-dark"]) assert.match(html, new RegExp(`/assets/lp/${shot}\.webp`));
+  assert.doesNotMatch(ja+en, /Hironao|hironao/);
   const textArea=ja.slice(ja.indexOf('class="guilduo-workspace"'),ja.indexOf('class="external-workspace"'));
   assert.match(textArea,/data-quest="original"/);assert.match(textArea,/data-quest="review"/);assert.doesNotMatch(textArea,/data-preview="/);
 });
@@ -69,13 +71,13 @@ test("public CTA URL policy allows only same-origin or HTTPS", () => {
   for(const unsafe of ["http://other.example/","javascript:alert(1)",""])assert.equal(resolvePublicUrl(unsafe,href,origin),null);
 });
 test("comparison routes remain available with noindex", () => {
-  for(const dir of ["lpv2","lpv2-1"])for(const lang of ["","en/"])assert.match(read(`${dir}/${lang}index.html`),/name="robots" content="noindex,follow"/);
+  for(const dir of ["lpv2","lpv2-1","lpv3"])for(const lang of ["","en/"])assert.match(read(`${dir}/${lang}index.html`),/name="robots" content="noindex,follow"/);
   assert.match(read("vite.config.ts"),/landingJa: resolve\(root, "lp\/index.html"\)/);
   assert.match(read("vite.config.ts"),/landingV21En: resolve\(root, "lpv2-1\/en\/index.html"\)/);
 });
 test("motion preserves palette and accessible off switch", () => {
-  const css=read("lpv2/styles.css")+read("lpv2-1/styles.css");
+  const css=read("lpv2/styles.css")+read("lpv2-1/styles.css")+read("lpv3/styles.css");
   assert.doesNotMatch(css,/linear-gradient|radial-gradient|backdrop-filter|filter:\s*blur|text-shadow/i);
   assert.match(css,/prefers-reduced-motion: reduce/);assert.match(css,/data-motion="off"/);
-  assert.match(ja+en,/data-motion-toggle aria-pressed/);assert.doesNotMatch(ja+en,/WebGL|canvas id=/i);
+  assert.doesNotMatch(ja+en,/data-motion-toggle/);assert.doesNotMatch(ja+en,/WebGL|canvas id=/i);
 });

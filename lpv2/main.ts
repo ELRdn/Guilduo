@@ -241,7 +241,9 @@ for (const [selector, value] of [
   ["[data-source-cta]", globalThis.QuestForgeConfig?.sourceUrl],
 ] as const) {
   document.querySelectorAll<HTMLAnchorElement>(selector).forEach(link => {
-    const url = resolvePublicUrl(value, location.href, location.origin);
+    // Fall back to the published URL written in the HTML when runtime config omits it.
+    const url = resolvePublicUrl(value, location.href, location.origin)
+      ?? resolvePublicUrl(link.getAttribute("href"), location.href, location.origin);
     if (url) { link.href = url; }
     else {
       link.removeAttribute("href");
