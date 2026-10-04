@@ -61,6 +61,9 @@ real-phone usability acceptance or product launch acceptance.
 - [Google: FAQ structured data](https://developers.google.com/search/docs/appearance/structured-data/faqpage)
 - [OpenAI: crawler and retrieval bots](https://developers.openai.com/api/docs/bots)
 
-Local acceptance: 457 automated tests, 111 Chrome Docs scenarios, 40 existing
-launch scenarios, type checks, design check and production build passed.
-Production publication and post-deployment evidence are recorded separately.
+Final candidate acceptance: 459 automated tests, 111 Chrome Docs scenarios,
+43 official LP scenarios, 40 existing launch scenarios, type checks, design check,
+production build and GitHub CI passed. Published Docs also passed 111 Chrome
+scenarios and 39 HTTP/discovery/crawler user-agent checks. The SPA fallback was
+removed before creating the final deployment, and missing Docs return HTTP 404.
+See [PUBLICATION.md](PUBLICATION.md) for the live evidence and remaining limits.

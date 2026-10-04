@@ -31,7 +31,7 @@ Guilduo 是一个 **Human × AI Work Platform**，让人类和 AI Agent 能够�
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | 正式 Remote HTTP MCP endpoint |
 | Appwrite API | `https://api.guilduo.com/v1` | 官方 Appwrite API endpoint（origin：`https://api.guilduo.com`） |
-| Documentation (JA / EN) | `https://guilduo.com/docs/` / `https://guilduo.com/docs/en/` | 静态文档 · 等待发布 |
+| Documentation (JA / EN) | `https://guilduo.com/docs/` / `https://guilduo.com/docs/en/` | 静态文档 · 已发布 |
 | Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com` 仅用于重定向到 `https://guilduo.com`。旧的 `workers.dev` URL 会继续用于兼容连接和 rollback。`api.guilduo.com` 用于 Appwrite API，由浏览器 Appwrite client 和 Worker 的 `APPWRITE_ENDPOINT` 使用；它不是 Worker REST `/v1` 或 MCP `/mcp` route 的公共 origin。

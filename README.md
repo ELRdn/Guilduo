@@ -31,8 +31,8 @@ Guilduo is a **Human × AI Work Platform** where people and AI Agents can commis
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Canonical Remote HTTP MCP endpoint |
 | Appwrite API | `https://api.guilduo.com/v1` | Official Appwrite API endpoint (origin: `https://api.guilduo.com`) |
-| Documentation | `https://guilduo.com/docs/` | Static Japanese Docs; publication pending |
-| English Documentation | `https://guilduo.com/docs/en/` | Static English Docs; publication pending |
+| Documentation | `https://guilduo.com/docs/` | Static Japanese Docs; published |
+| English Documentation | `https://guilduo.com/docs/en/` | Static English Docs; published |
 | Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com` is reserved for redirects to `https://guilduo.com`. The old `workers.dev` URL remains for compatibility connections and rollback. `api.guilduo.com` is for the Appwrite API and is used by the browser Appwrite client and the Worker's `APPWRITE_ENDPOINT`; it is not the public origin for the Worker's REST `/v1` or MCP `/mcp` routes.

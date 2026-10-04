@@ -12,8 +12,8 @@
 | --- | --- | --- | --- |
 | `https://guilduo.com/` | `/`を`/lp/`へrewrite | `/lp/` | `https://guilduo.com/` |
 | `https://guilduo.com/lp/en/` | 変更なし | `/lp/en/` | `https://guilduo.com/lp/en/` |
-| `https://guilduo.com/docs/` | 変更なし | `/docs/` | `https://guilduo.com/docs/`（静的Docs・配備待ち） |
-| `https://guilduo.com/docs/en/` | 変更なし | `/docs/en/` | `https://guilduo.com/docs/en/`（英語Docs・配備待ち） |
+| `https://guilduo.com/docs/` | 変更なし | `/docs/` | `https://guilduo.com/docs/`（静的Docs・公開済み） |
+| `https://guilduo.com/docs/en/` | 変更なし | `/docs/en/` | `https://guilduo.com/docs/en/`（英語Docs・公開済み） |
 | `https://app.guilduo.com/` | `/`を`/next/relay-forge/`へrewrite | `/next/relay-forge/` | `https://app.guilduo.com/` |
 | `https://app.guilduo.com/next/relay-forge/` | 変更なし | `/next/relay-forge/` | `https://app.guilduo.com/` |
 | Appwrite generated domain | 変更なし | 全deployment tree | 検証・rollback用 |

@@ -31,8 +31,8 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 | Web App | `https://app.guilduo.com` | Appwrite SiteのCustom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Remote HTTP MCPの正規接続先 |
 | Appwrite API | `https://api.guilduo.com/v1` | Appwrite APIの正式endpoint（originは`https://api.guilduo.com`） |
-| Documentation | `https://guilduo.com/docs/` | 日本語の静的Docs・本番公開待ち |
-| English Documentation | `https://guilduo.com/docs/en/` | 英語の静的Docs・本番公開待ち |
+| Documentation | `https://guilduo.com/docs/` | 日本語の静的Docs・公開済み |
+| English Documentation | `https://guilduo.com/docs/en/` | 英語の静的Docs・公開済み |
 | Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com`は`https://guilduo.com`へのredirect専用です。旧`workers.dev` URLは互換接続・rollback用に残します。`api.guilduo.com`はAppwrite API用で、ブラウザのAppwrite clientとWorkerの`APPWRITE_ENDPOINT`が利用します。Worker REST/MCPの`/v1`や`/mcp`の公開originではありません。

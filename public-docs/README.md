@@ -3,7 +3,8 @@
 The public Docs are static, bilingual articles generated alongside the existing
 Appwrite Site. Japanese: `https://guilduo.com/docs/`; English:
 `https://guilduo.com/docs/en/`. The `docs.guilduo.com` subdomain remains reserved.
-These paths are implemented locally; production publication is a separate step.
+Both paths were published and verified on 2026-10-05 (Asia/Tokyo).
+See [PUBLICATION.md](PUBLICATION.md) for deployment and live acceptance evidence.
 
 ## Content and sources
 
@@ -103,9 +104,20 @@ acceptance and deployment approval remain separate from the local checks.
   Light/Dark screenshots were also inspected. Existing LP verification passed
   with the new Docs links.
 - Local static discovery endpoints served the expected content types; a missing
-  article returned 404. Production deployment, live host behavior and Search
-  Console submission have not been performed.
+  article returned 404. Production publication and live host checks subsequently
+  passed; Search Console submission has not been performed.
 
 Local evidence: `.qa-artifacts/docs-browser.log`, `docs-build.log`,
 `docs-tests.log`, `docs-launch.log` and `.qa-artifacts/public-docs/` screenshots. These generated
 artifacts remain ignored and are not published as documentation.
+
+## Production verification
+
+The final candidate passed 459 automated tests and GitHub CI. Published Docs
+passed 111 Chrome scenarios and 39 HTTP/discovery/crawler user-agent checks.
+All 24 pages are readable without JavaScript; missing Docs paths return a real
+404. Existing LP, Web App and compatibility entries still boot and load assets.
+The browser verifier blocks host-injected Cloudflare RUM uploads before sending
+them and reports that separately from forbidden application writes. This does
+not change the host's analytics policy. Real-phone usability and verified crawler
+IP access remain separate from browser emulation and user-agent probes.

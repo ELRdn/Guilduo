@@ -1,0 +1,50 @@
+# Guilduo Docs publication — 2026-10-05 (Asia/Tokyo)
+
+Published Japanese Docs: https://guilduo.com/docs/
+
+Published English Docs: https://guilduo.com/docs/en/
+
+## Release evidence
+
+- [Docs implementation PR #49](https://github.com/ELRdn/Guilduo/pull/49)
+- [Static routing and read-only verification PR #50](https://github.com/ELRdn/Guilduo/pull/50)
+- Final deployed source: `cb82a1e15b80567bf84427263ac988f67755c89d`;
+  merged implementation: `d631cc8163941d840103425208a709901fcac183`.
+- [Final candidate CI: success](https://github.com/ELRdn/Guilduo/actions/runs/37227369953)
+- [Final Site deployment: success](https://github.com/ELRdn/Guilduo/actions/runs/37227367141)
+- 459 automated tests passed. Type checks, design checks, build, launch,
+  accessibility, app-entry and isolated-Worker CI checks passed. Cache safety,
+  previous-asset retention and archive validation remained enabled.
+
+## Live acceptance
+
+- 111/111 Chrome Docs scenarios passed against `https://guilduo.com`, including
+  every Japanese/English article without JavaScript at 320/768/1440px, local
+  search, language switching, keyboard navigation, theme persistence, clipboard
+  and recovery from expected search/clipboard failures. Physical phone hardware
+  was not used. The final deployment retains the same Docs HTML/client/CSS.
+- 39/39 HTTP checks passed after the final deployment at 2026-10-05 04:16 JST:
+  24 actual article bodies/canonicals, robots.txt, sitemap.xml, llms.txt,
+  search index, three directory redirects, a genuine missing-path 404,
+  five crawler user-agent probes, and Japanese/English LP Docs links.
+- Googlebot, Bingbot, OAI-SearchBot, ChatGPT-User and PerplexityBot probes returned
+  the actual FAQ HTML without a challenge or X-Robots-Tag restriction. This is
+  user-agent testing, not proof of access from verified crawler IPs.
+- Existing Web App root and `/next/relay-forge/` booted at 390px with the signed-out
+  screen and no page errors. LP, `/next/`, Privacy and Terms returned their static
+  entries; referenced JS/CSS assets returned correct content types. No login,
+  model inference, MCP write or private workspace acceptance was performed.
+- The edge injects Cloudflare RUM independently of Docs. The read-only Chrome
+  verifier blocked 38 telemetry upload attempts before sending them, and detected
+  no application write requests. This does not disable production host telemetry.
+
+Generated logs/screenshots remain in ignored `.qa-artifacts/`. No credentials,
+private account information or private runbooks are included in this report.
+
+## Remaining external outcomes
+
+Search Console sitemap submission has not been performed. Crawling, indexing,
+ranking, Google AI feature visibility and citations by AI services remain external
+outcomes. FAQPage and llms.txt are not guarantees of rich results or AI citations.
+The owner's physical-phone review and real-account product launch acceptance
+remain separate from this public documentation deployment.

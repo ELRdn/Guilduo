@@ -12,7 +12,7 @@ revision: https://github.com/ELRdn/Guilduo/commit/5125178d48e94be8d8a16d401fd992
 - originがELRdn/Guilduoを指すことを読み取りで確認した。
 - `gh api repos/ELRdn/Guilduo`でdefault branchがmainであることを確認し、`commits/main`で上記SHAを取得した。
 - リポジトリtreeと資料本文はGitHub APIから読み取った。本文取得はすべて`contents/<path>?ref=5125178d48e94be8d8a16d401fd992da5d8a2b5d`へ固定し、ローカルdirty実装を公開根拠にしていない。
-- 編集対象の公開先は、今回決定された正式サイト配下の https://guilduo.com/docs/ 。親担当の実確認では現状HTTP 200でもアプリfallback HTMLでcanonicalはapp.guilduo.comを指し、Docsは未公開。今回の本文作成を配備・公開確認へ読み替えない。
+- 編集対象の公開先は、今回決定された正式サイト配下の https://guilduo.com/docs/ 。資料収集時点ではHTTP 200でもアプリfallbackで、Docsは未公開だった。2026-10-05に静的Docsの本番配信と実HTTP 404を確認済み。[公開記録](PUBLICATION.md)を参照する。
 - 上記公開revisionのdocs/public-urls.mdにあるdocs.guilduo.comはReserved / Futureの旧計画。このDocsの公開先として採用しない。Web AppとMCPの正式URLは公開資料どおり維持する。
 - content.jsonのrootに`sourceRevision`を付与した。各記事のsources.pathは公開revisionに実在するrepo-relativeなファイルpathで、rendererは上記SHAを使ってGitHub blobリンクを固定できる。
 
