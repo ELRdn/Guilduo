@@ -30,7 +30,8 @@ test("Web App metadata and host routing stay separate from the LP", () => {
 test("official LP shares the approved demo and motion implementation", () => {
   assert.match(read("lp/main.ts"), /import "\.\.\/lpv3\/main"/);
   assert.match(read("lp/styles.css"), /@import "\.\.\/lpv3\/styles.css"/);
-  assert.match(read("lpv3/main.ts"), /import "\.\.\/lpv2-1\/main"/);
+  assert.match(read("lpv3/main.ts"), /import "\.\.\/lpv2\/site"/);
+  assert.match(read("lpv3/main.ts"), /import "\.\/experience"/);
   assert.match(read("lpv2-1/main.ts"), /import "\.\.\/lpv2\/main"/);
   for (const html of [ja,en]) {
     let previous = -1;
@@ -44,13 +45,17 @@ test("approved copy and text-only Guilduo boundary remain explicit", () => {
   assert.match(ja, /人もAIも、依頼主。人もAIも、担当者。/);
   assert.match(ja, /Work together\.<br>Level up together\./);
   assert.match(ja, /AIに任せる。<br>判断まで任せない。/);
-  assert.match(ja, /実際のAIへの接続やタスクの保存は行いません/);
-  assert.match(ja, /外部の作業画面/);assert.match(en, /external workspace/i);
+  assert.match(ja, /AIへの接続やデータの保存は行いません/);assert.match(en, /nothing connects to an agent or saves data/);
+  assert.match(ja, /あなたのAgentの作業画面/);assert.match(en, /agent’s workspace/);
   assert.doesNotMatch(ja+en, /data-deferred-src/);
   for (const html of [ja,en]) for (const shot of ["command-dark","party-dark"]) assert.match(html, new RegExp(`/assets/lp/${shot}\.webp`));
   assert.doesNotMatch(ja+en, /Hironao|hironao/);
-  const textArea=ja.slice(ja.indexOf('class="guilduo-workspace"'),ja.indexOf('class="external-workspace"'));
-  assert.match(textArea,/data-quest="original"/);assert.match(textArea,/data-quest="review"/);assert.doesNotMatch(textArea,/data-preview="/);
+  const textArea=ja.slice(ja.indexOf('class="xp-pane xp-guilduo"'),ja.indexOf('class="xp-pane xp-agent"'));
+  assert.match(textArea,/data-card="bug"/);assert.match(textArea,/data-card="device"/);assert.doesNotMatch(textArea,/data-phone=/);
+  // The demo shows real MCP tool names; keep them in step with the published contract.
+  const contract=JSON.parse(read("api/mcp-tools.json"));
+  const tools=new Set((Array.isArray(contract)?contract:contract.tools).map((tool: { name: string }) => tool.name));
+  for (const [, name] of read("lpv3/experience.ts").matchAll(/tool: "([a-z_]+)"/g)) assert.ok(tools.has(name), name);
 });
 test("official branding uses existing approved delivery assets", () => {
   for(const asset of ["assets/brand/guilduo-mark-gold.svg","assets/brand/og-guilduo.png","assets/icons/favicon-48.png","assets/icons/apple-touch-icon-180.png"]) assert.ok(statSync(new URL(`../${asset}`,import.meta.url)).size>0);
