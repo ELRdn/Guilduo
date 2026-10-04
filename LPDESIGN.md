@@ -362,4 +362,6 @@ Skillsでは、何を人へ頼むか、依頼理由、完了条件、回答待�
 - 言語切替は「日本語 / English」を並べ、現在の言語を塗りで示す。
 - Join the GuildとView on GitHubは、実行時設定にURLがない場合もHTMLに書いた公開URLへ遷移する。
 
-2026-10-05: LPv3を公式LPへ採用。`/lp/`と`/lp/en/`は`lpv3`のスタイル・スクロール演出と、`lpv2`の体験ロジックを共有する。公式URL・canonical・OG素材は維持し、比較用`/lpv3/`はnoindexで保持する。
+2026-10-05: LPv3を公式LPへ採用。`/lp/`と`/lp/en/`は`lpv3`のスタイル・スクロール演出・体験デモを共有する。公式URL・canonical・OG素材は維持し、比較用`/lpv3/`はnoindexで保持する。
+
+**体験デモ（LPv3）**：バグ報告「iPhoneで『購入する』が押せない」をAIに任せ、AIから「直し方の判断（A/B/C）」と「実機での確認」が人へ届く。C（フッター削除）を選ぶとAIが理由を添えて再考を求め、「まだ押せない」を返すとsafe-areaを考慮した追加修正が届く。右の作業画面はMCPの実ツール名（`get_quest`、`request_human_review`など）と作業ログ、修正中のスマホ画面を示す。Guilduo側はテキストの依頼と返信だけを扱い、成果物はAI側に置く。状態遷移は`lpv3/demo.ts`、表示は`lpv3/experience.ts`。

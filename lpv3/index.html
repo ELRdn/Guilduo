@@ -65,54 +65,80 @@
 <div class="relay-node node-h"><span>H</span><small>あなた</small></div>
 <div class="relay-node node-g"><img src="/assets/brand/guilduo-mark-gold.svg" width="30" height="40" alt=""><small>Guilduo</small></div>
 <div class="relay-node node-a"><span>A</span><small>あなたのAgent</small></div>
-<div class="quest-chip chip-out"><span class="mono">QUEST / 001</span>スマホ用メニューをつくる</div>
-<div class="quest-chip chip-back"><span class="mono">QUEST / 002</span>押しやすさを確かめてほしい</div>
+<div class="quest-chip chip-out"><span class="mono">QUEST / 001</span>購入ボタンが押せない</div>
+<div class="quest-chip chip-back"><span class="mono">QUEST / 002</span>直し方を選んでほしい</div>
 <div class="relay-done"><i data-lucide="check"></i><span>2者。1チーム。</span></div>
 </div>
 </div></div>
 </section>
 
 <section id="experience" class="experience shell" aria-labelledby="experience-title" data-state="intro">
-<div class="experience-heading"><div><p class="eyebrow">A little work. Both ways.</p><h2 id="experience-title">仕事は、<br>どちらからでも。</h2></div><ol class="stepper" aria-label="体験の進行"><li data-step="0" aria-current="step"><span>01</span>任せる</li><li data-step="1" ><span>02</span>頼まれる</li><li data-step="2" ><span>03</span>一緒に完了</li></ol></div>
-<div class="demo-caption"><span class="demo-label">体験デモ</span><p>仕事の受け渡しの流れを、体験用データで再現しています。実際のAIへの接続やタスクの保存は行いません。</p><button class="icon-button" data-action="restart" aria-label="もう一度体験する" title="もう一度体験する"><i data-lucide="rotate-ccw" aria-hidden="true"></i></button></div>
-<div class="mobile-views" aria-label="表示する場所"><button data-view="guilduo" aria-pressed="true">Guilduo <span data-inbox-count></span></button><button data-view="external" aria-pressed="false">外部の作業画面</button></div>
-<div class="workspaces" data-view="guilduo">
-<article class="guilduo-workspace" aria-label="Guilduo 体験デモ">
-<div class="workspace-title"><span class="wordmark"><img class="brand-mark" src="/assets/brand/guilduo-mark-gold.svg" width="30" height="40" alt="" aria-hidden="true">Guilduo</span><span class="mono">テキストで、仕事をつなぐ。</span></div>
-<div class="actor-strip"><span class="actor human"><i data-lucide="user-round" aria-hidden="true"></i> あなた</span><span class="relay-line" data-direction="out" aria-hidden="true"><i></i></span><span class="actor agent"><i data-lucide="bot" aria-hidden="true"></i> あなたのAgent</span></div>
-<div class="task-stack">
-<article class="quest" data-quest="original"><div class="quest-meta"><span class="mono">QUEST / 001</span><span class="status" data-original-status>依頼の下書き</span></div><h3>スマホ用メニューをつくる</h3><p class="quest-body">小さな紹介ページに、スマホでも使いやすいメニューを実装してください。</p><div class="ownership"><span>依頼主 <b class="human-text">あなた</b></span><span>担当 <b class="agent-text">あなたのAgent</b></span></div></article>
-<article class="quest review-quest" data-quest="review" hidden><div class="quest-meta"><span class="mono">QUEST / 002 <span class="muted">← 001</span></span><span class="status" data-review-status></span></div><h3 data-review-title></h3><p class="quest-body" data-review-body></p><div class="ownership"><span>依頼主 <b class="agent-text">あなたのAgent</b></span><span>担当 <b class="human-text">あなた</b></span></div></article>
-<p class="empty-slot" data-empty><i data-lucide="inbox" aria-hidden="true"></i> AIからの依頼は、ここに届きます。</p>
-<p class="receipt" data-receipt hidden></p>
-</div>
-<div class="demo-actions"><button class="button primary" data-action="start">AIにタスクを渡す <i data-lucide="arrow-right" aria-hidden="true"></i></button>
-<button class="button primary" data-action="feedback" hidden>ボタンを大きくして <i data-lucide="arrow-right" aria-hidden="true"></i></button>
-<button class="button quiet" data-action="approve" hidden>今のままでよい</button>
-<button class="text-button" data-action="hold" hidden>あとで確認</button>
-<button class="button primary" data-action="resume" hidden>確認を再開 <i data-lucide="arrow-right" aria-hidden="true"></i></button>
-<button class="button primary" data-action="confirm" hidden>確認完了を返す <i data-lucide="check" aria-hidden="true"></i></button>
-<button class="button primary" data-action="replay" hidden>もう一度体験する <i data-lucide="rotate-ccw" aria-hidden="true"></i></button>
-<span class="working-label" data-working hidden><i data-lucide="loader-circle" aria-hidden="true"></i> <span data-working-text></span></span>
+<div class="experience-heading"><div><p class="eyebrow">A little work. Both ways.</p><h2 id="experience-title">仕事は、<br>どちらからでも。</h2></div><ol class="stepper" aria-label="体験の進行"><li data-step="0" aria-current="step"><span>01</span>任せる</li><li data-step="1"><span>02</span>判断する</li><li data-step="2"><span>03</span>確かめる</li><li data-step="3"><span>04</span>完了</li></ol></div>
+<div class="demo-caption"><span class="demo-label">体験デモ</span><p>AIとの仕事の受け渡しを、体験用データで再現しています。MCPの呼び出しは実際のツール名で表示していますが、AIへの接続やデータの保存は行いません。</p><button class="icon-button" data-action="restart" aria-label="最初から体験する" title="最初から体験する"><i data-lucide="rotate-ccw" aria-hidden="true"></i></button></div>
+<div class="mobile-views" aria-label="表示する画面"><button data-view="guilduo" aria-pressed="true">Guilduo <span data-inbox-count></span></button><button data-view="agent" aria-pressed="false">AIの作業</button></div>
+<div class="xp" data-view="guilduo">
+<article class="xp-pane xp-guilduo" aria-label="Guilduo">
+<header class="xp-bar"><span class="wordmark"><img class="brand-mark" src="/assets/brand/guilduo-mark-gold.svg" width="30" height="40" alt="" aria-hidden="true">Guilduo</span><span class="mono">Inbox</span></header>
+<div class="xp-feed">
+<article class="xp-card xp-quest" data-card="bug">
+<div class="xp-meta"><span class="mono">QUEST / 001</span><span class="xp-status" data-bug-status>下書き</span></div>
+<h3>iPhoneで「購入する」が押せない</h3>
+<p class="xp-body">商品ページの購入ボタンが反応しないと、お客様から3件の問い合わせ。iPhone SEのSafariで再現します。</p>
+<div class="xp-owner"><span>依頼主 <b class="human-text">あなた</b></span><span>担当 <b class="agent-text">あなたのAgent</b></span></div>
+<div class="xp-actions"><button class="button primary" data-action="start">AIに任せる <i data-lucide="arrow-right" aria-hidden="true"></i></button></div>
+</article>
+<article class="xp-card xp-request" data-card="choose" hidden>
+<div class="xp-meta"><span class="mono">REVIEW / 002 <span class="muted">← 001</span></span><span class="xp-status" data-choose-status>あなたの判断待ち</span></div>
+<p class="xp-from"><i data-lucide="bot" aria-hidden="true"></i> あなたのAgentから</p>
+<h3>直し方を選んでください</h3>
+<p class="xp-body">原因は、画面下に固定したフッターが購入ボタンの下半分を覆っていたことです。直し方が3つあります。</p>
+<ol class="xp-options">
+<li data-option="a"><b>A</b><span><strong>購入ボタンを画面下に固定</strong>いつでも押せる。見た目の変更は大きめ。</span></li>
+<li data-option="b"><b>B</b><span><strong>フッターの高さ分、余白を足す</strong>変更は最小。ページが少し長くなる。</span></li>
+<li data-option="c"><b>C</b><span><strong>固定フッターを削除</strong>確実に直るが、フッターのリンクが消える。</span></li>
+</ol>
+<div class="xp-actions" data-reply-for="choose"><span class="xp-reply-label">返信する</span><button class="button" data-action="choose_a">Aでお願いします</button><button class="button" data-action="choose_b">Bでお願いします</button><button class="button" data-action="choose_c">Cでお願いします</button></div>
+<p class="xp-reply" data-reply="choose" hidden></p>
+</article>
+<article class="xp-card xp-request" data-card="pushback" hidden>
+<div class="xp-meta"><span class="mono">REVIEW / 002</span><span class="xp-status" data-pushback-status>あなたの判断待ち</span></div>
+<p class="xp-from"><i data-lucide="bot" aria-hidden="true"></i> あなたのAgentから</p>
+<h3>C案は、おすすめしません</h3>
+<p class="xp-body">フッターを消すと、スマホから「特定商取引法に基づく表記」へのリンクがなくなります。通販サイトには表示が必要です。AかBにしませんか？</p>
+<div class="xp-actions" data-reply-for="pushback"><span class="xp-reply-label">返信する</span><button class="button" data-action="choose_a">では、Aで</button><button class="button" data-action="choose_b">では、Bで</button></div>
+<p class="xp-reply" data-reply="pushback" hidden></p>
+</article>
+<article class="xp-card xp-request" data-card="device" hidden>
+<div class="xp-meta"><span class="mono" data-device-key>REVIEW / 003 <span class="muted">← 001</span></span><span class="xp-status" data-device-status>あなたの担当</span></div>
+<p class="xp-from"><i data-lucide="bot" aria-hidden="true"></i> あなたのAgentから</p>
+<h3 data-device-title>実機で、押せるか確かめてください</h3>
+<p class="xp-body" data-device-body>シミュレーターでは、テスト12件がすべて通りました。ただ、私は実機のiPhoneには触れられません。お手元のiPhoneで、購入ボタンを押してみてください。</p>
+<div class="xp-actions" data-reply-for="device"><span class="xp-reply-label">返信する</span><button class="button" data-action="works">押せた</button><button class="button" data-action="broken">まだ押せない</button></div>
+<p class="xp-reply" data-reply="device" hidden></p>
+</article>
+<p class="xp-empty" data-empty><i data-lucide="inbox" aria-hidden="true"></i> AIからの依頼は、ここに届きます。</p>
+<div class="xp-actions xp-replay" hidden data-replay><button class="button primary" data-action="restart">もう一度体験する <i data-lucide="rotate-ccw" aria-hidden="true"></i></button></div>
 </div>
 </article>
-<div class="bridge-column" aria-hidden="true"><span>MCP</span><div class="bridge-track"><i></i></div><span>⇄</span></div>
-<article class="external-workspace" aria-label="外部の作業画面">
-<div class="workspace-title"><span><i data-lucide="square-arrow-out-up-right" aria-hidden="true"></i> 外部の作業画面</span><span class="mono">体験用Webページ</span></div>
-<div class="agent-message"><span class="agent-avatar" aria-hidden="true"><i data-lucide="bot" aria-hidden="true"></i></span><div><span class="agent-text mono">あなたのAgent</span><p data-agent-message>タスクを渡すと、外部AIの作業が始まります。</p></div></div>
-<div class="preview" data-preview="empty">
-<div class="preview-bar"><span class="preview-logo">studio<span class="human-text">/</span>duo</span><button class="sample-menu" data-menu-toggle aria-expanded="false" aria-controls="sample-nav" aria-label="メニュー" disabled><i data-lucide="menu" aria-hidden="true"></i></button></div>
-<div class="sample-nav" id="sample-nav" hidden><button data-sample-page="0">このプロジェクト</button><button data-sample-page="1">つくったもの</button><button data-sample-page="2">お問い合わせ</button></div>
-<div class="sample-body"><span class="mono sample-kicker">INDEPENDENT STUDIO / 001</span><h3>小さくつくる。<br>一緒に育てる。</h3><p>アイデアを、手を動かして形にする。</p><div class="sample-art" aria-hidden="true"><span></span><span></span><i></i></div><p class="sample-selected" data-sample-selected></p></div>
-<div class="preview-placeholder"><i data-lucide="code-xml" aria-hidden="true"></i><span>タスクを渡すと、外部AIの作業が始まります。</span></div>
-</div>
-<div class="preview-footer"><span><i data-lucide="mouse-pointer-2" aria-hidden="true"></i> <span data-preview-hint>メニューができたら、押してみて。</span></span><span class="preview-revision" data-revision>v0</span></div>
-<p class="boundary-note"><i data-lucide="square-arrow-out-up-right" aria-hidden="true"></i> 成果物の確認は、Guilduoの外で。</p>
-<button class="return-to-task text-button" data-return-to-task hidden>Guilduoで回答する <i data-lucide="arrow-left" aria-hidden="true"></i></button>
+<div class="bridge-column" aria-hidden="true"><span>MCP</span><div class="bridge-track"><i></i></div><i data-lucide="arrow-left-right"></i></div>
+<article class="xp-pane xp-agent" aria-label="あなたのAgentの作業画面">
+<header class="xp-bar"><span><i data-lucide="bot" aria-hidden="true"></i> あなたのAgent</span><span class="mono" data-agent-state>待機中</span></header>
+<ol class="xp-log" data-log><li class="xp-idle">Questを任されると、ここに作業ログとMCPの呼び出しが流れます。</li></ol>
+<figure class="xp-phone" data-phone="bug">
+<div class="xp-device" aria-hidden="true"><div class="xp-screen">
+<div class="xp-shop-bar">canvas<span class="human-text">/</span>duo</div>
+<div class="xp-product"><i></i><i></i></div>
+<p class="xp-name">キャンバストート</p><p class="xp-price">¥4,800</p>
+<div class="xp-buy-wrap"><span class="xp-buy">購入する</span></div>
+<div class="xp-foot">お問い合わせ ・ 特商法表記</div>
+<span class="xp-overlap"></span><span class="xp-home"></span>
+</div></div>
+<figcaption><span class="mono" data-phone-version>v1 公開中</span><span data-phone-note>購入ボタンの下半分が、フッターに隠れています。</span></figcaption>
+</figure>
 </article>
 </div>
 <div class="experience-footer"><p class="live-status" role="status" aria-live="polite" data-live>人からAIへ。AIから人へ。</p><a class="text-link" href="#mcp">仕組みを見る <i data-lucide="arrow-down" aria-hidden="true"></i></a></div>
-<noscript><p>人がAIへ実装を依頼し、AIが人へ確認タスクを渡す。人のテキストFBを受け取り、AIが外部の成果物を修正する体験です。操作デモにはJavaScriptを有効にしてください。</p></noscript>
+<noscript><p>バグ報告をAIに任せると、AIが原因を調べて直し方の判断を頼み、修正後には実機での確認を頼んでくる体験です。操作デモにはJavaScriptを有効にしてください。</p></noscript>
 </section>
 
 <section class="pillars shell" aria-label="Guilduoでできること">
