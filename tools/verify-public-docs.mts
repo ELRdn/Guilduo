@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { chromium, type Page } from "playwright-core";
+import { chromium, type BrowserContext, type Page } from "playwright-core";
 
 type Locale = "ja" | "en";
 interface Article {
@@ -32,6 +32,22 @@ const errors: string[] = [];
 const badResponses: string[] = [];
 const forbiddenRequests: string[] = [];
 let failures = 0;
+let blockedHostTelemetry = 0;
+async function guardRequests(context: BrowserContext): Promise<void> {
+  await context.route("**/*", async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.origin === base.origin && url.pathname === "/cdn-cgi/rum" && request.method() === "POST") {
+      // The production edge injects Cloudflare RUM independently of Docs code.
+      // Stub its upload before sending anything; report it separately below.
+      blockedHostTelemetry += 1;
+      await route.fulfill({ status: 204, body: "" });
+    } else if (!["GET", "HEAD"].includes(request.method())) {
+      forbiddenRequests.push(`${request.method()} ${request.url()}`);
+      await route.fulfill({ status: 403, body: "Read-only Docs verification" });
+    } else await route.continue();
+  });
+}
 function watch(page: Page): void {
   page.on("pageerror", error => errors.push(`${new URL(page.url()).pathname}: ${error.message}`));
   page.on("console", message => {
@@ -39,9 +55,6 @@ function watch(page: Page): void {
   });
   page.on("response", response => {
     if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`);
-  });
-  page.on("request", request => {
-    if (!["GET", "HEAD"].includes(request.method())) forbiddenRequests.push(`${request.method()} ${request.url()}`);
   });
 }
 async function scenario(name: string, run: () => Promise<void>, page?: Page): Promise<void> {
@@ -83,6 +96,7 @@ try {
   // Entire static route matrix: neither rendering nor navigation needs JavaScript.
   for (const width of [320, 768, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, javaScriptEnabled: false, reducedMotion: "reduce" });
+    await guardRequests(context);
     try {
       const page = await context.newPage();
       watch(page);
@@ -106,6 +120,7 @@ try {
     const article = content[locale].find(candidate => candidate.slug && candidate.sections.some(section => section.code));
     assert.ok(article, `${locale} needs an article containing a copyable example`);
     const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce", permissions: ["clipboard-read", "clipboard-write"] });
+    await guardRequests(context);
     try {
       const page = await context.newPage();
       watch(page);
@@ -219,6 +234,7 @@ try {
   // Expected transport and clipboard failures must leave the article usable.
   {
     const context = await browser.newContext({ viewport: { width: 320, height: 900 }, reducedMotion: "reduce" });
+    await guardRequests(context);
     try {
       const page = await context.newPage();
       page.on("pageerror", error => errors.push(`failure-path: ${error.message}`));
@@ -262,4 +278,5 @@ try {
   await browser.close();
 }
 console.log(`Public Docs: ${results.length - failures}/${results.length} checks passed; screenshots: ${output}`);
+console.log(`Blocked host-injected Cloudflare RUM uploads: ${blockedHostTelemetry}; no upload sent.`);
 if (failures) process.exitCode = 1;
