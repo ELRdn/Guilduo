@@ -15,8 +15,8 @@
 | Appwrite API | https://api.guilduo.com/v1 | Appwrite SDKとWorkerが使うAPI endpoint | READY |
 | Documentation | https://guilduo.com/docs/ | 日本語Docsの正式URL（同じSiteに静的生成） | READY / PUBLISHED |
 | English Documentation | https://guilduo.com/docs/en/ | 英語Docsの正式URL | READY / PUBLISHED |
-| Japanese use cases | https://guilduo.com/solutions/mcp-task-management/ · https://guilduo.com/solutions/ai-agent-handoff/ | MCP task management / human review | PUBLICATION PENDING |
-| English use cases | https://guilduo.com/solutions/en/mcp-task-management/ · https://guilduo.com/solutions/en/ai-agent-handoff/ | English use cases | PUBLICATION PENDING |
+| Japanese use cases | https://guilduo.com/solutions/mcp-task-management/ · https://guilduo.com/solutions/ai-agent-handoff/ | MCP task management / human review | READY / PUBLISHED |
+| English use cases | https://guilduo.com/solutions/en/mcp-task-management/ · https://guilduo.com/solutions/en/ai-agent-handoff/ | English use cases | READY / PUBLISHED |
 | Documentation subdomain | https://docs.guilduo.com/ | 将来の移行・redirect用予約 | Reserved / Future |
 | Privacy | https://guilduo.com/privacy/ | `PRIVACY.md`を正本とする静的ページ | READY / PUBLISHED |
 | Terms | https://guilduo.com/terms/ | `TERMS.md`を正本とする静的ページ | READY / PUBLISHED |

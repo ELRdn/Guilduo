@@ -10,7 +10,9 @@
     "clicks": null,
     "ctr": null,
     "averagePosition": null,
-    "exportedAt": null
+    "exportedAt": null,
+    "startDate": "2026-09-08",
+    "endDate": "2026-10-05"
   },
   "siteChecks": {
     "permission": null,
@@ -186,6 +188,17 @@
   "followUp": {
     "day7": null,
     "day28": null,
-    "automaticMonitoring": false
+    "automaticMonitoring": false,
+    "plannedDay7": "2026-10-13",
+    "plannedDay28": "2026-11-03"
+  },
+  "publication": {
+    "publishedAt": "2026-10-05T17:16:05Z",
+    "timeZone": "Asia/Tokyo",
+    "deployedSourceRevision": "3c3af3add1f25da6ea58d5d61fc59955a1cdfa5d",
+    "siteWorkflow": "https://github.com/ELRdn/Guilduo/actions/runs/37346626622",
+    "publicSiteVerified": true,
+    "canonicalSitemapUrls": 32,
+    "searchConsoleSubmissionVerified": false
   }
 }
