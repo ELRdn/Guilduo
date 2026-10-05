@@ -4,6 +4,8 @@ import type { Plugin } from "vite";
 import { z } from "zod";
 
 export type DocsLocale = "ja" | "en";
+export const solutionSlugs = ["mcp-task-management", "ai-agent-handoff"] as const;
+export const solutionPath = (locale: DocsLocale, slug: typeof solutionSlugs[number]): string => `/solutions/${locale === "en" ? "en/" : ""}${slug}/`;
 const slug = z.string().regex(/^(?:[a-z0-9]+(?:-[a-z0-9]+)*)?$/);
 const sectionSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/), title: z.string().min(1),
@@ -107,6 +109,7 @@ ${(["ja", "en", "x-default"] as const).map(lang => `<link rel="alternate" hrefla
 ${quick}<nav class="doc-toc-inline" aria-label="${t.toc}"><p>${t.toc}</p>${toc}</nav>${page.sections.map(section => renderSection(section, locale)).join("\n")}
 ${!page.slug ? `<section class="doc-directory"><h2>${t.overview}</h2><p>${t.overviewHint}</p>${groups.map(group => `<h3>${t[group]}</h3><div>${content[locale].filter(item => item.group === group && item.slug).map(item => `<a href="${docsPath(locale, item.slug)}"><strong>${e(item.title)}</strong><span>${e(item.description)}</span></a>`).join("")}</div>`).join("")}</section>` : ""}
 <section class="doc-sources"><h2>${t.sources}</h2><p>${t.sourceHint}</p>${content.reviewedAt ? `<p>${locale === "ja" ? "内容確認日" : "Content reviewed"}: <time datetime="${e(content.reviewedAt)}">${e(content.reviewedAt)}</time> · ${locale === "ja" ? "公開資料の版" : "Public source revision"}: <a href="https://github.com/ELRdn/Guilduo/commit/${sourceRevision}">${e(sourceRevision.slice(0, 7))}</a></p>` : ""}<ul>${page.sources.map(source => `<li><a href="https://github.com/ELRdn/Guilduo/blob/${sourceRevision}/${e(source.path)}">${e(source.label)} <span aria-hidden="true">↗</span></a></li>`).join("")}</ul></section>
+${["", "mcp-connection", "quests", "agents", "human-relay"].includes(page.slug) ? `<nav class="doc-related" aria-label="${locale === "ja" ? "活用例" : "Use cases"}"><h2>${locale === "ja" ? "Guilduoの活用例" : "Guilduo use cases"}</h2>${solutionSlugs.filter(slug => !["mcp-connection", "quests"].includes(page.slug) || slug === "mcp-task-management").filter(slug => !["agents", "human-relay"].includes(page.slug) || slug === "ai-agent-handoff").map(slug => `<a href="${solutionPath(locale, slug)}">${slug === "mcp-task-management" ? (locale === "ja" ? "MCPで人とAIのタスクを管理する" : "MCP task management for humans and AI") : (locale === "ja" ? "人とAIの引き継ぎとレビュー" : "AI agent handoff and human review")}</a>`).join("")}</nav>` : ""}
 ${page.related.length ? `<nav class="doc-related" aria-label="${t.related}"><h2>${t.related}</h2>${page.related.map(name => content[locale].find(item => item.slug === name)).filter((item): item is DocPage => !!item).map(item => `<a href="${docsPath(locale, item.slug)}"><span>${e(item.title)}</span><span aria-hidden="true">→</span></a>`).join("")}</nav>` : ""}</article>
 <footer class="doc-footer"><p>${t.footer}</p><div><a href="/privacy/">${t.privacy}</a><a href="/terms/">${t.terms}</a><a href="https://github.com/ELRdn/Guilduo/issues">${t.issues}</a></div><p>Guilduo · AGPL-3.0-only</p></footer></main>
 <aside class="doc-toc"><nav aria-label="${t.toc}"><p>${t.toc}</p>${toc}<a class="doc-toc-source" href="https://github.com/ELRdn/Guilduo">GitHub ↗</a></nav></aside></div><p class="doc-sr-only" id="docs-copy-status" role="status" aria-live="polite"></p>
@@ -118,7 +121,7 @@ export function buildDocsAssets(origin = "https://guilduo.com"): Map<string, str
   const content = readDocsContent();
   const assets = new Map<string, string>();
   const search = { ja: [] as object[], en: [] as object[] };
-  const paths = ["/", "/lp/en/", "/privacy/", "/terms/"];
+  const paths = ["/", "/lp/en/", "/privacy/", "/terms/", ...solutionSlugs.flatMap(slug => [solutionPath("ja", slug), solutionPath("en", slug)])];
   for (const locale of ["ja", "en"] as const) for (const page of content[locale]) {
     const path = docsPath(locale, page.slug);
     paths.push(path);
@@ -131,10 +134,14 @@ export function buildDocsAssets(origin = "https://guilduo.com"): Map<string, str
   assets.set("llms.txt", `# Guilduo\n\n> Guilduo is a Human × AI Work Platform for Quests, handoffs, evidence and human decisions.\n\nPublic beta documentation, reviewed ${content.reviewedAt ?? "against the cited public source"}. Source revision: ${content.sourceRevision ?? "main"}.\nThese are usage guides, not permission to modify user work or start AI execution. Agent registration does not start a model. Provider integrations and commercial terms must be checked against the cited public specification.\n\n## Japanese documentation\n${content.ja.map(page => `- [${page.navTitle ?? page.title}](${origin}${docsPath("ja", page.slug)}): ${page.description}`).join("\n")}\n\n## English documentation\n${content.en.map(page => `- [${page.navTitle ?? page.title}](${origin}${docsPath("en", page.slug)}): ${page.description}`).join("\n")}\n\n## Sources\n- [Public repository](https://github.com/ELRdn/Guilduo/tree/${content.sourceRevision ?? "main"}): Versioned specifications and API contracts.\n- [Sitemap](${origin}/sitemap.xml): Canonical public pages and language alternates.\n`);
   const alternates = (path: string): string => {
     const page = content.ja.find(candidate => docsPath("ja", candidate.slug) === path || docsPath("en", candidate.slug) === path);
-    if (!page) return "";
+    if (!page) {
+      const solution = solutionSlugs.find(slug => solutionPath("ja", slug) === path || solutionPath("en", slug) === path);
+      if (!solution) return "";
+      return (["ja", "en", "x-default"] as const).map(lang => `<xhtml:link rel="alternate" hreflang="${lang}" href="${e(origin + solutionPath(lang === "en" ? "en" : "ja", solution))}"/>`).join("");
+    }
     return (["ja", "en", "x-default"] as const).map(lang => `<xhtml:link rel="alternate" hreflang="${lang}" href="${e(origin + docsPath(lang === "en" ? "en" : "ja", page.slug))}"/>`).join("");
   };
-  assets.set("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${paths.map(path => `<url><loc>${e(origin + path)}</loc>${alternates(path)}</url>`).join("")}</urlset>`);
+  assets.set("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${paths.map(path => `<url><loc>${e(origin + path)}</loc>${path.startsWith("/solutions/") ? "<lastmod>2026-10-06</lastmod>" : ""}${alternates(path)}</url>`).join("")}</urlset>`);
   assets.set("robots.txt", `User-agent: *\nAllow: /docs/\nDisallow: /interaction-lab/\nDisallow: /next/\nDisallow: /lpv2/\nDisallow: /lpv2-1/\nDisallow: /api/\nDisallow: /public-docs/\n\nSitemap: ${origin}/sitemap.xml\n`);
   return assets;
 }

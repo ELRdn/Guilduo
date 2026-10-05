@@ -41,6 +41,11 @@ See [BRAND.md](BRAND.md) for approved brand language and expression.
 
 Guilduo is an independent project and is not affiliated with, endorsed by, or an alternative service to Habitica. Product names and trademarks belong to their respective owners.
 
+### Explore Guilduo by use case
+
+- [MCP task management for humans and AI agents](https://guilduo.com/solutions/en/mcp-task-management/) — Shared Quests, ownership and completion criteria for your external AI.
+- [AI agent handoff and human review](https://guilduo.com/solutions/en/ai-agent-handoff/) — Bring human checks and saved text feedback back into the work.
+
 ## Public Beta Scope
 
 | Area | Status |

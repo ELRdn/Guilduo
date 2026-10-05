@@ -29,6 +29,8 @@
 
 ### Surface rules
 
+- Public Solutions `/solutions/`はLPの公開資料Surface。既存の`guilduo-mark-gold.svg`、favicon、Apple touch icon、`og-guilduo.png`と`assets/lp/command-dark.webp`を使用できる。Product Proofは説明用fixtureの画面例と明記し、縦横比を維持する。
+
 - Public Documentation `/docs/`と`/docs/en/`はLPと同じ公開資料Surfaceとして`guilduo-mark-gold.svg`、既存favicon / Apple touch icon / `og-guilduo.png`を使用できる。マークは幅30px・高さ40pxで縦横比を維持する。
 
 - PWA、favicon、Apple touch icon、OG、GitHubは角丸を焼き込んだフルカラー版を使う。Android `maskable`だけはOSマスク用に背景を端まで敷き、中央66%安全領域へ前景を縮小する。

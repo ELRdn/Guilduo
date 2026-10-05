@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>MCP Task Management for Humans and AI Agents | Guilduo</title>
+  <meta name="description" content="Manage shared Quests with Codex or Claude through Guilduo MCP. Learn goals, completion criteria, Agent permissions, assignment previews, session recovery and human review through a mobile menu fix.">
+  <meta name="guilduo:canonical-path" content="/solutions/en/mcp-task-management/">
+  <link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/">
+  <link rel="alternate" hreflang="ja" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/">
+  <link rel="alternate" hreflang="en" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/">
+  <link rel="alternate" hreflang="x-default" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Guilduo">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ja_JP">
+  <meta property="og:title" content="MCP Task Management for Humans and AI Agents | Guilduo">
+  <meta property="og:description" content="Share Quests, define delegated scope and keep human review explicit. A practical workflow for connecting an AI client, assigning work and resuming a task.">
+  <meta property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/">
+  <meta property="og:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Guilduo brand mark">
+  <meta property="article:modified_time" content="2026-10-06">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MCP Task Management for Humans and AI Agents | Guilduo">
+  <meta name="twitter:description" content="Connect goals, assignments and review through shared Quests. Practical MCP task management with Codex and Claude.">
+  <meta name="twitter:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta name="twitter:image:alt" content="Guilduo brand mark">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">
+  <link rel="stylesheet" href="/solutions/styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Guilduo", "item": "__GUILDUO_PUBLIC_ORIGIN__/" },
+          { "@type": "ListItem", "position": 2, "name": "MCP task management", "item": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/" }
+        ]
+      },
+      {
+        "@type": "TechArticle",
+        "headline": "MCP Task Management for Humans and AI Agents",
+        "description": "A practical MCP task management guide covering shared Quests, Agent permissions, assignment previews, session recovery and human review.",
+        "inLanguage": "en",
+        "dateModified": "2026-10-06",
+        "url": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/",
+        "mainEntityOfPage": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/",
+        "image": "__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png",
+        "publisher": { "@type": "Organization", "name": "Guilduo", "url": "__GUILDUO_PUBLIC_ORIGIN__/" },
+        "citation": [
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json",
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json"
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="solution-page" data-theme="dark">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="solution-header shell">
+    <a class="wordmark" href="/" aria-label="Guilduo home"><img class="brand-mark" src="/assets/brand/guilduo-mark-gold.svg" width="30" height="40" alt="" aria-hidden="true">Guilduo</a>
+    <nav aria-label="Site navigation">
+      <a href="/lp/en/">Home</a>
+      <a href="/docs/en/">Docs</a>
+      <a href="/solutions/mcp-task-management/" lang="ja" hreflang="ja" aria-label="このページを日本語で読む">日本語</a>
+    </nav>
+  </header>
+  <main id="main" class="solution-main shell" tabindex="-1">
+    <div class="solution-hero">
+      <p class="eyebrow">Guilduo / MCP Task Management</p>
+      <h1>MCP Task Management for Humans and AI Agents</h1>
+      <p class="solution-lead">Share work with Codex or Claude as a Quest with a clear goal, completion criteria and assignee. Read saved task state when a chat restarts, and hand work back when human judgment is needed. This guide follows a small UI fix from connection to review.</p>
+      <div class="solution-actions">
+        <a class="button gold" href="/docs/en/mcp-connection/">Connect with MCP</a>
+        <a class="button quiet" href="#example">Read the task example</a>
+      </div>
+    </div>
+
+    <section id="problem" class="solution-section" aria-labelledby="problem-title">
+      <h2 id="problem-title">Keep work state beyond a conversation</h2>
+      <p>A new chat can mean explaining the goal again: what changed, what remains and who should review it. Separate human task lists and AI conversations make it harder to distinguish implementation from acceptance.</p>
+      <p>Guilduo stores work as Quests that external AI clients can read and update through MCP. Humans inspect the same Quests in Guilduo / Relay Forge. Goals, completion criteria, next actions, assignments and Handoff states give the next session something concrete to read.</p>
+      <p>Model history, IDE files and running processes stay in the external environment. Registering an Agent does not start a model. A scheduled Quest or a <code>ready</code> Handoff does not automatically launch an Agent.</p>
+    </section>
+
+    <section id="flow" class="solution-section" aria-labelledby="flow-title">
+      <h2 id="flow-title">Connect, preview, save and reread</h2>
+      <ol class="solution-flow">
+        <li><strong>Define one small Quest.</strong> Record the goal, completion criteria and next action. Use Backlog if the date is undecided. Planning, assignment and completion are separate states.</li>
+        <li><strong>Check identity and permissions.</strong> Connect a supported client to <code>https://mcp.guilduo.com/mcp</code> using OAuth. Link it to a registered Agent in Web App Connections. Read <code>get_current_agent_context</code> to verify the Agent and <code>effectiveExecutionScopes</code>. Execution permissions are the intersection of OAuth grants and Agent permissions.</li>
+        <li><strong>Preview the assignment.</strong> Use <code>get_quest</code> to read the target and its latest <code>updatedAt</code>. Preview <code>assign_quest_to_agent</code> with <code>dryRun: true</code>. Within delegated scope, save with that timestamp as <code>expectedUpdatedAt</code> and <code>dryRun: false</code>.</li>
+        <li><strong>Work externally and return the result.</strong> Edit and test in Codex or Claude's work environment. Use <code>working</code>, then <code>review_required</code> when the result needs review. Preview <code>transition_quest_handoff</code>; pass the state you read as <code>expectedState</code> when saving.</li>
+        <li><strong>Resume by reading saved state.</strong> In a new session, verify the connection and Agent permissions. Find the task with <code>list_quests</code> and read it with <code>get_quest</code>. Check criteria, assignee, results and outstanding review, then inspect external files or artifacts before continuing.</li>
+      </ol>
+      <p>For ordinary updates, inspect the target and proposed changes before saving, then reread to verify them. Preview support depends on the tool: adding <code>dryRun</code> to <code>create_quest</code> or <code>update_quest</code> does not create a preview. Follow the published schema. On conflict, read current state and reconsider the change.</p>
+    </section>
+
+    <section id="example" class="solution-section" aria-labelledby="example-title">
+      <h2 id="example-title">Example: fix a smartphone menu</h2>
+      <p class="solution-note">This task is illustrative. It contains no real user data and does not represent an executed job or a quality guarantee.</p>
+      <div class="solution-table" role="region" aria-label="Smartphone menu Quest example" tabindex="0">
+        <table>
+          <caption>What to record in “Fix the smartphone menu”</caption>
+          <thead><tr><th scope="col">Field</th><th scope="col">Example</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Goal</th><td>Let visitors open and close the menu and reach the intended page on a narrow screen.</td></tr>
+            <tr><th scope="row">Completion criteria</th><td>No horizontal overflow at 390px. Menu controls and links work. Record keyboard checks and human device review.</td></tr>
+            <tr><th scope="row">Next action</th><td>Read existing menu behavior and styles, then reproduce the issue.</td></tr>
+            <tr><th scope="row">Delegated scope</th><td>Relevant UI changes and verification. Publishing and deployment decisions are excluded.</td></tr>
+            <tr><th scope="row">Return information</th><td>Changed files, checks, artifact location and the interactions a human should verify.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A request to the connected AI could read:</p>
+      <blockquote><p>Read “Fix the smartphone menu” in Guilduo and check its criteria and assignee. Preview assignment, save within my authorized scope, then make the fix. Check 390px layout and keyboard operation. Return the result for review with device checks still outstanding.</p></blockquote>
+      <p>If tap comfort needs human judgment, the assigned registered Agent uses <code>request_human_review</code> to create a separate confirmation Quest. Specify where to check, what to do and what answer is needed. Preview first; save using the latest <code>expectedUpdatedAt</code>. The human saves a text response in the Web App, which the Agent reads with <code>list_human_requests</code> before revising or proceeding toward acceptance.</p>
+      <p><strong>The human review response, Handoff approval and original Quest completion are separate operations.</strong> Answering the confirmation Quest does not complete the fix. Handoff records the transfer between assignees; even <code>accepted</code> leaves the original completion criteria to verify. See <a href="/solutions/en/ai-agent-handoff/">AI agent handoff</a> for that workflow.</p>
+    </section>
+
+    <section id="limits" class="solution-section" aria-labelledby="limits-title">
+      <h2 id="limits-title">Where this fits, and what you still need</h2>
+      <p>This fits UI fixes, copy review and research review with explicit goals and criteria. It helps when a human must respond to AI work or multiple sessions need to inspect saved progress.</p>
+      <p>Model hosting, IDE operation, test execution and scheduled Agent launches sit outside this Quest workflow. Native synchronization with external To Do services is not a prerequisite you can assume. Prepare the external runtime and its permissions separately.</p>
+      <p>Read access does not establish write access. Check required <code>quests:read</code> or <code>quests:write</code> permissions on both the OAuth and Agent sides. Record only necessary task information, keep credentials out of Quests, and check artifact link access separately.</p>
+    </section>
+
+    <section id="get-started" class="solution-section" aria-labelledby="get-started-title">
+      <h2 id="get-started-title">Start with one Quest and a read check</h2>
+      <p>Sign in to <a href="https://app.guilduo.com/">Guilduo / Relay Forge</a>. Use the <a href="/docs/en/quests/">Quest guide</a> to define a small task, then follow <a href="/docs/en/mcp-connection/">MCP connection</a>. See the client instructions for <a href="/docs/en/codex/">Codex</a> or <a href="/docs/en/claude/">Claude</a>.</p>
+      <p>Once the client reads the same Quest, check <a href="/docs/en/agents/">Agents and assignment</a> and <a href="/docs/en/permissions/">permissions</a>. Preview and save one assignment. Verify connection, reads, writes, external work and review separately so a failure has a clear location.</p>
+    </section>
+
+    <section id="sources" class="solution-section" aria-labelledby="sources-title">
+      <h2 id="sources-title">Published sources and review date</h2>
+      <p>Reviewed <time datetime="2026-10-06">October 6, 2026</time>. Based on publicly published source revision <code>42caab0fa1f396f15e4e1277f6e36dda1ac9bd04</code>.</p>
+      <ul>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json">public-docs/content.json</a>: quests, mcp-connection, codex, claude, agents, permissions, human-relay and faq articles; workflow and runtime boundaries.</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json">api/mcp-tools.json</a>: published contracts for Quest reads and writes, Agent context, assignment, Handoff transitions and human review requests.</li>
+      </ul>
+      <p>Consult <a href="/docs/en/">Guilduo Docs</a> for detailed operations and check your client's Remote MCP and OAuth support.</p>
+    </section>
+  </main>
+  <footer class="solution-footer shell">
+    <p>Guilduo — Connect human and AI work.</p>
+    <nav aria-label="Related pages and policies">
+      <a href="/solutions/en/ai-agent-handoff/">AI agent handoff</a>
+      <a href="https://github.com/ELRdn/Guilduo">GitHub</a>
+      <a href="/privacy/">Privacy</a>
+      <a href="/terms/">Terms</a>
+    </nav>
+  </footer>
+</body>
+</html>

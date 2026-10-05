@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Agent Handoff and Human Review | Guilduo</title>
+  <meta name="description" content="Keep task ownership, evidence and human feedback together in Guilduo. Follow a mobile-menu fix from external coding work through review and explicit resumption.">
+  <meta name="theme-color" content="#0F1418">
+  <link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/">
+  <link rel="alternate" hreflang="ja" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/">
+  <link rel="alternate" hreflang="en" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/">
+  <link rel="alternate" hreflang="x-default" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Guilduo">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ja_JP">
+  <meta property="og:title" content="AI Agent Handoff and Human Review | Guilduo">
+  <meta property="og:description" content="A practical handoff workflow: carry the task and evidence forward, save a human decision, then have the agent read it before resuming.">
+  <meta property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/">
+  <meta property="og:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Guilduo gold brand mark on a dark teal background">
+  <meta property="article:modified_time" content="2026-10-06">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AI Agent Handoff and Human Review | Guilduo">
+  <meta name="twitter:description" content="Follow a mobile-menu fix through task handoff, saved human feedback and explicit agent resumption in Guilduo.">
+  <meta name="twitter:url" content="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/">
+  <meta name="twitter:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta name="twitter:image:alt" content="Guilduo gold brand mark on a dark teal background">
+  <link rel="icon" href="/assets/icons/favicon-48.png" sizes="48x48">
+  <link rel="stylesheet" href="/solutions/styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Guilduo", "item": "__GUILDUO_PUBLIC_ORIGIN__/" },
+          { "@type": "ListItem", "position": 2, "name": "AI Agent Handoff and Human Review", "item": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/" }
+        ]
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/#article",
+        "url": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/",
+        "mainEntityOfPage": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/",
+        "headline": "AI Agent Handoff and Human Review",
+        "description": "Keep task ownership, evidence and human feedback together in Guilduo. Follow a mobile-menu fix from external coding work through review and explicit resumption.",
+        "inLanguage": "en",
+        "dateModified": "2026-10-06",
+        "publisher": { "@type": "Organization", "name": "Guilduo", "url": "__GUILDUO_PUBLIC_ORIGIN__/" },
+        "image": { "@type": "ImageObject", "url": "__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png", "width": 1200, "height": 630 },
+        "citation": [
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json",
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json"
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="solution-page" data-theme="dark">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="solution-header shell">
+    <a class="wordmark" href="/"><img src="/assets/brand/guilduo-mark-gold.svg" width="30" height="40" alt="">Guilduo</a>
+    <nav aria-label="Main navigation">
+      <a href="/lp/en/">Home</a>
+      <a href="/docs/en/">Docs</a>
+      <a href="/solutions/ai-agent-handoff/" lang="ja" hreflang="ja">日本語</a>
+    </nav>
+  </header>
+  <main id="main" class="solution-main shell" tabindex="-1">
+    <div class="solution-hero">
+      <p class="eyebrow">Human ⇄ Agent · Handoff and review</p>
+      <h1>AI Agent Handoff and Human Review</h1>
+      <p class="solution-lead">Give the next person or agent enough context to continue: who owns the task, what changed, what was checked and which decision is still needed. Guilduo keeps that work record and human feedback alongside a Quest while coding happens in your external tools.</p>
+      <div class="solution-actions">
+        <a class="button gold" href="/docs/en/human-relay/">Read the review workflow</a>
+        <a class="button quiet" href="https://app.guilduo.com/">Open Guilduo / Relay Forge</a>
+      </div>
+    </div>
+
+    <section id="problem" class="solution-section" aria-labelledby="problem-title">
+      <h2 id="problem-title">A finished edit still needs a clear handoff</h2>
+      <p>A coding agent can return “fixed” without explaining what remains unverified. A reviewer may reply in another chat, leaving the next session without the decision. The useful handoff carries the original goal, assignee, progress, evidence and next action together.</p>
+      <p>In Guilduo, a Quest is the task record and Handoff describes its handover state. Agent registration saves a role and permission policy; it does not start a model. Assigning work or changing a state does not launch execution either. The connected Codex, Claude or other coding environment must explicitly read the task and do the work.</p>
+      <p>In an agent SDK, “handoff” can mean transferring execution to another agent within a runtime. Guilduo's persisted task handoff records responsibility and review context. It does not transfer a running model session or its hidden context.</p>
+    </section>
+
+    <section id="practical-flow" class="solution-section" aria-labelledby="flow-title">
+      <h2 id="flow-title">Carry the work forward, then read the decision</h2>
+      <ol class="solution-flow">
+        <li><strong>Define and assign.</strong> Write the target, constraints and completion criteria. Read the current Quest and registered Agent; preview <code>assign_quest_to_agent</code>, then save authorized changes with the latest <code>expectedUpdatedAt</code>.</li>
+        <li><strong>Work in the connected tool.</strong> The agent reads the Quest, records <code>working</code>, edits and verifies externally. Save a concise result, evidence location and remaining checks; return work for review as <code>review_required</code>. If blocked, record the reason and what must change.</li>
+        <li><strong>Ask a specific human question.</strong> Check existing requests with <code>list_human_requests</code>. Preview <code>request_human_review</code> with a reason, check target and completion criteria; save with current <code>expectedUpdatedAt</code>. This creates a separate confirmation Quest.</li>
+        <li><strong>Save the human answer.</strong> The intended human checks the external artifact or device, then saves an outcome and text feedback through Web authentication. Opening a link, seeing a request or deferring it is not an answer.</li>
+        <li><strong>Read before resuming.</strong> Explicitly instruct the agent to reread <code>list_human_requests</code>, including <code>humanRequest.response</code> and <code>outcome</code>. Apply <code>changes_requested</code> feedback and verify again; for <code>approved</code>, check the accepted scope before closing work.</li>
+      </ol>
+      <div class="solution-table" role="region" aria-label="Handoff states and next actions" tabindex="0">
+        <table>
+          <caption>Saved state and the next explicit action</caption>
+          <thead><tr><th scope="col">Handoff state</th><th scope="col">Meaning</th><th scope="col">Next action</th></tr></thead>
+          <tbody>
+            <tr><th scope="row"><code>working</code></th><td>Work is in progress.</td><td>Edit and verify in the external client.</td></tr>
+            <tr><th scope="row"><code>blocked</code></th><td>Work cannot continue.</td><td>Record the blocker; resume after resolution.</td></tr>
+            <tr><th scope="row"><code>review_required</code></th><td>Work was returned for human review.</td><td>Inspect results and remaining checks.</td></tr>
+            <tr><th scope="row"><code>accepted</code></th><td>The Handoff was accepted.</td><td>Check original Quest completion separately.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Human response, confirmation Quest completion, Handoff acceptance and original Quest completion have separate conditions and operations. A saved approval does not automatically finish the original task.</p>
+    </section>
+
+    <section id="example" class="solution-section" aria-labelledby="example-title">
+      <h2 id="example-title">Example: fix a smartphone menu and review its feel</h2>
+      <p class="solution-note">Illustrative task and feedback only. These are invented examples, not a customer incident or evidence of a completed device test.</p>
+      <p><strong>Original Quest:</strong> “Fix the mobile menu so every link is usable and it can be closed one-handed. Keep desktop navigation unchanged. Return the changed files, checks run and remaining device checks.” This gives the agent an outcome and boundaries.</p>
+      <p>The agent fixes the menu in its coding tool and reports the actual checks. Automated checks may cover viewport behavior, but comfortable thumb reach needs a person's judgment. The review request asks: “On your usual phone, open and close the menu and try its links. Reply with no changes, or the element to change and why.”</p>
+      <p>The human checks the external preview and saves <code>changes_requested</code>: “The links work, but the close button is hard to reach with my thumb. Move it lower while keeping the labels.” The agent explicitly reads that saved response, returns the Handoff to <code>working</code> and implements the feedback.</p>
+      <p>For another review round, use a new <code>requestKey</code> and preserve the earlier answer. After the reviewer saves <code>approved</code>, check the remaining acceptance criteria, accept the Handoff and complete the original Quest as separate actions.</p>
+    </section>
+
+    <section id="limits" class="solution-section" aria-labelledby="limits-title">
+      <h2 id="limits-title">Where this workflow fits—and its limits</h2>
+      <p>Use it when implementation crosses sessions, responsibility changes or device behavior and preferences need human judgment. Include enough evidence that the next reader can distinguish completed checks from assumptions. A routine lint check the agent can run itself does not need a human request.</p>
+      <p>Guilduo is not a model runner or a guarantee that another agent has started. Plan explicit task reads and resumption in your client. Execution access is the intersection of the OAuth grant and Agent policy; registration or linking does not expand it.</p>
+      <p>Keep credentials and personal data out of task examples, shared logs and artifact URLs. An agent cannot impersonate the human answer through ordinary Quest updates. Preview supported changes; use current <code>expectedState</code> for Handoff transitions and reread after conflicts.</p>
+    </section>
+
+    <section id="get-started" class="solution-section" aria-labelledby="start-title">
+      <h2 id="start-title">Start with one task and one review question</h2>
+      <p>Follow <a href="/docs/en/agents/">Agents and Handoffs</a> to register an Agent and link your coding client, then <a href="/docs/en/human-relay/">Human Relay</a> to create a review and read its answer. Check <a href="/docs/en/permissions/">authentication and permissions</a> before writes. Begin with a small task whose completion criteria both sides can inspect.</p>
+    </section>
+
+    <section id="sources" class="solution-section" aria-labelledby="sources-title">
+      <h2 id="sources-title">Published sources and review date</h2>
+      <p>Reviewed <time datetime="2026-10-06">6 October 2026</time>. This guide uses published source revision <a href="https://github.com/ELRdn/Guilduo/commit/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04"><code>42caab0fa1f396f15e4e1277f6e36dda1ac9bd04</code></a>.</p>
+      <ul>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json">public-docs/content.json</a>: Agents, Human Relay and Permissions articles; saved feedback, external execution and separate completion.</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json">api/mcp-tools.json</a>: assignment, Handoff transitions, review requests and answer-reading contracts.</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="solution-footer shell">
+    <nav aria-label="Footer navigation">
+      <a href="/solutions/en/mcp-task-management/">MCP task management</a>
+      <a href="https://github.com/ELRdn/Guilduo">GitHub</a>
+      <a href="/privacy/">Privacy</a>
+      <a href="/terms/">Terms</a>
+    </nav>
+  </footer>
+</body>
+</html>

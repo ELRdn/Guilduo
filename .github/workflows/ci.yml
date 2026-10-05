@@ -40,6 +40,7 @@ jobs:
           for attempt in {1..30}; do curl -fsS http://127.0.0.1:4173/lp/ >/dev/null && break; sleep 1; done
           npm run lp:verify -- http://127.0.0.1:4173
           npm run docs:verify -- http://127.0.0.1:4173
+          npm run solutions:verify -- http://127.0.0.1:4173
           npm run launch:verify -- http://127.0.0.1:4173 --built
           npm run accessibility:verify -- http://127.0.0.1:4173 --built
           npm run entry:verify -- http://127.0.0.1:4173 --built

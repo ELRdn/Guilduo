@@ -73,3 +73,7 @@ default -> hover -> active -> focus-visible
 ## Public Docs components (2026-10-05)
 
 `/docs/`だけに適用する。分類別ナビは現在の記事に`aria-current="page"`を付け、Mobileでは標準`details`で開閉する。検索inputには可視label、結果一覧には通常のリンク、件数・失敗には`role="status"`を提供する。記事内のcodeは横スクロールをcode領域内に閉じ、コピー成功・失敗を読み上げる。本文と出典のリンクは下線を付け、44px相当の主要操作・明確なfocus-visible・8px以下の角丸を維持する。検索・コピー以外はJavaScriptを前提にしない。
+
+## Public Solutions components (2026-10-06)
+
+LPのbrand、button、font/tokenを再利用。用途ページのリンクは本文で下線、主要操作は44px以上。標準見出しと順序付きリストで流れを示し、表に列見出しを付ける。説明用の例は可視の注記を添える。JavaScriptを必要とする検索・デモ・保存操作を持たせない。

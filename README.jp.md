@@ -41,6 +41,11 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 
 GuilduoはHabiticaとは独立したプロジェクトです。提携・承認・代替サービスではありません。各製品名と商標はそれぞれの権利者に帰属します。
 
+### 目的からGuilduoを知る
+
+- [MCPでつなぐ、人とAIエージェントのタスク管理](https://guilduo.com/solutions/mcp-task-management/) — 外部AIとのQuest共有、担当、完了条件。
+- [人とAIエージェントの引き継ぎとレビュー](https://guilduo.com/solutions/ai-agent-handoff/) — 人の確認とテキスト回答を作業へ戻す流れ。
+
 ## 公開βの範囲
 
 | 項目 | 状態 |

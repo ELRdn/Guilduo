@@ -49,8 +49,8 @@ Also check host-level Cloudflare/WAF controls because generated robots.txt alone
 does not establish crawler access. A browser or spoofed user-agent probe is not
 a visit from a verified crawler IP.
 
-FAQ structured data does not promise Google FAQ rich results: Google restricts
-those results to eligible authoritative government/health sites. Similarly,
+FAQ structured data is kept aligned with visible answers, but Google retired
+FAQ rich results on May 7, 2026. It is not a rich-result objective. Similarly,
 good structure and citations enable extraction but do not guarantee AI citations,
 AI Overview visibility, traffic or ranking. This review does not substitute for
 real-phone usability acceptance or product launch acceptance.
@@ -58,7 +58,8 @@ real-phone usability acceptance or product launch acceptance.
 ## Official sources checked via HTTP 200
 
 - [Google: AI features and your website](https://developers.google.com/search/docs/appearance/ai-features)
-- [Google: FAQ structured data](https://developers.google.com/search/docs/appearance/structured-data/faqpage)
+- [Google: Search documentation updates](https://developers.google.com/search/updates)
+- [Google: generative AI optimization guide](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide)
 - [OpenAI: crawler and retrieval bots](https://developers.openai.com/api/docs/bots)
 
 Final candidate acceptance: 459 automated tests, 111 Chrome Docs scenarios,

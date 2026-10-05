@@ -118,6 +118,10 @@ export default defineConfig({
       input: {
         docsClient: resolve(root, "public-docs/client.ts"),
         app: resolve(root, "index.html"),
+        solutionMcpJa: resolve(root, "solutions/mcp-task-management/index.html"),
+        solutionMcpEn: resolve(root, "solutions/en/mcp-task-management/index.html"),
+        solutionHandoffJa: resolve(root, "solutions/ai-agent-handoff/index.html"),
+        solutionHandoffEn: resolve(root, "solutions/en/ai-agent-handoff/index.html"),
         landingJa: resolve(root, "lp/index.html"),
         landingEn: resolve(root, "lp/en/index.html"),
         privacy: resolve(root, "privacy/index.html"),
