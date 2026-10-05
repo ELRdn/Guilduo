@@ -626,3 +626,7 @@ error
 - 各記事に固有title / description / canonical / hreflang、OG、BreadcrumbListとTechArticleを付与する。未承認の価格、架空機能、実環境未受入の保証を記事に載せない。
 - 320px、キーボード、Reduced Motion、両言語、JavaScript無効を確認する。DocsはPWAやアプリの状態・認証・データ保存に触れない。
 - FAQは本文と同じ質問・回答だけを構造化する。記事末尾に内容確認日と公開資料の版を表示し、根拠を辿れるようにする。`llms.txt`は任意の資料索引で、検索順位やAI引用を保証するものではない。
+
+## 19. Public Solutions `/solutions/`
+
+2026-10-06: 2テーマを日英の静的HTMLで公開する。外部AIを使う個人開発者が用途と制約を判断するSurface。公式LPのtoken、font、brand assetsを継承し、Darkで読みやすい単一カラム、74chの本文、標準リンクと言語切替を使う。本文、出典、CTAはJavaScriptなしで読める。解決する課題、作業の流れ、明示された説明用の例、適する用途・制約、始め方の順とし、詳細手順はDocsへリンクする。新しいmotion、架空UI、価格、実行保証は追加しない。320px、keyboard、Reduced Motionで確認する。

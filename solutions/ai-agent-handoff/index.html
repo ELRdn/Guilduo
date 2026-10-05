@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>人とAIエージェントの引き継ぎとレビュー | Guilduo</title>
+  <meta name="description" content="Guilduoで担当・進捗・検証根拠・人の指摘を引き継ぐ方法。スマホメニュー修正の例で、外部ツールでの作業からレビュー、保存された回答の読み直しまで説明します。">
+  <meta name="theme-color" content="#0F1418">
+  <link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/">
+  <link rel="alternate" hreflang="ja" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/">
+  <link rel="alternate" hreflang="en" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/ai-agent-handoff/">
+  <link rel="alternate" hreflang="x-default" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Guilduo">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta property="og:title" content="人とAIエージェントの引き継ぎとレビュー | Guilduo">
+  <meta property="og:description" content="担当と検証根拠を渡し、人の判断をテキストで保存。AIエージェントが回答を読み直して再開する、具体的な引き継ぎ手順。">
+  <meta property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/">
+  <meta property="og:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="深い青緑の背景に金色のGuilduoブランドマーク">
+  <meta property="article:modified_time" content="2026-10-06">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="人とAIエージェントの引き継ぎとレビュー | Guilduo">
+  <meta name="twitter:description" content="スマホメニューの修正を例に、作業の引き継ぎ、人の指摘の保存、エージェントによる読み直しと再開を説明します。">
+  <meta name="twitter:url" content="__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/">
+  <meta name="twitter:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta name="twitter:image:alt" content="深い青緑の背景に金色のGuilduoブランドマーク">
+  <link rel="icon" href="/assets/icons/favicon-48.png" sizes="48x48">
+  <link rel="stylesheet" href="/solutions/styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Guilduo", "item": "__GUILDUO_PUBLIC_ORIGIN__/" },
+          { "@type": "ListItem", "position": 2, "name": "人とAIエージェントの引き継ぎとレビュー", "item": "__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/" }
+        ]
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/#article",
+        "url": "__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/",
+        "mainEntityOfPage": "__GUILDUO_PUBLIC_ORIGIN__/solutions/ai-agent-handoff/",
+        "headline": "人とAIエージェントの引き継ぎとレビュー",
+        "description": "Guilduoで担当・進捗・検証根拠・人の指摘を引き継ぐ方法。スマホメニュー修正の例で、外部ツールでの作業からレビュー、保存された回答の読み直しまで説明します。",
+        "inLanguage": "ja",
+        "dateModified": "2026-10-06",
+        "publisher": { "@type": "Organization", "name": "Guilduo", "url": "__GUILDUO_PUBLIC_ORIGIN__/" },
+        "image": { "@type": "ImageObject", "url": "__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png", "width": 1200, "height": 630 },
+        "citation": [
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json",
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json"
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="solution-page" data-theme="dark">
+  <a class="skip-link" href="#main">本文へ移動</a>
+  <header class="solution-header shell">
+    <a class="wordmark" href="/"><img src="/assets/brand/guilduo-mark-gold.svg" width="30" height="40" alt="">Guilduo</a>
+    <nav aria-label="メインナビゲーション">
+      <a href="/">ホーム</a>
+      <a href="/docs/">Docs</a>
+      <a href="/solutions/en/ai-agent-handoff/" lang="en" hreflang="en">English</a>
+    </nav>
+  </header>
+  <main id="main" class="solution-main shell" tabindex="-1">
+    <div class="solution-hero">
+      <p class="eyebrow">Human ⇄ Agent · 引き継ぎとレビュー</p>
+      <h1>人とAIエージェントの引き継ぎとレビュー</h1>
+      <p class="solution-lead">次の担当が迷わず続けられるように、誰の作業か、何を変更し、どこまで確認し、どの判断が残っているかを渡す。GuilduoはQuestに作業記録と人の指摘を残し、外部のコーディングツールで進む仕事の引き継ぎを支えます。</p>
+      <div class="solution-actions">
+        <a class="button gold" href="/docs/human-relay/">レビューの手順を読む</a>
+        <a class="button quiet" href="https://app.guilduo.com/">Guilduo / Relay Forgeを開く</a>
+      </div>
+    </div>
+
+    <section id="problem" class="solution-section" aria-labelledby="problem-title">
+      <h2 id="problem-title">「修正した」の先に、引き継ぐ情報がある</h2>
+      <p>AIエージェントから「直しました」と返ってきても、何が未確認か分からないことがあります。人が別のチャットで指摘すると、次の作業セッションには判断が伝わらないこともあります。引き継ぎには、元の目的、担当、進捗、検証根拠、次にすることを一緒に残す必要があります。</p>
+      <p>GuilduoのQuestは仕事の記録、Handoffは引き継ぎの状態です。Agent登録で保存するのは役割と権限の設定であり、モデルは起動しません。担当の割り当てや状態変更も実行を開始しません。接続したCodexやClaudeなどの外部環境で、エージェントが明示的にQuestを読み、作業を進めます。</p>
+      <p>エージェントSDKの「handoff」は、実行中のランタイムで別のエージェントへ処理を渡す意味で使われることがあります。Guilduoの永続化されたHandoffは、担当責任とレビューの文脈を記録するものです。実行中のモデルセッションや、その内部の文脈を移す機能ではありません。</p>
+    </section>
+
+    <section id="practical-flow" class="solution-section" aria-labelledby="flow-title">
+      <h2 id="flow-title">作業を渡し、判断を読み直して続ける</h2>
+      <ol class="solution-flow">
+        <li><strong>目的と担当を決める。</strong> 対象、制約、完了条件をQuestに書きます。現在のQuestと登録Agentを読み、<code>assign_quest_to_agent</code>でプレビュー。許可された変更を最新の<code>expectedUpdatedAt</code>で保存します。</li>
+        <li><strong>接続先で作業する。</strong> エージェントはQuestを読み、<code>working</code>を記録して外部ツールで修正・検証します。結果の要点、根拠の場所、残る確認を保存し、<code>review_required</code>でレビューへ返します。進められないときはブロック理由と再開条件を残します。</li>
+        <li><strong>人に具体的な確認を依頼する。</strong> <code>list_human_requests</code>で既存依頼を確認します。理由、確認対象、完了条件を指定して<code>request_human_review</code>をプレビューし、最新の<code>expectedUpdatedAt</code>で保存。元Questとは別の確認Questが作られます。</li>
+        <li><strong>本人が回答を保存する。</strong> 指定された人が外部の成果物や実機を確認し、Web認証を通して結果とテキストの指摘を保存します。リンクを開いたこと、既読、保留は、回答とは別です。</li>
+        <li><strong>回答を読んでから再開する。</strong> エージェントに<code>list_human_requests</code>を読み直させ、<code>humanRequest.response</code>と<code>outcome</code>を確認します。<code>changes_requested</code>なら指摘に沿って修正・再検証。<code>approved</code>なら承認範囲を確認して仕事を閉じます。</li>
+      </ol>
+      <div class="solution-table" role="region" aria-label="Handoffの状態と次の操作" tabindex="0">
+        <table>
+          <caption>保存された状態と、次に明示的に行うこと</caption>
+          <thead><tr><th scope="col">Handoff状態</th><th scope="col">意味</th><th scope="col">次の操作</th></tr></thead>
+          <tbody>
+            <tr><th scope="row"><code>working</code></th><td>作業中。</td><td>外部クライアントで修正と検証を行う。</td></tr>
+            <tr><th scope="row"><code>blocked</code></th><td>作業を続けられない。</td><td>理由を残し、解消後に再開する。</td></tr>
+            <tr><th scope="row"><code>review_required</code></th><td>人のレビューへ返した。</td><td>結果と残る確認を読む。</td></tr>
+            <tr><th scope="row"><code>accepted</code></th><td>Handoffが承認された。</td><td>元Questの完了を別に確認する。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>人の回答、確認Questの完了、Handoffの承認、元Questの完了には、それぞれ別の条件と操作があります。承認が保存されても、元の仕事が自動で完了するわけではありません。</p>
+    </section>
+
+    <section id="example" class="solution-section" aria-labelledby="example-title">
+      <h2 id="example-title">例：スマホメニューを直し、使い心地をレビューする</h2>
+      <p class="solution-note">以下のタスクと指摘は説明用の架空例です。実際の顧客事例や、実機検証を完了した証拠ではありません。</p>
+      <p><strong>元Quest：</strong>「スマホのメニューを直し、すべてのリンクを使えて、片手で閉じられるようにする。PCのナビゲーションは変えない。変更ファイル、実行したチェック、残る実機確認を返す。」これで、エージェントに期待する結果と変更範囲が伝わります。</p>
+      <p>エージェントは外部のコーディングツールで修正し、実際に行ったチェックを報告します。自動チェックで画面幅に応じた挙動を確認できても、親指の届きやすさは本人の判断が必要です。確認依頼では「普段のスマホでメニューを開閉し、リンクを試す。変更不要、または変える要素と理由を回答する」と頼みます。</p>
+      <p>人は外部のプレビューを確認し、<code>changes_requested</code>と「リンクは使えるが、閉じるボタンに親指が届きにくい。ラベルを保ったまま下へ移してほしい」という指摘を保存します。エージェントは保存済みの回答を明示的に読み、Handoffを<code>working</code>へ戻して指摘を反映します。</p>
+      <p>もう一度レビューするなら、新しい<code>requestKey</code>を使い、以前の回答は残します。人が<code>approved</code>を保存した後も、残る完了条件を確認し、Handoff承認と元Quest完了を別の操作として行います。</p>
+    </section>
+
+    <section id="limits" class="solution-section" aria-labelledby="limits-title">
+      <h2 id="limits-title">向いている仕事と、任せきれない範囲</h2>
+      <p>作業が複数のセッションにまたがるとき、担当が変わるとき、実機の挙動や好みに人の判断が必要なときに向いています。次の担当が、済んだチェックと推測を区別できる根拠を残します。エージェント自身で実行できる通常のlint確認なら、人への依頼は不要です。</p>
+      <p>Guilduoはモデルの実行環境ではなく、別のエージェントの起動を保証するものでもありません。接続先での明示的な読み取りと再開を手順に含めてください。実行権限はOAuthの許可とAgentポリシーの共通部分で決まり、登録や接続の紐付けだけでは拡張されません。</p>
+      <p>タスク例、共有ログ、成果物URLに認証情報や個人情報を含めないでください。エージェントは通常のQuest更新で本人の回答を代行できません。対応する変更はプレビューし、Handoff遷移には現在の<code>expectedState</code>を使います。競合したら最新の内容を読み直します。</p>
+    </section>
+
+    <section id="get-started" class="solution-section" aria-labelledby="start-title">
+      <h2 id="start-title">ひとつの仕事と、ひとつの確認から始める</h2>
+      <p><a href="/docs/agents/">Agent登録とHandoff</a>でAgentを登録し、コーディングクライアントを紐付けます。続いて<a href="/docs/human-relay/">Human Relay</a>で確認依頼と回答の読み取りを進めます。書き込み前に<a href="/docs/permissions/">認証と権限</a>も確認。まずは双方が完了条件を確認できる小さなタスクで、一往復を試してください。</p>
+    </section>
+
+    <section id="sources" class="solution-section" aria-labelledby="sources-title">
+      <h2 id="sources-title">公開資料と内容確認日</h2>
+      <p>内容確認日：<time datetime="2026-10-06">2026年10月6日</time>。公開ソースrevision <a href="https://github.com/ELRdn/Guilduo/commit/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04"><code>42caab0fa1f396f15e4e1277f6e36dda1ac9bd04</code></a>を根拠に編集しています。</p>
+      <ul>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json">public-docs/content.json</a>：Agent、Human Relay、Permissionsの記事。指摘の保存、外部環境での実行、各完了操作の区別。</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json">api/mcp-tools.json</a>：担当割り当て、Handoff遷移、人への確認依頼、回答読み取りの契約。</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="solution-footer shell">
+    <nav aria-label="フッターナビゲーション">
+      <a href="/solutions/mcp-task-management/">MCPによるタスク管理</a>
+      <a href="https://github.com/ELRdn/Guilduo">GitHub</a>
+      <a href="/privacy/">プライバシー</a>
+      <a href="/terms/">利用規約</a>
+    </nav>
+  </footer>
+</body>
+</html>

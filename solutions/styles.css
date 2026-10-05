@@ -1,0 +1,38 @@
+@import "../lp/styles.css";
+/* Static reading surface: inherit the official LP tokens without loading its demo. */
+.solution-page { font-size:16px; line-height:1.8; }
+.solution-page .shell { width: min(1040px, calc(100% - 48px)); }
+.solution-page a { overflow-wrap: anywhere; }
+.solution-header { display:flex; align-items:center; justify-content:space-between; gap:24px; padding-block:20px; border-bottom:1px solid var(--color-rule); }
+.solution-header nav, .solution-footer nav, .solution-footer > div { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; }
+.solution-header nav a, .solution-footer a { display:inline-flex; align-items:center; min-height:44px; }
+.solution-hero { padding-block:64px 40px; }
+.solution-hero h1 { max-width:22ch; font-size:clamp(32px,4.5vw,56px); line-height:1.22; margin-block:16px 24px; overflow-wrap:anywhere; }
+.solution-hero .eyebrow { color:var(--color-muted); }
+.solution-lead { font-size:clamp(17px,2vw,21px); color:var(--color-ink); max-width:70ch; }
+.solution-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; }
+.solution-section { max-width:74ch; padding-block:32px; border-top:1px solid var(--color-rule); }
+.solution-section h2 { font-size:clamp(24px,3vw,32px); margin-bottom:20px; scroll-margin-top:24px; }
+.solution-section h3 { font-size:20px; margin-block:24px 12px; }
+.solution-section p + p, .solution-section p + ul, .solution-section p + ol, .solution-section ul + p, .solution-section ol + p { margin-top:16px; }
+.solution-section a:not(.button), .solution-section summary { text-decoration:underline; text-underline-offset:4px; }
+.solution-section ul, .solution-section ol { padding-left:24px; }
+.solution-section li + li { margin-top:12px; }
+.solution-flow { display:grid; gap:16px; }
+.solution-note { border-left:3px solid var(--color-review); padding:12px 18px; margin-block:20px; background:var(--color-surface); }
+.solution-section code { font-family:var(--font-utility); overflow-wrap:anywhere; }
+.solution-section pre { max-width:100%; overflow:auto; padding:16px; border:1px solid var(--color-rule); border-radius:4px; }
+.solution-section pre code { white-space:pre; }
+.solution-table { max-width:100%; overflow:auto; }
+.solution-section table { width:100%; border-collapse:collapse; }
+.solution-section th, .solution-section td { border-bottom:1px solid var(--color-rule); padding:12px; text-align:left; vertical-align:top; }
+.solution-section details { margin-top:16px; }
+.solution-section summary { cursor:pointer; min-height:44px; }
+.solution-section details p { padding-block:12px; }
+.solution-figure { margin:28px 0; }
+.solution-figure img { display:block; width:100%; height:auto; border:1px solid var(--color-rule); border-radius:4px; }
+.solution-figure figcaption { font-size:13px; color:var(--color-muted); margin-top:12px; }
+.solution-footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; padding-block:28px; margin-top:32px; border-top:1px solid var(--color-rule); font-size:13px; }
+.solution-page :focus-visible { outline:3px solid var(--color-accent); outline-offset:4px; }
+@media(max-width:600px) { .solution-page .shell { width:calc(100% - 32px); } .solution-header { align-items:flex-start; flex-direction:column; gap:12px; } .solution-header nav { gap:8px 20px; } .solution-hero { padding-top:36px; } .solution-actions .button { width:100%; } }
+@media(prefers-reduced-motion:reduce) { .solution-page *, .solution-page *::before, .solution-page *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
