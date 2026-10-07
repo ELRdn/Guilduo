@@ -35,7 +35,7 @@ new MutationObserver(schedule).observe(root, { attributes: true, attributeFilter
 update();
 
 // One-time entrance for the LPv3 sections; content stays readable without it.
-const targets = document.querySelectorAll(".pillars article, .mcp-copy, .mcp-code, .guild-copy, .guild-v3 .product-shot, .open-v3, .facts > div, .pin-legend li");
+const targets = document.querySelectorAll(".pillars article, .mcp-copy, .mcp-code, .guild-copy, .guild-v3 .product-shot, .open-v3, .facts > div, .pin-legend li, .mcp-clients li, .start-steps li");
 if ("IntersectionObserver" in window) {
   const observer = new IntersectionObserver(entries => {
     for (const entry of entries) {

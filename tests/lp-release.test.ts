@@ -35,7 +35,7 @@ test("official LP shares the approved demo and motion implementation", () => {
   assert.match(read("lpv2-1/main.ts"), /import "\.\.\/lpv2\/main"/);
   for (const html of [ja,en]) {
     let previous = -1;
-    for (const id of ["hero-title", "relay-title", "experience-title", "mcp-title", "guild-title", "open-title", "final-title"]) {
+    for (const id of ["hero-title", "experience-title", "relay-title", "mcp-title", "guild-title", "open-title", "final-title"]) {
       const index = html.indexOf(`id="${id}"`);assert.ok(index > previous, id);previous=index;
     }
   }
