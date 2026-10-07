@@ -16,6 +16,7 @@ function mount(experience: HTMLElement): void {
   const log = $<HTMLOListElement>("[data-log]");
   const phone = $("[data-phone]");
   const live = $("[data-live]");
+  const feed = $(".xp-feed");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const idleLog = log.innerHTML;
 
@@ -31,6 +32,10 @@ function mount(experience: HTMLElement): void {
   let queue: Line[] = [];
   let timer: number | undefined;
   let onScreen = true;
+  // With motion on, page scroll plays one scripted run; "play" is the click-through demo.
+  let mode: "scroll" | "play" = document.documentElement.dataset.motion === "on" ? "scroll" : "play";
+  let quiet = false;
+  experience.dataset.mode = mode;
 
   const quest = '{ questId: "q_001" }';
   const said = (key: string): string => replies[key] ?? "";
@@ -87,7 +92,7 @@ function mount(experience: HTMLElement): void {
   }
 
   const liveText: Record<DemoState, string> = {
-    intro: text("まずは、バグ報告をAIに任せてみよう。", "Start by handing the bug report to your agent."),
+    intro: "",
     investigating: text("Human → Agent：AIがMCPでQuestを受け取り、原因を調べています。", "Human → Agent: your agent picked up the quest through MCP and is investigating."),
     choose: text("Agent → Human：直し方の判断が、あなたに届きました。", "Agent → Human: a decision about the fix is waiting for you."),
     pushback: text("AIが、C案の問題点を指摘してきました。", "Your agent flagged a problem with option C."),
@@ -102,17 +107,18 @@ function mount(experience: HTMLElement): void {
   function setView(view: "guilduo" | "agent"): void {
     if (panes.dataset.view === view) return;
     panes.dataset.view = view;
+    if (mode === "scroll") feed.scrollTo({ top: feed.scrollHeight, behavior: "instant" });
     experience.querySelectorAll<HTMLButtonElement>("button[data-view]").forEach(button => {
       button.setAttribute("aria-pressed", String(button.dataset.view === view));
     });
     // Tabs only show on narrow screens; keep them in sight after an automatic switch.
     const tabs = $(".mobile-views");
-    if (tabs.offsetParent && tabs.getBoundingClientRect().top < 0) tabs.scrollIntoView({ block: "start", behavior: reduced.matches ? "auto" : "smooth" });
+    if (mode === "play" && tabs.offsetParent && tabs.getBoundingClientRect().top < 0) tabs.scrollIntoView({ block: "start", behavior: reduced.matches ? "auto" : "smooth" });
   }
 
   // Entrance played once per new item, so switching tabs never replays it.
   function reveal(node: HTMLElement): void {
-    if (document.documentElement.dataset.motion !== "on") return;
+    if (quiet || document.documentElement.dataset.motion !== "on") return;
     node.animate([{ opacity: .2, transform: "translateY(9px)" }, { opacity: 1, transform: "none" }], { duration: 380, easing: "cubic-bezier(.22,.68,0,1)" });
   }
 
@@ -137,7 +143,7 @@ function mount(experience: HTMLElement): void {
 
   const pace: Record<Line["kind"], number> = { call: 750, result: 500, note: 850, ok: 750, wait: 650, advance: 700 };
   function pump(): void {
-    if (timer !== undefined || !queue.length || !onScreen || document.hidden) return;
+    if (mode === "scroll" || timer !== undefined || !queue.length || !onScreen || document.hidden) return;
     timer = window.setTimeout(() => {
       timer = undefined;
       const line = queue.shift()!;
@@ -151,6 +157,7 @@ function mount(experience: HTMLElement): void {
     render();
     if (automaticStates.includes(state) || state === "intro" || state === "complete") return;
     setView("guilduo");
+    if (mode === "scroll") return;
     // Bring the request that just arrived into view if it landed off screen.
     const card = experience.querySelector<HTMLElement>("[data-reply-for]:not([hidden])")?.closest<HTMLElement>(".xp-card");
     const rect = card?.getBoundingClientRect();
@@ -185,7 +192,12 @@ function mount(experience: HTMLElement): void {
   function render(): void {
     experience.dataset.state = state;
     experience.dataset.busy = String(!settled);
-    live.textContent = liveText[state];
+    live.textContent = liveText[state] || (mode === "scroll"
+      ? text("スクロールすると、AIとのやり取りが進みます。", "Scroll to play the handoff with your agent.")
+      : text("まずは、バグ報告をAIに任せてみよう。", "Start by handing the bug report to your agent."));
+    experience.querySelectorAll<HTMLElement>("[data-action]").forEach(button => {
+      button.dataset.next = String(mode === "scroll" && button.dataset.action === autoAnswer[state]);
+    });
     const order: DemoState[] = ["intro", "investigating", "choose", "pushback", "fixing", "device_check", "refixing", "recheck", "completing", "complete"];
     const past = (from: DemoState): boolean => order.indexOf(state) >= order.indexOf(from);
     const at = (from: DemoState): boolean => order.indexOf(state) > order.indexOf(from) || (state === from && settled);
@@ -246,6 +258,8 @@ function mount(experience: HTMLElement): void {
       else node.removeAttribute("aria-current");
     });
     renderPhone();
+    // Pinned panes cannot grow, so keep the newest request in view.
+    if (mode === "scroll") feed.scrollTop = feed.scrollHeight;
   }
 
   function dispatch(event: DemoEvent): void {
@@ -266,22 +280,27 @@ function mount(experience: HTMLElement): void {
     settled = queue.length === 0;
     render();
     if (automaticStates.includes(state)) setView("agent");
+    else if (state === "complete") setView("guilduo");
     pump();
   }
 
+  const autoAnswer: Partial<Record<DemoState, DemoEvent>> = { intro: "start", choose: "choose_c", pushback: "choose_b", device_check: "works" };
   const replyText: Partial<Record<string, [string, string]>> = {
     choose_a: ["「Aでお願いします。」", "“Go with A.”"], choose_b: ["「Bでお願いします。」", "“Go with B.”"], choose_c: ["「Cでお願いします。」", "“Go with C.”"],
     works: ["「押せた。」", "“It works.”"], broken: ["「まだ押せない。」", "“Still stuck.”"],
   };
+  function answer(action: DemoEvent): void {
+    const words = replyText[action];
+    if (words) {
+      const key = state === "pushback" ? "pushback" : state === "choose" ? "choose" : "device";
+      replies[key] = key === "pushback" ? text(action === "choose_a" ? "「では、Aで。」" : "「では、Bで。」", action === "choose_a" ? "“A, then.”" : "“B, then.”") : text(...words);
+    }
+    dispatch(action);
+  }
   experience.querySelectorAll<HTMLButtonElement>("[data-action]").forEach(button => {
     button.addEventListener("click", () => {
-      const action = button.dataset.action as DemoEvent;
-      const words = replyText[action];
-      if (words) {
-        const key = state === "pushback" ? "pushback" : state === "choose" ? "choose" : "device";
-        replies[key] = key === "pushback" ? text(action === "choose_a" ? "「では、Aで。」" : "「では、Bで。」", action === "choose_a" ? "“A, then.”" : "“B, then.”") : text(...words);
-      }
-      dispatch(action);
+      if (mode === "scroll") return;
+      answer(button.dataset.action as DemoEvent);
       live.tabIndex = -1;
       live.focus({ preventScroll: true });
     });
@@ -302,8 +321,64 @@ function mount(experience: HTMLElement): void {
       resume();
     }, { threshold: 0 }).observe(experience);
   }
+
+  // One unit of the scripted run: the next log line, or the visitor's scripted reply.
+  function forward(): boolean {
+    const line = queue.shift();
+    if (line) {
+      if (line.kind === "advance") dispatch("advance");
+      else { append(line); if (!queue.length) settle(); }
+      return true;
+    }
+    const act = autoAnswer[state];
+    if (act) answer(act);
+    return Boolean(act);
+  }
+  // Replies wait a few units so each request is readable before it is answered.
+  const weights: number[] = [];
+  quiet = true;
+  while (true) {
+    const weight = !queue.length && autoAnswer[state] ? 4 : 1;
+    if (!forward()) break;
+    weights.push(weight);
+  }
+  dispatch("restart");
+  quiet = false;
+  const total = weights.reduce((sum, weight) => sum + weight, 0) + 4;
+  let shown = 0;
+  function seek(target: number): void {
+    if (target < shown) { quiet = true; dispatch("restart"); shown = 0; }
+    quiet = quiet || target - shown > 1;
+    while (shown < target && forward()) shown++;
+    quiet = false;
+  }
+  let frame = 0;
+  function follow(): void {
+    frame = 0;
+    if (mode !== "scroll") return;
+    const rect = experience.getBoundingClientRect();
+    const at = Math.min(1, Math.max(0, -rect.top / Math.max(1, rect.height - innerHeight))) * total;
+    let target = 0;
+    for (let sum = weights[0]; target < weights.length && sum <= at; sum += weights[++target] ?? 0);
+    seek(target);
+  }
+  function setMode(next: typeof mode): void {
+    mode = next;
+    experience.dataset.mode = mode;
+    experience.style.setProperty("--xp-run", total * 120 + "px");
+  }
+  $("[data-play]").addEventListener("click", () => {
+    setMode("play");
+    dispatch("restart");
+    experience.scrollIntoView({ block: "start", behavior: "instant" });
+    live.tabIndex = -1;
+    live.focus({ preventScroll: true });
+  });
+  addEventListener("scroll", () => { if (!frame) frame = requestAnimationFrame(follow); }, { passive: true });
+  setMode(mode);
   document.documentElement.dataset.demoReady = "true";
   render();
+  follow();
 }
 
 const section = document.querySelector<HTMLElement>("#experience");
