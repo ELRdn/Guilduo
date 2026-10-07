@@ -1,0 +1,204 @@
+{
+  "preparedAt": "2026-10-06",
+  "status": "Awaiting authenticated Search Console evidence",
+  "property": null,
+  "access": "User confirmed registered and accessible; agent has no authenticated browser/API connection",
+  "baseline": {
+    "period": "28 complete days before solution-page publication",
+    "excludeBrandRegex": "(?i)guilduo|ギルデュオ|questforge|quest.?forge|relay.?forge",
+    "impressions": null,
+    "clicks": null,
+    "ctr": null,
+    "averagePosition": null,
+    "exportedAt": null,
+    "startDate": "2026-09-08",
+    "endDate": "2026-10-05"
+  },
+  "siteChecks": {
+    "permission": null,
+    "manualActions": null,
+    "securityIssues": null,
+    "searchGenerativeAi": null
+  },
+  "sitemap": {
+    "url": "https://guilduo.com/sitemap.xml",
+    "expectedCanonicalUrls": 32,
+    "submittedAt": null,
+    "lastRead": null,
+    "state": null,
+    "detectedUrls": null,
+    "errors": null
+  },
+  "urls": [
+    {
+      "url": "https://guilduo.com/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/lp/en/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/en/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/mcp-connection/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/en/mcp-connection/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/faq/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/en/faq/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/human-relay/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/docs/en/human-relay/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/solutions/mcp-task-management/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/solutions/en/mcp-task-management/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/solutions/ai-agent-handoff/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    },
+    {
+      "url": "https://guilduo.com/solutions/en/ai-agent-handoff/",
+      "indexStatus": null,
+      "googleCanonical": null,
+      "lastCrawl": null,
+      "crawlAllowed": null,
+      "liveTestAt": null,
+      "liveTestResult": null,
+      "requestStatus": "Not performed",
+      "requestedAt": null
+    }
+  ],
+  "followUp": {
+    "day7": null,
+    "day28": null,
+    "automaticMonitoring": false,
+    "plannedDay7": "2026-10-13",
+    "plannedDay28": "2026-11-03"
+  },
+  "publication": {
+    "publishedAt": "2026-10-05T17:16:05Z",
+    "timeZone": "Asia/Tokyo",
+    "deployedSourceRevision": "3c3af3add1f25da6ea58d5d61fc59955a1cdfa5d",
+    "siteWorkflow": "https://github.com/ELRdn/Guilduo/actions/runs/37346626622",
+    "publicSiteVerified": true,
+    "canonicalSitemapUrls": 32,
+    "searchConsoleSubmissionVerified": false
+  }
+}

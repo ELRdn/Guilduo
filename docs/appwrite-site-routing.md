@@ -12,6 +12,8 @@
 | --- | --- | --- | --- |
 | `https://guilduo.com/` | `/`を`/lp/`へrewrite | `/lp/` | `https://guilduo.com/` |
 | `https://guilduo.com/lp/en/` | 変更なし | `/lp/en/` | `https://guilduo.com/lp/en/` |
+| `https://guilduo.com/docs/` | 変更なし | `/docs/` | `https://guilduo.com/docs/`（静的Docs・公開済み） |
+| `https://guilduo.com/docs/en/` | 変更なし | `/docs/en/` | `https://guilduo.com/docs/en/`（英語Docs・公開済み） |
 | `https://app.guilduo.com/` | `/`を`/next/relay-forge/`へrewrite | `/next/relay-forge/` | `https://app.guilduo.com/` |
 | `https://app.guilduo.com/next/relay-forge/` | 変更なし | `/next/relay-forge/` | `https://app.guilduo.com/` |
 | Appwrite generated domain | 変更なし | 全deployment tree | 検証・rollback用 |
@@ -21,6 +23,22 @@
 Appwrite Sitesのdomain-level redirectはpath/queryを保持しないため、rootのLP・Web App切替には使いません。`www`のapex redirectだけは、Cloudflare Redirect Ruleでpath/queryを保持する構成にします。
 
 ## Appwrite Siteの設定状態
+
+### 静的ページの404 (2026-10-05)
+
+Guilduoの公開入口は実HTMLファイルを持ち、アプリの画面移動はhash navigationを使う。
+SiteのSPA用`fallbackFile: index.html`は存在しないDocsにもアプリをHTTP 200で返すため、
+静的Siteでは`fallbackFile: ""`を使用する。手動Site workflowは配備前に
+`tools/ensure-static-site-routing.mts`で設定を確認する。対象Site、static adapter、
+全公開入口のHTMLを検査し、既知のindex.html fallbackだけを解除する。
+それ以外の設定とactive deploymentは維持し、未知のfallbackやSSRへは適用しない。
+配備後に既存LP・Web App・互換pathと、存在しないDocsの実HTTP 404を確認する。
+fallback設定は新しいdeployment作成時に取り込まれるため、設定更新だけでは
+既存deploymentの応答は変わらない。新deploymentを作成・有効化してから
+workflowが日英Docs本文と未知のDocs pathのHTTP 404を検査する。
+
+Appwrite公式の[静的SiteとSPA fallback](https://appwrite.io/docs/products/sites/rendering/static)
+および[Site更新API](https://appwrite.io/docs/references/cloud/server-rest/sites#update)を参照。
 
 - [x] 既存のAppwrite Siteで、`app.guilduo.com`を**Active deployment**のCustom Domainとして維持する。
 - [x] 同じSiteへ`guilduo.com`を追加し、**Active deployment**を使用する。Redirect設定にはしない。

@@ -3,6 +3,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { OFFICIAL_SITE_ORIGIN, WEB_APP_ORIGIN } from "./site-routing.ts";
+import { publicDocsPlugin } from "./public-docs/build.ts";
 
 // The checkout is exposed through a Windows path alias while Node resolves the
 // files on another drive. Give Vite the same real root it sees for HTML inputs
@@ -109,13 +110,18 @@ export default defineConfig({
   appType: "mpa",
   base: "./",
   publicDir: false,
-  plugins: [react(), injectPublicBrandMetadata(), copyQuestForgeRuntime],
+  plugins: [react(), injectPublicBrandMetadata(), publicDocsPlugin(getPublicSiteOrigin), copyQuestForgeRuntime],
   build: {
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        docsClient: resolve(root, "public-docs/client.ts"),
         app: resolve(root, "index.html"),
+        solutionMcpJa: resolve(root, "solutions/mcp-task-management/index.html"),
+        solutionMcpEn: resolve(root, "solutions/en/mcp-task-management/index.html"),
+        solutionHandoffJa: resolve(root, "solutions/ai-agent-handoff/index.html"),
+        solutionHandoffEn: resolve(root, "solutions/en/ai-agent-handoff/index.html"),
         landingJa: resolve(root, "lp/index.html"),
         landingEn: resolve(root, "lp/en/index.html"),
         privacy: resolve(root, "privacy/index.html"),

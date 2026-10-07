@@ -31,13 +31,20 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 | Web App | `https://app.guilduo.com` | Appwrite SiteのCustom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Remote HTTP MCPの正規接続先 |
 | Appwrite API | `https://api.guilduo.com/v1` | Appwrite APIの正式endpoint（originは`https://api.guilduo.com`） |
-| Documentation | `https://docs.guilduo.com` | Reserved / Future |
+| Documentation | `https://guilduo.com/docs/` | 日本語の静的Docs・公開済み |
+| English Documentation | `https://guilduo.com/docs/en/` | 英語の静的Docs・公開済み |
+| Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com`は`https://guilduo.com`へのredirect専用です。旧`workers.dev` URLは互換接続・rollback用に残します。`api.guilduo.com`はAppwrite API用で、ブラウザのAppwrite clientとWorkerの`APPWRITE_ENDPOINT`が利用します。Worker REST/MCPの`/v1`や`/mcp`の公開originではありません。
 
 ブランドの言葉と表現は[BRAND.md](BRAND.md)を参照してください。
 
 GuilduoはHabiticaとは独立したプロジェクトです。提携・承認・代替サービスではありません。各製品名と商標はそれぞれの権利者に帰属します。
+
+### 目的からGuilduoを知る
+
+- [MCPでつなぐ、人とAIエージェントのタスク管理](https://guilduo.com/solutions/mcp-task-management/) — 外部AIとのQuest共有、担当、完了条件。
+- [人とAIエージェントの引き継ぎとレビュー](https://guilduo.com/solutions/ai-agent-handoff/) — 人の確認とテキスト回答を作業へ戻す流れ。
 
 ## 公開βの範囲
 

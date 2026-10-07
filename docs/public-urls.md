@@ -1,6 +1,6 @@
 # Guilduo 公開URLガイド
 
-最終更新: 2026-10-02
+最終更新: 2026-10-05
 
 この文書は、Guilduoの公開URLを人間とエージェントが同じ理解で扱うための早見表である。新しいユーザー向けリンク、README、接続手順には、原則として以下の正式URLを使う。
 
@@ -13,11 +13,15 @@
 | Web App | https://app.guilduo.com/ | **Guilduo / Relay Forge**の正式Web App | READY |
 | MCP | https://mcp.guilduo.com/mcp | OAuth対応Remote HTTP MCP | READY |
 | Appwrite API | https://api.guilduo.com/v1 | Appwrite SDKとWorkerが使うAPI endpoint | READY |
-| Documentation | https://docs.guilduo.com/ | 将来のドキュメントサイト | Reserved / Future |
-| Privacy | https://guilduo.com/privacy/ | `PRIVACY.md`を正本とする静的ページ | LOCAL VERIFIED / DEPLOYMENT PENDING |
-| Terms | https://guilduo.com/terms/ | `TERMS.md`を正本とする静的ページ | LOCAL VERIFIED / DEPLOYMENT PENDING |
+| Documentation | https://guilduo.com/docs/ | 日本語Docsの正式URL（同じSiteに静的生成） | READY / PUBLISHED |
+| English Documentation | https://guilduo.com/docs/en/ | 英語Docsの正式URL | READY / PUBLISHED |
+| Japanese use cases | https://guilduo.com/solutions/mcp-task-management/ · https://guilduo.com/solutions/ai-agent-handoff/ | MCP task management / human review | READY / PUBLISHED |
+| English use cases | https://guilduo.com/solutions/en/mcp-task-management/ · https://guilduo.com/solutions/en/ai-agent-handoff/ | English use cases | READY / PUBLISHED |
+| Documentation subdomain | https://docs.guilduo.com/ | 将来の移行・redirect用予約 | Reserved / Future |
+| Privacy | https://guilduo.com/privacy/ | `PRIVACY.md`を正本とする静的ページ | READY / PUBLISHED |
+| Terms | https://guilduo.com/terms/ | `TERMS.md`を正本とする静的ページ | READY / PUBLISHED |
 | バグ報告 | https://github.com/ELRdn/Guilduo/issues | 公開GitHub Issues | READY |
-| 個別問い合わせ・データ削除依頼 | mailto:el2radon2official@gmail.com | 公式運営者Radonの個別受付窓口 | OPERATOR CONFIRMED / POLICY DEPLOYMENT PENDING |
+| 個別問い合わせ・データ削除依頼 | mailto:el2radon2official@gmail.com | 公式運営者Radonの個別受付窓口 | OPERATOR CONFIRMED / POLICY PUBLISHED |
 
 2026-10-02の未認証確認では、公式LP・Web App・OAuth metadataへ到達し、MCP healthは56ツールを報告。`www.guilduo.com`はDNS未解決。Privacy／Termsの本番URLはHTTP 200でも既存アプリへのfallbackで、本文配布を確認できない。配備後はステータスだけでなく見出し・本文・canonicalを確認する。[確認記録](launch-readiness.md)
 
@@ -63,3 +67,8 @@ WorkerのRESTとMCP、Appwrite Auth/TablesDB、Agent Registryの保存先を混�
 - QuestForgeという名前は、CLI、MCP ID、storage key、環境変数、既存route、schema、型、ファイル名などのtechnical identifierでは維持する。
 - URLやrouteを変更するときは、先に site-routing.ts と tests/site-routing.test.ts を確認し、この文書と docs/appwrite-site-routing.md を同期する。
 - Token、API Key、Client Secret、完全なUIDはURL、ログ、接続例へ書かない。
+
+
+## Public Docs implementation (2026-10-05)
+
+公開先は`https://guilduo.com/docs/`、英語は`https://guilduo.com/docs/en/`。既存Siteへ静的同梱し、DNS追加とroot rewrite変更は不要。`docs.guilduo.com`は予約維持。2026-10-05に日英24記事の実本文・canonical・リンク、検索索引、robots、sitemapと未知pathの実HTTP 404を本番確認済み。Privacy／Termsも静的本文を配信している。商品・正式ReleaseのGoとは別に扱う。[公開記録](../public-docs/PUBLICATION.md)、[更新と公開確認](../public-docs/README.md)。

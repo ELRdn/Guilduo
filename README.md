@@ -31,13 +31,20 @@ Guilduo is a **Human × AI Work Platform** where people and AI Agents can commis
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Canonical Remote HTTP MCP endpoint |
 | Appwrite API | `https://api.guilduo.com/v1` | Official Appwrite API endpoint (origin: `https://api.guilduo.com`) |
-| Documentation | `https://docs.guilduo.com` | Reserved / Future |
+| Documentation | `https://guilduo.com/docs/` | Static Japanese Docs; published |
+| English Documentation | `https://guilduo.com/docs/en/` | Static English Docs; published |
+| Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com` is reserved for redirects to `https://guilduo.com`. The old `workers.dev` URL remains for compatibility connections and rollback. `api.guilduo.com` is for the Appwrite API and is used by the browser Appwrite client and the Worker's `APPWRITE_ENDPOINT`; it is not the public origin for the Worker's REST `/v1` or MCP `/mcp` routes.
 
 See [BRAND.md](BRAND.md) for approved brand language and expression.
 
 Guilduo is an independent project and is not affiliated with, endorsed by, or an alternative service to Habitica. Product names and trademarks belong to their respective owners.
+
+### Explore Guilduo by use case
+
+- [MCP task management for humans and AI agents](https://guilduo.com/solutions/en/mcp-task-management/) — Shared Quests, ownership and completion criteria for your external AI.
+- [AI agent handoff and human review](https://guilduo.com/solutions/en/ai-agent-handoff/) — Bring human checks and saved text feedback back into the work.
 
 ## Public Beta Scope
 

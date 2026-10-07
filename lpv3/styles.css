@@ -378,7 +378,7 @@ html[data-motion="off"] .relay-steps p { max-height: none; padding-top: 6px; }
   .hero-v3 .shot-canvas { width: 190%; margin: -26% 0 0 -72%; }
   .experience-heading h2 { font-size: 30px; }
   .experience-heading h2 br { display: inline; }
-  .stepper { gap: 8px; }
+  .stepper { gap: 8px; flex-wrap: wrap; }
   .stepper li { font-size: 12px; gap: 6px; }
   .stepper li span { width: 26px; height: 26px; font-size: 10px; }
   .demo-caption p { font-size: 12px; }
@@ -448,4 +448,8 @@ html[data-motion="off"] .relay-steps p { max-height: none; padding-top: 6px; }
 @media (max-width: 760px) {
   .lang-switch svg { display: none; }
   .lang-switch > a, .lang-switch > span { min-height: 40px; padding: 0 10px; font-size: 12px; }
+}
+@media (max-width: 360px) {
+  .site-nav { flex-wrap: wrap; padding-block: 12px; }
+  .nav-tools { width: 100%; justify-content: flex-end; }
 }

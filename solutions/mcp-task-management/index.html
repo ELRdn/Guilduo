@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>MCPでつなぐ、人とAIエージェントのタスク管理 | Guilduo</title>
+  <meta name="description" content="CodexやClaudeとQuestを共有するGuilduoのMCPタスク管理。目的・完了条件、Agent権限、担当のプレビュー、セッション再開、人のレビューをスマホメニュー修正の例で解説します。">
+  <meta name="guilduo:canonical-path" content="/solutions/mcp-task-management/">
+  <link rel="canonical" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/">
+  <link rel="alternate" hreflang="ja" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/">
+  <link rel="alternate" hreflang="en" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/">
+  <link rel="alternate" hreflang="x-default" href="__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Guilduo">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta property="og:title" content="MCPでつなぐ、人とAIエージェントのタスク管理 | Guilduo">
+  <meta property="og:description" content="共有Questを使って、AIに任せる範囲と人が確認する条件を明確に。接続、担当、作業再開からレビューまでの実践ガイド。">
+  <meta property="og:url" content="__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/">
+  <meta property="og:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Guilduoのブランドマーク">
+  <meta property="article:modified_time" content="2026-10-06">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MCPでつなぐ、人とAIエージェントのタスク管理 | Guilduo">
+  <meta name="twitter:description" content="共有Questで目的、担当、レビューをつなぐ。Codex・ClaudeとのMCPタスク管理を具体例で解説。">
+  <meta name="twitter:image" content="__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png">
+  <meta name="twitter:image:alt" content="Guilduoのブランドマーク">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">
+  <link rel="stylesheet" href="/solutions/styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Guilduo", "item": "__GUILDUO_PUBLIC_ORIGIN__/" },
+          { "@type": "ListItem", "position": 2, "name": "MCPタスク管理", "item": "__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/" }
+        ]
+      },
+      {
+        "@type": "TechArticle",
+        "headline": "MCPでつなぐ、人とAIエージェントのタスク管理",
+        "description": "共有Quest、Agent権限、担当のプレビュー、セッション再開と人のレビューを使うMCPタスク管理の実践ガイド。",
+        "inLanguage": "ja",
+        "dateModified": "2026-10-06",
+        "url": "__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/",
+        "mainEntityOfPage": "__GUILDUO_PUBLIC_ORIGIN__/solutions/mcp-task-management/",
+        "image": "__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png",
+        "publisher": { "@type": "Organization", "name": "Guilduo", "url": "__GUILDUO_PUBLIC_ORIGIN__/" },
+        "citation": [
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json",
+          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json"
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="solution-page" data-theme="dark">
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="solution-header shell">
+    <a class="wordmark" href="/" aria-label="Guilduo ホーム"><img class="brand-mark" src="/assets/brand/guilduo-mark-gold.svg" width="30" height="40" alt="" aria-hidden="true">Guilduo</a>
+    <nav aria-label="サイトナビゲーション">
+      <a href="/">公式サイト</a>
+      <a href="/docs/">Docs</a>
+      <a href="/solutions/en/mcp-task-management/" lang="en" hreflang="en" aria-label="Read this page in English">English</a>
+    </nav>
+  </header>
+  <main id="main" class="solution-main shell" tabindex="-1">
+    <div class="solution-hero">
+      <p class="eyebrow">Guilduo / MCP Task Management</p>
+      <h1>MCPでつなぐ、人とAIエージェントのタスク管理</h1>
+      <p class="solution-lead">CodexやClaudeへ任せる仕事を、目的・完了条件・担当が分かるQuestとして共有する。チャットを開き直しても保存済みの作業状態を読み、人の確認が必要なところで受け渡せます。このガイドでは、小さなUI修正を例に、その進め方を説明します。</p>
+      <div class="solution-actions">
+        <a class="button gold" href="/docs/mcp-connection/">MCP接続を始める</a>
+        <a class="button quiet" href="#example">タスク例を読む</a>
+      </div>
+    </div>
+
+    <section id="problem" class="solution-section" aria-labelledby="problem-title">
+      <h2 id="problem-title">会話の記憶に、仕事の状態を任せない</h2>
+      <p>AIに修正を頼んだあと、別のチャットで再開すると「どこまで進んだか」「何を確認すれば完了か」を説明し直すことがあります。人のタスク一覧とAIの会話が別々では、実装済みなのか、レビュー待ちなのかも追いにくくなります。</p>
+      <p>Guilduoでは、仕事をQuestとして保存し、MCP経由で外部のAIクライアントから読み書きします。人はGuilduo / Relay Forgeで同じQuestを確認できます。目的、完了条件、次の行動、担当、Handoffの状態を共有すると、再開時に読むべき情報を会話の外へ残せます。</p>
+      <p>共有するのは作業データです。モデルの会話履歴、IDEの開いているファイル、実行中のプロセスが移るわけではありません。Agent登録はモデルを起動せず、Questの予定日や<code>ready</code>も自動実行の開始を意味しません。</p>
+    </section>
+
+    <section id="flow" class="solution-section" aria-labelledby="flow-title">
+      <h2 id="flow-title">接続から再開まで、保存状態を確かめて進める</h2>
+      <ol class="solution-flow">
+        <li><strong>小さなQuestを用意する。</strong>目的、完了条件、次の行動を具体化します。日付未定ならBacklogへ。予定、担当、作業の完了は別の状態として扱います。</li>
+        <li><strong>接続と権限を確認する。</strong>対応クライアントから<code>https://mcp.guilduo.com/mcp</code>へOAuthで接続し、Web AppのConnectionsで登録済みAgentとリンクします。<code>get_current_agent_context</code>でAgentと<code>effectiveExecutionScopes</code>を確認します。実行権限はOAuthの許可とAgent側の許可の共通部分です。</li>
+        <li><strong>担当をプレビューする。</strong><code>get_quest</code>で対象と最新の<code>updatedAt</code>を読み、<code>assign_quest_to_agent</code>を<code>dryRun: true</code>で確認します。任された範囲内で、最新値を<code>expectedUpdatedAt</code>へ渡し、<code>dryRun: false</code>で保存します。</li>
+        <li><strong>外部で作業して結果を返す。</strong>実際の修正やテストはCodexやClaudeの作業環境で行います。Handoffを<code>working</code>、結果を確認してもらう段階で<code>review_required</code>へ。<code>transition_quest_handoff</code>を先にプレビューし、保存時は読み取った状態を<code>expectedState</code>に指定します。</li>
+        <li><strong>新しいセッションで読み直す。</strong>接続先とAgentの権限を確認し、<code>list_quests</code>で対象を探して<code>get_quest</code>で詳細を読みます。完了条件、担当、結果、残る確認を照合し、外部のファイルや成果物も確認して再開します。</li>
+      </ol>
+      <p>一般の更新も、対象と変更内容を先に確認してから保存し、読み直して反映を確かめます。ただし、すべてのツールがプレビューに対応するわけではありません。<code>create_quest</code>や<code>update_quest</code>へ独自に<code>dryRun</code>を足してもプレビューにはならないため、実際の入力スキーマに従ってください。競合時は最新状態を読み、変更案を見直します。</p>
+    </section>
+
+    <section id="example" class="solution-section" aria-labelledby="example-title">
+      <h2 id="example-title">例：スマホで使えるメニューへ修正する</h2>
+      <p class="solution-note">以下は手順を説明するための架空のタスク例です。実際の利用者データ、実行結果、品質保証を示すものではありません。</p>
+      <div class="solution-table" role="region" aria-label="スマホメニュー修正のQuest例" tabindex="0">
+        <table>
+          <caption>「スマホのメニューを修正する」Questに残す情報</caption>
+          <thead><tr><th scope="col">項目</th><th scope="col">具体例</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">目的</th><td>狭い画面でメニューを開閉し、目的のページへ移動できるようにする。</td></tr>
+            <tr><th scope="row">完了条件</th><td>390px幅で横にはみ出さず、開閉とリンク移動ができる。キーボード操作と人の実機確認の結果を残す。</td></tr>
+            <tr><th scope="row">次の行動</th><td>メニューの開閉処理と既存のスタイルを読み、問題を再現する。</td></tr>
+            <tr><th scope="row">任せる範囲</th><td>関連するUI修正と検証。公開・デプロイの判断は含めない。</td></tr>
+            <tr><th scope="row">返す情報</th><td>変更箇所、確認結果、成果物の場所、人に確認してほしい操作。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>接続済みのAIへの依頼は、例えば次のように書けます。</p>
+      <blockquote><p>Guilduoの「スマホのメニューを修正する」を読んで、完了条件と担当を確認してください。担当割り当てを先にプレビューし、許可した範囲で保存して修正してください。390px幅とキーボード操作を確認し、結果と残る実機確認をレビュー待ちとして返してください。</p></blockquote>
+      <p>実機での押しやすさなど、人の判断が必要なら、担当の登録済みAgentが<code>request_human_review</code>で確認用の別Questを作ります。確認場所、操作、回答してほしい内容を具体化し、プレビュー後に最新の<code>expectedUpdatedAt</code>で保存します。人がWeb Appでテキスト回答を保存したら、Agentは<code>list_human_requests</code>でその回答を読んで修正または受け入れへ進みます。</p>
+      <p><strong>人のレビュー回答、Handoffの承認、元Questの完了は別の操作です。</strong>確認用Questへの回答だけでは、元の修正作業は完了しません。Handoffは担当間の受け渡し状態を表し、<code>accepted</code>でも元Questの完了条件を確認する必要があります。詳しくは<a href="/solutions/ai-agent-handoff/">AIエージェントとの仕事の受け渡し</a>へ。</p>
+    </section>
+
+    <section id="limits" class="solution-section" aria-labelledby="limits-title">
+      <h2 id="limits-title">向いている仕事と、別に用意するもの</h2>
+      <p>向いているのは、UI修正、文章の確認、調査結果のレビューなど、目的と完了条件を書ける仕事です。AIの作業結果に人の判断を戻す場合や、複数セッションで保存済み状態を確認したい場合に使えます。</p>
+      <p>モデルのホスティング、IDE操作、テスト実行、時刻指定によるAgentの自動起動は、ここで説明するQuest管理の役割に含まれません。外部のTo Doサービスとのネイティブ同期も、この手順の前提にはできません。必要な実行環境と、その利用権限を接続元で用意してください。</p>
+      <p>読み取りできても書き込みできるとは限りません。必要な<code>quests:read</code>や<code>quests:write</code>をOAuthとAgentの両側で確認します。タスクには必要な情報だけを残し、トークンや認証情報を貼らないでください。成果物リンクの閲覧権限も別に確認します。</p>
+    </section>
+
+    <section id="get-started" class="solution-section" aria-labelledby="get-started-title">
+      <h2 id="get-started-title">最初は1件のQuestと読み取り確認から</h2>
+      <p><a href="https://app.guilduo.com/">Guilduo / Relay Forge</a>へログインし、<a href="/docs/quests/">Questガイド</a>で小さな仕事を作り、<a href="/docs/mcp-connection/">MCP接続ガイド</a>に沿って接続します。クライアント別の操作は<a href="/docs/codex/">Codex</a>または<a href="/docs/claude/">Claude</a>を参照してください。</p>
+      <p>同じQuestを読めたら、<a href="/docs/agents/">Agentの登録・担当割り当て</a>と<a href="/docs/permissions/">権限ガイド</a>を確認し、1件だけプレビューして保存します。接続、読み取り、書き込み、外部での作業、レビューを順に確かめれば、問題が起きた段階を切り分けられます。</p>
+    </section>
+
+    <section id="sources" class="solution-section" aria-labelledby="sources-title">
+      <h2 id="sources-title">公開資料と内容確認日</h2>
+      <p>内容確認日：<time datetime="2026-10-06">2026年10月6日</time>。公開済みソースのリビジョン <code>42caab0fa1f396f15e4e1277f6e36dda1ac9bd04</code> を根拠に編集しています。</p>
+      <ul>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json">public-docs/content.json</a>：quests、mcp-connection、codex、claude、agents、permissions、human-relay、faqの記事。作業手順と実行環境の境界。</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json">api/mcp-tools.json</a>：Questの読み書き、Agent context、担当割り当て、Handoff遷移、人への確認依頼の公開入力契約。</li>
+      </ul>
+      <p>操作の詳細は<a href="/docs/">Guilduo Docs</a>で確認できます。利用するクライアントのRemote MCP・OAuth対応も確認してください。</p>
+    </section>
+  </main>
+  <footer class="solution-footer shell">
+    <p>Guilduo — 人とAIの仕事をつなぐ。</p>
+    <nav aria-label="関連ページと運営情報">
+      <a href="/solutions/ai-agent-handoff/">AIエージェントとの受け渡し</a>
+      <a href="https://github.com/ELRdn/Guilduo">GitHub</a>
+      <a href="/privacy/">Privacy</a>
+      <a href="/terms/">Terms</a>
+    </nav>
+  </footer>
+</body>
+</html>
