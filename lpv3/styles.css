@@ -331,6 +331,7 @@ html[data-motion="off"] .relay-steps p { max-height: none; padding-top: 6px; }
   .final-v3 .button.gold:hover { background: #cfb879; border-color: #cfb879; }
 }
 @media (max-width: 1100px) {
+  .site-nav nav a[href="#start"] { display: none; }
   .pillars article { padding-inline: 22px; }
   .mcp-inner, .guild-v3 { gap: 44px; }
 }
@@ -388,7 +389,10 @@ html[data-motion="off"] .relay-steps p { max-height: none; padding-top: 6px; }
   .experience[data-mode="scroll"] .xp-pane { flex: 1; }
   .experience[data-mode="scroll"] .xp-stage { padding-block: 20px 12px; }
   .experience[data-mode="scroll"] .experience-heading { margin-bottom: 10px; }
-  .experience[data-mode="scroll"] .experience-heading .eyebrow, .experience[data-mode="scroll"] .demo-caption p, .experience[data-mode="scroll"] .experience-footer .text-link { display: none; }
+  .experience[data-mode="scroll"] .experience-heading .eyebrow, .experience[data-mode="scroll"] .experience-footer .text-link { display: none; }
+  .experience[data-mode="scroll"] .demo-caption p { font-size: 11px; line-height: 1.6; }
+  .experience[data-mode="scroll"] .live-status { font-size: 13px; }
+  .experience[data-mode="scroll"] .experience-footer { margin-top: 8px; }
   .experience[data-mode="scroll"] .experience-heading h2 { font-size: 24px; margin-bottom: 10px; }
   .experience[data-mode="scroll"] .experience-heading h2 br { display: none; }
   .experience[data-mode="scroll"] .demo-caption { padding: 8px 0; }

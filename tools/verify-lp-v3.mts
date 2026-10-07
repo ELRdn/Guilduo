@@ -249,6 +249,28 @@ try {
       });
     } finally { await context.close(); }
   }
+  // With motion on, page scroll plays the scripted run; its end hands over to the click-through demo.
+  for (const width of [390, 1440]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    try {
+      await instrument(context);
+      const page = await context.newPage(); watch(page);
+      await scenario(`demo-scroll-${width}`, page, async () => {
+        await visit(page, "ja");
+        const demo = page.locator("#experience");
+        assert.equal(await demo.getAttribute("data-mode"), "scroll");
+        await page.evaluate('(() => { const s = document.querySelector("#experience"); scrollTo(0, s.offsetTop + s.offsetHeight - innerHeight); })()');
+        await page.locator('#experience[data-state="complete"]').waitFor({ state: "attached" });
+        assert.equal(await page.locator("[data-option=c]").getAttribute("data-declined"), "true", "scroll run includes the pushback");
+        await fits(page, "scroll complete");
+        await page.locator("[data-play]").click();
+        assert.equal(await demo.getAttribute("data-mode"), "play");
+        await settled(page, "intro");
+        await action(page, "start");
+        await settled(page, "choose");
+      });
+    } finally { await context.close(); }
+  }
   await scenario("zero-js-errors", undefined, async () => assert.deepEqual([...new Set(errors)], []));
   await scenario("zero-remote-or-write-requests", undefined, async () => assert.deepEqual([...new Set(unsafeRequests)], []));
   await scenario("zero-http-errors", undefined, async () => assert.deepEqual([...new Set(badResponses)], []));
