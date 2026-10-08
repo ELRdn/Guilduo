@@ -94,7 +94,7 @@ PWAアイコンはLucide機能アイコンと混同しない。アプリブラ�
 | `assets/lp/party-*.webp` | Human、Astra、AgentのParty表現 | `/lp/`、`/lp/en/`、`/lpv3/`、`/lpv3/en/` | `.qa-artifacts/relay-forge-screens/`の検証済みcapture | identity labelが判読できるサイズを保つ |
 | `assets/lp/battle-*.webp` | Quest報酬とBattleの体験層 | `/lp/`、`/lp/en/` | `.qa-artifacts/relay-forge-screens/`の検証済みcapture | RPGをProductの主identityとして誇張しない |
 
-`command-dark.webp`と`party-dark.webp`は2026-10-05に`origin/main`（100f86e）の`/interaction-lab/relay-forge/?theme=dark&fixture=1`（1440×900、2x、ja-JP）から再取得した。fixture内の個人名`Hironao`は、撮影時に表示文字列だけを`Admin`へ置き換えている。LP用captureは決定的fixtureだけを使い、個人情報、認証情報、秘密情報を含めない。Product UIをLP専用HTMLで描き直さず、公開用WebPは元captureを変形・合成せず圧縮する。
+`command-dark.webp`と`party-dark.webp`は2026-10-05に`origin/main`（100f86e）の`/interaction-lab/relay-forge/?theme=dark&fixture=1`（1440×900、2x、ja-JP）から再取得した。fixture内の個人名`Hironao`は、撮影時に表示文字列だけを`Admin`へ置き換えている。LP用captureは決定的fixtureだけを使い、個人情報、認証情報、秘密情報を含めない。Product UIをLP専用HTMLで描き直さず、公開用WebPは元captureを変形・合成せず圧縮する。`-960`、`-1280`、`-1600`付きのWebPは同じ2160px版を縦横比のまま縮小した`srcset`用の派生で、LPは画面幅に合うものを読み込む。
 
 ## 追加Assetの受入条件
 

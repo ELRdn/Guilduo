@@ -1,5 +1,6 @@
 // LPv3 hands-on demo: a bug report travels to the agent and back as real-looking
 // Guilduo requests. Timing and DOM live here; lpv3/demo.ts owns the transitions.
+import { createElement, MousePointer2 } from "lucide";
 import { automaticStates, initialState, transition, type DemoEvent, type DemoState } from "./demo";
 
 type Line = { kind: "call" | "result" | "note" | "ok" | "wait" | "advance"; text?: string; tool?: string; effect?: "highlight" | "fix" | "safe" };
@@ -36,6 +37,22 @@ function mount(experience: HTMLElement): void {
   let mode: "scroll" | "play" = document.documentElement.dataset.motion === "on" ? "scroll" : "play";
   let quiet = false;
   experience.dataset.mode = mode;
+  // Scroll mode stands in for the visitor with a labelled cursor that presses each reply.
+  const cursor = document.createElement("span");
+  cursor.className = "xp-cursor";
+  cursor.setAttribute("aria-hidden", "true");
+  const label = document.createElement("small");
+  label.textContent = text("あなた", "You");
+  cursor.append(createElement(MousePointer2), label);
+  feed.append(cursor);
+  function aim(): void {
+    const target = experience.querySelector<HTMLElement>('.button[data-next="true"]');
+    const rect = mode === "scroll" ? target?.getBoundingClientRect() : undefined;
+    cursor.dataset.show = String(Boolean(rect?.width));
+    if (!rect?.width) return;
+    const box = feed.getBoundingClientRect();
+    cursor.style.transform = `translate(${rect.left - box.left + rect.width * .6 - 4}px, ${rect.top - box.top + feed.scrollTop + rect.height * .55 - 4}px)`;
+  }
 
   const quest = '{ questId: "q_001" }';
   const said = (key: string): string => replies[key] ?? "";
@@ -107,7 +124,7 @@ function mount(experience: HTMLElement): void {
   function setView(view: "guilduo" | "agent"): void {
     if (panes.dataset.view === view) return;
     panes.dataset.view = view;
-    if (mode === "scroll") feed.scrollTo({ top: feed.scrollHeight, behavior: "instant" });
+    if (mode === "scroll") { feed.scrollTo({ top: feed.scrollHeight, behavior: "instant" }); aim(); }
     experience.querySelectorAll<HTMLButtonElement>("button[data-view]").forEach(button => {
       button.setAttribute("aria-pressed", String(button.dataset.view === view));
     });
@@ -260,6 +277,7 @@ function mount(experience: HTMLElement): void {
     renderPhone();
     // Pinned panes cannot grow, so keep the newest request in view.
     if (mode === "scroll") feed.scrollTop = feed.scrollHeight;
+    aim();
   }
 
   function dispatch(event: DemoEvent): void {
@@ -295,6 +313,7 @@ function mount(experience: HTMLElement): void {
       const key = state === "pushback" ? "pushback" : state === "choose" ? "choose" : "device";
       replies[key] = key === "pushback" ? text(action === "choose_a" ? "「では、Aで。」" : "「では、Bで。」", action === "choose_a" ? "“A, then.”" : "“B, then.”") : text(...words);
     }
+    if (mode === "scroll" && !quiet) cursor.firstElementChild?.animate([{ transform: "none" }, { transform: "scale(.78)" }, { transform: "none" }], { duration: 280, easing: "ease-out" });
     dispatch(action);
   }
   experience.querySelectorAll<HTMLButtonElement>("[data-action]").forEach(button => {
