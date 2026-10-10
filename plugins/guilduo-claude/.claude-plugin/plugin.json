@@ -1,7 +1,7 @@
 {
   "name": "guilduo",
   "displayName": "Guilduo",
-  "version": "0.6.0-beta.1",
+  "version": "0.6.0-beta.2",
   "description": "Guilduo Quests and Human/Agent relays through the official OAuth MCP endpoint, with the guilduo-workflows Skill.",
   "author": {
     "name": "Guilduo",
@@ -10,5 +10,9 @@
   "homepage": "https://guilduo.com/docs/",
   "repository": "https://github.com/ELRdn/Guilduo",
   "license": "AGPL-3.0-only",
-  "keywords": ["guilduo", "mcp", "oauth", "quests", "agent-skills"]
+  "keywords": ["guilduo", "mcp", "oauth", "quests", "agent-skills"],
+  "documentationUrl": "https://guilduo.com/docs/",
+  "supportUrl": "https://github.com/ELRdn/Guilduo/issues",
+  "privacyPolicyUrl": "https://guilduo.com/privacy/",
+  "termsOfServiceUrl": "https://guilduo.com/terms/"
 }

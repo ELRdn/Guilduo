@@ -82,7 +82,7 @@ Natural access-token expiry, refresh concurrency/rotation guarantees, cross-Agen
 
 ## Claude Code plugin candidate
 
-`guilduo@guilduo` `0.6.0-beta.1` ([README](../plugins/guilduo-claude/README.md)) is distributed through this repository's standard Claude Code marketplace (`.claude-plugin/marketplace.json`), not npm. It declares only the official OAuth MCP endpoint as `guilduo` and bundles the canonical `guilduo-workflows` Skill. It has no hooks, commands, subagents, automatic prompts or Agent registration.
+`guilduo@guilduo` `0.6.0-beta.2` ([README](../plugins/guilduo-claude/README.md)) is distributed through this repository's standard Claude Code marketplace (`.claude-plugin/marketplace.json`), not npm. It declares only the official OAuth MCP endpoint as `guilduo` and bundles the canonical `guilduo-workflows` Skill. It has no hooks, commands, subagents, automatic prompts or Agent registration.
 
 | Gate | Claude Code |
 | --- | --- |
@@ -98,6 +98,8 @@ Natural access-token expiry, refresh concurrency/rotation guarantees, cross-Agen
 | Guarded Quest update / readback / no-op / conflict reread | Not accepted |
 | Human request → Web answer → saved answer → Agent resumption | Not accepted |
 | Refresh / server-side revocation | Not accepted |
-| Marketplace publication (merge to `main`) / Anthropic directory listing | Not published |
+| Marketplace publication | Published: merged to `main` in #60 (`claude plugin marketplace add ELRdn/Guilduo`) |
+| Anthropic directory listing | Not submitted. `ELRdn/Guilduo` exceeds the directory's 50 MiB repository archive limit (83 MiB zip), so submission uses the `ELRdn/guilduo-claude-plugin` mirror of `plugins/guilduo-claude` |
+| claude.ai chat / Cowork | Not accepted |
 
 Observed during Claude Code OAuth: Claude Code warns that the stored credential has no issuer stamp (SEP-2352), meaning the authorization response does not round-trip the issuer. Sign-in still succeeds; this is a server-side follow-up, not changed by this plugin.
