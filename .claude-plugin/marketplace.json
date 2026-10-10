@@ -1,0 +1,15 @@
+{
+  "name": "guilduo",
+  "description": "Official Guilduo plugins for Claude Code.",
+  "owner": {
+    "name": "Guilduo",
+    "url": "https://guilduo.com/"
+  },
+  "plugins": [
+    {
+      "name": "guilduo",
+      "source": "./plugins/guilduo-claude",
+      "description": "Guilduo Quests and Human/Agent relays through the official OAuth MCP endpoint, with the guilduo-workflows Skill."
+    }
+  ]
+}

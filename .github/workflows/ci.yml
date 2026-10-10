@@ -30,6 +30,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run check
       - run: npm test
+      - run: node --test plugins/guilduo-claude/tests/package.test.mjs
       - run: npm run build
       - name: Verify landing page in preview server
         shell: bash
