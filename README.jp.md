@@ -202,6 +202,20 @@ npm run cli -- mcp-config --json
 
 書き込みは `--execute` がない限りdry-runまたは実行計画だけを返します。認証は `QUESTFORGE_TOKEN` または `--token-stdin` を使用し、トークンをログへ出しません。本番の一般ユーザーは固定APIキーではなくOAuthを使います。
 
+## DSHプラグインの導入・接続
+
+**DeepSeek Harness（DSH）** 向けGuilduoプラグインをnpmで公開しています。[`@guilduo/dsh-oauth-poc`](https://www.npmjs.com/package/@guilduo/dsh-oauth-poc) の `latest`／`beta` は、2026-10-10時点で **0.6.0-beta.16**。**設定 → Guilduo**、ブラウザーOAuth、`guilduo-workflows` Skillを追加します。検証対象はWindows・DSH **0.2.0-rc.2** です。
+
+Web／Desktopのホストを停止してから、既存のWebプロファイルへ導入・更新します。
+
+```powershell
+dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.16 --ignore-scripts
+```
+
+ホストを再起動してブラウザーを再読込し、会話 → **設定 → Guilduo → 接続 → ブラウザーで認証** から許可してください。Desktopはnative plugin managerで同じパッケージ・版を導入します。
+
+共有・更新・安全な削除・トラブル対処は **[日本語How-to](docs/guilduo-dsh-howto.jp.md)** / **[English](docs/guilduo-dsh-howto.md)** を参照してください。本人確認で公開OAuth・MCP読み書き・Desktop再起動後の保存認証再利用が成功。設定なし初回入力／新規／fork利用、Agent Handoff、Human回答→再開は未受入です。このβを一区切りに追加開発を停止し、[現行の受入状況](docs/guilduo-dsh-status.md)に残件を記録しています。
+
 ## Skill / OpenAI Plugin・MCP App
 
 - 正規Skill：[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)

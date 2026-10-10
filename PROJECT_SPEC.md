@@ -1,5 +1,7 @@
 # Guilduo Project Specification
 
+2026-10-10 本人追確認：DSH beta.16を一区切りとして追加開発停止。公開OAuth・MCP読み書き・Desktop再起動後の保存認証再利用は本人確認済み。設定を開く前の復元完了は断定せず、設定なし新規／fork初回入力・Agent紐付け／Handoff・限定更新readback／競合・Human回答→再開は未受入。npm latest／beta=beta.16を維持し、source文書を公開状態に更新する。公開済みarchiveと捕捉済みREADMEは変更しない。[現行状況](docs/guilduo-dsh-status.md)。以下は各時点の履歴。
+
 > **English summary:** Guilduo is a Human × AI Work Platform where humans and AI agents coordinate work in the same workspace. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).
 
 最終更新: 2026-10-02

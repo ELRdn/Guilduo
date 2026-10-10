@@ -1,0 +1,10 @@
+Guilduo DSH OAuth PoC
+Copyright (c) 2026 Guilduo contributors. AGPL-3.0-only; see LICENSE.
+All adapter and integration source is included under src/ in the tarball.
+
+Uses (does not vendor) official DeepSeek Harness packages, MIT licensed:
+https://github.com/deepseek-ai/deepseek-harness
+Inspected source: 5badb15009ae1756c3afe0ae0cef1faafc290ccc
+Runtime compatibility target: @deepseek-ai/dsh 0.2.0-rc.2.
+Uses (does not vendor) @modelcontextprotocol/client 2.0.0, MIT licensed:
+https://github.com/modelcontextprotocol/typescript-sdk
