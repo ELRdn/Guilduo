@@ -241,7 +241,7 @@ OpenClaw targets 2026.9.9 with its recorded build commit, native Settings/Accoun
 
 Progress updates require fresh Agent context and Quest reads, permitted narrow patches with `expectedUpdatedAt`, no-op detection and readback. Preview supported operations with `dryRun`; do not send an unsupported `dryRun` to `update_quest`. Human answers, Handoff acceptance, completion and rewards are separate actions. Free's registered-Agent limit remains two and does not increase with the number of hosts.
 
-Windows native acceptance, public OAuth, guarded writes, Human answer/resumption, npm publication and official listing are separate recorded gates. Model-based checks use OpenCode Go `deepseek-v4.1-flash` without fallback. See [release status](docs/guilduo-host-extensions-status.md). DSH's runtime and published beta.16 are unchanged; its [independent AI review](docs/guilduo-dsh-independent-review.md) is feedback rather than an external human audit.
+Windows native acceptance, public OAuth, guarded writes, Human answer/resumption, npm publication and official listing are separate recorded gates. Model-based checks use OpenCode Go `deepseek-v4.1-flash` without fallback. See [release status](docs/guilduo-host-extensions-status.md). The later user-authorized DSH beta.17 maintenance update addresses the legacy disconnect, restoration-deadline credential persistence and staging-link findings; published beta.16 remains immutable. Its [independent AI review](docs/guilduo-dsh-independent-review.md) and [completion assessment](docs/guilduo-plugins-completion.md) are AI evaluations rather than external human audits. Real-environment acceptance and publication remain separate gates.
 
 ## 7. 開発・変更・リリースルール
 

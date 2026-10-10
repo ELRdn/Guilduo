@@ -15,7 +15,7 @@ DeepSeek Harnessの設定画面から[Guilduo](https://guilduo.com/)へ接続で
 同じDSH保存領域を使う旧Web／Desktopホストを停止してから更新します。既存のWebプロファイル名が `web` の場合：
 
 ```powershell
-dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.16 --ignore-scripts
+dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.17 --ignore-scripts
 ```
 
 `web` は実際のWebプロファイル名に置き換えてください。2026-10-10時点では `@latest`／`@beta` もこの版ですが、版指定なら同じ配布物を再現できます。共有に参加する各プロファイルを更新し、ホストを再起動してブラウザーを再読込します。
@@ -61,7 +61,7 @@ Desktopはnative plugin managerで削除します。プラグインの削除だ�
 | ブラウザー認証から戻れない | ホストと同じPCのブラウザーでlocalhost／loopbackを使用。LAN・リモートブラウザーは非対応。期限切れなら明示的に再試行。 |
 | 旧会話だけ接続できる | 元の会話で **全会話で使う** を実行。他の資格情報は自動探索しません。 |
 | 接続済みなのにツールが使えない | 対象会話が共有対象か確認し、上記の読み取り専用テストを実行。発見失敗・カタログ変更時はホストを再起動して設定を確認。 |
-| 旧版の更新後に再認証が必要 | 消失したgrantは復元不能。beta.16で一度明示接続。 |
+| 旧版の更新後に再認証が必要 | 消失したgrantは復元不能。beta.17で一度明示接続。 |
 | HandoffでAgentが見つからない | Guilduo Registry Agentの紐付け・許可scopeを確認。OAuth接続だけでは紐付きません。 |
 
 [GitHub Issues](https://github.com/ELRdn/Guilduo/issues)には、DSH／プラグイン版、WebかDesktopか、再現手順を記載してください。トークン・callback URL・資格情報ファイル・非公開Quest本文や会話履歴は含めないでください。
@@ -70,4 +70,8 @@ Desktopはnative plugin managerで削除します。プラグインの削除だ�
 
 **0.6.0-beta.16** はnpmの `latest`／`beta` として公開済みで、公開archiveのbyte一致を確認しています。ローカルpackage・native lifecycle・合成OAuth／Settings・隔離CLI検査が成功。2026-10-10の本人報告では実公開OAuth・ツール発見・MCP読み書きとDesktop再起動後の保存認証再利用が成功しています。起動から約1〜2分後に設定を開くと、再認証なしで接続済みでした。設定を開く前に復元が終わったかは、この観察だけでは断定できません。設定なし初回入力／新規／fork利用、限定更新のreadback・競合、Registry Agent紐付け／Handoff、Human回答→再開は未受入です。Registry Agentはまだ未紐付け。beta.14の過去の認証消失原因は未確定です。
 
-このβを一区切りとして追加機能の開発は停止します。[現行の公開・受入状況](guilduo-dsh-status.md)を参照してください。GitHubのsource文書は更新し、公開済みnpm archiveと当時のREADMEは保持します。npmページのREADMEを差し替えるには新しい版の公開が必要で、今回の文書更新では版・latestを変更しません。ライセンス：[AGPL-3.0-only](../LICENSE)。
+追加機能の開発は停止し、下記beta.17の必要な保守修正だけを行います。[現行の公開・受入状況](guilduo-dsh-status.md)を参照してください。GitHubのsource文書は更新し、公開済みnpm archiveと当時のREADMEは保持します。beta.17は必要な保守更新です。latest昇格を前提にせず、上記の固定versionで導入してください。ライセンス：[AGPL-3.0-only](../LICENSE)。
+
+## beta.17保守更新
+
+旧認証の消去失敗を成功として返さず、切断エラーとして報告します。同じ元会話から再試行してください。復元期限より前に更新した認証は既存の保存ロックと権限検査の下で保持し、期限後の更新は拒否します。配布準備はSkill・LICENSE双方のリンク先上書きを拒否します。公開済みbeta.16は変更しません。[三プラグインの完成度評価](guilduo-plugins-completion.md)で公開・実環境受入の未完了項目を確認できます。

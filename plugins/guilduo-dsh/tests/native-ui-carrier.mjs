@@ -17,7 +17,7 @@ const host = JSON.parse(await readFile(resolve(hostRoot, 'package.json'), 'utf8'
 assert.equal(host.name, '@deepseek-ai/dsh');
 assert.equal(host.version, '0.2.0-rc.2');
 const candidate = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-assert.equal(candidate.version, '0.6.0-beta.16');
+assert.equal(candidate.version, '0.6.0-beta.17');
 const physicalCarrierPackages = (await readdir(resolve(hostRoot, 'node_modules/@deepseek-ai'))).filter(name => /^dsh-.*(?:electron|worker|desktop)/.test(name));
 assert.deepEqual(physicalCarrierPackages, [], 'Reinspect physical carriers if installed host contents change');
 const hashes = {};

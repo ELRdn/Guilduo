@@ -12,7 +12,7 @@ assert.ok(process.argv[2], 'Supply installed DSH lib/bin.js');
 const hostRequire = createRequire(resolve(process.argv[2]));
 assert.equal(hostRequire('@deepseek-ai/dsh/package.json').version, '0.2.0-rc.2');
 const candidate = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-assert.equal(candidate.version, '0.6.0-beta.16');
+assert.equal(candidate.version, '0.6.0-beta.17');
 const hashes = {};
 for (const file of ['index.js', 'settings.js', 'settings-gateway.js', 'persistence.js']) {
   hashes[`lib/${file}`] = createHash('sha256').update(await readFile(new URL(`../lib/${file}`, import.meta.url))).digest('hex');

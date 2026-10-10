@@ -85,7 +85,12 @@ export function createSettingsBridge(ctx, control, timeoutMs = LOGIN_TIMEOUT_MS)
                     cancelledStarts.add(startingId);
                 await Promise.allSettled([...attempts.values()].filter(attempt => !attempt.closed)
                     .map(attempt => cancel(attempt, 'disconnected', attempt.phase === 'connected')));
-                await control.logout(id);
+                try {
+                    await control.logout(id);
+                }
+                catch {
+                    return failure('guilduo/disconnect-incomplete', 'Disconnect did not finish. Saved credential removal is unconfirmed. Retry from the original conversation.');
+                }
                 return { ok: true, value: status(id) };
             }
             if (endpoint !== 'guilduo/connect')

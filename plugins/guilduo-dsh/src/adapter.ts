@@ -18,7 +18,7 @@ export type Dependencies = {
 };
 const sdk: Dependencies = {
   authorize: auth,
-  client: () => new Client({ name: 'guilduo-dsh-oauth-poc', version: '0.6.0-beta.16' }),
+  client: () => new Client({ name: 'guilduo-dsh-oauth-poc', version: '0.6.0-beta.17' }),
   transport: (authProvider, signal) => new StreamableHTTPClientTransport(new URL(MCP_URL), {
     authProvider, onInsufficientScope: 'throw', requestInit: { signal },
   }),
@@ -49,6 +49,7 @@ export function createSession(sessionId: string, redirect: string, deps: Depende
   let invalidated = false;
   let flight: Promise<unknown> | undefined;
   let draining = false;
+  let retainedGrant: Grant | undefined;
   const lifecycle = new AbortController();
   const authFetch: typeof fetch = (input, init) => fetch(input, { ...init,
     signal: AbortSignal.any([lifecycle.signal, ...(init?.signal ? [init.signal] : [])]) });
@@ -108,7 +109,7 @@ export function createSession(sessionId: string, redirect: string, deps: Depende
         try { result = { ok: true, value: await operation() }; }
         catch (error) { result = { ok: false, error }; }
         // A refresh can rotate credentials even when the following MCP request fails.
-        return { result, grant: grant() };
+        return { result, grant: retainedGrant ?? grant() };
       });
       if (!outcome.ok) throw outcome.error;
       return outcome.value;
@@ -214,6 +215,7 @@ export function createSession(sessionId: string, redirect: string, deps: Depende
     async close(retainGrant = false) {
       if (closing) return closing;
       const shutdown = () => {
+        if (retainGrant && durable && tokens) retainedGrant = grant();
         closed = true;
         const previous = client; client = undefined;
         lifecycle.abort(new Error('Session closed'));

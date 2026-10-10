@@ -1,10 +1,26 @@
-# Guilduo DSH beta.16: release and acceptance status
+# Guilduo DSH: release and acceptance status
 
 [English How-to](guilduo-dsh-howto.md) · [日本語How-to](guilduo-dsh-howto.jp.md) · [Source](../plugins/guilduo-dsh/)
 
-Updated October 10, 2026. Package: **@guilduo/dsh-oauth-poc@0.6.0-beta.16**, Windows / DSH **0.2.0-rc.2**. Both npm `latest` and `beta` point to this version. Additional feature development is paused; the remaining work is publication documentation and acceptance.
+Updated October 10, 2026. Windows / DSH **0.2.0-rc.2**. **Beta.17 maintenance candidate** follows published beta.16; feature expansion remains paused. Before beta.17 publication, npm `latest` and `beta` both point to beta.16. Use the exact package version rather than assuming a tag promotion.
 
-## Confirmed scope
+## Beta.17 maintenance
+
+The user authorized necessary fixes after the independent review. Published beta.16 stays immutable; these changes are limited to the plugin and its tests/documentation.
+
+| Finding | Change and fresh evidence |
+| --- | --- |
+| DSH-R1 / P2 | Legacy disconnect no longer reports erasure success when decoding, admission or native storage fails. The connection remains disabled; Settings returns a safe `guilduo/disconnect-incomplete` error. Retrying from the original conversation after recovery clears the grant, even after a global disconnected tombstone exists. Atomic clear preserves different-birth/replacement records. |
+| DSH-R2 / P3 | Retaining close snapshots an already durable grant before clearing RAM. A restore timeout aborts the transport and rejects late provider saves; an earlier rotation can commit only through the original native writer lock and admission checks. Tests cover timeout → prior rotation retained, late save rejected, retry with new token, and timeout → disconnect → no resurrection. This does not establish the cause of historical beta.14 grant loss. |
+| DSH-R3 / P3 | Skill and LICENSE share regular-file, symlink/hardlink and directory checks. Physical Windows hardlinks and a junction are rejected without overwriting the other file. Staging copies canonical Skill and LICENSE bytes. |
+
+Fresh local results: **90 package tests, 2 root package-boundary tests, types and build passed**. Installed DSH 0.2.0-rc.2 native synthetic lifetime/shared authentication, actual 15-second restore deadline, native Settings carrier and Chrome shell renderer passed. Isolated CLI beta.16 → beta.17 update/add/readd/remove preserved unrelated configuration, dependency and bundle; Skill discovery/unload passed. These checks use synthetic grants and owned temporary directories, not the user's real profile, OAuth or inference.
+
+Frozen candidate: **32 files**, SHA-256 `89414b1ec3d98fa5d1fa7aa3eb0180f1ed59c913b615942bb46844e5fed3c6d9`. All archive members match current source; Skill references/metadata and LICENSE match the canonical files. Publication, public download matching and final independent approval are recorded separately below after completion. See the [three-plugin completion assessment](guilduo-plugins-completion.md).
+
+## Beta.16 historical acceptance
+
+### Confirmed scope
 
 | Item | Evidence and limits |
 | --- | --- |
@@ -17,7 +33,7 @@ Updated October 10, 2026. Package: **@guilduo/dsh-oauth-poc@0.6.0-beta.16**, Win
 
 The assistant did not inspect real credentials, alter the user's profile or repeat public OAuth/Quest writes. User reports and synthetic tests remain separate evidence sources. No private IDs, tokens, callback URLs or Quest contents are recorded here.
 
-## Remaining acceptance
+## Remaining real-environment acceptance
 
 - Settings-free MCP use in the first model input after restart, in a new ordinary conversation and in a top-level fork. The reported Connected display does not by itself establish these cases.
 - Explicit legacy-grant sharing and Web/Desktop sharing across the participating profiles in the real environment.
@@ -28,10 +44,10 @@ The assistant did not inspect real credentials, alter the user's profile or repe
 
 ## Interpretation
 
-**Beta implementation and npm distribution are a useful stopping point.** Public OAuth, basic MCP read/write and Desktop saved authentication reuse have user acceptance. Full acceptance of settings-free use across all eligible conversations and the Human/Handoff workflows remains open; this is not a declaration of stable-release completion.
+**Beta.17 addresses the three scoped review findings; full workflow acceptance remains open.** Beta.16 public OAuth, basic MCP read/write and Desktop saved authentication reuse have user acceptance. They are historical evidence rather than fresh beta.17 public acceptance. Full acceptance of settings-free use across all eligible conversations and the Human/Handoff workflows remains open; this is not a declaration of stable-release completion.
 
-Beta.14's historical grant-loss cause is unproven. Beta.16 fixed the reproduced unsafe lifecycle deletion and premature Connected state. Runtime code, identifiers, permissions and the Free limit of **2 registered Agents** are unchanged by this documentation update. Windows DPAPI protects storage for the Windows user; it does not isolate credentials from code running with that same user's privileges.
+Beta.14's historical grant-loss cause is unproven. Beta.16 fixed unsafe lifecycle deletion and premature Connected state; beta.17 is the limited maintenance update above. Compatibility identifiers, permissions and the Free limit of **2 registered Agents** are unchanged. Windows DPAPI protects storage for the Windows user; it does not isolate credentials from code running with that same user's privileges.
 
 ## Documentation versus package history
 
-The GitHub source README and How-to are maintained after release. The already published beta.16 tarball and its prepublication README remain immutable. npm's displayed README may therefore still describe the old prepublication state: updating this source file does not update npm metadata; a new version would be required. This documentation pass does not publish that new version or change `latest`.
+The published beta.16 tarball remains immutable and is retained with its original SHA-256. The beta.17 package captures the maintenance README; later status-only updates do not rewrite its bytes. A `beta` publication does not request `latest` promotion.

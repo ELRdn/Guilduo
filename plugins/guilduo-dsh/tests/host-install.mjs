@@ -77,7 +77,7 @@ try {
     await cli('previous-version-add', ['plugin', '--profile', 'guilduo-isolated', 'add', previousArchive, '--ignore-scripts', ...flags]);
     await preserved('previous-version-preservation', JSON.parse(await readFile(join(profile, 'package.json'), 'utf8')), 1);
     const previous = JSON.parse(await readFile(join(profile, 'node_modules/@guilduo/dsh-oauth-poc/package.json'), 'utf8'));
-    assert.equal(previous.version, '0.6.0-beta.14');
+    assert.equal(previous.version, '0.6.0-beta.16');
     evidence.upgradeFrom = previous.version;
   }
   await cli('add', ['plugin', '--profile', 'guilduo-isolated', 'add', archive, '--ignore-scripts', ...flags]);
