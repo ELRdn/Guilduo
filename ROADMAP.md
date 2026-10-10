@@ -1,5 +1,13 @@
 # Guilduo 公開βロードマップ
 
+## 2026-10-10 3プラグインのブラッシュアップ・公式Docs
+
+- [x] 本人依頼で3プラグインをブラッシュアップ段階へ移行。通常導入にはnpm `latest`を採用し、DSHはbeta.17へ昇格、OpenCode／OpenClawはbeta.16を確認。版番号と公開済みarchiveは維持。以前のbeta-only条件は撤回。
+- [x] 公式日英DocsにDSH／OpenCode／OpenClawの導入・認証・更新・停止・削除ガイドを追加。出典・静的生成・関連記事、21 Docs／URL／routingテスト、型・design・build、Chrome 129シナリオを確認。本番配信の確認結果はこの更新PRの公開記録に残す。
+- [ ] 実環境の残受入・上流掲載は[完成度評価](docs/guilduo-plugins-completion.md)の範囲で継続。Docs掲載・latestタグを全受入完了や上流公式認定として扱わない。
+
+以下の記録は各時点の履歴。最新方針は上記を優先する。
+
 ## 2026-10-10 プラグイン保守・独立完了評価
 
 - [x] 本人の追加依頼によりDSHの必要な保守修正を許可。beta.17で旧認証消去失敗の誤成功、復元期限前更新の保持、Skill／LICENSE出力リンク保護を修正。90 package tests・2 root tests・型／build・native合成認証／Chrome／Settings／隔離CLI更新を確認。
@@ -7,7 +15,7 @@
 - [x] 最大3担当を再利用し、DSH／OpenCode／OpenClawの[独立完成度評価](docs/guilduo-plugins-completion.md)を実施。限定βの実装・配布と、実ワークフロー／公式掲載の全体完了を区別。
 
 - [x] 2026-10-10 OpenCode／OpenClaw beta.16：Windows native／指定Goモデル／公開OAuth・refresh・失効・再接続／Human回答→再開／限定更新・競合を受入。ソースPR #55をmainへ反映し、両npm公開tgzのbyte・integrityと隔離導入、ClawHub公開配布物のnative導入を確認。DSHはコード変更せず[独立FB](docs/guilduo-dsh-independent-review.md)を保存。
-- [ ] betaのみの公開タグと公式掲載：npm初回公開でlatestも自動付与され、認証済み削除はHTTP 400。OpenCode掲載PR #54271はv1 freezeでclosed、公式代替経路を照会中。ClawHubはbeta.16公開／取得成功、aggregate scan・検索表示は未達。[公開・受入状況](docs/guilduo-host-extensions-status.md)。
+- [ ] 上流公式掲載：OpenCode掲載PR #54271はv1 freezeでclosed、公式代替経路を照会中。ClawHubはbeta.16公開／取得成功、aggregate scan・検索表示は未達。以前のbeta-only条件は本人のlatest採用依頼で撤回。[公開・受入状況](docs/guilduo-host-extensions-status.md)。
 
 - [x] 2026-10-10 本人追確認：DSH beta.16の公開OAuth・MCP読み書き・Desktop再起動後の保存認証再利用が成功。追加開発は停止し、README／How-to／現行受入台帳を更新。設定なし新規／fork・Agent紐付け／Handoff・限定更新readback／競合・Human回答→再開は残件。npm最新タグはbeta.16を維持し、GitHub反映は別記録。[現行状況](docs/guilduo-dsh-status.md)。
 

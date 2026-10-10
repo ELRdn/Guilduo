@@ -1,5 +1,33 @@
 # Guilduo public Docs 編集根拠
 
+## 2026-10-10：3プラグインの公式導入ガイド
+
+- 現在のroot sourceRevision: `60df808c2e4f39b287093240c33d1f7d1d7aedd5`（公開main、Record DSH beta.17 publication and final independent verification (#58)）。既存pageSchemaは記事単位revisionを持たないため、全記事の出典リンクをこの公開commitに固定した。renderer/schemaは変更していない。
+- `content.json`のreviewedAtを2026-10-10へ更新。日英それぞれに`dsh`／`opencode`／`openclaw`を追加し、各15記事・計30ページとした。overviewとmcp-connectionには関連記事と短い導入案内だけを追加した。
+- 既存記事の参照先14ファイルと追加した8ファイル、計22種のsources.pathがすべてこのSHAに存在することをローカルGit objectの読取りで確認した。新記事はその公開commitのREADME、status、native evidence、canonical Skill、PROJECT_SPECを根拠に編集した。非公開profile・資格情報・受入artifactは読んでいない。
+
+| 記事（日英共通slug） | 導入版・検証host | 固定した公開資料 |
+| --- | --- | --- |
+| dsh | @guilduo/dsh-oauth-poc 0.6.0-beta.17 / Windows DSH 0.2.0-rc.2、Cordis 4.0.4、MCP client 2.0.0 | [README](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/plugins/guilduo-dsh/README.md)、[status](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/docs/guilduo-dsh-status.md) |
+| opencode | @guilduo/opencode-plugin 0.6.0-beta.16 / Windows OpenCode 1.18.32・1.18.35 | [README](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/plugins/guilduo-opencode/README.md)、[status](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/docs/guilduo-host-extensions-status.md)、[native evidence](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/docs/guilduo-opencode-native-evidence.md) |
+| openclaw | @guilduo/openclaw-plugin 0.6.0-beta.16 / Windows OpenClaw 2026.9.9 | [README](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/plugins/guilduo-openclaw/README.md)、[status](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/docs/guilduo-host-extensions-status.md)、[native evidence](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/docs/guilduo-openclaw-native-evidence.md) |
+
+共通根拠は[canonical guilduo-workflows Skill](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/skills/guilduo-workflows/SKILL.md)と[PROJECT_SPEC](https://github.com/ELRdn/Guilduo/blob/60df808c2e4f39b287093240c33d1f7d1d7aedd5/PROJECT_SPEC.md)。旧記事に残るquestforge-workflowsの出典pathもこのcommitに実在する。新しい3プラグインのSkill名はguilduo-workflows。
+
+### 今回の編集判断と受入境界
+
+- 利用者の新しい方針に従い、通常導入はnpmのlatestを推奨し、再現用の固定beta版も併記した。latestはタグであって安定版宣言ではない。親担当はofficial npm registryでOpenCode／OpenClawのlatest=beta.16を確認し、2026-10-10 10:07 UTCにDSHのlatest=beta.17昇格と全3公開archiveのSHA-256／integrity一致を確認したと報告。これは本編集者による再取得ではなく、親の検証報告を根拠にする現在の配布案内である。
+- 固定SHAのstatusにはDSH latest=beta.16やOC／Clawのbeta-only方針が残る。これらは昇格・方針変更前の履歴として扱い、現在のlatest推奨を妨げる未達gateとはしない。package README／tgzは一切書き換えていない。現行status／How-toの更新、タグ・公開作業は親担当。
+- DSH Desktopの導入版は公開beta.17 READMEに従う。古いHow-toに混在するDesktop beta.16は今回の記事へ採用しない。DSHの公開OAuth・基本読み書き・再起動後の認証再利用はbeta.16の本人報告。beta.17の公開Human/Handoff、設定を開かない初回／新規／fork利用は未受入と明記した。
+- OC／Clawの公開OAuth・限定更新readback・Human保存回答後のnative再開・refresh／失効／再接続は公開statusにある受入記録で、本編集中の再実行ではない。OpenCode refreshはQA 401 carrier、OpenClaw refreshはQA expiry操作が契機で、自然失効の実測とは書かない。OpenCode phaseSyncの実モデル検査は合成loopback MCPを使い、公開phaseSyncを受入済みとしない。
+- OpenCode Ecosystem PR #54271はclosed・未mergeで公式一覧未掲載。v2互換性も未検証。ClawHubは公開page／取得／native導入が確認済みだが、集約scan・標準検索gateは未完了。community package公開をhost公式endorsementとは表現しない。
+- Freeの上限2登録Agent、導入／OAuth／Agentリンクと作業権限の分離を保持。共有接続ではallowedAgentIdsから所有者が許可したactingAgentIdを読み取り・preview・書き込みで保持し、共有接続のrelinkによるAgent切替を案内しない。これは固定commitのcanonical Skillに公開済みであり、下記初回記録の「未公開として除外」から更新された部分である。
+- 新記事の本文はplain text、コマンドとJSON例は既存code構造を使用。新URLは公式Site／Web App／MCPのみ。既存schemaによるJSON、両言語slug／section ID／related、コードJSON、全sourceのcommit存在とin-memory静的HTML生成を検査する。実ブラウザー・production build・PR／CI・公開確認は親担当で、この記録はそれらのPASSを意味しない。
+
+## 2026-10-05：初回編集の履歴
+
+以下は初回のSHA・API読取り・24ページの編集記録を保持したもの。現在の記事数、root sourceRevision、配布方針、公開済みshared-Agent対応は上記2026-10-10の追記を優先する。
+
 確認日: 2026-10-05（Asia/Tokyo）
 公開リポジトリ: https://github.com/ELRdn/Guilduo
 公開default branch: `main`
