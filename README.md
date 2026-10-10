@@ -216,7 +216,7 @@ Restart the host and reload the browser. Open a conversation → **Settings → 
 
 See the **[English How-to](docs/guilduo-dsh-howto.md)** / **[日本語の導入・使い方](docs/guilduo-dsh-howto.jp.md)** for sharing, updates, safe removal and troubleshooting. Beta.17 includes the independently reviewed maintenance fixes. The user's beta.16 public OAuth, MCP reads/writes and Desktop saved authentication reuse are accepted; beta.17's full Human/Handoff and settings-free workflow acceptance remains open. All three plugins are entering the polish phase; see [current acceptance status](docs/guilduo-dsh-status.md).
 
-## OpenCode and OpenClaw extensions
+## OpenCode, OpenClaw and Claude Code extensions
 
 Guilduo's independent extensions reuse each host's native OAuth MCP connection and bundle the `guilduo-workflows` Skill. They preserve existing MCP aliases and other plugins. Installation does not grant Quest write permission or register a new Agent.
 
@@ -224,6 +224,7 @@ Guilduo's independent extensions reuse each host's native OAuth MCP connection a
 | --- | --- | --- |
 | OpenCode 1.18.32 / 1.18.35 | `@guilduo/opencode-plugin@0.6.0-beta.16` (`latest` / `beta`) | [Official guide](https://guilduo.com/docs/en/opencode/) / [日本語](https://guilduo.com/docs/opencode/) |
 | OpenClaw 2026.9.9 | `@guilduo/openclaw-plugin@0.6.0-beta.16` (`latest` / `beta`) | [Official guide](https://guilduo.com/docs/en/openclaw/) / [日本語](https://guilduo.com/docs/openclaw/) |
+| Claude Code 2.1.286+ | `guilduo@guilduo` `0.6.0-beta.2` (Claude Code marketplace `ELRdn/Guilduo`, not npm) | [Official guide](https://guilduo.com/docs/en/claude/) / [日本語](https://guilduo.com/docs/claude/) |
 
 Use the official guides for installation, OAuth, updates and removal. OpenCode's optional phase reminder is off by default and can start an additional model request when explicitly bound to a session. OpenClaw uses the standard Settings / Accounts connection UI. `latest` selects the recommended published prerelease; version numbers and acceptance limits remain visible in the [release status](docs/guilduo-host-extensions-status.md) and [independent completion assessments](docs/guilduo-plugins-completion.md).
 

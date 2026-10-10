@@ -216,7 +216,7 @@ dsh plugin --profile web add @guilduo/dsh-oauth-poc@latest --ignore-scripts
 
 共有・更新・安全な削除・トラブル対処は **[日本語How-to](docs/guilduo-dsh-howto.jp.md)** / **[English](docs/guilduo-dsh-howto.md)** を参照してください。beta.17には独立レビュー済みの保守修正を含みます。beta.16の本人確認で公開OAuth・MCP読み書き・Desktop再起動後の認証再利用が成功。beta.17のHuman／Handoff・設定なし利用を含む全受入は残件です。3プラグインはブラッシュアップ段階へ進み、[現行の受入状況](docs/guilduo-dsh-status.md)に検証範囲を記録しています。
 
-## OpenCode・OpenClaw拡張
+## OpenCode・OpenClaw・Claude Code拡張
 
 各ホストの標準OAuth MCPと正本の`guilduo-workflows` Skillを使う独立拡張です。既存のMCP別名や他pluginを保持し、導入だけでQuest更新権限や新しいAgent登録は付与しません。
 
@@ -224,6 +224,7 @@ dsh plugin --profile web add @guilduo/dsh-oauth-poc@latest --ignore-scripts
 | --- | --- | --- |
 | OpenCode 1.18.32 / 1.18.35 | `@guilduo/opencode-plugin@0.6.0-beta.16`（`latest`／`beta`） | [公式ガイド](https://guilduo.com/docs/opencode/) / [English](https://guilduo.com/docs/en/opencode/) |
 | OpenClaw 2026.9.9 | `@guilduo/openclaw-plugin@0.6.0-beta.16`（`latest`／`beta`） | [公式ガイド](https://guilduo.com/docs/openclaw/) / [English](https://guilduo.com/docs/en/openclaw/) |
+| Claude Code 2.1.286以降 | `guilduo@guilduo` `0.6.0-beta.2`（Claude Code marketplace `ELRdn/Guilduo`、npmではありません） | [公式ガイド](https://guilduo.com/docs/claude/) / [English](https://guilduo.com/docs/en/claude/) |
 
 公式ガイドで導入・OAuth・更新・削除を案内しています。OpenCodeの任意フェーズ確認は既定OFFで、明示binding時に追加モデル要求を行います。OpenClawは標準Settings／Accountsから接続します。`latest`は推奨配布版の選択タグで、β版番号と検証範囲は[公開・受入状況](docs/guilduo-host-extensions-status.md)と[独立完成度評価](docs/guilduo-plugins-completion.md)に残しています。
 
