@@ -1,17 +1,33 @@
 {
-  "productName": "QuestForge",
-  "appVersion": "0.5.0-beta.1",
-  "integrationType": "remote-mcp-app",
-  "technicalAppId": "",
+  "productName": "Guilduo Workflows",
+  "pluginVersion": "0.6.0-beta.12",
+  "integrationType": "remote-mcp-and-skills",
+  "packageCommand": "npx tsx tools/prepare-guilduo-plugin.mts --submission",
   "mcpEndpoint": "https://mcp.guilduo.com/mcp",
   "oauthMetadata": "https://mcp.guilduo.com/.well-known/oauth-authorization-server",
-  "scopes": ["quests:read", "quests:write", "character:read", "events:read"],
-  "destructiveOperations": false,
+  "minimumPhaseSyncScopes": ["agents:read", "quests:read", "quests:write"],
+  "publicPackageIncludesHooks": false,
+  "publicPackageIncludesAppReferences": false,
+  "toolAnnotationsRequirePerToolReview": true,
+  "websiteURL": "https://guilduo.com/",
+  "supportURL": "https://github.com/ELRdn/Guilduo/issues",
+  "privacyPolicyURL": "https://guilduo.com/privacy/",
+  "termsOfServiceURL": "https://guilduo.com/terms/",
   "dataPolicy": {
     "questTextSentToProvider": true,
     "publicByDefault": false,
     "telemetryOptInOnly": true,
     "accountDeletionDocument": "PRIVACY.md"
   },
-  "submissionState": "operator_submits_after_public-beta-acceptance"
+  "reviewCases": { "positive": 5, "negative": 3, "realAccountExecution": "not_verified_for_this_package" },
+  "remainingOperatorSteps": [
+    "Choose the existing Guilduo plugin draft if available and verify the publishing identity.",
+    "Complete domain verification, OAuth setup, a current tool scan, and per-tool annotation justifications.",
+    "Prepare a dedicated reviewer account and test fixtures; enter access only in the secure dashboard form.",
+    "Run all review cases, including actual Human feedback and Agent resumption, on the packaged version.",
+    "Record and host the demo; supply its real URL in the dashboard.",
+    "Resolve package and Skill scan findings, complete policy attestations, and submit for review.",
+    "After approval, choose Publish plugin separately."
+  ],
+  "submissionState": "not_submitted_operator_acceptance_pending"
 }

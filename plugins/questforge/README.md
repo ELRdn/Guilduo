@@ -1,6 +1,6 @@
 # Guilduo OpenAI Plugin / MCP App package
 
-This directory is the repository-side handoff package for a Guilduo remote MCP App. The existing directory name is retained as a compatibility-sensitive legacy identifier.
+This beta.12 directory is the repository-side template for Guilduo plugin generation. The existing directory name and template name `questforge` are retained as compatibility-sensitive legacy identifiers.
 It is a registration template, not an installable connection by itself. It does not contain a real
 OpenAI technical app ID, provider secret, Appwrite token, or deployment credential.
 
@@ -12,11 +12,21 @@ remain unchanged. A legacy QuestForge connection is not the current Guilduo App.
 
 ## What is already linked
 
- - `plugin.json` declares the bundled Guilduo workflow Skill.
+- `.codex-plugin/plugin.json` uses the remote MCP connection by default and keeps the template ID `questforge`.
 - `.mcp.json` points to the stable `/mcp` endpoint and uses OAuth.
-- `.app.json` is a local registration placeholder.
+- `.app.json` and `.app.json.example` remain optional local registration examples; the template manifest does not load them alongside MCP.
 - `openai-submission.json` is a review checklist payload, not an approval.
-- `skills/questforge-workflows/` contains the same safety-first Skill shipped in the main repo.
+- `skills/questforge-workflows/` retains historical compatibility assets. The generator copies the complete current canonical `skills/guilduo-workflows/` and all references unchanged.
+
+Install the canonical Codex source from `plugins/guilduo-workflows` through the
+`guilduo-local` marketplace (`guilduo-workflows@guilduo-local`). Its compatibility
+manifest loads remote OAuth MCP and explicitly reviewed/trusted hooks. Native
+Codex packages omit root `plugin.json`: Codex 0.159.2 does not load bundled hooks
+from the portable manifest path. The separate OpenAI public ZIP keeps portable
+metadata and excludes hooks and App references. A registered App companion is
+local only and replaces the remote MCP connection under the same plugin identity.
+Do not activate both companion and standard copies. See the generated hooks README
+for Codex beta.12 receipt gates; Claude/Muse optional hooks retain their legacy mode.
 
 ## Registration handoff
 

@@ -1,0 +1,10 @@
+{
+  "name": "guilduo-local",
+  "interface": { "displayName": "Guilduo" },
+  "plugins": [{
+    "name": "guilduo-workflows",
+    "source": { "source": "local", "path": "./plugins/guilduo-workflows" },
+    "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+    "category": "Productivity"
+  }]
+}

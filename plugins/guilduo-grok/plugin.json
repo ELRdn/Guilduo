@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "guilduo-workflows",
+  "version": "0.6.0-beta.12",
+  "description": "Coordinate Guilduo Quests, authorized phase progress, Human and Agent handoffs, and reviews through OAuth MCP.",
+  "author": {
+    "name": "Radon",
+    "email": "el2radon2official@gmail.com",
+    "url": "https://guilduo.com/"
+  },
+  "homepage": "https://guilduo.com/",
+  "repository": "https://github.com/ELRdn/Guilduo",
+  "license": "AGPL-3.0-only"
+}

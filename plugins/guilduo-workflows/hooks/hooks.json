@@ -1,0 +1,27 @@
+{
+  "description": "Local opt-in Guilduo phase-end reminders; no direct MCP, network or transcript access.",
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node -e \"import(require('node:url').pathToFileURL(require('node:path').join(process.env.PLUGIN_ROOT??process.env.CLAUDE_PLUGIN_ROOT??process.env.MUSE_PLUGIN_ROOT,'hooks','lifecycle.mjs')).href)\" guilduo-hook SessionStart --codex",
+        "timeout": 3
+      }]
+    }],
+    "Interrupt": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node -e \"import(require('node:url').pathToFileURL(require('node:path').join(process.env.PLUGIN_ROOT??process.env.CLAUDE_PLUGIN_ROOT??process.env.MUSE_PLUGIN_ROOT,'hooks','lifecycle.mjs')).href)\" guilduo-hook Interrupt --codex",
+        "timeout": 3
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node -e \"import(require('node:url').pathToFileURL(require('node:path').join(process.env.PLUGIN_ROOT??process.env.CLAUDE_PLUGIN_ROOT??process.env.MUSE_PLUGIN_ROOT,'hooks','lifecycle.mjs')).href)\" guilduo-hook Stop --codex",
+        "timeout": 10
+      }]
+    }]
+  }
+}
+

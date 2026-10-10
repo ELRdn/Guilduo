@@ -77,17 +77,22 @@ test("public beta keeps external provider OAuth in preparation while Appwrite an
   assert.match(readme, /Early Access \/ OAuth preparation/);
 });
 
-test("CLI, Skill bundle, and MCP App handoff package are present without credentials", () => {
+test("CLI and direct MCP template keep the optional App example separate and credential-free", () => {
   const packageJson = JSON.parse(read("package.json"));
   const plugin = JSON.parse(read("plugins/questforge/.codex-plugin/plugin.json"));
   const mcp = read("plugins/questforge/.mcp.json");
   const submission = read("plugins/questforge/openai-submission.json");
+  const appExample = JSON.parse(read("plugins/questforge/.app.json"));
   assert.equal(packageJson.bin.questforge, "cli/questforge.ts");
+  assert.equal(packageJson.version, "0.6.0-beta.8");
+  assert.equal(plugin.name, "questforge");
+  assert.equal(plugin.version, "0.6.0-beta.12");
   assert.equal(plugin.mcpServers, "./.mcp.json");
-  assert.equal(plugin.apps, "./.app.json");
+  assert.equal(plugin.apps, undefined);
+  assert.equal(appExample.apps.questforge.id, "questforge-mcp-app-registration-pending");
   assert.match(mcp, /authentication/);
   assert.match(submission, /registration_pending|not_submitted|operator/);
-  assert.doesNotMatch([mcp, submission].join("\n"), /AIzaSy|client_secret|private_key|Bearer\s+[A-Za-z0-9]/i);
+  assert.doesNotMatch([mcp, submission, JSON.stringify(appExample)].join("\n"), /AIzaSy|client_secret|private_key|Bearer\s+[A-Za-z0-9]/i);
 });
 
 test("tagged release derives the active Appwrite deployment URL before Worker and semantic smoke checks", () => {

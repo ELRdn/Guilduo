@@ -12,20 +12,34 @@ DSH, OpenCode and OpenClaw plugins are published and entering the polish phase. 
 
 Use these guides for native installation, OAuth, updates, disconnection and removal. [Completion assessments](guilduo-plugins-completion.md) distinguish accepted workflows from remaining checks and upstream directory review. The Codex companion/direct MCP instructions and historical package-preparation records below are separate installation paths, not prerequisites for these three hosts.
 
+## OpenAI / Codex / Grok / Muse candidate guides
+
+The `0.6.0-beta.12` target release uses separate OpenAI submission, normal Codex
+with hooks, local App companion, Grok and native Muse artifacts. See the current
+[English installation guide](guilduo-next-hosts.md) /
+[日本語の導入ガイド](guilduo-next-hosts.jp.md) and
+[OpenAI submission runbook](guilduo-plugin-submission.md). Do not use the raw
+`plugins/questforge/` registration template as a published plugin. Its legacy
+template identifier is preserved; generated packages use `guilduo-workflows`.
+
 ## Available approaches
 
 | Approach | Use | Remaining user action |
 | --- | --- | --- |
 | Desktop companion plugin | Bundle the Workflow Skill with an already registered Guilduo App; reuse its OAuth connection | Refresh the App metadata, restart the desktop app, and test in a new chat |
 | Direct MCP plugin | Bundle the same Skill with `https://mcp.guilduo.com/mcp` for Codex CLI or another local host | Complete OAuth in the intended account |
-| Standalone Skill | Install `skills/questforge-workflows/` in a host that already has the MCP connection | Configure that host's Skill discovery; MCP alone does not load the Skill |
+| Standalone Skill | Install `skills/guilduo-workflows/` in a host that already has the MCP connection | Configure that host's Skill discovery; MCP alone does not load the Skill |
 | Public plugin | Submit the combined package to the universal directory | Complete real-account acceptance and operator submission/review |
 
 The desktop companion is the recommended local path. It adds instructions to the current Guilduo
 connection without replacing the old QuestForge App. Do not install both connection modes at once
 or use an old QuestForge App ID just because the repository still has legacy technical names.
 
-## Prepare and install locally
+## Historical local installation (2026-10-02)
+
+The commands and Skill names below describe the previous installation. For
+beta.12, use the current guides above and check the cache after updating. Do not
+install both the old and canonical Skill, or add a duplicate MCP connection.
 
 Run from this repository. App IDs are identifiers, not credentials; never paste an OAuth token.
 Copy the ID from your registered **Guilduo** connection. Supported installed metadata may use

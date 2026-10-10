@@ -1,0 +1,20 @@
+{
+  "name": "guilduo-grok-candidates",
+  "owner": { "name": "Radon", "email": "el2radon2official@gmail.com" },
+  "metadata": {
+    "description": "Guilduo portable Grok Bot candidate; native host acceptance and marketplace review are separate gates.",
+    "version": "0.6.0-beta.12"
+  },
+  "plugins": [
+    {
+      "name": "guilduo-workflows",
+      "source": "plugins/guilduo-grok",
+      "version": "0.6.0-beta.12",
+      "description": "Coordinate authorized Guilduo Quests and Human/Agent handoffs through OAuth MCP.",
+      "homepage": "https://guilduo.com/",
+      "repository": "https://github.com/ELRdn/Guilduo",
+      "license": "AGPL-3.0-only",
+      "category": "Productivity"
+    }
+  ]
+}

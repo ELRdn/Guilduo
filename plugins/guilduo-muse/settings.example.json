@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "mcpServers": {
+    "questforge": {
+      "transport": "streamable_http",
+      "url": "https://mcp.guilduo.com/mcp",
+      "enabled": true,
+      "mode": "optional"
+    }
+  }
+}
