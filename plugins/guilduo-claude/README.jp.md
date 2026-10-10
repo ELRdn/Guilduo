@@ -55,6 +55,8 @@ claude mcp get plugin:guilduo:guilduo
 
 > /guilduo:guilduo-workflows を使って、何も書き込まずに get_agent_link、list_registered_agents、get_current_agent_context を呼び、私のQuest一覧を読んでください。
 
+Questが多いアカウントで`list_quests`などを絞り込みなしで読むと、Claude CodeのMCP出力上限を超え、結果が大きすぎると表示されるかファイルに退避されます。`week`や`backlog`などの範囲を指定するか、Claude Code起動前に`MAX_MCP_OUTPUT_TOKENS`を引き上げてください。
+
 Agentの扱い:
 
 - [Guilduo Web App](https://app.guilduo.com/)で登録・許可済みの既存Agentを使います。表示名やクライアント名はAgent IDではありません。

@@ -55,6 +55,8 @@ Then ask Claude, in a new session, to use the Skill for a **read-only** check, f
 
 > Use /guilduo:guilduo-workflows. Without writing anything, call get_agent_link, list_registered_agents and get_current_agent_context, then list my Quests.
 
+An unfiltered read such as `list_quests` on a large account can exceed Claude Code's MCP output limit; Claude Code then reports the result as too large or saves it to a file. Ask for a narrower view (for example `week` or `backlog`), or raise `MAX_MCP_OUTPUT_TOKENS` before starting Claude Code.
+
 Agent identity rules:
 
 - Use an existing Agent that you already registered and allowed in the [Guilduo Web App](https://app.guilduo.com/). A display name or client name is not an Agent ID.

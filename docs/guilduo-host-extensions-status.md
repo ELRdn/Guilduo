@@ -90,8 +90,12 @@ Natural access-token expiry, refresh concurrency/rotation guarantees, cross-Agen
 | GitHub sparse clone of the PR branch into the plugin cache / content comparison | Passed (`tests/native-host.mjs ELRdn/Guilduo#codex/guilduo-claude-plugin`, 17 checks) |
 | Version-changing update from GitHub | Not accepted (requires a published version change) |
 | Public OAuth (dynamic client registration, loopback callback) / reuse in a new process | Passed in an isolated profile with operator browser approval |
-| Read-only MCP tool calls / sign-out and reconnect | Pending operator acceptance |
+| Read-only MCP tool calls through the Skill | Passed: `claude-haiku-5-5` loaded the Skill and called `get_agent_link`, `list_registered_agents` and `get_current_agent_context`; no write, link or permission denial. An unfiltered `list_quests` exceeded Claude Code's MCP output limit (README notes narrower views / `MAX_MCP_OUTPUT_TOKENS`) |
+| Sign-out / reconnect | Passed: `claude mcp logout` returned the server to "Needs authentication"; fresh operator approval restored `Connected` in a new process |
+| Agent association for writes | Not accepted: the test connection was left unlinked; no Agent was linked or registered |
 | Guarded Quest update / readback / no-op / conflict reread | Not accepted |
 | Human request → Web answer → saved answer → Agent resumption | Not accepted |
-| Refresh / revocation / reconnect | Not accepted |
+| Refresh / server-side revocation | Not accepted |
 | Marketplace publication (merge to `main`) / Anthropic directory listing | Not published |
+
+Observed during Claude Code OAuth: Claude Code warns that the stored credential has no issuer stamp (SEP-2352), meaning the authorization response does not round-trip the issuer. Sign-in still succeeds; this is a server-side follow-up, not changed by this plugin.
