@@ -1,10 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // QA only. Not a supported native operation, token bridge, or shipped feature.
 import assert from 'node:assert/strict';
-import { lstat, readFile, realpath } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+
+async function assertUnlinkedDirectory(path) {
+  const info = await lstat(path);
+  assert.ok(info.isDirectory() && !info.isSymbolicLink(), 'Linked QA directory refused');
+  assert.equal(await realpath(path), path, 'QA directory differs from lexical path');
+}
+
+async function validateQaProfile(base, profileArg) {
+  // Validate lexical roots before using their resolved paths as an allowlist.
+  await assertUnlinkedDirectory(base);
+  const qa = join(base, '.qa-artifacts');
+  await assertUnlinkedDirectory(qa);
+  const profile = resolve(profileArg);
+  assert.ok(profile.startsWith(qa + sep), 'Only this package isolated QA profiles are accepted');
+  let ancestor = qa;
+  for (const component of relative(qa, profile).split(sep)) {
+    ancestor = join(ancestor, component);
+    await assertUnlinkedDirectory(ancestor);
+  }
+  return profile;
+}
 
 const updateSql = `UPDATE mcp_oauth_stores
 SET store_json = json_set(store_json, '$.tokenExpiresAt', 1)
@@ -48,12 +69,42 @@ if (process.argv[2] === '--self-test') {
     for (const key of ['missing', 'unsupported', 'not-json']) assert.throws(() => expireInsideDatabase(db, key));
     console.log('PASS expiry-only SQL isolation and fail-closed checks; no profile accessed');
   } finally { db.close(); }
+} else if (process.argv[2] === '--root-self-test') {
+  const base = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  await assertUnlinkedDirectory(base);
+  const qa = join(base, '.qa-artifacts');
+  await assertUnlinkedDirectory(qa);
+  const root = await mkdtemp(join(qa, 'expiry-root-'));
+  try {
+    const normalBase = join(root, 'normal');
+    const profile = join(normalBase, '.qa-artifacts', 'profile');
+    await mkdir(profile, { recursive: true });
+    assert.equal(await validateQaProfile(normalBase, profile), profile);
+    const outside = join(root, 'outside');
+    await mkdir(join(outside, 'profile'), { recursive: true });
+    const linkedQaBase = join(root, 'linked-qa');
+    await mkdir(linkedQaBase);
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+    await symlink(outside, join(linkedQaBase, '.qa-artifacts'), linkType);
+    await assert.rejects(validateQaProfile(linkedQaBase, join(outside, 'profile')), /Linked QA directory refused/);
+    await assert.rejects(validateQaProfile(linkedQaBase, join(linkedQaBase, '.qa-artifacts', 'profile')), /Linked QA directory refused/);
+    const linkedBase = join(root, 'linked-base');
+    await symlink(normalBase, linkedBase, linkType);
+    await assert.rejects(validateQaProfile(linkedBase, join(linkedBase, '.qa-artifacts', 'profile')), /Linked QA directory refused/);
+    const linkedProfile = join(normalBase, '.qa-artifacts', 'linked-profile');
+    await symlink(profile, linkedProfile, linkType);
+    await assert.rejects(validateQaProfile(normalBase, linkedProfile), /Linked QA directory refused/);
+    await assert.rejects(validateQaProfile(normalBase, join(outside, 'profile')), /Only this package isolated QA profiles/);
+    console.log('PASS normal root, QA-root junction escape, base/profile junction and outside-profile checks; no database or native process accessed');
+  } finally {
+    assert.ok(root.startsWith(qa + sep + 'expiry-root-'));
+    await assertUnlinkedDirectory(root);
+    await rm(root, { recursive: true, force: true });
+  }
 } else {
   assert.deepEqual(process.argv.slice(4), ['--apply-only-expiry', '--profile-stopped'], 'Usage: node native-expiry-qa.mjs <isolated-QA-profile> <host.mjs> --apply-only-expiry --profile-stopped');
   const base = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const qa = await realpath(join(base, '.qa-artifacts'));
-  const profile = await realpath(resolve(process.argv[2]));
-  assert.ok(profile.startsWith(qa + sep), 'Only this package isolated QA profiles are accepted');
+  const profile = await validateQaProfile(base, process.argv[2]);
   const host = resolve(process.argv[3]);
   const build = JSON.parse(await readFile(join(dirname(host), 'dist/build-info.json'), 'utf8'));
   assert.equal(build.commit, 'bcfc88812a35243893585dbeca87ca41b48272ca');

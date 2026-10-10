@@ -450,6 +450,69 @@ root tracked差分は拡張案内／scope／statusへの参照で、依存・loc
 
 親の最新live通知は、OpenClaw embedded Goによる保存Human回答のread／resumeが成功し、指定provider／model、一回の成功attempt、fallbackなし、tool failureなしだったことを示す。OpenCodeのnative no-op／stale guard reject／rereadも親がPASSを通知した。private receiptは読まず、独立再現とは区別する。
 
-**公開update_questにserver自動idempotencyを要求・推定しない。** 親はfresh versionで同じnextActionを直接writeしてもupdatedAtが進むことを確認し、OpenClaw SDKの「同値writeでもversion不変」というassertionは失敗・受入除外と通知した。正本 [phase-sync](../skills/guilduo-workflows/references/phase-sync.md) 21、28–29、35–36行は、同値ならwriteを省略し、競合・不確実write後はfresh readを求める。このAgent判断が契約であり、APIの自動重複排除とは別。OpenClaw embedded Goが同値を検出して全writeを省略しversionを維持する確認、およびnative stale guardはこの追補時点では親の継続gate。Hosted API変更はscope外。
+**公開update_questにserver自動idempotencyを要求・推定しない。** 親はfresh versionで同じnextActionを直接writeしてもupdatedAtが進むことを確認し、OpenClaw SDKの「同値writeでもversion不変」というassertionは失敗・受入除外と通知した。正本 [phase-sync](../skills/guilduo-workflows/references/phase-sync.md) 21、28–29、35–36行は、同値ならwriteを省略し、競合・不確実write後はfresh readを求める。このAgent判断が契約であり、APIの自動重複排除とは別。後続の親live通知ではOpenClaw embedded Goが同値を検出して全writeを省略しversionを維持し、native SDKのstale write拒否→fresh rereadで保存field／version一致もPASSした。OpenCodeも同様の親PASS通知あり。両hostのno-op／stale guardはこの通知のscopeで親検証済みに更新し、独立再実行とはしない。Hosted API変更はscope外。
 
 両専用接続の成功はcross-Agent shared selection／複数人channel認可を証明しない。DSH-R1 P2は凍結runtimeへのfeedbackのみ。**source PR準備と上記hashのarchive内容reviewは通過**し、fresh native smoke・未完了public受入・公開registry取得byte・npm／listingは担当者の別gateに残す。以後収録byteまたはindexを変更した場合は再照合が必要。この追補はreview docのworktreeだけを更新するため、親がsource PRへ取り込む際は最新本文をindexへ反映する。
+
+## Source commit後の追加review — QA helperと親live証拠
+
+2026-10-10追補。独立readでsource commit `11c960e14d8a6276e9304abfff897ae2c1616415` の変更60pathを確認し、QA artifact／profile／reports／node_modulesは含まれない。前節の最終tgz hashは不変で、OpenCode全14member／OpenClaw全16memberを**commit blob**と再比較して完全一致した。追加 [native-expiry-qa.mjs](../plugins/guilduo-openclaw/tests/native-expiry-qa.mjs) は同commitのbyteと一致し、tgz／runtime import／npm.filesには含まれない。package gateのPASSは維持するが、新しいsource QA helperには以下の条件付きP2を付記する。
+
+### [P2・解決済み] B16-Q1 — QA root自体がjunctionのときpackage外DBを許す（発見時snapshot）
+
+- **発見時source・条件:** commit `11c960e` のhelper 53–56行は `.qa-artifacts` 自体をrealpathし、解決先を許可rootにした。QA rootのsymlink／junction拒否やpackage内への包含を検査しなかった。このrootがpackage外のprofile親へjunctionで向き、既存のprofile／state／DBが通常fileなら、旧63–68行の子path検査も通り、旧69行のDB openおよびexpiry変更へ進んだ。現在の修正とclose証拠は末尾の追補。
+- **再現・影響:** 秘密なしRAM mockで実helperのpath admissionを実行し、package外を指すQA rootでもDB openへ到達した。DB／native identity／build読取りは合成mock、SQLのdisk実行・資格情報読取り・実junction作成はしていない。実事故やcredential exportの証拠ではないが、実DBを持つ外部profileへ誤ってexpiry注入できる境界欠陥。
+- **現在・confidence:** 高（現source分岐とRAM再現一致）。現在の作業treeのQA root metadataは非symlinkであり、今回親が利用したrootの境界逸脱は立証していない。未収録QA helperの条件付き欠陥で、shipped runtimeのP2へ拡張しない。
+- **対応案:** helper再利用前にpackageの実root配下へのQA root包含を検査し、QA root自体／必要な祖先のjunctionを拒否する。修正までは非linkの専用QA rootに限定して使用する。あーしはhelperを変更しない。
+
+**支持される安全性と限界（発見時commitの行番号）:** 9–17行のSQLはbound store key、format=1、JSON objectとrefresh token、challenge不在を条件にexpiry列だけを更新し、RETURNINGもscalar expiryだけ。19–30行は不成立／複数row時にrollback、52行はexplicit flags、59–61行はpinned host commitとofficial operator identity、63–68行はDB側ancestor link／hardlinkを拒否する。`node plugins/guilduo-openclaw/tests/native-expiry-qa.mjs --self-test` を実行し、合成in-memory SQLiteでexpiry以外の保存、他row不変、missing／unknown format／non-JSON拒否がPASSした。DB tokensはJSへexportしない。なお `--profile-stopped` は呼出者の申告であり実process停止を検証せず、native leaseも迂回する。専用profileの停止／排他運用が前提という既知policy境界であり、今回のrace実害を再現した所見ではない。
+
+発見時再現コード（repository rootでNode実行、旧commit source以外はすべてRAM mock。修正後の現sourceの再現ではない）:
+
+```js
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {dirname,join,resolve,sep} from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import vm from 'node:vm';
+const path='plugins/guilduo-openclaw/tests/native-expiry-qa.mjs';
+const text=execFileSync('git',['cat-file','blob','11c960e:'+path],{encoding:'utf8'}),full=resolve(path),base=resolve(dirname(full),'..'),qa=join(base,'.qa-artifacts');
+const outside=resolve('C:/synthetic-real-host-profile-root'),profile=join(outside,'operator'),opened=[],output=[];
+let source=text.replace(/^import .*;\r?\n/gm,'').replaceAll('import.meta.url','reviewModuleUrl');
+source=source.replace(/const \{ operatorMcpOAuthIdentity \} = await import\([^;\n]+;/,'const operatorMcpOAuthIdentity = reviewIdentity;');
+const context={
+ assert:{...assert,deepEqual:(a,b,message)=>assert.deepEqual(JSON.parse(JSON.stringify(a)),JSON.parse(JSON.stringify(b)),message)},dirname,join,resolve,sep,fileURLToPath,pathToFileURL,reviewModuleUrl:pathToFileURL(full).href,
+ process:{argv:['node',full,join(qa,'operator'),'C:/synthetic-host/openclaw.mjs','--apply-only-expiry','--profile-stopped']},
+ realpath:async p=>p===qa?outside:p===join(qa,'operator')?profile:p,
+ readFile:async()=>JSON.stringify({commit:'bcfc88812a35243893585dbeca87ca41b48272ca'}),
+ lstat:async()=>({isSymbolicLink:()=>false,isFile:()=>true,nlink:1}),
+ reviewIdentity:()=>({storeKey:'synthetic-identity'}),
+ DatabaseSync:class {constructor(p){opened.push(p);}exec(){}prepare(){return {all:()=>[{expiresAt:1}]};}close(){}},
+ console:{log:x=>output.push(x)}
+};
+await new vm.Script('(async()=>{'+source+'})()').runInNewContext(context);
+assert.deepEqual(opened,[join(profile,'state','state','openclaw.sqlite')]);
+assert.ok(!opened[0].startsWith(base+sep));
+console.log(JSON.stringify({proof:'QA root redirected by junction: existing path guards reach a DB outside package',allStateSynthetic:true,openedSyntheticDatabasePath:opened[0],sqlNotExecutedOnDisk:true}));
+```
+
+### 親のpublic refresh通知 — 注入条件を明記した限定PASS
+
+親がOpenClawの隔離QA profileのexpiryだけをSQLで1へ注入し、その後の通常native probeが56toolを返し、保存expiryが `1791618935462` から `1791619191218` へ進んだと通知した。これは実public接続の**QA注入expiry後のnative refresh成功**を支持する親の実行証拠で、自然expiry待ち、server token失効、refresh rotation／concurrency、revocation／logout後の明示reconnectをすべて受け入れた証拠ではない。独立reviewerはpublic profile／SQLite／private receiptを読まず、SQL注入・probe・model要求を実行しない。OpenCodeのpublic自然expiry gateは未完了のまま。
+
+後続の親通知はOpenCodeの**synthetic invalid Authorization headerによるpublic 401誘発後のnative refresh**が成功し、秘密値を出さない比較でaccessReplaced=true／futureExpiry=trueだったとする。通常configを復元してnative serverを再起動後、`/mcp` のguilduo connectedもPASSした。これはpublic native refreshと通常config復元後の接続を支持する親の実行証拠で、自然expiryやgrant失効後の再OAuthを支持するものではない。先行するlocal expiry metadata注入だけではrefreshを示せなかった試行はPASSに数えない。追加model要求はなく、独立reviewerはheader／native grant／receiptを読まずnative接続も実行しない。
+
+OpenClaw no-op／stale guardは上記の親scopeで検証済み。B16-Q1は発見時点で追加の条件付きP2だったが、後続修正を独立検証してcloseした（次節）。DSH P2は引き続き凍結runtimeへのfeedbackのみ。この追補はreview docだけの未commit変更であり、親のsource commitをあーしが変更したものではない。
+
+## QA helper修正の独立再review — B16-Q1解決
+
+2026-10-10。現helperのSHA-256は `f62181668032646e4aa2d32969e6034a1c147ccccf8a8d16a4ee94c9df291b5f`。worker差分はQA root／profile検証とselfcheckの追加で、SQL／native operator identity／expiry-only操作は変更していない。
+
+- **現source:** [helper](../plugins/guilduo-openclaw/tests/native-expiry-qa.mjs) 9–12行はdirectory・非symlink・lexical pathとrealpath一致を要求し、15–28行はbase／QA root／profileまでの各祖先を検査する。107行はこのguardをhost import・DB openより前に実行する。旧P2の「QA rootの解決先を新allowlistにする」処理は削除された。
+- **独立verification:** 実sourceのguard関数を抽出してRAM fs mockで実行。normal nested profileを許可し、QA root junctionのlexical／external profile指定、base／profile／中間祖先junction、lstatとrealpathの不一致、外部path／prefix衝突／rootのみを拒否した。in-memory SQL `--self-test` も再PASS。すべて秘密なしで、disk DB／host／modelにアクセスしていない。
+- **worker証拠・限界:** 親通知では実filesystem `--root-self-test` がnormal／root junction／base・profile link／outside profileを検査してPASS、SQL selftestもPASS。独立reviewerは指定write範囲を守り、QA scratchを作るこのfilesystem testは再実行せず、sourceとRAM guard assertionを検証した。競合するfilesystem変更やnative lease停止を保証する修正ではなく、停止／排他のpolicy前提は維持する。
+- **判定:** B16-Q1を現source上で解決。host候補に新しい未解決P1/P2所見はなし。修正helperはsource-onlyでpackageには未収録。両最終tgz hash `6fe013ae…`／`46c3fb45…` を再計算して不変を確認し、package gateは維持する。helperの修正自体はまだ `11c960e` のblobへ継承されず、親の次source反映で扱う。
+
+### 親の認可拒否通知 — logout／再OAuthは継続gate
+
+公開Web operatorは切断操作について「probably disconnected」と報告し、その後、親のnative OpenCode reconnectはneeds_auth、OpenClaw probeはzero serversかつOAuth authorization requiredを返した。これは両hostが既存grantで接続できず、再認可を要求したという親の観測を支持する。独立reviewerはprivate receiptを読まず再実行していない。切断のserver内原因、全client／tokenの失効、credential削除まではこの通知から証明しない。explicit host logoutは開始通知のみで、成功・保存状態削除・ユーザーOAuth後の再接続はこの追補時点でpending。自然expiryを受入済みとはしない。

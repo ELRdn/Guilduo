@@ -109,6 +109,22 @@ also reported actual same-session Go model resumption after the public Human ans
 read the saved reply, previewed the narrow `nextAction` change, updated with the version guard,
 and confirmed persistence by exact readback in the same Go model session. These are parent-confirmed
 live results, not this driver's independent loopback receipt.
+Public native OAuth refresh **PASS via QA 401 carrier** (parent-reported, 2026-10-10).
+In the isolated profile, the parent kept the normal official MCP URL, set the alias to
+`enabled:false`, and temporarily supplied a fixed invalid synthetic Bearer through native MCP
+headers. Local native REST `POST /mcp/guilduo/connect` then exercised the actual public server's
+401 and the SDK's native refresh flow using its saved public grant. Native storage received a
+different access token and a future `expiresAt` of `1791619428.023`; the refresh token was unchanged.
+The parent compared credentials without exporting their values; the receipt contains no secrets:
+`.qa-artifacts/guilduo-host-beta16/opencode-public-refresh-receipt.json`.
+
+This verifies real public refresh under an injected invalid-Authorization carrier, not natural
+access-token expiry and not synthetic loopback OAuth. The earlier local expiry-metadata-only
+attempt reused the still-server-valid access token, left expiry in the past, and did not demonstrate
+refresh; it is not a PASS. The parent restored the original config in `finally` and confirmed the
+owned QA helper server exited. Normal serve was restarting for actual reconnection at this update;
+that reconnect result and server-side revocation remain separate gates. No package/archive change,
+public-profile operation or additional model run was performed by this evidence update.
 Public phaseSync, source PR, npm and Ecosystem listing remain separate parent-owned gates.
 No private profile path, real Agent/Quest/UID or OAuth credential is
 included in this public document.
