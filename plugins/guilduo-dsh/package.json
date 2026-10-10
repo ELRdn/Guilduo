@@ -1,0 +1,107 @@
+{
+  "name": "@guilduo/dsh-oauth-poc",
+  "version": "0.6.0-beta.16",
+  "description": "Guilduo MCP OAuth and native Settings UI for DeepSeek Harness",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "guilduo",
+    "mcp",
+    "oauth",
+    "agent-skills"
+  ],
+  "homepage": "https://guilduo.com/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ELRdn/Guilduo.git",
+    "directory": "plugins/guilduo-dsh"
+  },
+  "bugs": {
+    "url": "https://github.com/ELRdn/Guilduo/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": "./lib/index.js",
+    "./adapter": "./lib/adapter.js",
+    "./client": "./lib/client.js"
+  },
+  "files": [
+    "lib",
+    "src",
+    "skills/guilduo-workflows",
+    "stage.mjs",
+    "README.md",
+    "NOTICE",
+    "LICENSE",
+    "cordis.patch.yml",
+    "dsh.bundle.patch.yml",
+    "tsconfig.json",
+    "build-client.mjs",
+    "tsconfig.client.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node build-client.mjs",
+    "stage": "node stage.mjs",
+    "test": "tsx --test tests/poc.test.ts tests/settings.test.ts tests/client.test.ts tests/persistence.test.ts",
+    "test:types": "tsc --ignoreConfig --noEmit --target ES2022 --lib ES2024,DOM --jsx react-jsx --module ESNext --moduleResolution Bundler --skipLibCheck --types node,react --strict tests/poc.test.ts tests/settings.test.ts tests/client.test.ts tests/persistence.test.ts",
+    "pack:poc": "npm run stage && npm run build && npm pack --pack-destination ../../.qa-artifacts/guilduo-dsh"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@deepseek-ai/dsh-mcp-client": "0.2.0-rc.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-credentials": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2",
+    "tsx": "4.23.12",
+    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-gateway": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-store": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.2",
+    "esbuild": "0.28.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@types/react": "18.3.1",
+    "@types/react-dom": "18.3.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
