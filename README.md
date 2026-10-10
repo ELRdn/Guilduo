@@ -2,7 +2,7 @@
 
 [日本語](README.jp.md)
 
-`guilduo@guilduo` `0.6.0-beta.1` is the Guilduo plugin for **Claude Code** (CLI, IDE extensions and the desktop app's Code tab). It is distributed through this repository's standard Claude Code plugin marketplace, not npm. It is separate from Claude Desktop Connectors and Desktop Extensions (`.mcpb`).
+`guilduo@guilduo` `0.6.0-beta.2` is the Guilduo plugin for **Claude Code** (CLI, IDE extensions and the desktop app's Code tab). It is distributed through the Claude Code plugin marketplace in the [Guilduo repository](https://github.com/ELRdn/Guilduo), not npm. It is separate from Claude Desktop Connectors and Desktop Extensions (`.mcpb`).
 
 Its only components are:
 
@@ -83,9 +83,13 @@ Or use the **Marketplaces** tab in `/plugin`. Auto-update is **off** by default 
 
 Clear authentication before uninstalling if you also want the local sign-in removed. Signing out or uninstalling does not revoke the grant on the server, and none of these steps touch your Quests, other plugins or MCP servers.
 
+## Data and network
+
+The plugin runs no code of its own; `stage.mjs` and `tests/` are development tools it never runs. After you sign in, Claude Code connects only to `https://mcp.guilduo.com/mcp` and sends the tool calls Claude makes there, such as Quest reads and the updates you authorize. Guilduo handles that data under its [Privacy Policy](https://guilduo.com/privacy/) and [Terms](https://guilduo.com/terms/). The plugin contains no credentials and sends no telemetry.
+
 ## Development
 
-The Skill is staged from the canonical `skills/guilduo-workflows/` (Codex-only `agents/openai.yaml` is excluded):
+In the [Guilduo source repository](https://github.com/ELRdn/Guilduo), the Skill is staged from the canonical `skills/guilduo-workflows/` (Codex-only `agents/openai.yaml` is excluded):
 
 ```powershell
 node plugins/guilduo-claude/stage.mjs
@@ -98,6 +102,6 @@ node plugins/guilduo-claude/tests/native-host.mjs ELRdn/Guilduo#<branch>
 
 `native-host.mjs` installs, inspects, updates, disables, re-enables and removes the plugin in a fresh isolated `CLAUDE_CONFIG_DIR` and checks that an unrelated MCP server and setting survive. Without an argument the plugin loads in place from a local copy; with a pushed `owner/repo#branch` it is sparse-cloned from GitHub into the plugin cache and compared with this checkout (line endings normalized). It performs no sign-in, MCP tool call or model request (`claude mcp list` health-checks the public endpoint without credentials).
 
-Release: after changing the canonical Skill, run `stage.mjs` and raise `version` in `.claude-plugin/plugin.json`; installed copies only update when the version changes. CI runs `package.test.mjs`, which fails if the staged Skill drifts from the canonical one.
+Release: after changing the canonical Skill, run `stage.mjs` and raise `version` in `.claude-plugin/plugin.json`; installed copies only update when the version changes. `ELRdn/guilduo-claude-plugin` is a mirror of this folder for Anthropic's directory; change the plugin here, then publish the mirror with `git subtree split --prefix=plugins/guilduo-claude -b claude-plugin-mirror` and push that branch to the mirror's `main`. CI runs `package.test.mjs`, which fails if the staged Skill drifts from the canonical one.
 
 Docs: [guilduo.com/docs](https://guilduo.com/docs/) · Source: [github.com/ELRdn/Guilduo](https://github.com/ELRdn/Guilduo). AGPL-3.0-only.

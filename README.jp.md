@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-`guilduo@guilduo` `0.6.0-beta.1`は、**Claude Code**（CLI、IDE拡張、デスクトップアプリのCodeタブ）向けのGuilduoプラグインです。npmではなく、このリポジトリのClaude Code標準plugin marketplaceで配布します。Claude DesktopのConnectorsやDesktop Extension（`.mcpb`）とは別物です。
+`guilduo@guilduo` `0.6.0-beta.2`は、**Claude Code**（CLI、IDE拡張、デスクトップアプリのCodeタブ）向けのGuilduoプラグインです。npmではなく、[Guilduoリポジトリ](https://github.com/ELRdn/Guilduo)のClaude Code plugin marketplaceで配布します。Claude DesktopのConnectorsやDesktop Extension（`.mcpb`）とは別物です。
 
 構成要素は次の2つだけです。
 
@@ -83,9 +83,13 @@ claude plugin update guilduo@guilduo
 
 ローカルの認証も消したい場合は、削除前にClear authenticationを行ってください。サインアウトや削除だけではサーバー側の許可は失効しません。いずれの操作もQuest、他のプラグイン、他のMCP接続には影響しません。
 
+## データと通信
+
+プラグイン自体はコードを実行しません。`stage.mjs`と`tests/`は開発用で、プラグインからは実行されません。サインイン後、Claude Codeは`https://mcp.guilduo.com/mcp`にだけ接続し、Claudeが行うtool呼び出し（Questの読み取りや、許可した更新など）を送ります。データはGuilduoの[プライバシーポリシー](https://guilduo.com/privacy/)と[利用規約](https://guilduo.com/terms/)に従って扱われます。プラグインは認証情報を含まず、テレメトリも送りません。
+
 ## 開発
 
-Skillは正本`skills/guilduo-workflows/`からコピーします（Codex専用の`agents/openai.yaml`は含めません）。
+[Guilduoのソースリポジトリ](https://github.com/ELRdn/Guilduo)で、Skillは正本`skills/guilduo-workflows/`からコピーします（Codex専用の`agents/openai.yaml`は含めません）。
 
 ```powershell
 node plugins/guilduo-claude/stage.mjs
@@ -98,6 +102,6 @@ node plugins/guilduo-claude/tests/native-host.mjs ELRdn/Guilduo#<branch>
 
 `native-host.mjs`は新しい隔離`CLAUDE_CONFIG_DIR`で導入・確認・更新・停止・再開・削除を行い、無関係なMCP接続と設定が残ることを確認します。引数なしではローカルコピーからその場で読み込み、push済みの`owner/repo#branch`を渡すとGitHubからsparse cloneしてplugin cacheへ入れ、このcheckoutと比較します（改行は正規化）。サインイン、MCPツール呼び出し、モデル実行は行いません（`claude mcp list`は認証なしで公開endpointのhealth checkを行います）。
 
-リリース: 正本Skillを変更したら`stage.mjs`を実行し、`.claude-plugin/plugin.json`の`version`を上げてください。導入済みのコピーはversionが変わったときだけ更新されます。CIの`package.test.mjs`は、配布Skillが正本とずれると失敗します。
+リリース: 正本Skillを変更したら`stage.mjs`を実行し、`.claude-plugin/plugin.json`の`version`を上げてください。導入済みのコピーはversionが変わったときだけ更新されます。`ELRdn/guilduo-claude-plugin`はAnthropicのdirectory向けにこのフォルダを複製したミラーです。変更はここで行い、`git subtree split --prefix=plugins/guilduo-claude -b claude-plugin-mirror`で作ったブランチをミラーの`main`へpushして反映します。CIの`package.test.mjs`は、配布Skillが正本とずれると失敗します。
 
 Docs: [guilduo.com/docs](https://guilduo.com/docs/) ・ Source: [github.com/ELRdn/Guilduo](https://github.com/ELRdn/Guilduo)。AGPL-3.0-only。
