@@ -86,20 +86,20 @@ Natural access-token expiry, refresh concurrency/rotation guarantees, cross-Agen
 
 | Gate | Claude Code |
 | --- | --- |
-| Host target | 2.1.286 |
+| Host target | 2.1.286 (also exercised on 2.1.296 for the real-profile rows below) |
 | Manifest validation (`claude plugin validate --strict`) / package test | Passed |
 | Isolated native install / Skill and MCP discovery / update command / disable / enable / uninstall / unrelated setting preservation | Passed from a local in-place marketplace (`tests/native-host.mjs`, no sign-in, MCP tool call or inference) |
 | GitHub sparse clone of the PR branch into the plugin cache / content comparison | Passed (`tests/native-host.mjs ELRdn/Guilduo#codex/guilduo-claude-plugin`, 17 checks) |
-| Version-changing update from GitHub | Not accepted (requires a published version change) |
+| Version-changing update from GitHub | Passed on 2.1.296: an operator profile with beta.1 installed from public `main` ran `claude plugin marketplace update guilduo` and `claude plugin update guilduo@guilduo` after #62; it moved to `0.6.0-beta.2`, stayed enabled, matched `main` (line endings normalized), and `settings.json` and the other five plugins were unchanged |
 | Public OAuth (dynamic client registration, loopback callback) / reuse in a new process | Passed in an isolated profile with operator browser approval |
 | Read-only MCP tool calls through the Skill | Passed: `claude-haiku-5-5` loaded the Skill and called `get_agent_link`, `list_registered_agents` and `get_current_agent_context`; no write, link or permission denial. An unfiltered `list_quests` exceeded Claude Code's MCP output limit (README notes narrower views / `MAX_MCP_OUTPUT_TOKENS`) |
 | Sign-out / reconnect | Passed: `claude mcp logout` returned the server to "Needs authentication"; fresh operator approval restored `Connected` in a new process |
-| Agent association for writes | Not accepted: the test connection was left unlinked; no Agent was linked or registered |
-| Guarded Quest update / readback / no-op / conflict reread | Not accepted |
-| Human request → Web answer → saved answer → Agent resumption | Not accepted |
+| Agent association for writes | Passed on 2.1.296: on the owner's instruction the dedicated plugin connection was linked with `link_agent` to an existing registered Agent; no Agent was registered. While that Agent allowed only `quests:read`, `create_quest` was rejected with `Required scope: quests:write` despite the broader OAuth grant; after the owner added `quests:write` in the Web App, writes succeeded |
+| Guarded Quest update / readback / no-op / conflict reread | Passed on 2.1.296 with one dedicated test Quest: a narrow `update_quest` with `expectedUpdatedAt` persisted and read back; an unchanged phase result was detected from a fresh read and not resent; a stale `expectedUpdatedAt` was rejected without changing the Quest, and a reread plus fresh timestamp succeeded |
+| Human request → Web answer → saved answer → Agent resumption | Passed on 2.1.296: `request_human_review` was previewed, then executed; a same-key retry returned the existing request (`reused: true`); the owner answered in the Web App; `list_human_requests` returned the saved `approved` answer and the Agent resumed and completed the test Quest, which was archived. The preview created no stored request |
 | Refresh / server-side revocation | Not accepted |
 | Marketplace publication | Published: merged to `main` in #60 (`claude plugin marketplace add ELRdn/Guilduo`) |
-| Anthropic directory listing | Not submitted. `ELRdn/Guilduo` exceeds the directory's 50 MiB repository archive limit (83 MiB zip), so submission uses the `ELRdn/guilduo-claude-plugin` mirror of `plugins/guilduo-claude` |
+| Anthropic directory listing | Not submitted. The `ELRdn/guilduo-claude-plugin` mirror tree matches `main`'s `plugins/guilduo-claude` after #62. `ELRdn/Guilduo` exceeds the directory's 50 MiB repository archive limit (83 MiB zip), so submission uses that mirror |
 | claude.ai chat / Cowork | Not accepted |
 
 Observed during Claude Code OAuth: Claude Code warns that the stored credential has no issuer stamp (SEP-2352), meaning the authorization response does not round-trip the issuer. Sign-in still succeeds; this is a server-side follow-up, not changed by this plugin.
