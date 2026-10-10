@@ -2,6 +2,9 @@
 
 [日本語](guilduo-next-hosts.jp.md) · Candidate version: **0.6.0-beta.12**
 
+[Download the four host-specific ZIPs](https://github.com/ELRdn/Guilduo/releases/tag/guilduo-next-hosts-v0.6.0-beta.12).
+The source and ZIPs are published; directory submissions remain separate gates.
+
 These packages reuse the canonical `skills/guilduo-workflows/` Skill and the
 official OAuth MCP endpoint, `https://mcp.guilduo.com/mcp`. Installation does not
 register an Agent, run a model, authorize writes or widen permissions. Free

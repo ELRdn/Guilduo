@@ -1,5 +1,16 @@
 # Guilduo public Docs 編集根拠
 
+## 2026-10-10：OpenAI・Codex・Grok Bot・Muse Code beta.12
+
+- 公開sourceRevision: `53793f068546524305d3bc8634edf2918eef4c6b`（レビュー済みsource PR #64の公開main merge）。日英OpenAI／Grok／Muse記事を追加し、Codex記事を更新。各18記事・計36ページ。既存renderer／schema／デザインは変更しない。
+- Claude担当が公開mainへ統合した記事は日英とも内容一致を検証して保持した。overviewとMCP接続の関連記事を追加した。既存DSH／OpenCode／OpenClawの記事と配布物を保持する。
+- 新記事は公開sourceの`docs/guilduo-next-hosts.md`、日本語ガイド、host別受入文書、canonical Skill、manifest、READMEを根拠とする。全記事のsources.pathが固定したGit commitに存在することを確認する。
+- OpenAI ZIPはhook／App参照なしの審査候補。本人確認・候補の実ChatGPT受入・domain・scan・reviewer環境・demo・提出／承認／Publishは未完了。既存App利用を候補plugin受入としない。
+- CodexはCLI 0.159.2の導入／発見、既存App companionのbeta.12更新、専用プロセスの直接OAuth再利用・56tool発見・限定更新／readback・本人Human回答後の同セッション再開・no-op・競合再読取を確認。trusted hook実行、refresh／失効／再接続、Desktopの全導入工程は未受入。
+- Grokはschema検査済みGit／ZIP候補。実ホスト検査が不足しCursor提出は保留。Muse stable1.4.4-R5419.1は公式checksumと無モデルの導入工程を確認。本人は認証ページが開かず端末エラーも残っていないと報告し、OAuthの根因は未特定・未受入。両候補の実モデル／Human往復は未実施。
+- source／ZIPと新記事の独立AIレビューで未解消P1／P2なし。外部の人間による監査やホスト公式承認ではない。新規課金、npm配布、Claude側の実装変更は追加しない。
+- ローカルでは36ページの静的本文・canonical・コマンド・検索／sitemap等40HTTP検査、Docs関連11テスト、build、追加／更新8記事の日英ブラウザー表示、コピー成功表示と言語切替を確認した。本番配備と公開ダウンロードの検証は後段のPUBLICATION記録へ残す。
+
 ## 2026-10-10：3プラグインの公式導入ガイド
 
 - 現在のroot sourceRevision: `60df808c2e4f39b287093240c33d1f7d1d7aedd5`（公開main、Record DSH beta.17 publication and final independent verification (#58)）。既存pageSchemaは記事単位revisionを持たないため、全記事の出典リンクをこの公開commitに固定した。renderer/schemaは変更していない。

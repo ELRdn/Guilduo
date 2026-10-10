@@ -2,6 +2,9 @@
 
 [English](guilduo-next-hosts.md) · 公開候補 **0.6.0-beta.12**
 
+[4ホスト別ZIPのダウンロード](https://github.com/ELRdn/Guilduo/releases/tag/guilduo-next-hosts-v0.6.0-beta.12)。
+source／ZIPは公開済み。各ディレクトリへの提出・掲載は別の工程です。
+
 正本Skillは `skills/guilduo-workflows/`、OAuth MCPは
 https://mcp.guilduo.com/mcp です。導入でモデル実行、Agent登録、書き込み許可は
 始まりません。Freeの登録Agent上限2を維持し、既存の許可済みAgentを使います。

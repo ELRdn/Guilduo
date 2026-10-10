@@ -1,5 +1,27 @@
 # Guilduo Docs publication — 2026-10-05 (Asia/Tokyo)
 
+## Next-hosts beta.12 update — deployment pending
+
+The OpenAI, Grok Bot and Muse Code guides are added in Japanese and English;
+Codex is updated. There are 18 articles per language (36 pages). Concurrent
+Claude guide content is preserved. Public source revision:
+`53793f068546524305d3bc8634edf2918eef4c6b`, merged [PR #64](https://github.com/ELRdn/Guilduo/pull/64).
+[Final source CI](https://github.com/ELRdn/Guilduo/actions/runs/38058236638) passed.
+[The four host ZIPs](https://github.com/ELRdn/Guilduo/releases/tag/guilduo-next-hosts-v0.6.0-beta.12)
+were published as a prerelease. Tag/source, all four downloaded SHA-256 values and
+GitHub asset digests matched the frozen candidates. Live Docs deployment remains pending.
+
+Local validation: 11 Docs tests, build, 40 HTTP checks including every article's
+actual heading/lead/canonical/command, search index, sitemap, robots and llms.
+Browser checks cover the eight changed articles, Japanese/English copy success
+announcements and language switching. Independent AI content review found no
+P1/P2. Clipboard contents and physical mobile hardware were not inspected.
+
+OpenAI verification/submission, Grok native acceptance, Muse OAuth and both
+candidates' model/Human acceptance, and trusted Codex hook execution remain
+outside this documentation publication. Current per-host gates are recorded in
+[the acceptance report](../docs/acceptance/guilduo-next-hosts.md).
+
 Published Japanese Docs: https://guilduo.com/docs/
 
 Published English Docs: https://guilduo.com/docs/en/
