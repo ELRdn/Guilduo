@@ -9,7 +9,7 @@
 - CodexはCLI 0.159.2の導入／発見、既存App companionのbeta.12更新、専用プロセスの直接OAuth再利用・56tool発見・限定更新／readback・本人Human回答後の同セッション再開・no-op・競合再読取を確認。trusted hook実行、refresh／失効／再接続、Desktopの全導入工程は未受入。
 - Grokはschema検査済みGit／ZIP候補。実ホスト検査が不足しCursor提出は保留。Muse stable1.4.4-R5419.1は公式checksumと無モデルの導入工程を確認。本人は認証ページが開かず端末エラーも残っていないと報告し、OAuthの根因は未特定・未受入。両候補の実モデル／Human往復は未実施。
 - source／ZIPと新記事の独立AIレビューで未解消P1／P2なし。外部の人間による監査やホスト公式承認ではない。新規課金、npm配布、Claude側の実装変更は追加しない。
-- ローカルでは36ページの静的本文・canonical・コマンド・検索／sitemap等40HTTP検査、Docs関連11テスト、build、追加／更新8記事の日英ブラウザー表示、コピー成功表示と言語切替を確認した。本番配備と公開ダウンロードの検証は後段のPUBLICATION記録へ残す。
+- ローカルでは36ページの静的本文・canonical・コマンド・検索／sitemap等40HTTP検査、Docs関連11テスト、build、追加／更新8記事の日英ブラウザー表示、コピー成功表示と言語切替を確認した。本番はdeploy38059302339成功後、全36ページと実404等41HTTP検査、同8記事の実ブラウザー・日英コピー成功表示・言語切替を確認した。公開4ZIPの再取得hash／asset digest／source tagも一致。[公開記録](PUBLICATION.md)に根拠を残す。
 
 ## 2026-10-10：3プラグインの公式導入ガイド
 
