@@ -39,6 +39,8 @@ node node_modules/tsx/dist/cli.mjs tools/verify-guilduo-muse-native.mts --smoke
 
 公開前のP2修正: native環境helperはHOME等だけでなく `workspace` / `config/muse` / `logs` の全利用directoryと祖先を、最初のmkdir前にpreflightする。mkdir前後にも再検査する。これら3箇所の既存Windows junctionを拒否し、profile外のsentinel設定byte不変・未作成homeが未作成のままであることをregressionで確認した。既存profile内の子directoryを経由するsettings write escapeを防ぐ修正で、source plugin/凍結ZIPは変更しない。
 
+R6 P2の末端file境界も修正した。[安全なQA file helper](../../tools/guilduo-muse-safe-files.mts)で、公開OAuth `prepare` のsettings/readyと新規診断・検査ログは `flag:"wx"` による排他新規作成に固定した。既存regular fileも上書きせず、末端symlink/hardlinkを経由する書込を拒否する。更新が必要な固定receipt等は、既存末端を `lstat` でregularかつ `nlink:1` と確認し、同一directoryの一時fileを `wx` で作成してrenameする。既存inodeを開いてtruncateせず、native起動前にもready/settings/receiptの末端を検査する。対象の診断、native検査、schema/凍結検査の出力も同じ境界へ統一した。Windows実fixtureでsettings/ready/login receipt/診断receiptの末端symlinkと `nlink:2` hardlinkを拒否し、リンク先sentinel bytes保持、既存regular prepare files保持、安全なreceipt更新と一時file清掃を確認した。対象testsは14/14、対象strict型検査はPASS。本人native profile・秘密・公開loginは読み書き/再実行せず、plugin sourceと凍結ZIPも変更しない。これはAI修正・回帰検査の記録であり、独立reviewの最終判定や公開OAuth受入を代替しない。
+
 [公式schema検査driver](../../tools/verify-guilduo-grok-schemas.mts)はAgent Plugins 1.0.0のplugin/MCP schemaを現在取得し、draft2020-12でGrokの両JSONを検査、未知propertyのnegativeも拒否した。receipt: `.qa-artifacts/guilduo-next-hosts/grok-muse/official-schemas/receipt.json`。schema SHA-256はplugin `0a4aad95ce337878ad38802ebf0daa3fde76abe3f65400c86bcbb1ec0b3ab883`、MCP `6539175bfcdf43085855183e86da40ea94b166547a72b47ae9a0a390516d3acb`。これはGrok/Cursor native受入ではない。
 
 ## Muse最新版の取得・実測

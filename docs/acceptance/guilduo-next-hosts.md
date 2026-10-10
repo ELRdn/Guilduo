@@ -30,8 +30,8 @@ published DSH/OpenCode/OpenClaw distributions remain outside the changes. Free
 retains two registered Agents. No credential bridge, new API, automatic Agent
 registration, root dependency or npm distribution is added.
 
-Current source checks: full suite **515/515**, focused package/archive/hooks/review
-checks **40/40**, Grok/Muse target checks **11/11**, root type checks, design check
+Current source checks: full suite **518/518**, focused package/archive/hooks/review
+checks **40/40**, Grok/Muse target checks **14/14**, root type checks, design check
 and build passed. The old beta-release template assertion was corrected.
 Final Git/member byte verification and independent review remain publication gates.
 
@@ -39,7 +39,7 @@ Codex account tests use a process-only direct server, with the App companion and
 App tools disabled in that test process. The explicitly supplied Skill is the
 installed beta.12 canonical file; this is not proof of trusted plugin hook execution.
 The native model provider/model returned exactly `openai` / `gpt-6-astra`, with
-API-key environment overrides removed. Three model cases completed within 120 seconds.
+API-key environment overrides removed. Four model cases completed within 120 seconds. A stale expectedUpdatedAt was rejected with quest_conflict; the Agent reread the current Quest in read-only mode and did not retry the write.
 The first Human preview correctly rejected an unassigned test fixture. Only the
 fixture's assignee was repaired using the existing `codex` Agent, then only the
 failed Human case was rerun. An invalid direct handoff transition was rejected.
@@ -47,6 +47,11 @@ No new Agent, original-Quest completion or reward mutation was performed.
 The owner saved the Human response in Web; the Agent read persisted `answered`,
 `respondedAt` and the exact response before resuming. Raw account results, OAuth
 material, profiles and private identifiers are excluded from public evidence.
+After the final LF-only package normalization, the owner companion was reinstalled
+through the standard CLI and all 13 cache members matched. Fresh default-profile
+native discovery returned exactly one enabled namespaced Guilduo Skill with no
+discovery errors, plus the three hook definitions. They are not trusted for these
+new bytes (`modified` or `untrusted`); no trust bypass or automatic binding was used.
 
 Native refresh, explicit revocation/reconnection and trusted-hook execution
 remain unaccepted. A synthetic receipt/trust suppression test does not establish

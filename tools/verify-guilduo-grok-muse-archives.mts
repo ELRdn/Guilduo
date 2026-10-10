@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { candidateTargets, digest, validateGrokMuseSource } from "./freeze-guilduo-grok-muse.mts";
 import { museQAEnvironment } from "./guilduo-muse-native-env.mts";
+import { replaceMuseQAFile } from "./guilduo-muse-safe-files.mts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const owned = join(root, ".qa-artifacts", "guilduo-next-hosts", "grok-muse");
@@ -34,5 +35,5 @@ for (const target of candidateTargets) {
     memberCount: members.length, sourceBytes: "passed", canonicalSkillBytes: "passed", forwardSlashPaths: "passed", members });
 }
 const receipt = { checkedAt: new Date().toISOString(), results, published: false, submitted: false };
-await writeFile(join(owned, "frozen", "byte-verification.json"), JSON.stringify(receipt, null, 2) + "\n");
+await replaceMuseQAFile(root, join(owned, "frozen", "byte-verification.json"), JSON.stringify(receipt, null, 2) + "\n");
 console.log(JSON.stringify(receipt, null, 2));

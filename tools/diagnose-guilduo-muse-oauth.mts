@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { museQAEnvironment } from "./guilduo-muse-native-env.mts";
+import { createMuseQAFile } from "./guilduo-muse-safe-files.mts";
 import { digest } from "./freeze-guilduo-grok-muse.mts";
 import { nativeVersion, nativeSHA256 } from "./verify-guilduo-muse-native.mts";
 
@@ -62,7 +63,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 const observed = { authorizePagePrompt: false, enterToOpenBrowserPrompt: false, browserOpening: false,
   browserFailure: false, authorizationWaiting: false, loginFailure: false };
 try {
-  await writeFile(join(profile, "config", "muse", "settings.json"), JSON.stringify({ schema_version: 1,
+  await createMuseQAFile(repository, join(profile, "config", "muse", "settings.json"), JSON.stringify({ schema_version: 1,
     mcpServers: { qa_diagnostic: { transport: "streamable_http", url: `${origin}/mcp`, enabled: true, mode: "optional" } } }));
   child = spawn(exe, ["mcp", "login", "qa_diagnostic"], { cwd: join(profile, "workspace"),
     env: environment, stdio: [terminalInput ? "inherit" : "pipe", "pipe", "pipe"], windowsHide: true });
@@ -86,7 +87,7 @@ try {
   const receipt = { checkedAt: new Date().toISOString(), nativeVersion, kind: "synthetic-prompt-only",
     observed, requests: counts, exitCode, signal, terminalInput, inputSent: false, publicOAuthAttempted: false,
     secretsRecorded: false, modelCalls: 0 };
-  await writeFile(join(profile, "receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
+  await createMuseQAFile(repository, join(profile, "receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
   console.log(JSON.stringify(receipt));
   assert.equal(counts.authorization, 0);
   assert.equal(counts.token, 0);

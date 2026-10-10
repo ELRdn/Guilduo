@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { lstat, readFile, writeFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { museQAEnvironment } from "./guilduo-muse-native-env.mts";
+import { assertMuseQAFile, createMuseQAFile, replaceMuseQAFile } from "./guilduo-muse-safe-files.mts";
 import { digest, validateGrokMuseSource } from "./freeze-guilduo-grok-muse.mts";
 import { nativeVersion, nativeSHA256 } from "./verify-guilduo-muse-native.mts";
 
@@ -29,7 +30,7 @@ if (mode === "prepare") {
   assert(!existing, "Public OAuth profile already prepared; do not overwrite its user-owned authorization");
   const source = await validateGrokMuseSource(repository, "muse");
   const settingsPath = join(profile, "config", "muse", "settings.json");
-  await writeFile(settingsPath, await readFile(join(source.source, "settings.example.json")));
+  await createMuseQAFile(repository, settingsPath, await readFile(join(source.source, "settings.example.json")));
   const native = spawnSync(exe, ["plugins", "install", source.source, "--json"], {
     cwd: join(profile, "workspace"), env: environment, input: "", encoding: "utf8", windowsHide: true,
     timeout: 25_000, maxBuffer: 1024 * 1024,
@@ -43,9 +44,13 @@ if (mode === "prepare") {
     pluginVersion: installed.installed.version, publicEndpoint: "https://mcp.guilduo.com/mcp",
     nativeMCPServer: "questforge", callback: "native ephemeral loopback port", modelCalls: 0,
     publicOAuth: "pending-user-action", instruction: "Run login in your visible terminal and press Enter at the native browser prompt; callback is automatic loopback. Use login-headless only in a user-visible terminal; paste final redirect only into native protected input. No transcript or tee." };
-  await writeFile(readyPath, JSON.stringify(ready, null, 2) + "\n");
+  await createMuseQAFile(repository, readyPath, JSON.stringify(ready, null, 2) + "\n");
   console.log(JSON.stringify(ready, null, 2));
 } else {
+  await assertMuseQAFile(repository, readyPath, false);
+  await assertMuseQAFile(repository, join(profile, "config", "muse", "settings.json"), false);
+  const receiptPath = join(profile, `${mode}-receipt.json`);
+  await assertMuseQAFile(repository, receiptPath);
   assert.equal(JSON.parse(await readFile(readyPath, "utf8")).nativeVersion, nativeVersion);
   // In a real terminal normal login asks Enter to open the browser, then handles the loopback callback.
   // Explicit headless fallback requires a user-visible terminal for protected redirect input.
@@ -64,7 +69,7 @@ if (mode === "prepare") {
   clearTimeout(timer);
   process.removeListener("SIGINT", cancel);
   process.removeListener("SIGTERM", cancel);
-  await writeFile(join(profile, `${mode}-receipt.json`), JSON.stringify({ checkedAt: new Date().toISOString(),
+  await replaceMuseQAFile(repository, receiptPath, JSON.stringify({ checkedAt: new Date().toISOString(),
     mode, exitCode, signal, timedOut, nativeVersion, modelCalls: 0, secretsRecorded: false }, null, 2) + "\n");
   process.exitCode = timedOut || exitCode !== 0 ? 1 : 0;
 }

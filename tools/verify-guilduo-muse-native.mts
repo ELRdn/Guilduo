@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { museQAEnvironment } from "./guilduo-muse-native-env.mts";
+import { createMuseQAFile, replaceMuseQAFile } from "./guilduo-muse-safe-files.mts";
 import { candidateVersion, digest } from "./freeze-guilduo-grok-muse.mts";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
@@ -23,7 +24,7 @@ export async function verifyMuseNative(smokeOnly = false) {
   const settingsBytes = Buffer.from(JSON.stringify({ schema_version: 1, mcpServers: {
     qa_unrelated: { transport: "streamable_http", url: "http://127.0.0.1:1/unrelated", enabled: false, mode: "optional" },
   } }, null, 2) + "\n");
-  await writeFile(settingsPath, settingsBytes);
+  await createMuseQAFile(repository, settingsPath, settingsBytes);
   const logs: string[] = [];
   const settingsSerializationChanges: string[][] = [];
   async function command(args: string[], expected = 0) {
@@ -32,7 +33,7 @@ export async function verifyMuseNative(smokeOnly = false) {
     const result = spawnSync(exe, args, { cwd: join(profile, "workspace"), env: environment,
       input: "", windowsHide: true, timeout: 25_000, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
     const path = join(profile, "logs", `${String(logs.length + 1).padStart(3, "0")}-${args[0]}-${args[1] ?? "version"}.json`);
-    await writeFile(path, JSON.stringify({ args, exitCode: result.status, signal: result.signal,
+    await createMuseQAFile(repository, path, JSON.stringify({ args, exitCode: result.status, signal: result.signal,
       error: result.error?.message ?? null, stdout: result.stdout, stderr: result.stderr }, null, 2) + "\n");
     logs.push(relative(repository, path).replaceAll("\\", "/"));
     assert.ifError(result.error);
@@ -85,17 +86,17 @@ export async function verifyMuseNative(smokeOnly = false) {
       profile: relative(repository, profile).replaceAll("\\", "/"), archive: archive.path, archiveSHA256: archive.sha256,
       immutableZipMembersAndBytes: "passed", finalValidateInstallInspectDiscoveryRemove: "passed",
       finalPluginStoreEmpty: true, unrelatedSettingsValuesPreserved: true, modelCalls: 0, logs };
-    await writeFile(join(owned, "final-native-smoke-receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
+    await replaceMuseQAFile(repository, join(owned, "final-native-smoke-receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
     return receipt;
   }
 
   const sentinelSource = join(profile, "unrelated-plugin");
   await mkdir(join(sentinelSource, ".muse-plugin"), { recursive: true });
   await mkdir(join(sentinelSource, "skills", "qa-unrelated"), { recursive: true });
-  await writeFile(join(sentinelSource, ".muse-plugin", "plugin.json"), JSON.stringify({ schemaVersion: 1,
+  await createMuseQAFile(repository, join(sentinelSource, ".muse-plugin", "plugin.json"), JSON.stringify({ schemaVersion: 1,
     name: "qa-unrelated", version: "1.0.0", description: "Unrelated offline QA sentinel", compat: { source: "native", manifestDir: ".muse-plugin" },
     capabilities: { skills: [{ id: "qa-unrelated", path: "skills/qa-unrelated/SKILL.md" }] } }));
-  await writeFile(join(sentinelSource, "skills", "qa-unrelated", "SKILL.md"), "---\nname: qa-unrelated\ndescription: Offline unrelated QA sentinel.\n---\n# Sentinel\n");
+  await createMuseQAFile(repository, join(sentinelSource, "skills", "qa-unrelated", "SKILL.md"), "---\nname: qa-unrelated\ndescription: Offline unrelated QA sentinel.\n---\n# Sentinel\n");
   await command(["plugins", "install", sentinelSource, "--json"]);
   const sentinel = (await command(["plugins", "inspect", "qa-unrelated", "--json"])).json();
   const mutableSource = join(profile, "update-fixture");
@@ -104,13 +105,13 @@ export async function verifyMuseNative(smokeOnly = false) {
   const finalManifest = await readFile(manifestPath);
   const older = JSON.parse(finalManifest.toString());
   older.version = "0.6.0-beta.11";
-  await writeFile(manifestPath, JSON.stringify(older, null, 2) + "\n");
+  await replaceMuseQAFile(repository, manifestPath, JSON.stringify(older, null, 2) + "\n");
   let installed = false;
   try {
     const installation = (await command(["plugins", "install", mutableSource, "--json"])).json();
     installed = true;
     assert.equal(installation.installed.version, "0.6.0-beta.11");
-    await writeFile(manifestPath, finalManifest);
+    await replaceMuseQAFile(repository, manifestPath, finalManifest);
     const updated = (await command(["plugins", "update", "guilduo-workflows", "--json"])).json();
     assert.equal(updated.updated.version, candidateVersion);
     let inspected = (await command(["plugins", "inspect", "guilduo-workflows", "--json"])).json();
@@ -152,13 +153,13 @@ export async function verifyMuseNative(smokeOnly = false) {
       mode: spelling === "invalid-mode" ? "all" : "optional" } };
     const settings = spelling === "both" ? { schema_version: 1, mcpServers: entry, mcp_servers: entry }
       : { schema_version: 1, [spelling === "invalid-mode" ? "mcpServers" : spelling]: entry };
-    await writeFile(settingsPath, JSON.stringify(settings));
+    await replaceMuseQAFile(repository, settingsPath, JSON.stringify(settings));
     const result = await command(["mcp", "login", "qa_schema", "--headless"], 1);
     const recognized = result.stderr.includes("OAuth HTTP request failed");
     assert.equal(recognized, spelling === "mcpServers" || spelling === "mcp_servers");
     if (!recognized) assert.match(result.stderr, /no MCP server named|MCP configuration is faulted/);
     schemaChecks.push({ spelling, recognized, oauthIssued: false });
-  } } finally { await writeFile(settingsPath, settingsBytes); }
+  } } finally { await replaceMuseQAFile(repository, settingsPath, settingsBytes); }
   await command(["plugins", "remove", "qa-unrelated", "--delete-data", "--json"]);
   assert.equal((await command(["plugins", "list", "--json"])).json().plugins.length, 0);
   for (const file of validation.files) assert.equal(digest(await readFile(join(extracted, file.path))), file.sha256);
@@ -170,7 +171,7 @@ export async function verifyMuseNative(smokeOnly = false) {
     unrelatedSettingsValuesPreserved: true, unrelatedSettingsBytesPreserved: settingsSerializationChanges.length === 0,
     settingsSerializationChanges, finalPluginStoreEmpty: true, schemaChecks,
     perCommandTimeoutMs: 25_000, automaticRetries: 0, modelCalls: 0, publicOAuth: "pending", logs };
-  await writeFile(join(owned, "native-lifecycle-receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
+  await replaceMuseQAFile(repository, join(owned, "native-lifecycle-receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
   return receipt;
 }
 

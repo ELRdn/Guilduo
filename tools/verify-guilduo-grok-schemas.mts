@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Validator } from "@cfworker/json-schema";
 import type { Schema } from "@cfworker/json-schema";
 import { digest, validateGrokMuseSource } from "./freeze-guilduo-grok-muse.mts";
+import { replaceMuseQAFile } from "./guilduo-muse-safe-files.mts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = join(root, ".qa-artifacts", "guilduo-next-hosts", "grok-muse", "official-schemas");
@@ -24,12 +25,12 @@ for (const name of ["plugin", "mcp"]) {
   const result = validator.validate(packageDocument);
   assert.equal(result.valid, true, JSON.stringify(result.errors));
   assert.equal(validator.validate({ ...packageDocument, unrelated_private_credential: "synthetic-only" }).valid, false);
-  await writeFile(join(output, `${name}.schema.json`), bytes);
+  await replaceMuseQAFile(root, join(output, `${name}.schema.json`), bytes);
   results.push({ document: `plugins/guilduo-grok/${name}.json`, url, schemaSHA256: digest(bytes),
     packageSHA256: digest(await readFile(join(root, "plugins/guilduo-grok", `${name}.json`))),
     positive: "passed", unexpectedFieldNegative: "passed" });
 }
 const receipt = { checkedAt: new Date().toISOString(), draft: "2020-12", results,
   grokNativeAcceptance: "pending", cursorNativeAcceptance: "pending", modelCalls: 0, submitted: false };
-await writeFile(join(output, "receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
+await replaceMuseQAFile(root, join(output, "receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
 console.log(JSON.stringify(receipt, null, 2));

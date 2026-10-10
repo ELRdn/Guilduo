@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cp, link, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { candidateVersion, validateGrokMuseSource } from "../tools/freeze-guilduo-grok-muse.mts";
 import { museQAEnvironment } from "../tools/guilduo-muse-native-env.mts";
+import { createMuseQAFile, replaceMuseQAFile } from "../tools/guilduo-muse-safe-files.mts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const qa = join(root, ".qa-artifacts", "guilduo-next-hosts", "grok-muse", "static-tests");
@@ -110,4 +111,41 @@ for (const child of ["workspace", "config/muse", "logs"]) test(`Muse rejects exi
   await assert.rejects(museQAEnvironment(root, profile), /Linked Muse QA ancestor or directory/);
   assert((await readFile(sentinel)).equals(bytes));
   await assert.rejects(lstat(join(profile, "home")), { code: "ENOENT" });
+}));
+
+for (const kind of ["symlink", "hardlink"] as const) test(`Muse prepare/receipt reject final ${kind} without changing sentinel bytes`, async () => fixture(async path => {
+  const profile = join(path, "profile");
+  await museQAEnvironment(root, profile);
+  const sentinel = join(path, "sentinel.json");
+  const bytes = Buffer.from('{"unrelated":"outside native profile"}\n');
+  await writeFile(sentinel, bytes);
+  for (const file of ["config/muse/settings.json", "ready.json", "login-receipt.json", "receipt.json"]) {
+    const target = join(profile, file);
+    if (kind === "symlink") await symlink(sentinel, target, "file");
+    else await link(sentinel, target);
+    if (kind === "hardlink") assert.equal((await lstat(target)).nlink, 2);
+    await assert.rejects(createMuseQAFile(root, target, "must not write"), { code: "EEXIST" });
+    await assert.rejects(replaceMuseQAFile(root, target, "must not replace"), /Unsafe Muse QA file/);
+    assert((await readFile(sentinel)).equals(bytes));
+    await rm(target);
+  }
+}));
+
+test("Muse prepare preserves existing regular settings/ready; receipt replaces a safe file atomically", async () => fixture(async path => {
+  const profile = join(path, "profile");
+  await museQAEnvironment(root, profile);
+  const bytes = Buffer.from('{"existing":"preserve"}\n');
+  for (const file of ["config/muse/settings.json", "ready.json"]) {
+    const target = join(profile, file);
+    await createMuseQAFile(root, target, bytes);
+    await assert.rejects(createMuseQAFile(root, target, "must not overwrite"), { code: "EEXIST" });
+    assert((await readFile(target)).equals(bytes));
+  }
+  const receipt = join(profile, "login-receipt.json");
+  await replaceMuseQAFile(root, receipt, "initial");
+  await replaceMuseQAFile(root, receipt, "updated");
+  assert.equal(await readFile(receipt, "utf8"), "updated");
+  assert.equal((await lstat(receipt)).nlink, 1);
+  assert(!(await readdir(profile)).some(name => name.includes(".tmp-")));
+  await assert.rejects(createMuseQAFile(root, join(root, "outside.json"), "refused"), /Outside owned/);
 }));

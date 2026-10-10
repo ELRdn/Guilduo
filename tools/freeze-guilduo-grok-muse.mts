@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { archiveGuilduoPlugin } from "./package-guilduo-plugins.mts";
+import { replaceMuseQAFile } from "./guilduo-muse-safe-files.mts";
 
 export const candidateVersion = "0.6.0-beta.12";
 export const candidateTargets = ["grok", "muse"] as const;
@@ -104,7 +105,7 @@ async function ownedWrite(root: string, path: string, data: string | Buffer): Pr
   await mkdir(dirname(absolute), { recursive: true });
   const previous = await lstat(absolute).catch(error => { if (error.code === "ENOENT") return undefined; throw error; });
   if (previous && (!previous.isFile() || previous.nlink !== 1 || previous.isSymbolicLink())) throw new Error("Linked freeze file");
-  await writeFile(absolute, data);
+  await replaceMuseQAFile(root, absolute, data);
 }
 
 export async function freezeGrokMuse(root = repository) {
