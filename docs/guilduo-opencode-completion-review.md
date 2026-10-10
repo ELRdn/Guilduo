@@ -1,5 +1,7 @@
 # OpenCode beta.16 完了評価
 
+後続方針: 本人依頼でnpm `latest`採用へ変更され、beta-onlyは現在の残件ではない。3プラグインはブラッシュアップ段階へ移行した。以下は評価時点の記録で、上流掲載の判定は維持する。[現行評価](guilduo-plugins-completion.md)を参照。
+
 評価日: 2026-10-10。対象: `@guilduo/opencode-plugin@0.6.0-beta.16`、Windows、OpenCode 1.18.32 / 1.18.35。
 
 **判定: 限定範囲の実装・受入とnpm公開は成立。ただし、選択済みのbeta-only配布と公式Ecosystem掲載が未達のため、要求全体の完了とは判定しない。** この読み取り評価で、対象範囲の利用を阻む新たなruntime修正事項は確認できなかった。v2や全環境への互換性保証ではない。

@@ -204,17 +204,17 @@ npm run cli -- mcp-config --json
 
 ## DSHプラグインの導入・接続
 
-**DeepSeek Harness（DSH）** 向けGuilduoプラグインをnpmで公開しています。[`@guilduo/dsh-oauth-poc`](https://www.npmjs.com/package/@guilduo/dsh-oauth-poc) の `latest`／`beta` は、2026-10-10時点で **0.6.0-beta.16**。**設定 → Guilduo**、ブラウザーOAuth、`guilduo-workflows` Skillを追加します。検証対象はWindows・DSH **0.2.0-rc.2** です。
+**DeepSeek Harness（DSH）** 向けGuilduoプラグインをnpmで公開しています。[`@guilduo/dsh-oauth-poc`](https://www.npmjs.com/package/@guilduo/dsh-oauth-poc) の `latest`／`beta` は、2026-10-10時点で **0.6.0-beta.17**。**設定 → Guilduo**、ブラウザーOAuth、`guilduo-workflows` Skillを追加します。検証対象はWindows・DSH **0.2.0-rc.2** です。[公式DSHガイド](https://guilduo.com/docs/dsh/)。
 
 Web／Desktopのホストを停止してから、既存のWebプロファイルへ導入・更新します。
 
 ```powershell
-dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.16 --ignore-scripts
+dsh plugin --profile web add @guilduo/dsh-oauth-poc@latest --ignore-scripts
 ```
 
 ホストを再起動してブラウザーを再読込し、会話 → **設定 → Guilduo → 接続 → ブラウザーで認証** から許可してください。Desktopはnative plugin managerで同じパッケージ・版を導入します。
 
-共有・更新・安全な削除・トラブル対処は **[日本語How-to](docs/guilduo-dsh-howto.jp.md)** / **[English](docs/guilduo-dsh-howto.md)** を参照してください。本人確認で公開OAuth・MCP読み書き・Desktop再起動後の保存認証再利用が成功。設定なし初回入力／新規／fork利用、Agent Handoff、Human回答→再開は未受入です。このβを一区切りに追加開発を停止し、[現行の受入状況](docs/guilduo-dsh-status.md)に残件を記録しています。
+共有・更新・安全な削除・トラブル対処は **[日本語How-to](docs/guilduo-dsh-howto.jp.md)** / **[English](docs/guilduo-dsh-howto.md)** を参照してください。beta.17には独立レビュー済みの保守修正を含みます。beta.16の本人確認で公開OAuth・MCP読み書き・Desktop再起動後の認証再利用が成功。beta.17のHuman／Handoff・設定なし利用を含む全受入は残件です。3プラグインはブラッシュアップ段階へ進み、[現行の受入状況](docs/guilduo-dsh-status.md)に検証範囲を記録しています。
 
 ## OpenCode・OpenClaw拡張
 
@@ -222,10 +222,10 @@ dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.16 --ignore-scrip
 
 | ホスト | package | 導入ガイド |
 | --- | --- | --- |
-| OpenCode 1.18.32 / 1.18.35 | `@guilduo/opencode-plugin@0.6.0-beta.16` | [日本語](plugins/guilduo-opencode/README.jp.md) / [English](plugins/guilduo-opencode/README.md) |
-| OpenClaw 2026.9.9 | `@guilduo/openclaw-plugin@0.6.0-beta.16` | [日本語](plugins/guilduo-openclaw/README.jp.md) / [English](plugins/guilduo-openclaw/README.md) |
+| OpenCode 1.18.32 / 1.18.35 | `@guilduo/opencode-plugin@0.6.0-beta.16`（`latest`／`beta`） | [公式ガイド](https://guilduo.com/docs/opencode/) / [English](https://guilduo.com/docs/en/opencode/) |
+| OpenClaw 2026.9.9 | `@guilduo/openclaw-plugin@0.6.0-beta.16`（`latest`／`beta`） | [公式ガイド](https://guilduo.com/docs/openclaw/) / [English](https://guilduo.com/docs/en/openclaw/) |
 
-導入前に[公開・受入状況](docs/guilduo-host-extensions-status.md)を確認してください。OpenCodeの任意フェーズ確認は既定OFFで、明示binding時に追加モデル要求を行います。OpenClawは標準Settings／Accountsから接続します。[DSHの独立FB](docs/guilduo-dsh-independent-review.md)は別記録で、DSH beta.16は変更していません。
+公式ガイドで導入・OAuth・更新・削除を案内しています。OpenCodeの任意フェーズ確認は既定OFFで、明示binding時に追加モデル要求を行います。OpenClawは標準Settings／Accountsから接続します。`latest`は推奨配布版の選択タグで、β版番号と検証範囲は[公開・受入状況](docs/guilduo-host-extensions-status.md)と[独立完成度評価](docs/guilduo-plugins-completion.md)に残しています。
 
 ## Skill / OpenAI Plugin・MCP App
 

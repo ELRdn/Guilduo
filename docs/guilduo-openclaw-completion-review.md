@@ -1,5 +1,7 @@
 # OpenClaw beta.16 完了評価
 
+後続方針: 本人依頼でnpm `latest`採用へ変更され、beta-onlyは現在の残件ではない。3プラグインはブラッシュアップ段階へ移行した。以下は評価時点の記録で、ClawHub集約scan・検索掲載の判定は維持する。[現行評価](guilduo-plugins-completion.md)を参照。
+
 評価日: 2026-10-10。公開APIの最終確認: **08:01:24 UTC / 17:01:24 JST**。対象は `@guilduo/openclaw-plugin@0.6.0-beta.16` のみ。本書は独立した **AIレビュー**であり、外部人間監査・公式認定ではない。DSH / OpenCode の完了判定は行わない。
 
 **判定: Windows・固定ホスト向け最小実装と受入は完了。配布は成立。ただし npm beta-only と ClawHub の集約scan・通常検索掲載が未完了なので、要求全体の完全完了とは判定しない。**

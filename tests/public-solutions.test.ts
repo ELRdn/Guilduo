@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
-import { buildDocsAssets, solutionPath, solutionSlugs } from "../public-docs/build.ts";
+import { buildDocsAssets, readDocsContent, solutionPath, solutionSlugs } from "../public-docs/build.ts";
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string): string => readFileSync(resolve(root, path), "utf8");
 const origin = "https://guilduo.com";
@@ -12,7 +12,8 @@ test("static solutions have unique metadata, reciprocal languages and sourced na
   const descriptions = new Set<string>();
   const assets = buildDocsAssets();
   const sitemap = assets.get("sitemap.xml")!;
-  assert.equal([...sitemap.matchAll(/<loc>/g)].length, 32);
+  const content = readDocsContent();
+  assert.equal([...sitemap.matchAll(/<loc>/g)].length, 4 + 2 * solutionSlugs.length + content.ja.length + content.en.length);
   for (const locale of ["ja", "en"] as const) for (const slug of solutionSlugs) {
     const path = solutionPath(locale, slug);
     const html = read(path.slice(1) + "index.html").replaceAll("__GUILDUO_PUBLIC_ORIGIN__", origin);

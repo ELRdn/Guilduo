@@ -2,6 +2,8 @@
 
 Updated October 10, 2026. Windows is the accepted target platform. These independent packages use host-owned OAuth and the canonical `guilduo-workflows` Skill. Installation grants no Quest write permission and does not register another Agent.
 
+The user subsequently authorized normal `latest` distribution and the polish phase for all three plugins. OpenCode and OpenClaw already resolve to beta.16 under both `latest` and `beta`; the official npm registry was rechecked. The earlier beta-only requirement is superseded. Official Guilduo guides: [OpenCode](https://guilduo.com/docs/en/opencode/) / [OpenClaw](https://guilduo.com/docs/en/openclaw/). These guides are separate from upstream directory approval.
+
 | Gate | OpenCode | OpenClaw |
 | --- | --- | --- |
 | Published npm version | `@guilduo/opencode-plugin@0.6.0-beta.16` | `@guilduo/openclaw-plugin@0.6.0-beta.16` |
@@ -9,7 +11,7 @@ Updated October 10, 2026. Windows is the accepted target platform. These indepen
 | Native install / beta.15 update / Skill / removal | Passed on both host versions | Passed on pinned host |
 | Exact Go model / optional phaseSync | Four cases passed on each host; synthetic MCP | No plugin model execution |
 | npm publication / public archive / isolated install | Passed; public version, beta tag, SHA-256/integrity and raw bytes verified | Passed; public version, beta tag, SHA-256/integrity and raw bytes verified |
-| npm beta-only tag gate | Not met: registry automatically assigned `latest`; authenticated deletion returned HTTP 400 | Not met: registry automatically assigned `latest`; authenticated deletion returned HTTP 400 |
+| Current npm tags | `latest = beta = 0.6.0-beta.16`; latest distribution now authorized | `latest = beta = 0.6.0-beta.16`; latest distribution now authorized |
 | Official listing | Ecosystem PR #54271 closed by upstream v1 freeze; official alternative requested | Published under `guilduo`; public page/download/native install passed; aggregate scan/search gate pending |
 | Public OAuth / native MCP | Native CLI sign-in and restarted host connection passed | Native CLI sign-in and 56-tool discovery passed |
 | Guarded Quest update / readback | Single-field preview, version-guarded update and exact readback passed | Single-field preview, version-guarded update and exact readback passed |
@@ -48,11 +50,11 @@ The operator approved native OAuth for both isolated host profiles and answered 
 
 ## Release order
 
-Review the exact source diff, validate the packages and final archives, then publish the source through a reviewed PR. Publish npm packages under `beta`, verify the public archive bytes and registry integrity, and submit the corresponding official listings. A submitted PR or pending ClawHub scan is not a completed listing. No promotion to `latest` or production Worker/Site deployment is included.
+The original beta release reviewed source and final archives before npm publication and upstream submissions. The later user request authorizes `latest` distribution and publication of the official Guilduo Docs. Package versions and frozen archives remain unchanged. A submitted PR or pending ClawHub scan is not a completed upstream listing; no Worker deployment is part of the Docs update.
 
 ## Published installation
 
-Use an explicit version while the tag exception below remains unresolved. Preserve other entries in your OpenCode `opencode.json`:
+The normal `@latest` tag is available. Use an explicit version for a reproducible installation. Preserve other entries in your OpenCode `opencode.json`:
 
 ```json
 { "plugin": ["@guilduo/opencode-plugin@0.6.0-beta.16"] }
@@ -71,7 +73,7 @@ Inspect existing Settings/MCP aliases first; an existing alias should be retaine
 
 - [Source PR #55](https://github.com/ELRdn/Guilduo/pull/55) merged after independent AI source/archive review and successful CI. Published source commit: `8dfee40372f83c3f3f23ae21863e23c7d950011c`. QA-root junction refusal was fixed and checked before merge; DSH runtime stayed frozen.
 - npm [OpenCode](https://www.npmjs.com/package/@guilduo/opencode-plugin/v/0.6.0-beta.16) and [OpenClaw](https://www.npmjs.com/package/@guilduo/openclaw-plugin/v/0.6.0-beta.16) publication used explicit `--tag beta --access public --ignore-scripts`. Public tgz bytes exactly match the frozen archives: OpenCode SHA-256 `6fe013ae72b80e47d8846b2c20b0e4d42a749ce03ea142ef3d9243410e870d2c`; OpenClaw `46c3fb454ac179807148c090f9730f8a2f77576f9fdbd8d20d4584508eaea678`. SHA-512 registry integrity matched; fresh isolated registry installation found the correct manifests and canonical Skill in both packages.
-- **Unresolved npm tag exception:** the first public versions also received `latest` despite the explicit beta tag. Both standard `npm dist-tag rm <package> latest` operations completed operator two-factor authentication but the registry rejected deletion with HTTP 400. Current public tags are `beta` and `latest`, both pointing to beta.16. No explicit latest-promotion command was executed, but the requested beta-only public state is **not achieved**. The same first-publication behavior is reported in [npm/cli #8490](https://github.com/npm/cli/issues/8490). No dummy stable version, destructive unpublish, credential workaround or altered artifact was introduced.
+- **Historical npm tag exception:** the first public versions received `latest` despite the explicit beta tag. Authenticated deletion returned HTTP 400, as also reported in [npm/cli #8490](https://github.com/npm/cli/issues/8490). The user later authorized keeping `latest`; the beta-only gate is superseded. Both tags still point to the same reviewed beta.16 bytes. No dummy stable version, unpublish or artifact rewrite was introduced.
 - [OpenCode Ecosystem PR #54271](https://github.com/anomalyco/opencode/pull/54271) added one row with all other document bytes preserved. Automated checks passed; the upstream bot closed it because the v1 `dev` branch accepts only critical fixes. The description was corrected to the required template and a supported official listing route was requested. This is **closed without merge**, not submitted-and-waiting or a completed listing. The accepted package targets 1.18.32/1.18.35; `@opencode/cli` v2 compatibility is untested and not claimed.
 - [ClawHub package page](https://clawhub.ai/guilduo/plugins/openclaw-plugin) returned HTTP 200 with the Guilduo title and package identity. Owner is `guilduo`; publication receipt is `published` for beta.16, source-linked to the merged commit. Public CLI download verified the original SHA-256/integrity; fresh native installation, runtime import, Skill discovery and removal passed on the pinned host. This is a community package on the official registry, not an OpenClaw endorsement.
 - **Unresolved ClawHub discovery gate:** selected beta.16 verification and LLM verdict are clean/benign, while package-level metadata still reports pending with no default latest release, and public `package explore guilduo --family code-plugin` returns no results. Static scanning flags the disclosed `child_process` native CLI call in `setup.mjs`; no hidden persistence was reported by the LLM scan. Version publication/download success does not establish aggregate scan, default search visibility or completed official listing. No latest tag was added to ClawHub to bypass this boundary.

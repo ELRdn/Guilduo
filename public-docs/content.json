@@ -1,5 +1,5 @@
 {
-  "sourceRevision": "5125178d48e94be8d8a16d401fd992da5d8a2b5d",
+  "sourceRevision": "60df808c2e4f39b287093240c33d1f7d1d7aedd5",
   "ja": [
     {
       "slug": "",
@@ -13,7 +13,7 @@
           "title": "目的からガイドを選ぶ",
           "bullets": [
             "初めて使う：はじめにでログインと最初のQuestを確認し、Questガイドで予定・完了・保管を学びます。",
-            "AIを接続する：MCP接続を読み、CodexまたはClaudeへ進みます。接続後はAgentリンクと権限を確認します。",
+            "AIを接続する：MCP接続を読み、Codex・Claude・DeepSeek Harness・OpenCode・OpenClawの導入記事へ進みます。接続後はAgentリンクと権限を確認します。",
             "仕事を受け渡す：Agentsで担当とHandoffを設定し、Human Relayで確認依頼・回答・再開を学びます。",
             "失敗を解決する：トラブルシューティングで症状を切り分け、権限とAPIで必要な契約を確認します。"
           ]
@@ -79,7 +79,10 @@
         "mcp-connection",
         "quests",
         "human-relay",
-        "faq"
+        "faq",
+        "dsh",
+        "opencode",
+        "openclaw"
       ],
       "sources": [
         {
@@ -101,6 +104,18 @@
         {
           "path": "skills/questforge-workflows/SKILL.md",
           "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "plugins/guilduo-dsh/README.md",
+          "label": "plugins/guilduo-dsh/README.md"
+        },
+        {
+          "path": "plugins/guilduo-opencode/README.md",
+          "label": "plugins/guilduo-opencode/README.md"
+        },
+        {
+          "path": "plugins/guilduo-openclaw/README.md",
+          "label": "plugins/guilduo-openclaw/README.md"
         }
       ],
       "navTitle": "Guilduo Docsの概要"
@@ -197,7 +212,8 @@
           "bullets": [
             "クライアントがRemote HTTP MCPとOAuthに対応していることを確認します。設定名や利用条件はクライアントの版によって異なります。",
             "Web Appで作業用アカウントにログインし、Questを読めることを確認します。",
-            "担当AIを使うならPartyでAgentを登録し、表示名とは別のAgent IDを確認します。"
+            "担当AIを使うならPartyでAgentを登録し、表示名とは別のAgent IDを確認します。",
+            "DSH・OpenCode・OpenClawのプラグイン導入は、関連記事のホスト別手順を使います。検証版、標準OAuth、停止・切断・削除を各記事で確認できます。"
           ]
         },
         {
@@ -285,7 +301,10 @@
         "claude",
         "agents",
         "permissions",
-        "troubleshooting"
+        "troubleshooting",
+        "dsh",
+        "opencode",
+        "openclaw"
       ],
       "sources": [
         {
@@ -307,6 +326,18 @@
         {
           "path": "api/mcp-tools.json",
           "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "plugins/guilduo-dsh/README.md",
+          "label": "plugins/guilduo-dsh/README.md"
+        },
+        {
+          "path": "plugins/guilduo-opencode/README.md",
+          "label": "plugins/guilduo-opencode/README.md"
+        },
+        {
+          "path": "plugins/guilduo-openclaw/README.md",
+          "label": "plugins/guilduo-openclaw/README.md"
         }
       ],
       "navTitle": "MCPを接続する"
@@ -492,6 +523,422 @@
         }
       ],
       "navTitle": "Claudeとの連携"
+    },
+    {
+      "slug": "dsh",
+      "group": "integrations",
+      "title": "DeepSeek HarnessでGuilduoを使う",
+      "navTitle": "DeepSeek Harness",
+      "description": "DSHのGuilduoプラグインを導入し、設定からOAuth接続する手順。Windows対応版、Agent権限、更新、停止、切断・削除を案内します。",
+      "lead": "DeepSeek Harness（DSH）にGuilduo設定、OAuth対応MCPツール、guilduo-workflows Skillを追加します。npmのlatestを推奨導入タグとし、同じ配布物を再現する場合は0.6.0-beta.17を指定します。beta版として提供しています。",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "必要な環境",
+          "bullets": [
+            "Windowsで検証したホストはDSH 0.2.0-rc.2、Cordis 4.0.4、MCP client 2.0.0です。他OS・別ホスト版の互換性は未受入です。",
+            "導入済みのWebプロファイルまたはDesktopアプリと、Guilduoアカウントを用意します。Webはホストと同じPCのlocalhost／数値loopbackで開きます。",
+            "利用者によるソースcheckout・ビルド・トークンの貼り付けは不要です。インストールやロードだけではOAuthやモデル実行は始まりません。"
+          ]
+        },
+        {
+          "id": "install",
+          "title": "標準コマンドで導入する",
+          "paragraphs": [
+            "同じDSH_HOMEを使うWeb／Desktopホストを停止してから導入・更新します。webは自分の既存Webプロファイル名に置き換えてください。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "dsh plugin --profile web add @guilduo/dsh-oauth-poc@latest --ignore-scripts"
+          },
+          "steps": [
+            "Desktopではnative plugin managerで同じパッケージを追加します。検証対象の固定版は0.6.0-beta.17です。CLIで予約済みdesktopプロファイルを管理しません。",
+            "共有に参加する各プロファイルへ導入し、ホストを再起動してブラウザーを再読込します。標準bundleに手動Cordis overlayを重ねて登録しません。"
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "設定からブラウザー認証する",
+          "steps": [
+            "通常会話で設定 → Guilduoを開き、接続 → ブラウザーで認証を選びます。",
+            "Web Appと同じアカウントでOAuthを許可し、元の会話と設定画面を接続済みになるまで開いておきます。接続先はhttps://mcp.guilduo.com/mcpです。",
+            "旧版の有効な認証がこの会話のみと表示される場合、元の会話で全会話で使うを一度選びます。消失した認証は明示的に接続し直します。"
+          ],
+          "paragraphs": [
+            "新しい認証は同じWindowsユーザー・DSH_HOMEの対象通常会話、新規会話とトップレベルfork、更新済みWeb／Desktopで共有します。subagent・子Agent・独立seeded会話は対象外です。資格情報はnative CredentialsのCurrentUser DPAPIで保存します。"
+          ]
+        },
+        {
+          "id": "agent-and-permissions",
+          "title": "Agentと作業権限を確認する",
+          "steps": [
+            "最初にget_agent_linkを読み、接続が意図した既存のRegistry Agentに紐付いているか確認します。必要ならlist_registered_agentsで既存の許可済みAgentを調べます。表示名やクライアント名からIDを推測しません。",
+            "未リンクの専用接続では、所有者の明示的な許可を得てlink_agentに既存AgentのagentIdを渡します。正しいリンクは維持します。共有接続を別Agentへ切り替えるためにlink_agentを使いません。",
+            "get_current_agent_contextと対象のget_questを読み、返ったAgent IDとQuest IDを確認します。requiresAgentSelectionがtrueなら、allowedAgentIdsから所有者が許可したactingAgentIdを選び、プレビュー・読み取り・書き込みの各呼び出しで保持します。",
+            "更新するQuestと許可する変更を明示してから作業します。対応ツールではdryRunでプレビューし、update_questでは最新のexpectedUpdatedAtを使って狭い変更を送り、再読で保存を確認します。update_questにdryRunは送りません。"
+          ],
+          "paragraphs": [
+            "Freeの上限は2登録Agentです。導入・OAuth・AgentリンクはAgent自動登録やQuest継続更新の許可ではありません。guilduo-workflows Skillは許可範囲での作業を案内し、完了・承認・報酬を自動許可しません。接続管理のOAuth権限とAgentの実行scopeは別で、実行権限を広げてリンクエラーを解消しないでください。"
+          ]
+        },
+        {
+          "id": "read-only-check",
+          "title": "最初は読み取りで接続を確認する",
+          "code": {
+            "language": "text",
+            "text": "Guilduo MCPを読み取り専用で確認してください。\nget_agent_linkを確認し、既知の許可済みAgentを使ってget_current_agent_contextと対象get_questを読み、IDが一致することを確認してください。\n共有接続でAgent選択が必要ならactingAgentIdを各呼び出しで保持してください。\n作成・更新・削除はしないでください。資格情報や非公開Quest本文は表示しないでください。"
+          },
+          "paragraphs": [
+            "DSH実行時のAgent IDとGuilduo Registry Agent IDは別です。会話やホストごとに新しいRegistry Agentを登録する必要はありません。"
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "更新と作業停止",
+          "paragraphs": [
+            "更新時は参加する全ホストを停止し、導入時のaddコマンドを再実行して再起動・再読込します。版を固定する場合は@latestを@0.6.0-beta.17へ置き換えます。更新後に設定と読み取りを確認してください。",
+            "作業中のモデルはDSHの標準停止操作で止めます。Guilduoの継続更新許可を取り消す場合は、その作業を担当するAgentにも明示します。この版にStopフックやフェーズ終了ごとの更新保証はありません。"
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "切断・削除する",
+          "steps": [
+            "先に設定 → Guilduo → 切断を選びます。共有切断は同じDSH_HOMEの対象会話・Web／Desktop全体に効きます。切断失敗時は保存認証の除去が未確認なので、保護・保存領域が復旧してから元の会話で再試行します。",
+            "サーバー側の認可失効はhttps://app.guilduo.com/の接続設定で別途行います。ホストを停止してからWebのremoveコマンドを実行し、Desktopはnative plugin managerで削除します。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "dsh plugin --profile web remove @guilduo/dsh-oauth-poc"
+          },
+          "paragraphs": [
+            "プラグインのunload・削除だけではログアウトになりません。旧版の未共有会話を消す場合も、その会話で先に切断してください。"
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "検証範囲と問い合わせ",
+          "paragraphs": [
+            "beta.17は公開済みの保守更新で、ローカル・native合成検査を通過しています。公開OAuth・基本MCP読み書き・Desktop再起動後の保存認証再利用はbeta.16での本人確認記録です。beta.17の新たな公開実環境受入と同一視しません。",
+            "beta.17の公開Human回答→再開とAgent-specific Handoff、設定を開かない初回入力／新規／fork利用は未受入です。必要な運用を小さなQuestで確認してから広げてください。",
+            "問題報告にはホスト・プラグイン版、Web／Desktopの別、再現手順を含めます。トークン、callback URL、資格情報ファイル、非公開の会話やQuest本文は含めません。記事の出典から現行statusとREADMEを確認できます。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "permissions",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "plugins/guilduo-dsh/README.md",
+          "label": "plugins/guilduo-dsh/README.md"
+        },
+        {
+          "path": "docs/guilduo-dsh-status.md",
+          "label": "docs/guilduo-dsh-status.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ]
+    },
+    {
+      "slug": "opencode",
+      "group": "integrations",
+      "title": "OpenCodeでGuilduoを使う",
+      "navTitle": "OpenCode",
+      "description": "OpenCodeにGuilduoのSkillとOAuth MCPを追加する手順。Windows検証版、Agentリンク、任意のphaseSync、更新、停止・切断・削除を解説します。",
+      "lead": "opencode.jsonに公開npmプラグインを追加し、OpenCode標準OAuthでGuilduoへ接続します。推奨導入タグはlatest、検証したプラグイン版は0.6.0-beta.16です。guilduo-workflows Skillと作業ガイダンスを追加します。",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "必要な環境",
+          "bullets": [
+            "WindowsのOpenCode 1.18.32／1.18.35で検証しています。OpenCode v2の互換性は未検証です。",
+            "認証・資格情報の保存はOpenCodeが担当します。プラグイン独自の資格情報保存やトークンbridgeはありません。",
+            "通常導入で追加のモデル継続は始まりません。phaseSyncは初期状態でOFFです。"
+          ]
+        },
+        {
+          "id": "install",
+          "title": "opencode.jsonへ追加する",
+          "paragraphs": [
+            "プロジェクトの既存plugin配列に次の項目を追加し、他の設定・プラグインを保持します。導入変更前に、その設定を使うOpenCodeプロセスを終了してください。"
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"plugin\": [\n    \"@guilduo/opencode-plugin@latest\"\n  ]\n}"
+          },
+          "steps": [
+            "再起動するとコンパイル済みコードとSkillを読み込みます。利用者によるビルドは不要です。固定版なら@latestを@0.6.0-beta.16へ置き換えます。",
+            "既存の公式endpoint別名、無効化設定、占有済みguilduoキーは保持します。別endpointとの競合は自分のMCP設定で解消してください。"
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "OpenCode標準OAuthで認証する",
+          "code": {
+            "language": "powershell",
+            "text": "opencode mcp list\nopencode mcp auth guilduo\nopencode mcp auth list"
+          },
+          "paragraphs": [
+            "接続先はhttps://mcp.guilduo.com/mcpです。既存の別名がある場合、コマンドのguilduoをその別名へ置き換えます。ブラウザーで同じGuilduoアカウントを許可し、ホストへ戻ります。callbackや認証ファイルを会話へ貼り付けません。"
+          ]
+        },
+        {
+          "id": "agent-and-permissions",
+          "title": "Agentと作業権限を確認する",
+          "steps": [
+            "最初にget_agent_linkを読み、接続が意図した既存のRegistry Agentに紐付いているか確認します。必要ならlist_registered_agentsで既存の許可済みAgentを調べます。表示名やクライアント名からIDを推測しません。",
+            "未リンクの専用接続では、所有者の明示的な許可を得てlink_agentに既存AgentのagentIdを渡します。正しいリンクは維持します。共有接続を別Agentへ切り替えるためにlink_agentを使いません。",
+            "get_current_agent_contextと対象のget_questを読み、返ったAgent IDとQuest IDを確認します。requiresAgentSelectionがtrueなら、allowedAgentIdsから所有者が許可したactingAgentIdを選び、プレビュー・読み取り・書き込みの各呼び出しで保持します。",
+            "更新するQuestと許可する変更を明示してから作業します。対応ツールではdryRunでプレビューし、update_questでは最新のexpectedUpdatedAtを使って狭い変更を送り、再読で保存を確認します。update_questにdryRunは送りません。"
+          ],
+          "paragraphs": [
+            "Freeの上限は2登録Agentです。導入・OAuth・AgentリンクはAgent自動登録やQuest継続更新の許可ではありません。guilduo-workflows Skillは許可範囲での作業を案内し、完了・承認・報酬を自動許可しません。接続管理のOAuth権限とAgentの実行scopeは別で、実行権限を広げてリンクエラーを解消しないでください。"
+          ]
+        },
+        {
+          "id": "verify",
+          "title": "読み込みと接続を確認する",
+          "code": {
+            "language": "powershell",
+            "text": "opencode --version\nopencode debug skill\nopencode mcp list\nopencode mcp auth list"
+          },
+          "paragraphs": [
+            "--versionはホスト版です。Skill一覧にguilduo-workflowsがあり、MCPの接続状態が正しいことを確認します。その後、対象Agentのcontextと正確なQuestを実際に読みます。認証済み表示やツール発見だけでは読み書きの成功を証明しません。"
+          ]
+        },
+        {
+          "id": "optional-phase-sync",
+          "title": "任意：特定会話のphaseSyncを有効にする",
+          "paragraphs": [
+            "継続更新を許可済みのQuest／Agentに限って使います。新しいプロジェクトではまずOFFのままnative sessionを作成し、OpenCodeを完全終了してから、その既存session IDとホストが解決した正確なcwdを設定して再起動します。下記プレースホルダーは実値へ置き換えてください。"
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"plugin\": [\n    [\n      \"@guilduo/opencode-plugin@latest\",\n      {\n        \"phaseSync\": {\n          \"sessionId\": \"ses-your-existing-session\",\n          \"questId\": \"your-quest-id\",\n          \"actingAgentId\": \"your-allowed-agent-id\",\n          \"cwd\": \"D:\\\\your-project\"\n        }\n      }\n    ]\n  ]\n}"
+          },
+          "bullets": [
+            "一致するbuild sessionの完了stop応答とidle後、元のユーザー入力ごとに最大1回の追加モデル確認を行います。provider料金が発生し得ます。MCPへ直接書き込む機能ではありません。",
+            "cwdの大文字小文字を含む正確なbindingが必要です。新規会話・forkへbindingをコピーしません。Plan／読み取り専用、エラー、compaction、不一致、無効MCPでは継続しません。失敗・不明な送信を自動再試行しません。"
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "更新・停止する",
+          "paragraphs": [
+            "更新時はOpenCodeを終了し、互換性とリリース内容を確認してplugin項目をlatestまたは確認した固定版にします。他の設定を保持して再起動し、Skill・接続・読み取りを再確認します。",
+            "現在の推論はOpenCode標準interrupt／abortで止めます。phaseSyncを永続的に止めるには終了後に設定を削除またはfalseにして再起動します。",
+            "bindingと未使用のコマンド名がある場合、/guilduo-sync-offでその会話のbindingを次のplugin reloadまで解除できます。別会話には効きません。slash commandはプロンプトを送るため、推論abortや無課金停止の保証ではありません。継続更新の許可とOAuthは別途取り消します。"
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "切断・削除する",
+          "code": {
+            "language": "powershell",
+            "text": "opencode mcp logout guilduo\nopencode mcp auth list"
+          },
+          "steps": [
+            "自分の別名でlogoutし、phaseSyncを無効化します。再接続を止める場合は公式MCP entryをenabled: falseで明示的に残します。entryを消すだけではplugin reload時に既定接続が追加されます。",
+            "サーバー側の認可はhttps://app.guilduo.com/の接続管理で別途失効させます。",
+            "OpenCodeを終了し、opencode.jsonからこのpluginの文字列／tupleだけを削除します。個別loaderがあればそれも外します。再起動後、Skillとplugin所有commandが消えたことを確認します。"
+          ],
+          "paragraphs": [
+            "npm形式の設定はホストが管理します。明示MCP設定とnative認証はplugin削除だけでは消えません。ローカルarchiveを専用.opencode/guilduoへ導入した場合だけ、その専用prefixから削除します。共有.opencodeでnpm uninstallを実行して他パッケージを巻き込まないでください。"
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "検証範囲と公式掲載",
+          "paragraphs": [
+            "Windows 1.18.35では公開OAuth、専用リンク済みAgent／Questの読み取り、限定・version guard付き更新と再読、Human保存回答→同じGo会話での再開、QA 401を契機にした公開refresh、失効・再接続の受入記録があります。phaseSyncの実モデル検査は両ホスト版の合成loopback MCPを使用し、公開phaseSyncの受入とは別です。",
+            "OpenCode Ecosystem PR #54271はv1のcritical-fixes-only方針によりclosed・未mergeです。OpenCode公式一覧への掲載は完了していません。共有接続でのcross-Agent選択は未受入です。これらは公開npmからの導入手順と分けて扱います。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "permissions",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "plugins/guilduo-opencode/README.md",
+          "label": "plugins/guilduo-opencode/README.md"
+        },
+        {
+          "path": "docs/guilduo-host-extensions-status.md",
+          "label": "docs/guilduo-host-extensions-status.md"
+        },
+        {
+          "path": "docs/guilduo-opencode-native-evidence.md",
+          "label": "docs/guilduo-opencode-native-evidence.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ]
+    },
+    {
+      "slug": "openclaw",
+      "group": "integrations",
+      "title": "OpenClawでGuilduoを使う",
+      "navTitle": "OpenClaw",
+      "description": "OpenClaw標準プラグイン導入とMCP OAuthの設定手順。Windows検証版、Accounts表示、Agent権限、更新、停止・切断・削除を案内します。",
+      "lead": "OpenClawにguilduo-workflows SkillとOAuth MCP宣言を追加します。推奨導入タグはnpmのlatest、検証したプラグイン版は0.6.0-beta.16です。保存済みMCP設定と認証はOpenClawが管理します。",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "必要な環境",
+          "bullets": [
+            "WindowsのOpenClaw 2026.9.9で検証しています。Nodeはそのホストに合わせて>=24.16.0 <25または>=26.1.0を使います。",
+            "対象は個人または管理者が運用するインスタンスのshared operator OAuthです。複数人channelのrequester別権限は未受入で、OpenClaw native権限が優先します。",
+            "プラグイン導入でモデル実行は始まりません。独自のフェーズ継続フックや自動Quest更新は追加しません。"
+          ]
+        },
+        {
+          "id": "install",
+          "title": "公開npmから導入する",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw plugins install npm:@guilduo/openclaw-plugin@latest --pin"
+          },
+          "paragraphs": [
+            "--pinで解決した版を保持します。検証版を再現する場合は@latestを@0.6.0-beta.16へ置き換えます。利用者によるビルドやinstall hookは不要です。"
+          ],
+          "steps": [
+            "先にSettings → MCPで既存Guilduoの別名、有効状態、filtersを確認し、保存設定を保持します。manifest宣言だけでは保存済みmcp.servers entryは作られません。",
+            "未設定の場合だけ次のMCP追加コマンドを実行します。同名guilduoが別endpointを指す場合はSettingsで明示的に解消してください。既存別名を重複登録しません。"
+          ]
+        },
+        {
+          "id": "configure-mcp",
+          "title": "未設定のMCPを追加する",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw mcp add guilduo --url https://mcp.guilduo.com/mcp --transport streamable-http --auth oauth --no-probe"
+          },
+          "paragraphs": [
+            "pluginのAccounts表示には、active宣言と保存設定のname=guilduo、公式URL、transport=streamable-http、shared auth=oauthが一致する必要があります。別名の接続はSettings／CLIから利用できます。無効化・per-requester OAuth・auth-profile設定は保持してください。"
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "標準UIまたはCLIで認証する",
+          "steps": [
+            "管理者Control UIのSettings → MCPで接続を選び、Sign inからブラウザー認証します。名前が一致する場合はpluginのAccounts → Connectも使えます。Connectedはそのoperator接続の保存認証を表します。",
+            "UIで認証できない場合はCLIのmcp loginを使い、表示されたURLを同じPCのブラウザーで開きます。callbackに到達できなければ、CLIが案内する--codeのfallbackを端末内だけで使います。認証コードをAgent会話へ渡しません。",
+            "CLI設定が稼働Gatewayへ反映されない場合はGatewayを再起動するか標準の設定反映操作を行います。mcp reloadは現在のCLIプロセスだけに作用します。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "openclaw mcp login guilduo"
+          }
+        },
+        {
+          "id": "agent-and-permissions",
+          "title": "Agentと作業権限を確認する",
+          "steps": [
+            "最初にget_agent_linkを読み、接続が意図した既存のRegistry Agentに紐付いているか確認します。必要ならlist_registered_agentsで既存の許可済みAgentを調べます。表示名やクライアント名からIDを推測しません。",
+            "未リンクの専用接続では、所有者の明示的な許可を得てlink_agentに既存AgentのagentIdを渡します。正しいリンクは維持します。共有接続を別Agentへ切り替えるためにlink_agentを使いません。",
+            "get_current_agent_contextと対象のget_questを読み、返ったAgent IDとQuest IDを確認します。requiresAgentSelectionがtrueなら、allowedAgentIdsから所有者が許可したactingAgentIdを選び、プレビュー・読み取り・書き込みの各呼び出しで保持します。",
+            "更新するQuestと許可する変更を明示してから作業します。対応ツールではdryRunでプレビューし、update_questでは最新のexpectedUpdatedAtを使って狭い変更を送り、再読で保存を確認します。update_questにdryRunは送りません。"
+          ],
+          "paragraphs": [
+            "Freeの上限は2登録Agentです。導入・OAuth・AgentリンクはAgent自動登録やQuest継続更新の許可ではありません。guilduo-workflows Skillは許可範囲での作業を案内し、完了・承認・報酬を自動許可しません。接続管理のOAuth権限とAgentの実行scopeは別で、実行権限を広げてリンクエラーを解消しないでください。"
+          ]
+        },
+        {
+          "id": "verify",
+          "title": "実接続を確認する",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw plugins inspect guilduo --runtime --json\nopenclaw mcp status --verbose\nopenclaw mcp doctor guilduo --probe"
+          },
+          "paragraphs": [
+            "コマンドには既存のMCP別名を使います。保存認証の存在、plugin有効状態、実接続・ツール発見は別です。probe後にAgent contextと正確なQuestを読み、必要なHumanツールも実際のカタログで確認してください。"
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "更新と一時停止",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw plugins update @guilduo/openclaw-plugin@0.6.0-beta.16"
+          },
+          "paragraphs": [
+            "npm導入の更新は、上の版を確認済みの新しい版へ置き換えて実行し、Gatewayを再起動して読み込みを確認します。互換性やinstall policyの失敗をforceで無視しません。",
+            "モデル作業はOpenClaw標準停止操作で止め、継続更新の許可もAgentへ明示的に取り消します。MCPを一時停止するにはSettings → MCPでserverを無効化し、稼働Gatewayへ反映します。停止・OAuth失効・plugin削除は別の操作です。"
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "切断・削除する",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw mcp logout guilduo\nopenclaw mcp unset guilduo\nopenclaw plugins uninstall guilduo"
+          },
+          "paragraphs": [
+            "自分のMCP別名でlogoutしてホスト保存認証を消し、unsetで保存serverを削除し、pluginをuninstallしてSkillを外します。Gatewayを再起動します。plugin削除だけでは明示MCP設定が残り、再接続し得ます。",
+            "サーバー側の認可失効はhttps://app.guilduo.com/の接続設定で別途行います。他の別名、plugin、データは保持してください。"
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "検証範囲とClawHub",
+          "paragraphs": [
+            "検証ホストでは公開OAuth、専用リンク済みAgent／Questの読み取り、限定更新と再読、Human保存回答→native Agent再開、QA expiry操作を契機にした公開refresh、失効・再接続の受入記録があります。複数人channelや共有接続のcross-Agent選択は保証しません。",
+            "ClawHubのGuilduo公開pageと配布物取得・native導入は確認済みです。集約scan・標準検索での発見は未完了です。公式registryのcommunity package公開はOpenClawによるendorsementを意味しません。通常導入は上のnpmコマンドを使えます。"
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "permissions",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "plugins/guilduo-openclaw/README.md",
+          "label": "plugins/guilduo-openclaw/README.md"
+        },
+        {
+          "path": "docs/guilduo-host-extensions-status.md",
+          "label": "docs/guilduo-host-extensions-status.md"
+        },
+        {
+          "path": "docs/guilduo-openclaw-native-evidence.md",
+          "label": "docs/guilduo-openclaw-native-evidence.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ]
     },
     {
       "slug": "quests",
@@ -1419,7 +1866,7 @@
           "title": "Choose a guide for your goal",
           "bullets": [
             "New to Guilduo: use Getting started for sign-in and your first Quest, then Quests for planning, completion and archiving.",
-            "Connect an AI client: start with MCP connection, then Codex or Claude. Verify the linked Agent and permissions afterward.",
+            "Connect your AI: read the MCP guide, then choose Codex, Claude, DeepSeek Harness, OpenCode or OpenClaw. Check Agent linking and permissions after connecting.",
             "Delegate work: use Agents for assignment and Handoff, then Human Relay for review requests, saved answers and resumption.",
             "Resolve an error: isolate the symptom with Troubleshooting, then check the relevant Permissions and API contracts."
           ]
@@ -1485,7 +1932,10 @@
         "mcp-connection",
         "quests",
         "human-relay",
-        "faq"
+        "faq",
+        "dsh",
+        "opencode",
+        "openclaw"
       ],
       "sources": [
         {
@@ -1507,6 +1957,18 @@
         {
           "path": "skills/questforge-workflows/SKILL.md",
           "label": "skills/questforge-workflows/SKILL.md"
+        },
+        {
+          "path": "plugins/guilduo-dsh/README.md",
+          "label": "plugins/guilduo-dsh/README.md"
+        },
+        {
+          "path": "plugins/guilduo-opencode/README.md",
+          "label": "plugins/guilduo-opencode/README.md"
+        },
+        {
+          "path": "plugins/guilduo-openclaw/README.md",
+          "label": "plugins/guilduo-openclaw/README.md"
         }
       ],
       "navTitle": "Guilduo Docs overview"
@@ -1603,7 +2065,8 @@
           "bullets": [
             "Check that your client supports Remote HTTP MCP and OAuth. Setting names and availability depend on the client version.",
             "Sign in to your working account in the Web App and verify that you can read Quests.",
-            "Register an Agent in Party for delegated work and check its Agent ID, which differs from its display name."
+            "Register an Agent in Party for delegated work and check its Agent ID, which differs from its display name.",
+            "For DSH, OpenCode and OpenClaw plugins, use the related host guide for tested versions, native OAuth, stopping, disconnecting and removal."
           ]
         },
         {
@@ -1691,7 +2154,10 @@
         "claude",
         "agents",
         "permissions",
-        "troubleshooting"
+        "troubleshooting",
+        "dsh",
+        "opencode",
+        "openclaw"
       ],
       "sources": [
         {
@@ -1713,6 +2179,18 @@
         {
           "path": "api/mcp-tools.json",
           "label": "api/mcp-tools.json"
+        },
+        {
+          "path": "plugins/guilduo-dsh/README.md",
+          "label": "plugins/guilduo-dsh/README.md"
+        },
+        {
+          "path": "plugins/guilduo-opencode/README.md",
+          "label": "plugins/guilduo-opencode/README.md"
+        },
+        {
+          "path": "plugins/guilduo-openclaw/README.md",
+          "label": "plugins/guilduo-openclaw/README.md"
         }
       ],
       "navTitle": "Connect with MCP"
@@ -1898,6 +2376,422 @@
         }
       ],
       "navTitle": "Connect Claude"
+    },
+    {
+      "slug": "dsh",
+      "group": "integrations",
+      "title": "Use Guilduo with DeepSeek Harness",
+      "navTitle": "DeepSeek Harness",
+      "description": "Install the DSH Guilduo plugin and connect through Settings with OAuth. Covers tested Windows versions, Agent permission, updates, stopping, disconnecting and removal.",
+      "lead": "Add Guilduo Settings, OAuth-backed MCP tools and the guilduo-workflows Skill to DeepSeek Harness (DSH). Use latest for normal installation, or pin 0.6.0-beta.17 to reproduce the reviewed release. This is a beta release.",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "Requirements",
+          "bullets": [
+            "Tested on Windows with DSH 0.2.0-rc.2, Cordis 4.0.4 and MCP client 2.0.0. Other operating systems and host versions are outside the accepted evidence.",
+            "Have an existing Web profile or Desktop app and a Guilduo account. Open the Web host on the same computer through localhost or numeric loopback.",
+            "No source checkout, build or pasted token is needed. Installing or loading the plugin starts neither OAuth nor model inference."
+          ]
+        },
+        {
+          "id": "install",
+          "title": "Install through the standard host command",
+          "paragraphs": [
+            "Stop Web and Desktop hosts sharing the same DSH_HOME before installing or updating. Replace web with your existing Web profile name."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "dsh plugin --profile web add @guilduo/dsh-oauth-poc@latest --ignore-scripts"
+          },
+          "steps": [
+            "For Desktop, add the same package through its native plugin manager. The tested fixed version is 0.6.0-beta.17. The CLI cannot manage the reserved desktop profile.",
+            "Install in each participating profile, restart the host and reload the browser. Use standard bundle activation without a second manual Cordis overlay."
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "Sign in from Settings",
+          "steps": [
+            "In an ordinary conversation, open Settings → Guilduo and choose 接続 → ブラウザーで認証.",
+            "Approve OAuth with the same account as the Web App. Keep the original conversation and Settings open until 接続済み. The endpoint is https://mcp.guilduo.com/mcp.",
+            "For an older valid grant shown as この会話のみ, choose 全会話で使う once in its original conversation. A missing grant requires explicit sign-in again."
+          ],
+          "paragraphs": [
+            "New authentication is shared across eligible ordinary/new conversations, top-level forks and updated Web/Desktop profiles for the same Windows user and DSH_HOME. Subagents, children and independently seeded sessions are excluded. Native Credentials stores the grant with CurrentUser DPAPI."
+          ]
+        },
+        {
+          "id": "agent-and-permissions",
+          "title": "Check the Agent and task permission",
+          "steps": [
+            "Read get_agent_link first to check the association with the intended existing Registry Agent. Use list_registered_agents to identify an existing permitted Agent if needed. Never infer IDs from display names or client names.",
+            "For an unlinked dedicated connection, obtain explicit owner approval and pass the existing Agent ID to link_agent. Preserve a correct link. Never use link_agent to switch a shared connection between Agents.",
+            "Read get_current_agent_context and the exact get_quest, and check the returned Agent and Quest IDs. When requiresAgentSelection is true, select the owner-authorized actingAgentId from allowedAgentIds and retain it on every preview, read and write call.",
+            "Authorize the exact Quest and allowed changes before working. Preview tools that support dryRun. For update_quest, send a narrow patch with fresh expectedUpdatedAt and read back the saved result; do not send dryRun to update_quest."
+          ],
+          "paragraphs": [
+            "Free allows 2 registered Agents. Installation, OAuth and Agent linking neither register an Agent automatically nor authorize continuing Quest writes. The guilduo-workflows Skill guides authorized work; it grants no completion, acceptance or reward permission. OAuth connection-management grants and Agent execution scopes are distinct. Do not broaden execution scopes to fix a linking error."
+          ]
+        },
+        {
+          "id": "read-only-check",
+          "title": "Verify the first connection with reads",
+          "code": {
+            "language": "text",
+            "text": "Check Guilduo MCP read-only.\nRead get_agent_link, then get_current_agent_context and the exact get_quest using the known permitted Agent. Verify the returned IDs.\nRetain actingAgentId on every call when the shared connection requires Agent selection.\nDo not create, update or delete anything. Do not display credentials or private Quest text."
+          },
+          "paragraphs": [
+            "A DSH runtime Agent ID differs from a Guilduo Registry Agent ID. Each conversation or host does not require a new Registry Agent."
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "Update and stop work",
+          "paragraphs": [
+            "Stop all participating hosts, repeat the add command, then restart and reload. Replace @latest with @0.6.0-beta.17 for a fixed version. Recheck Settings and the first read after updating.",
+            "Stop current inference with the standard DSH stop control. Explicitly tell the working Agent when you withdraw continuing update permission. This version installs no Stop hook and guarantees no automatic update at each phase end."
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "Disconnect and remove",
+          "steps": [
+            "Choose Settings → Guilduo → 切断 first. A shared disconnect affects eligible conversations and Web/Desktop profiles in the same DSH_HOME. If it fails, saved credential removal is unconfirmed; retry from the original conversation after protection or storage recovers.",
+            "Revoke server-side authorization separately in the connection settings at https://app.guilduo.com/. Stop the host before removing the Web plugin; use the native plugin manager for Desktop removal."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "dsh plugin --profile web remove @guilduo/dsh-oauth-poc"
+          },
+          "paragraphs": [
+            "Unloading or removing the plugin does not log out. Disconnect from an old unshared conversation before deleting that conversation as well."
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "Evidence and support",
+          "paragraphs": [
+            "Beta.17 is a published maintenance release with local and native synthetic checks. User-confirmed public OAuth, basic MCP reads/writes and saved authentication after Desktop restart belong to beta.16; they are not fresh beta.17 public acceptance.",
+            "Public Human answer → resume and Agent-specific Handoff remain unaccepted for beta.17, as do settings-free first-input/new-session/fork use. Verify your required workflow on a small Quest before expanding it.",
+            "Include the host/plugin version, Web or Desktop, and reproduction steps in a report. Exclude tokens, callback URLs, credential files, private conversations and Quest text. The article sources provide the status record and README."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "permissions",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "plugins/guilduo-dsh/README.md",
+          "label": "plugins/guilduo-dsh/README.md"
+        },
+        {
+          "path": "docs/guilduo-dsh-status.md",
+          "label": "docs/guilduo-dsh-status.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ]
+    },
+    {
+      "slug": "opencode",
+      "group": "integrations",
+      "title": "Use Guilduo with OpenCode",
+      "navTitle": "OpenCode",
+      "description": "Add the Guilduo Skill and OAuth MCP to OpenCode. Covers tested Windows versions, Agent linking, optional phaseSync, updates, stopping, disconnecting and removal.",
+      "lead": "Add the public npm plugin to opencode.json and sign in with native OpenCode OAuth. Use latest for normal installation; the tested plugin release is 0.6.0-beta.16. It adds the guilduo-workflows Skill and workflow guidance.",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "Requirements",
+          "bullets": [
+            "Tested on Windows with OpenCode 1.18.32 and 1.18.35. OpenCode v2 compatibility is untested.",
+            "OpenCode owns authentication and credential storage. The plugin adds no credential store or token bridge.",
+            "Normal installation starts no extra model continuation. phaseSync is OFF by default."
+          ]
+        },
+        {
+          "id": "install",
+          "title": "Add the plugin to opencode.json",
+          "paragraphs": [
+            "Add this entry to your existing project plugin array, preserving other plugins and settings. Exit every OpenCode process using the configuration before changing it."
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"plugin\": [\n    \"@guilduo/opencode-plugin@latest\"\n  ]\n}"
+          },
+          "steps": [
+            "Restart to load the compiled plugin and Skill. No consumer build is needed. Replace @latest with @0.6.0-beta.16 for a fixed release.",
+            "Existing official-endpoint aliases, disabled settings and occupied guilduo keys are preserved. Resolve conflicting endpoints in your own MCP settings."
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "Use native OpenCode OAuth",
+          "code": {
+            "language": "powershell",
+            "text": "opencode mcp list\nopencode mcp auth guilduo\nopencode mcp auth list"
+          },
+          "paragraphs": [
+            "The endpoint is https://mcp.guilduo.com/mcp. Substitute your existing alias for guilduo when applicable. Approve the same Guilduo account in the browser and return to the host. Do not paste callback URLs or authentication files into chat."
+          ]
+        },
+        {
+          "id": "agent-and-permissions",
+          "title": "Check the Agent and task permission",
+          "steps": [
+            "Read get_agent_link first to check the association with the intended existing Registry Agent. Use list_registered_agents to identify an existing permitted Agent if needed. Never infer IDs from display names or client names.",
+            "For an unlinked dedicated connection, obtain explicit owner approval and pass the existing Agent ID to link_agent. Preserve a correct link. Never use link_agent to switch a shared connection between Agents.",
+            "Read get_current_agent_context and the exact get_quest, and check the returned Agent and Quest IDs. When requiresAgentSelection is true, select the owner-authorized actingAgentId from allowedAgentIds and retain it on every preview, read and write call.",
+            "Authorize the exact Quest and allowed changes before working. Preview tools that support dryRun. For update_quest, send a narrow patch with fresh expectedUpdatedAt and read back the saved result; do not send dryRun to update_quest."
+          ],
+          "paragraphs": [
+            "Free allows 2 registered Agents. Installation, OAuth and Agent linking neither register an Agent automatically nor authorize continuing Quest writes. The guilduo-workflows Skill guides authorized work; it grants no completion, acceptance or reward permission. OAuth connection-management grants and Agent execution scopes are distinct. Do not broaden execution scopes to fix a linking error."
+          ]
+        },
+        {
+          "id": "verify",
+          "title": "Check loading and connection",
+          "code": {
+            "language": "powershell",
+            "text": "opencode --version\nopencode debug skill\nopencode mcp list\nopencode mcp auth list"
+          },
+          "paragraphs": [
+            "--version reports the host version. Check that guilduo-workflows is listed and MCP has the intended connection status. Then actually read the Agent context and exact Quest. Saved authorization or tool discovery alone proves no successful read or write."
+          ]
+        },
+        {
+          "id": "optional-phase-sync",
+          "title": "Optional: enable phaseSync for one conversation",
+          "paragraphs": [
+            "Use this only for a Quest/Agent pair with continuing update permission. In a new project, create a native session with phaseSync OFF, fully exit OpenCode, then set its existing session ID and exact host-resolved cwd and restart. Replace the placeholders below with verified values."
+          ],
+          "code": {
+            "language": "json",
+            "text": "{\n  \"plugin\": [\n    [\n      \"@guilduo/opencode-plugin@latest\",\n      {\n        \"phaseSync\": {\n          \"sessionId\": \"ses-your-existing-session\",\n          \"questId\": \"your-quest-id\",\n          \"actingAgentId\": \"your-allowed-agent-id\",\n          \"cwd\": \"D:\\\\your-project\"\n        }\n      }\n    ]\n  ]\n}"
+          },
+          "bullets": [
+            "After a matching build session completes a stop response and becomes idle, it can request at most one extra model check per original user input. Provider costs may apply. It never writes MCP directly.",
+            "The exact binding includes directory casing. Do not copy it to new conversations or forks. Plan/read-only, errors, compaction, mismatches and disabled MCP suppress continuation. Failed or ambiguous delivery is not automatically retried."
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "Update and stop",
+          "paragraphs": [
+            "Exit OpenCode, review compatibility and the release, and set the plugin entry to latest or a reviewed fixed version. Preserve other settings, restart, and recheck the Skill, connection and first read.",
+            "Use native interrupt/abort to stop current inference. For a persistent phaseSync stop, exit the host, remove the option or set it to false, and restart.",
+            "When a binding and free command name exist, /guilduo-sync-off clears that conversation binding until plugin reload; it does not stop a different conversation. Slash commands submit prompts, so this does not abort inference or guarantee a cost-free stop. Withdraw task permission and OAuth separately."
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "Disconnect and remove",
+          "code": {
+            "language": "powershell",
+            "text": "opencode mcp logout guilduo\nopencode mcp auth list"
+          },
+          "steps": [
+            "Log out using your alias and disable phaseSync. To prevent reconnection, retain an explicit official MCP entry with enabled: false. Deleting the entry alone lets the plugin restore its default on reload.",
+            "Revoke server-side authorization separately through connection management at https://app.guilduo.com/.",
+            "Exit OpenCode and remove only this plugin string/tuple from opencode.json and any separately installed loader. Restart and check that the Skill and plugin-owned command disappear."
+          ],
+          "paragraphs": [
+            "The host manages the npm plugin entry. Explicit MCP settings and native authentication survive plugin removal. If you installed a local archive into dedicated .opencode/guilduo, remove it only from that dedicated prefix. Do not run npm uninstall against shared .opencode and affect other packages."
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "Accepted scope and upstream listing",
+          "paragraphs": [
+            "On Windows 1.18.35, the records cover public OAuth, dedicated linked Agent/Quest reads, narrow version-guarded updates and readback, saved Human answer → same Go session resumption, public refresh triggered by a QA 401 carrier, revocation and reconnection. Real-model phaseSync checks used synthetic loopback MCP on both tested host versions; they are separate from public phaseSync acceptance.",
+            "OpenCode Ecosystem PR #54271 was closed without merge under the v1 critical-fixes-only policy. Official OpenCode directory listing is incomplete. Cross-Agent selection on shared connections is unaccepted. These limits are separate from installing the published npm package."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "permissions",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "plugins/guilduo-opencode/README.md",
+          "label": "plugins/guilduo-opencode/README.md"
+        },
+        {
+          "path": "docs/guilduo-host-extensions-status.md",
+          "label": "docs/guilduo-host-extensions-status.md"
+        },
+        {
+          "path": "docs/guilduo-opencode-native-evidence.md",
+          "label": "docs/guilduo-opencode-native-evidence.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ]
+    },
+    {
+      "slug": "openclaw",
+      "group": "integrations",
+      "title": "Use Guilduo with OpenClaw",
+      "navTitle": "OpenClaw",
+      "description": "Install the OpenClaw plugin and configure native MCP OAuth. Covers tested Windows versions, Accounts status, Agent permission, updates, stopping, disconnecting and removal.",
+      "lead": "Add the guilduo-workflows Skill and an OAuth MCP declaration to OpenClaw. Use npm latest for normal installation; the tested plugin release is 0.6.0-beta.16. OpenClaw owns saved MCP configuration and authentication.",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "Requirements",
+          "bullets": [
+            "Tested on Windows with OpenClaw 2026.9.9. Match its Node requirement: >=24.16.0 <25 or >=26.1.0.",
+            "The scope is a personal or administrator-managed instance with shared operator OAuth. Multi-person channel requester permissions are unaccepted; native OpenClaw permissions remain authoritative.",
+            "Installation starts no model inference. The plugin adds no phase-continuation hook or automatic Quest update."
+          ]
+        },
+        {
+          "id": "install",
+          "title": "Install from public npm",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw plugins install npm:@guilduo/openclaw-plugin@latest --pin"
+          },
+          "paragraphs": [
+            "--pin retains the resolved version. Replace @latest with @0.6.0-beta.16 to reproduce the tested release. No consumer build or install hook is required."
+          ],
+          "steps": [
+            "Inspect existing Guilduo aliases, enablement and filters in Settings → MCP first and preserve them. The manifest declaration alone creates no saved mcp.servers entry.",
+            "Run the following MCP add command only when no entry exists. Explicitly resolve a guilduo name pointing to another endpoint in Settings. Do not duplicate an existing alias."
+          ]
+        },
+        {
+          "id": "configure-mcp",
+          "title": "Add MCP when absent",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw mcp add guilduo --url https://mcp.guilduo.com/mcp --transport streamable-http --auth oauth --no-probe"
+          },
+          "paragraphs": [
+            "For the plugin Accounts display, the active declaration and saved entry must match name=guilduo, the official URL, transport=streamable-http and shared auth=oauth. Alternate aliases work through Settings and CLI. Preserve disabled, per-requester OAuth and auth-profile settings."
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "Sign in with native UI or CLI",
+          "steps": [
+            "In the administrator Control UI, select the connection in Settings → MCP and use Sign in. When the name matches, plugin Accounts → Connect also works. Connected represents saved authorization for that operator connection.",
+            "If UI sign-in is unavailable, use CLI mcp login and open its printed URL in a browser on the same computer. For an unreachable callback, use the CLI-provided --code fallback locally. Never send authorization codes to agent chat.",
+            "Restart the Gateway or use its standard configuration publication flow if CLI changes have not reached the running Gateway. mcp reload affects only the current CLI process."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "openclaw mcp login guilduo"
+          }
+        },
+        {
+          "id": "agent-and-permissions",
+          "title": "Check the Agent and task permission",
+          "steps": [
+            "Read get_agent_link first to check the association with the intended existing Registry Agent. Use list_registered_agents to identify an existing permitted Agent if needed. Never infer IDs from display names or client names.",
+            "For an unlinked dedicated connection, obtain explicit owner approval and pass the existing Agent ID to link_agent. Preserve a correct link. Never use link_agent to switch a shared connection between Agents.",
+            "Read get_current_agent_context and the exact get_quest, and check the returned Agent and Quest IDs. When requiresAgentSelection is true, select the owner-authorized actingAgentId from allowedAgentIds and retain it on every preview, read and write call.",
+            "Authorize the exact Quest and allowed changes before working. Preview tools that support dryRun. For update_quest, send a narrow patch with fresh expectedUpdatedAt and read back the saved result; do not send dryRun to update_quest."
+          ],
+          "paragraphs": [
+            "Free allows 2 registered Agents. Installation, OAuth and Agent linking neither register an Agent automatically nor authorize continuing Quest writes. The guilduo-workflows Skill guides authorized work; it grants no completion, acceptance or reward permission. OAuth connection-management grants and Agent execution scopes are distinct. Do not broaden execution scopes to fix a linking error."
+          ]
+        },
+        {
+          "id": "verify",
+          "title": "Check the live connection",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw plugins inspect guilduo --runtime --json\nopenclaw mcp status --verbose\nopenclaw mcp doctor guilduo --probe"
+          },
+          "paragraphs": [
+            "Use your existing MCP alias in MCP commands. Saved authentication, plugin enablement and live connection/tool discovery are distinct. After the probe, read the Agent context and exact Quest, and check the actual catalog for required Human tools."
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "Update and pause",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw plugins update @guilduo/openclaw-plugin@0.6.0-beta.16"
+          },
+          "paragraphs": [
+            "For npm-installed updates, replace the version above with a reviewed newer release, then restart the Gateway and verify loading. Do not force past a compatibility or install-policy failure.",
+            "Stop model work through native OpenClaw controls and explicitly withdraw continuing update permission from the Agent. For a temporary MCP pause, disable the server in Settings → MCP and apply it to the running Gateway. Stopping work, revoking OAuth and removing the plugin are separate operations."
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "Disconnect and remove",
+          "code": {
+            "language": "powershell",
+            "text": "openclaw mcp logout guilduo\nopenclaw mcp unset guilduo\nopenclaw plugins uninstall guilduo"
+          },
+          "paragraphs": [
+            "Use your MCP alias to log out and clear host-saved authentication; unset removes the saved server, and plugin uninstall removes the extension and Skill. Restart the Gateway. Removing only the plugin leaves explicit MCP configuration able to reconnect.",
+            "Revoke server-side authorization separately in the connection settings at https://app.guilduo.com/. Preserve other aliases, plugins and data."
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "Accepted scope and ClawHub",
+          "paragraphs": [
+            "The tested host records cover public OAuth, dedicated linked Agent/Quest reads, narrow updates and readback, saved Human answer → native Agent resumption, public refresh triggered by QA expiry injection, revocation and reconnection. They establish no multi-person channel or cross-Agent shared-connection guarantee.",
+            "The public Guilduo ClawHub page, artifact download and native installation are confirmed. Aggregate scanning and default search discovery remain incomplete. A community package on the official registry is not OpenClaw endorsement. Use the npm command above for normal installation."
+          ]
+        }
+      ],
+      "related": [
+        "mcp-connection",
+        "agents",
+        "permissions",
+        "human-relay",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "plugins/guilduo-openclaw/README.md",
+          "label": "plugins/guilduo-openclaw/README.md"
+        },
+        {
+          "path": "docs/guilduo-host-extensions-status.md",
+          "label": "docs/guilduo-host-extensions-status.md"
+        },
+        {
+          "path": "docs/guilduo-openclaw-native-evidence.md",
+          "label": "docs/guilduo-openclaw-native-evidence.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        }
+      ]
     },
     {
       "slug": "quests",
@@ -2812,5 +3706,5 @@
       "navTitle": "API and MCP reference"
     }
   ],
-  "reviewedAt": "2026-10-05"
+  "reviewedAt": "2026-10-10"
 }

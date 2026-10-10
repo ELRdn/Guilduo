@@ -2,7 +2,7 @@
 
 [English How-to](guilduo-dsh-howto.md) · [日本語How-to](guilduo-dsh-howto.jp.md) · [Source](../plugins/guilduo-dsh/)
 
-Updated October 10, 2026. Windows / DSH **0.2.0-rc.2**. **Published maintenance beta: @guilduo/dsh-oauth-poc@0.6.0-beta.17**. npm `beta` points to beta.17; `latest` remains beta.16. Feature expansion stays paused. Use the exact beta.17 package version rather than assuming a tag promotion.
+Updated October 10, 2026. Windows / DSH **0.2.0-rc.2**. **Recommended release: @guilduo/dsh-oauth-poc@0.6.0-beta.17**. npm `latest` and `beta` both point to beta.17 after the user-authorized latest promotion. All three plugins now enter the polish phase. `latest` is the normal installation tag; it does not change the prerelease version or acceptance limits. [Official guide](https://guilduo.com/docs/en/dsh/).
 
 ## Beta.17 maintenance
 
@@ -23,7 +23,7 @@ Frozen release: **32 files**, SHA-256 `89414b1ec3d98fa5d1fa7aa3eb0180f1ed59c913b
 - Source and the three completion reviews merged in [PR #57](https://github.com/ELRdn/Guilduo/pull/57), public main commit `8cfd0fd32daa6af69c40efdefcb411882de073e6`. Final CI [38037436398](https://github.com/ELRdn/Guilduo/actions/runs/38037436398) passed, including the root suite, type/build/design and browser/isolated Worker gates.
 - Standard npm publication completed after the user's per-publication two-factor approval. No new credential bridge, Agent registration or real user profile modification was performed.
 - The public exact-version metadata and downloaded tgz match the frozen candidate byte-for-byte. All **32 public members** also match source commit `caa0dd4` and public main. Verified SHA-512 integrity: `sha512-Jg4py9D3u6HLmgJ1YvmHEje9hjVIQ5Ak7cP9DagUafilZdCb8ChFPsIJFoh2NOSvO9K9+9qmpOvl30rR45zi8A==`.
-- Registry tags verified after publication: **beta = 0.6.0-beta.17**, **latest = 0.6.0-beta.16**. Beta.16's original archive is unchanged. Its hash remains `260d257a96be09f970cf429b312915ffba1c28868a1b249614a328dc7524a513`.
+- Registry tags verified after the subsequent user-authorized promotion: **beta = latest = 0.6.0-beta.17**. The normal npm dist-tag operation completed with the user's two-factor approval. Beta.16's original archive is unchanged. Its hash remains `260d257a96be09f970cf429b312915ffba1c28868a1b249614a328dc7524a513`.
 - This closes beta.17 source and distribution gates, not the public workflow acceptance gaps below. The user's installed Web/Desktop profiles were not upgraded automatically; stop participating hosts and use the pinned beta.17 version in the standard CLI or Desktop plugin manager.
 
 ## Beta.16 historical acceptance
@@ -58,4 +58,4 @@ Beta.14's historical grant-loss cause is unproven. Beta.16 fixed unsafe lifecycl
 
 ## Documentation versus package history
 
-The published beta.16 tarball remains immutable and is retained with its original SHA-256. The beta.17 package captures the maintenance README; later status-only updates do not rewrite its bytes. A `beta` publication does not request `latest` promotion.
+The published beta.16 and beta.17 tarballs remain immutable. The beta.17 package captures the maintenance README; later guide updates and tag promotion do not rewrite its bytes. The original beta publication and the later user-authorized latest promotion are separate actions.

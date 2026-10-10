@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright-core";
-import { solutionPath, solutionSlugs } from "../public-docs/build.ts";
+import { readDocsContent, solutionPath, solutionSlugs } from "../public-docs/build.ts";
 
 const base = new URL(process.argv[2] ?? "http://127.0.0.1:4173");
 assert.ok(["http:", "https:"].includes(base.protocol) && !base.username && !base.password && base.pathname === "/", "HTTP origin required");
@@ -79,7 +79,9 @@ try {
   assert.equal(sitemap.status, 200);
   const sitemapText = await sitemap.text();
   const urls = [...sitemapText.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
-  assert.equal(urls.length, 32); assert.equal(new Set(urls).size, 32);
+  const content = readDocsContent();
+  assert.equal(urls.length, 4 + pages.length + content.ja.length + content.en.length);
+  assert.equal(new Set(urls).size, urls.length);
   for (const url of urls) {
     assert.equal(new URL(url).origin, "https://guilduo.com");
     const path = new URL(url).pathname;

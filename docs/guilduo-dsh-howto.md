@@ -20,7 +20,7 @@ dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.17 --ignore-scrip
 
 Replace `web` with your actual Web profile name. On October 10, 2026, both `@latest` and `@beta` resolve to this version; the explicit version above makes the installation reproducible. Update each participating profile before restarting its host, then reload the browser.
 
-For **Desktop**, add/update `@guilduo/dsh-oauth-poc` version `0.6.0-beta.16` in its native plugin manager. The npm DSH CLI refuses the reserved `desktop` profile. Web and Desktop have separate plugin installations. Standard bundle installation activates the plugin; do not also add a manual Cordis overlay.
+For **Desktop**, add/update `@guilduo/dsh-oauth-poc` version `0.6.0-beta.17` in its native plugin manager. The npm DSH CLI refuses the reserved `desktop` profile. Web and Desktop have separate plugin installations. Standard bundle installation activates the plugin; do not also add a manual Cordis overlay.
 
 ## 2. Connect from Settings
 
@@ -61,16 +61,16 @@ Desktop removal uses its native plugin manager. Removing the plugin alone is not
 | Browser authorization cannot return | Use a browser on the host computer via localhost/loopback; a LAN or remote browser is unsupported. Retry explicitly if the flow expires. |
 | Connected in one old conversation only | Use **全会話で使う** in that original conversation. No automatic migration searches other credentials. |
 | OAuth works but no tools appear | Check the target conversation is eligible, and use the read-only check above. If discovery fails or the catalog changes, restart the host and check Settings. |
-| Reauthorization required after an older upgrade | An erased grant cannot be recovered; connect explicitly once with beta.16. |
+| Reauthorization required after an older upgrade | An erased grant cannot be recovered; connect explicitly once with beta.17. |
 | Handoff reports a missing Agent | Check the Guilduo Registry Agent link and its allowed scopes; OAuth alone does not establish that link. |
 
 Report problems at [GitHub Issues](https://github.com/ELRdn/Guilduo/issues) with the DSH/plugin version, Web or Desktop, and reproducible steps. Exclude tokens, callback URLs, credential files and private Quest/conversation contents.
 
 ## Release status
 
-**0.6.0-beta.16** is published as both `latest` and `beta`, with public archive bytes verified. Local package, native lifecycle, synthetic OAuth/Settings and isolated CLI checks passed. On October 10, 2026, the user reported successful public OAuth, MCP discovery, real MCP reads/writes and Desktop saved authentication reuse after restart. After waiting roughly 1–2 minutes, opening Settings showed Connected without reauthorization. This does not establish whether restoration occurred before opening Settings. Settings-free first-input/new-session/fork use, guarded-update readback/conflicts, Registry Agent linking/Handoff and Human answer → resume remain pending. No Registry Agent is linked yet; beta.14's historical grant-loss cause is unproven.
+**0.6.0-beta.17** is the recommended npm release under both `latest` and `beta`, with public archive bytes verified. Its maintenance tests, native synthetic checks and isolated update/removal passed. Earlier beta.16 user acceptance covered public OAuth, MCP discovery, basic reads/writes and Desktop saved authentication reuse after restart. Beta.17's settings-free first-input/new-session/fork use, guarded-update readback/conflicts, Registry Agent linking/Handoff and Human answer → resume remain pending. A Connected display alone does not prove settings-free restoration; beta.14's historical grant-loss cause is unproven.
 
-Feature expansion remains paused; beta.17 contains only the maintenance fixes below. See the [current release/acceptance status](guilduo-dsh-status.md). GitHub source documentation is maintained; the published npm archive and its captured README are unchanged. Use the pinned beta.17 maintenance version above; do not assume a latest promotion. License: [AGPL-3.0-only](../LICENSE).
+All three plugins are entering the polish phase. Beta.17 contains the maintenance fixes below. The user authorized its `latest` promotion; the prerelease version and [acceptance limits](guilduo-dsh-status.md) remain unchanged. The [official DSH guide](https://guilduo.com/docs/en/dsh/) is the current public entry; published npm archives and their captured READMEs stay immutable. License: [AGPL-3.0-only](../LICENSE).
 
 ## beta.17 maintenance update
 

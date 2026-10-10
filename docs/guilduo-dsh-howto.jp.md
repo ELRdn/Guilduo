@@ -20,7 +20,7 @@ dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.17 --ignore-scrip
 
 `web` は実際のWebプロファイル名に置き換えてください。2026-10-10時点では `@latest`／`@beta` もこの版ですが、版指定なら同じ配布物を再現できます。共有に参加する各プロファイルを更新し、ホストを再起動してブラウザーを再読込します。
 
-**Desktop** はnative plugin managerで `@guilduo/dsh-oauth-poc` の `0.6.0-beta.16` を追加・更新します。npmのDSH CLIでは予約済みの `desktop` プロファイルを管理できません。Web／Desktopへのプラグイン導入は別々です。標準のbundle導入で有効になるため、手動Cordis overlayを重ねて登録しないでください。
+**Desktop** はnative plugin managerで `@guilduo/dsh-oauth-poc` の `0.6.0-beta.17` を追加・更新します。npmのDSH CLIでは予約済みの `desktop` プロファイルを管理できません。Web／Desktopへのプラグイン導入は別々です。標準のbundle導入で有効になるため、手動Cordis overlayを重ねて登録しないでください。
 
 ## 2. 設定から接続する
 
@@ -68,9 +68,9 @@ Desktopはnative plugin managerで削除します。プラグインの削除だ�
 
 ## 公開・検証状況
 
-**0.6.0-beta.16** はnpmの `latest`／`beta` として公開済みで、公開archiveのbyte一致を確認しています。ローカルpackage・native lifecycle・合成OAuth／Settings・隔離CLI検査が成功。2026-10-10の本人報告では実公開OAuth・ツール発見・MCP読み書きとDesktop再起動後の保存認証再利用が成功しています。起動から約1〜2分後に設定を開くと、再認証なしで接続済みでした。設定を開く前に復元が終わったかは、この観察だけでは断定できません。設定なし初回入力／新規／fork利用、限定更新のreadback・競合、Registry Agent紐付け／Handoff、Human回答→再開は未受入です。Registry Agentはまだ未紐付け。beta.14の過去の認証消失原因は未確定です。
+**0.6.0-beta.17** はnpmの `latest`／`beta` が指す推奨配布版で、公開archiveのbyte一致を確認しています。保守テスト・native合成検査・隔離更新／削除が成功。旧beta.16の本人確認では公開OAuth・ツール発見・基本読み書きとDesktop再起動後の保存認証再利用が成功しました。beta.17の設定なし初回入力／新規／fork、限定更新readback／競合、Registry Agent紐付け／Handoff、Human回答→再開は未受入です。接続済み表示だけでは設定なし復元を証明せず、beta.14の過去の認証消失原因も未確定です。
 
-追加機能の開発は停止し、下記beta.17の必要な保守修正だけを行います。[現行の公開・受入状況](guilduo-dsh-status.md)を参照してください。GitHubのsource文書は更新し、公開済みnpm archiveと当時のREADMEは保持します。beta.17は必要な保守更新です。latest昇格を前提にせず、上記の固定versionで導入してください。ライセンス：[AGPL-3.0-only](../LICENSE)。
+3プラグインはブラッシュアップ段階へ進みます。beta.17には下記の保守修正を含み、本人依頼で`latest`へ昇格しました。β版番号と[現行の検証範囲](guilduo-dsh-status.md)は維持しています。[公式DSHガイド](https://guilduo.com/docs/dsh/)を公開入口とし、公開済みnpm archiveと当時のREADMEは保持します。ライセンス：[AGPL-3.0-only](../LICENSE)。
 
 ## beta.17保守更新
 
