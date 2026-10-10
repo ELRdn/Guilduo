@@ -94,7 +94,7 @@ node plugins/guilduo-claude/tests/native-host.mjs
 node plugins/guilduo-claude/tests/native-host.mjs ELRdn/Guilduo#<branch>
 ```
 
-`native-host.mjs` installs, inspects, updates, disables, re-enables and removes the plugin in a fresh isolated `CLAUDE_CONFIG_DIR` and checks that an unrelated MCP server and setting survive. Without an argument the plugin loads in place from a local copy; with a pushed `owner/repo#branch` it is sparse-cloned from GitHub into the plugin cache and compared byte for byte with this checkout. It performs no sign-in, MCP tool call or model request (`claude mcp list` health-checks the public endpoint without credentials).
+`native-host.mjs` installs, inspects, updates, disables, re-enables and removes the plugin in a fresh isolated `CLAUDE_CONFIG_DIR` and checks that an unrelated MCP server and setting survive. Without an argument the plugin loads in place from a local copy; with a pushed `owner/repo#branch` it is sparse-cloned from GitHub into the plugin cache and compared with this checkout (line endings normalized). It performs no sign-in, MCP tool call or model request (`claude mcp list` health-checks the public endpoint without credentials).
 
 Release: after changing the canonical Skill, run `stage.mjs` and raise `version` in `.claude-plugin/plugin.json`; installed copies only update when the version changes. CI runs `package.test.mjs`, which fails if the staged Skill drifts from the canonical one.
 

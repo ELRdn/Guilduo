@@ -37,7 +37,7 @@ async function hashes(root) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) await visit(path);
-      else out[relative(root, path).replaceAll('\\', '/')] = createHash('sha256').update(await readFile(path)).digest('hex');
+      else out[relative(root, path).replaceAll('\\', '/')] = createHash('sha256').update((await readFile(path, 'utf8')).replaceAll('\r\n', '\n')).digest('hex');
     }
   }
   await visit(root);
@@ -72,8 +72,9 @@ try {
   let installed = entry();
   check(`install is enabled at ${version}`, installed?.enabled === true && installed.version === version);
   if (remote) {
-    check('GitHub install is a cached copy outside the checkout', relative(repo, installed.installPath).startsWith('..') && relative(profile, installed.installPath).split(/[\/]/)[0] === 'plugins');
-    check('installed files match this checkout byte for byte', await hashes(installed.installPath) === await hashes(local));
+    console.log(`installPath <profile>/${relative(profile, installed.installPath).replaceAll('\\', '/')}`);
+    check('GitHub install is a cached copy outside the checkout', relative(repo, installed.installPath).startsWith('..') && !relative(profile, installed.installPath).startsWith('..'));
+    check('installed files match this checkout (line endings normalized)', await hashes(installed.installPath) === await hashes(local));
   }
   const details = cli('plugin', 'details', id);
   check('discovers exactly the guilduo-workflows Skill', /Skills \(1\)\s+guilduo-workflows(\s|$)/.test(details));

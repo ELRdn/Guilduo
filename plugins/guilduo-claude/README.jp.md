@@ -94,7 +94,7 @@ node plugins/guilduo-claude/tests/native-host.mjs
 node plugins/guilduo-claude/tests/native-host.mjs ELRdn/Guilduo#<branch>
 ```
 
-`native-host.mjs`は新しい隔離`CLAUDE_CONFIG_DIR`で導入・確認・更新・停止・再開・削除を行い、無関係なMCP接続と設定が残ることを確認します。引数なしではローカルコピーからその場で読み込み、push済みの`owner/repo#branch`を渡すとGitHubからsparse cloneしてplugin cacheへ入れ、このcheckoutとバイト単位で比較します。サインイン、MCPツール呼び出し、モデル実行は行いません（`claude mcp list`は認証なしで公開endpointのhealth checkを行います）。
+`native-host.mjs`は新しい隔離`CLAUDE_CONFIG_DIR`で導入・確認・更新・停止・再開・削除を行い、無関係なMCP接続と設定が残ることを確認します。引数なしではローカルコピーからその場で読み込み、push済みの`owner/repo#branch`を渡すとGitHubからsparse cloneしてplugin cacheへ入れ、このcheckoutと比較します（改行は正規化）。サインイン、MCPツール呼び出し、モデル実行は行いません（`claude mcp list`は認証なしで公開endpointのhealth checkを行います）。
 
 リリース: 正本Skillを変更したら`stage.mjs`を実行し、`.claude-plugin/plugin.json`の`version`を上げてください。導入済みのコピーはversionが変わったときだけ更新されます。CIの`package.test.mjs`は、配布Skillが正本とずれると失敗します。
 

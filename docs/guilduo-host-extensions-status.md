@@ -87,7 +87,7 @@ Natural access-token expiry, refresh concurrency/rotation guarantees, cross-Agen
 | Host target | 2.1.286 |
 | Manifest validation (`claude plugin validate --strict`) / package test | Passed |
 | Isolated native install / Skill and MCP discovery / update command / disable / enable / uninstall / unrelated setting preservation | Passed from a local in-place marketplace (`tests/native-host.mjs`, no sign-in, MCP tool call or inference) |
-| GitHub sparse clone of the PR branch into the plugin cache / byte comparison | Pending this PR |
+| GitHub sparse clone of the PR branch into the plugin cache / content comparison | Pending this PR |
 | Version-changing update from GitHub | Not accepted (requires a published version change) |
 | Public OAuth / restart reuse / read-only MCP | Pending this PR's operator acceptance |
 | Guarded Quest update / readback / no-op / conflict reread | Not accepted |
