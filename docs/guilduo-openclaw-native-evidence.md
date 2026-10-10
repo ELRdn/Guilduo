@@ -78,6 +78,8 @@ The parent subsequently reported successful public linking of an existing permit
 
 ### Public refresh, revocation and reconnect handoff
 
+Parent completion: public Web revocation made native discovery return no server and require OAuth; explicit native logout cleared credentials, and fresh operator approval restored 56-tool discovery. Native SDK re-linking of the same permitted existing Agent and exact assigned-Quest reads passed after reconnect. Published ClawHub beta.16 download matched the frozen tgz and passed a fresh native install/runtime/Skill/removal smoke (`final-zdJSlW/receipt.json`). npm publication/bytes/install passed; the npm tag exception and ClawHub aggregate scan/search remain unresolved in [release status](guilduo-host-extensions-status.md).
+
 Read-only inspection of the pinned installed host confirms no force-refresh CLI: `dist/mcp-cli-qf1WNGc9.mjs:419` exposes non-connecting `mcp status --json`, `:450` exposes `mcp probe [name] --json`, and `:670` exposes `mcp login <name> --code`. `dist/mcp-oauth-store-BdQs9xoR.mjs:12` projects the nonsecret `authStatus.expiresAt`. `dist/mcp-oauth-BxoraIn0.mjs:221,240,268` refreshes under the native SQLite lease when expiry is within 30 seconds or the current token is rejected. An already-fresh repeated login returns authorized (`:414`), so it is not a force-refresh test.
 
 Supported natural-expiry route, run only by the parent through its existing isolated profile runner:
