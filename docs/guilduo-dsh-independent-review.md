@@ -513,6 +513,12 @@ OpenClaw no-op／stale guardは上記の親scopeで検証済み。B16-Q1は発�
 - **worker証拠・限界:** 親通知では実filesystem `--root-self-test` がnormal／root junction／base・profile link／outside profileを検査してPASS、SQL selftestもPASS。独立reviewerは指定write範囲を守り、QA scratchを作るこのfilesystem testは再実行せず、sourceとRAM guard assertionを検証した。競合するfilesystem変更やnative lease停止を保証する修正ではなく、停止／排他のpolicy前提は維持する。
 - **判定:** B16-Q1を現source上で解決。host候補に新しい未解決P1/P2所見はなし。修正helperはsource-onlyでpackageには未収録。両最終tgz hash `6fe013ae…`／`46c3fb45…` を再計算して不変を確認し、package gateは維持する。helperの修正自体はまだ `11c960e` のblobへ継承されず、親の次source反映で扱う。
 
-### 親の認可拒否通知 — logout／再OAuthは継続gate
+### 親の認可拒否・logout／再OAuth通知 — 専用fixtureでPASS
 
-公開Web operatorは切断操作について「probably disconnected」と報告し、その後、親のnative OpenCode reconnectはneeds_auth、OpenClaw probeはzero serversかつOAuth authorization requiredを返した。これは両hostが既存grantで接続できず、再認可を要求したという親の観測を支持する。独立reviewerはprivate receiptを読まず再実行していない。切断のserver内原因、全client／tokenの失効、credential削除まではこの通知から証明しない。explicit host logoutは開始通知のみで、成功・保存状態削除・ユーザーOAuth後の再接続はこの追補時点でpending。自然expiryを受入済みとはしない。
+先行通知では公開Web operatorが切断操作について「probably disconnected」と報告し、その後、親のnative OpenCode reconnectはneeds_auth、OpenClaw probeはzero serversかつOAuth authorization requiredを返した。これは両hostが既存grantで接続できず、再認可を要求したという親の観測を支持する。切断のserver内原因、全client／tokenの失効や保存byteの完全消去までは、この観測から証明しない。
+
+**親の最終live通知でlogout／新規operator OAuth／再接続を専用fixtureのscopeでPASSに更新する。** 両hostのnative logoutと新たなoperator OAuthが成功した。OpenCodeはconnectedとなり、指定native Goで所有者が承認した同じ既存Agentへの明示relink、contextのAgent一致、exact assigned Quest readに成功。OpenClawは56tool discovery・diagnosticsなしとなり、native SDKでも同じ既存Agentへの明示relink、contextとexact assigned Quest readが成功した。いずれも専用fixtureでの接続／identity回復確認で、この最終確認ではQuest writeもAgent registrationもしていない。新規接続のlinkを回復した結果であり、shared接続のglobal actor切替やcross-Agent arbitrationの受入へ拡張しない。
+
+独立reviewerは親通知と公開source文書の記録を区別し、private receipt／credential／native stateを読まず、logout／OAuth／SDK／modelを再実行していない。自然expiry、全形式の失効・concurrent refresh、複数人channelは未受入のまま。DSHの凍結runtimeと既存P2 feedbackにも変更はない。
+
+親はcandidate commit `7b421df` とpublic source PR #55を通知し、CIはrerun待ち。これは親の進行状況通知で、今回の独立reviewerがremote PR／CIを取得してPASSと判定したものではない。B16-Q1は前節の独立source／RAM検証でclose済み。package byte変更やpublication完了をこの通知から推定せず、review docの最終追補は親が後続の公開status更新へ取り込む。

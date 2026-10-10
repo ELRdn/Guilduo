@@ -122,8 +122,10 @@ This verifies real public refresh under an injected invalid-Authorization carrie
 access-token expiry and not synthetic loopback OAuth. The earlier local expiry-metadata-only
 attempt reused the still-server-valid access token, left expiry in the past, and did not demonstrate
 refresh; it is not a PASS. The parent restored the original config in `finally` and confirmed the
-owned QA helper server exited. Normal serve was restarting for actual reconnection at this update;
-that reconnect result and server-side revocation remain separate gates. No package/archive change,
+owned QA helper server exited. The parent later restored normal serve and verified connected status,
+then verified Web revocation denial, explicit native logout, fresh operator OAuth, existing-Agent linking
+and exact assigned-Quest reads through the same specified Go model. These later parent-owned results
+are recorded in the release status document. No package/archive change,
 public-profile operation or additional model run was performed by this evidence update.
 Public phaseSync, source PR, npm and Ecosystem listing remain separate parent-owned gates.
 No private profile path, real Agent/Quest/UID or OAuth credential is
