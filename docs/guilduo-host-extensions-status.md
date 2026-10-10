@@ -87,9 +87,10 @@ Natural access-token expiry, refresh concurrency/rotation guarantees, cross-Agen
 | Host target | 2.1.286 |
 | Manifest validation (`claude plugin validate --strict`) / package test | Passed |
 | Isolated native install / Skill and MCP discovery / update command / disable / enable / uninstall / unrelated setting preservation | Passed from a local in-place marketplace (`tests/native-host.mjs`, no sign-in, MCP tool call or inference) |
-| GitHub sparse clone of the PR branch into the plugin cache / content comparison | Pending this PR |
+| GitHub sparse clone of the PR branch into the plugin cache / content comparison | Passed (`tests/native-host.mjs ELRdn/Guilduo#codex/guilduo-claude-plugin`, 17 checks) |
 | Version-changing update from GitHub | Not accepted (requires a published version change) |
-| Public OAuth / restart reuse / read-only MCP | Pending this PR's operator acceptance |
+| Public OAuth (dynamic client registration, loopback callback) / reuse in a new process | Passed in an isolated profile with operator browser approval |
+| Read-only MCP tool calls / sign-out and reconnect | Pending operator acceptance |
 | Guarded Quest update / readback / no-op / conflict reread | Not accepted |
 | Human request → Web answer → saved answer → Agent resumption | Not accepted |
 | Refresh / revocation / reconnect | Not accepted |
