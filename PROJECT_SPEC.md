@@ -231,6 +231,18 @@ Harness Client
 
 DeepSeek Harnessは公式リポジトリでもDeveloper Previewとされ、互換性を壊す変更があり得る。したがって現段階では依存追加や実接続コードを作らず、上記のアダプター契約だけを設計対象とする。[DeepSeek Harness公式リポジトリ](https://github.com/deepseek-ai/deepseek-harness)
 
+### OpenCode / OpenClaw extensions (2026-10-10)
+
+The independent `@guilduo/opencode-plugin` and `@guilduo/openclaw-plugin` beta.16 candidates reuse native OAuth MCP and the canonical `guilduo-workflows` Skill. They add no API, token bridge, automatic Agent registration or root runtime dependency. Existing OAuth, MCP, package, plugin and storage identifiers remain unchanged.
+
+OpenCode targets 1.18.32 / 1.18.35. Optional `phaseSync` is off by default and requires exact session, canonical cwd, Quest and known Agent binding. It permits at most one additional model reminder per original input; it never writes MCP directly or grants permission. Plan, read-only, forks, errors, compaction and revoked bindings suppress continuation. Reminder stopping and native inference cancellation are distinct operations.
+
+OpenClaw targets 2026.9.9 with its recorded build commit, native Settings/Accounts and shared operator OAuth. A manifest declaration is not assumed to create saved MCP configuration. Existing aliases, disabled settings, filters and requester profiles are preserved. No additional lifecycle hook or custom UI is included; multi-person channel authorization remains outside this acceptance scope.
+
+Progress updates require fresh Agent context and Quest reads, permitted narrow patches with `expectedUpdatedAt`, no-op detection and readback. Preview supported operations with `dryRun`; do not send an unsupported `dryRun` to `update_quest`. Human answers, Handoff acceptance, completion and rewards are separate actions. Free's registered-Agent limit remains two and does not increase with the number of hosts.
+
+Windows native acceptance, public OAuth, guarded writes, Human answer/resumption, npm publication and official listing are separate recorded gates. Model-based checks use OpenCode Go `deepseek-v4.1-flash` without fallback. See [release status](docs/guilduo-host-extensions-status.md). DSH's runtime and published beta.16 are unchanged; its [independent AI review](docs/guilduo-dsh-independent-review.md) is feedback rather than an external human audit.
+
 ## 7. 開発・変更・リリースルール
 
 ### Launch behavior and private caching (2026-10-02)

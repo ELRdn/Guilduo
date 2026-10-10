@@ -1,5 +1,7 @@
 # Guilduo 公開βロードマップ
 
+- [ ] 2026-10-10 OpenCode／OpenClaw beta.16：独立package、Windows native受入、実モデルによる任意phaseSync確認、英日ガイド、npm beta配布、OpenCode Ecosystem／ClawHub掲載を進行中。[公開・受入状況](docs/guilduo-host-extensions-status.md)。DSHはコード変更せず[独立FB](docs/guilduo-dsh-independent-review.md)へ分離する。
+
 - [x] 2026-10-10 本人追確認：DSH beta.16の公開OAuth・MCP読み書き・Desktop再起動後の保存認証再利用が成功。追加開発は停止し、README／How-to／現行受入台帳を更新。設定なし新規／fork・Agent紐付け／Handoff・限定更新readback／競合・Human回答→再開は残件。npm最新タグはbeta.16を維持し、GitHub反映は別記録。[現行状況](docs/guilduo-dsh-status.md)。
 
 最終更新: 2026-10-02

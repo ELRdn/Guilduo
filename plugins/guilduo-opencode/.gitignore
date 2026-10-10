@@ -1,0 +1,4 @@
+artifacts/
+.qa-artifacts/
+node_modules/
+package-lock.json

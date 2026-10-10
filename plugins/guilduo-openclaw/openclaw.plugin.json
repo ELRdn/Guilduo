@@ -1,0 +1,15 @@
+{
+  "id": "guilduo",
+  "name": "Guilduo",
+  "version": "0.6.0-beta.16",
+  "description": "Coordinate Quests and Human–Agent handoffs with Guilduo native OAuth MCP.",
+  "configSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+  "skills": ["./skills"],
+  "mcpServers": {
+    "guilduo": {
+      "url": "https://mcp.guilduo.com/mcp",
+      "transport": "streamable-http",
+      "auth": "oauth"
+    }
+  }
+}

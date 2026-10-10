@@ -216,6 +216,17 @@ dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.16 --ignore-scrip
 
 共有・更新・安全な削除・トラブル対処は **[日本語How-to](docs/guilduo-dsh-howto.jp.md)** / **[English](docs/guilduo-dsh-howto.md)** を参照してください。本人確認で公開OAuth・MCP読み書き・Desktop再起動後の保存認証再利用が成功。設定なし初回入力／新規／fork利用、Agent Handoff、Human回答→再開は未受入です。このβを一区切りに追加開発を停止し、[現行の受入状況](docs/guilduo-dsh-status.md)に残件を記録しています。
 
+## OpenCode・OpenClaw拡張
+
+各ホストの標準OAuth MCPと正本の`guilduo-workflows` Skillを使う独立拡張です。既存のMCP別名や他pluginを保持し、導入だけでQuest更新権限や新しいAgent登録は付与しません。
+
+| ホスト | package | 導入ガイド |
+| --- | --- | --- |
+| OpenCode 1.18.32 / 1.18.35 | `@guilduo/opencode-plugin@0.6.0-beta.16` | [日本語](plugins/guilduo-opencode/README.jp.md) / [English](plugins/guilduo-opencode/README.md) |
+| OpenClaw 2026.9.9 | `@guilduo/openclaw-plugin@0.6.0-beta.16` | [日本語](plugins/guilduo-openclaw/README.jp.md) / [English](plugins/guilduo-openclaw/README.md) |
+
+導入前に[公開・受入状況](docs/guilduo-host-extensions-status.md)を確認してください。OpenCodeの任意フェーズ確認は既定OFFで、明示binding時に追加モデル要求を行います。OpenClawは標準Settings／Accountsから接続します。[DSHの独立FB](docs/guilduo-dsh-independent-review.md)は別記録で、DSH beta.16は変更していません。
+
 ## Skill / OpenAI Plugin・MCP App
 
 - 正規Skill：[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)

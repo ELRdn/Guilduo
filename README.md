@@ -216,6 +216,17 @@ Restart the host and reload the browser. Open a conversation → **Settings → 
 
 See the **[English How-to](docs/guilduo-dsh-howto.md)** / **[日本語の導入・使い方](docs/guilduo-dsh-howto.jp.md)** for sharing, updates, safe removal and troubleshooting. The user confirmed public OAuth, MCP reads/writes and Desktop saved authentication reuse after restart. Settings-free first-input/new-session/fork use, Agent Handoff and Human answer → resume remain pending. Feature development is paused at this beta stopping point; see [current acceptance status](docs/guilduo-dsh-status.md).
 
+## OpenCode and OpenClaw extensions
+
+Guilduo's independent extensions reuse each host's native OAuth MCP connection and bundle the `guilduo-workflows` Skill. They preserve existing MCP aliases and other plugins. Installation does not grant Quest write permission or register a new Agent.
+
+| Host | Package | Guide |
+| --- | --- | --- |
+| OpenCode 1.18.32 / 1.18.35 | `@guilduo/opencode-plugin@0.6.0-beta.16` | [English](plugins/guilduo-opencode/README.md) / [日本語](plugins/guilduo-opencode/README.jp.md) |
+| OpenClaw 2026.9.9 | `@guilduo/openclaw-plugin@0.6.0-beta.16` | [English](plugins/guilduo-openclaw/README.md) / [日本語](plugins/guilduo-openclaw/README.jp.md) |
+
+Check the [release and acceptance status](docs/guilduo-host-extensions-status.md) before installing. OpenCode's optional phase reminder is off by default and can start an additional model request when explicitly bound to a session. OpenClaw uses the standard Settings / Accounts connection UI. [Independent DSH feedback](docs/guilduo-dsh-independent-review.md) is tracked separately; DSH beta.16 is unchanged.
+
 ## Skill / OpenAI Plugin / MCP App
 
 - Official Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)

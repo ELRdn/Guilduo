@@ -1,0 +1,14 @@
+{
+  "name": "@guilduo/opencode-plugin", "version": "0.6.0-beta.16", "type": "module", "license": "AGPL-3.0-only",
+  "description": "Guilduo workflows, native OAuth MCP and phase reminders for OpenCode",
+  "keywords": ["opencode", "opencode-plugin", "guilduo", "mcp", "oauth", "agent-skills"],
+  "homepage": "https://guilduo.com/",
+  "repository": { "type": "git", "url": "git+https://github.com/ELRdn/Guilduo.git", "directory": "plugins/guilduo-opencode" },
+  "bugs": { "url": "https://github.com/ELRdn/Guilduo/issues" },
+  "publishConfig": { "access": "public", "tag": "beta", "registry": "https://registry.npmjs.org/" },
+  "main": "lib/index.js", "types": "lib/index.d.ts", "exports": { ".": "./lib/index.js" },
+  "files": ["lib", "src", "skills/guilduo-workflows", "README.md", "README.jp.md", "LICENSE", "NOTICE", "stage.mjs", "tsconfig.json"],
+  "scripts": { "stage": "node stage.mjs", "build": "tsc -p tsconfig.json", "test": "tsx --test tests/plugin.test.ts tests/stage.test.mjs", "test:types": "tsc --ignoreConfig --noEmit --target ES2022 --lib ES2024 --module ESNext --moduleResolution Bundler --skipLibCheck --types node --strict tests/plugin.test.ts", "pack:plugin": "npm run stage && npm run build && npm pack --pack-destination artifacts" },
+  "devDependencies": { "@opencode-ai/plugin": "1.18.32", "@types/node": "26.2.0", "typescript": "7.0.2", "tsx": "4.23.12" },
+  "engines": { "node": ">=22" }
+}

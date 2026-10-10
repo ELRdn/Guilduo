@@ -1,0 +1,30 @@
+{
+  "name": "@guilduo/openclaw-plugin",
+  "version": "0.6.0-beta.16",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "Guilduo workflows with OpenClaw native OAuth MCP",
+  "keywords": ["openclaw", "openclaw-plugin", "guilduo", "mcp", "oauth", "agent-skills"],
+  "homepage": "https://guilduo.com/",
+  "repository": { "type": "git", "url": "git+https://github.com/ELRdn/Guilduo.git", "directory": "plugins/guilduo-openclaw" },
+  "bugs": { "url": "https://github.com/ELRdn/Guilduo/issues" },
+  "publishConfig": { "access": "public", "tag": "beta", "registry": "https://registry.npmjs.org/" },
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js" },
+  "files": ["lib", "src", "skills/guilduo-workflows", "openclaw.plugin.json", "README.md", "README.jp.md", "LICENSE", "NOTICE", "setup.mjs", "stage.mjs", "build.mjs"],
+  "scripts": {
+    "stage": "node stage.mjs",
+    "build": "node build.mjs",
+    "test": "node --experimental-strip-types --test ../../tests/plugin-openclaw.test.ts",
+    "pack:plugin": "npm run stage && npm run build && npm pack --pack-destination .qa-artifacts",
+    "test:native": "node tests/native-host.mjs"
+  },
+  "peerDependencies": { "openclaw": "2026.9.9" },
+  "peerDependenciesMeta": { "openclaw": { "optional": true } },
+  "engines": { "node": ">=24.16.0 <25 || >=26.1.0" },
+  "openclaw": {
+    "extensions": ["./lib/index.js"],
+    "compat": { "pluginApi": "2026.9.9", "minGatewayVersion": "2026.9.9" },
+    "build": { "openclawVersion": "2026.9.9" }
+  }
+}
