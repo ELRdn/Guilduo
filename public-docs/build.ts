@@ -59,11 +59,12 @@ function articleLinks(locale: DocsLocale, pages: DocPage[], current: string): st
 
 function renderSection(section: DocPage["sections"][number], locale: DocsLocale): string {
   const t = copy[locale];
+  // Cloudflare otherwise mistakes pinned npm versions for emails and rewrites copyable commands.
   return `<section class="doc-section" id="${e(section.id)}"><h2><a class="doc-anchor" href="#${e(section.id)}">${e(section.title)}</a></h2>
 ${(section.paragraphs ?? []).map(p => `<p>${e(p)}</p>`).join("")}
 ${section.steps ? `<ol class="doc-steps">${section.steps.map(p => `<li>${e(p)}</li>`).join("")}</ol>` : ""}
 ${section.bullets ? `<ul>${section.bullets.map(p => `<li>${e(p)}</li>`).join("")}</ul>` : ""}
-${section.code ? `<div class="doc-code"><div class="doc-code-heading"><span>${e(section.code.language)}</span><button type="button" data-copy hidden>${t.copy}</button></div><pre tabindex="0" aria-label="${e(section.title)}"><code>${e(section.code.text)}</code></pre></div>` : ""}
+${section.code ? `<div class="doc-code"><div class="doc-code-heading"><span>${e(section.code.language)}</span><button type="button" data-copy hidden>${t.copy}</button></div><pre tabindex="0" aria-label="${e(section.title)}"><code><!--email_off-->${e(section.code.text)}<!--/email_off--></code></pre></div>` : ""}
 ${section.table ? `<div class="doc-table" role="region" aria-label="${e(section.title)}" tabindex="0"><table><thead><tr>${section.table.headers.map(h => `<th scope="col">${e(h)}</th>`).join("")}</tr></thead><tbody>${section.table.rows.map(row => `<tr>${row.map((cell, i) => i === 0 ? `<th scope="row">${e(cell)}</th>` : `<td>${e(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}</section>`;
 }
 

@@ -128,7 +128,8 @@ test("the complete sourced article, sections, tables and code exist before JavaS
       if (section.table) assert.match(main, /<table\b[\s\S]*?<th\b/);
       if (section.code) {
         const code = [...main.matchAll(/<pre\b[^>]*>[\s\S]*?<code\b[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/pre>/gi)];
-        assert.ok(code.some(match => decode(match[1].replace(/<[^>]*>/g, "")) === section.code!.text), `${page.slug} exact code`);
+        assert.ok(code.some(match => match[1].startsWith("<!--email_off-->") && match[1].endsWith("<!--/email_off-->")
+          && decode(match[1].replace(/<[^>]*>/g, "")) === section.code!.text), `${page.slug} exact code with CDN rewrite exclusion`);
       }
     }
     assert.ok(page.sources.length > 0, `${page.slug} source references`);
