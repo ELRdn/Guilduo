@@ -9,7 +9,7 @@
 | package | portable `plugin.json` + `mcp.json` + canonical Skill、0.6.0-beta.12 | native `.muse-plugin/plugin.json` + canonical Skill、0.6.0-beta.12 |
 | lifecycle hooks | なし | なし |
 | native install / discovery / update / disable / enable / remove | 未受入。実ホスト未導入、利用資格なし | Windows stable 1.4.4-R5419.1で現在の候補を実測PASS |
-| native OAuth | 未受入 | 公開標準loginの今回試行は失敗・未受入。本人に認可ページ未表示、失敗段階未確定。headless手順のみ準備済み |
+| native OAuth | 未受入 | 公開標準loginの今回試行は失敗・未受入。本人確認は「認証ページ自体が開かない」、失敗段階未確定。headless手順のみ準備済み |
 | 公開MCP read / narrow write / Human再開 / shared Agent選択 | 未受入 | 未受入 |
 | source / ZIP distribution | 候補。公開操作は親担当 | 候補。公開操作は親担当 |
 | upstream listing | Cursor catalogはstatic検査のみ。tested-locally条件未達で提出保留 | custom source配布の公式guideあり。中央公式listingの経路は確認できない |
@@ -99,7 +99,9 @@ node node_modules/tsx/dist/cli.mjs tools/guilduo-muse-public-oauth.mts logout
 
 最終診断receiptはQA root配下の `oauth-prompt-diagnostic-1791639277534/receipt.json`（TTY）と `oauth-prompt-diagnostic-1791639313510/receipt.json`（非TTY）。いずれもloopback resource/metadata/registration到達、authorization/token endpoint呼出し0、Enter送信なし、browser起動なし、公開OAuth試行なし、modelCalls 0。native出力は限定したメモリー内で固定booleanへ分類し、raw出力・URL・code/tokenはreceiptへ記録していない。対象型検査と両login modeの非TTY拒否自己検証がPASS、拒否時の既存公開receiptはbyte不変、凍結Grok/Muse ZIPのhashも不変を確認した。
 
-親は修正後driverを本人の見えるPowerShellで開始したが、本人は「認証ページ自体が開かない」と確認した。親が受信した2026-10-10T13:40:15Zのvisible login receiptは `exitCode:1` / `timedOut:false`。今回の公開標準loginは失敗・未受入であり、成功やtimeoutとは分類しない。browser opener、OAuth discovery、PKCE/client登録、authorization endpointのどこで失敗したかは未確定で、非TTY問題の修正だけで公開OAuth成功を推定しない。native出力・code・最終redirectは取得せず、同じlogin/承認依頼を繰り返さない。source/凍結ZIPは公開候補のまま保持する。
+親は修正後driverを本人の見えるPowerShellで開始したが、本人の最新確認は「認証ページ自体が開かない」。認証後のlocalhost到達エラーやbrowserエラーと確定しない。親が受信した2026-10-10T13:40:15Zのvisible login receiptは `exitCode:1` / `timedOut:false`。今回の公開標準loginは失敗・未受入であり、成功やtimeoutとは分類しない。browser opener、OAuth discovery、PKCE/client登録、authorization endpointのどこで失敗したかは未確定で、非TTY問題の修正だけで公開OAuth成功を推定しない。native出力・code・最終redirectは取得せず、同じlogin/承認依頼を繰り返さない。source/凍結ZIPは公開候補のまま保持する。
+
+追加確認は、新規の空QA環境でpinned 1.4.4 binaryの `--help` のみを実行した。今回確認したhelpには任意URLを開く単独native commandの掲載がなく、OAuthなしのloopback合成URLで同じnative openerを呼ぶ標準経路は確認できなかった。opener動作検査は未実施で、OSの別openerを代用してMuse成功/失敗と判定することもしない。既存terminal/profile/認証URLはinspectせず、native raw出力は保存しなかった。分類receiptはQA root配下 `opener-help-only-308d2df6-f312-4204-a591-3836255eb930/receipt.json`（help成功、opener/ログイン/ブラウザー起動なし、modelCalls 0）。この確認は認証ページが開かない根因を確定する証拠ではない。
 
 #### 本人terminalでの公式headless fallback（手順のみ・未実施）
 
@@ -108,7 +110,7 @@ node node_modules/tsx/dist/cli.mjs tools/guilduo-muse-public-oauth.mts logout
 1. 前のnative loginが終了した状態で、本人が見えるPowerShell/Windows Terminalを使う。既存公開profileは上書きせず、tee/transcript/出力リダイレクトを使わない。
 2. 下記driverを起動する。isolated envと同じ `questforge` 設定はdriverが適用し、native実コマンドは `muse mcp login questforge --headless`。180秒上限で、自動再試行はない。
 3. nativeが本人terminalへ表示する認可URLを、本人がブラウザーで開く。URLが表示されない場合はそこで失敗・未受入とし、同じ承認依頼を繰り返さない。
-4. ブラウザーで認可後、localhostへ到達できないページになることがある。アドレスバーの最終localhost redirect URLを、本人がnativeの `Paste the final localhost redirect URL here` の保護入力（echo off）へ直接貼り付ける。チャット・ログ・receipt・archiveには渡さない。native終了状態を確認し、成功後の認証付きread/refresh等は別の受入gateとして扱う。
+4. headless方式の一般手順として、ブラウザーで認可後にlocalhostへ到達できないページになることがある。これは今回の本人報告ではなく、未実施fallbackの説明である。アドレスバーの最終localhost redirect URLを、本人がnativeの `Paste the final localhost redirect URL here` の保護入力（echo off）へ直接貼り付ける。チャット・ログ・receipt・archiveには渡さない。native終了状態を確認し、成功後の認証付きread/refresh等は別の受入gateとして扱う。
 
 ```powershell
 Set-Location 'C:\Users\hiron\.codex\worktrees\guilduo-host-extensions\questforge-relay-forge'
