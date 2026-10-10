@@ -1,0 +1,4 @@
+Guilduo OpenClaw extension, AGPL-3.0-only.
+Workflow Skill and references are staged from skills/guilduo-workflows/.
+OpenClaw is a separate MIT-licensed host. No host code is shipped in this package.
+Validated host contract: OpenClaw 2026.9.9, commit bcfc88812a35243893585dbeca87ca41b48272ca.
