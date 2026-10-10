@@ -9,7 +9,7 @@ implementation and review record, not an external human audit or host endorsemen
 | Native install/discovery/update/remove | Complete ZIP installation awaiting portal access | CLI 0.159.2 isolated install/discovery accepted; owner's App companion updated to beta.12, cache verified | Not accepted; eligible host unavailable | Stable 1.4.4-R5419.1 accepted; settings values and unrelated plugin preserved |
 | Public OAuth/tool discovery | Pending installed package acceptance | Native OAuth success notification, process restart/auth reuse and fresh 56-tool direct discovery accepted; existing App schemas remain stale | Not accepted | Native visible-terminal login exited 1; owner reports authorization page does not open; unaccepted |
 | Model / Human | Five positive/three negative cases pending; no executed pass claimed | OpenAI gpt-6-astra, canonical Skill supplied explicitly: limited update/readback, actual owner Web answer retrieval, same-session resume and no-op accepted | Not run; excluded from this candidate's acceptance | Not run; excluded from this candidate's acceptance |
-| Distribution | Target-specific submission ZIP being frozen | Git marketplace and separate ZIP being frozen | Git/ZIP candidate being frozen | Git/ZIP candidate being frozen |
+| Distribution | Target-specific submission ZIP frozen; public release pending | Git marketplace and separate ZIP frozen; public release pending | Git/ZIP candidate frozen; public release pending | Git/ZIP candidate frozen; public release pending |
 | Listing | Not submitted; developer identity verification pending | Public OpenAI directory submission shares this gate | Cursor submission held: tested-locally requirement unmet | No verified central-store submission route |
 
 The OpenAI Platform account is signed in. Individual verification currently
@@ -33,7 +33,9 @@ registration, root dependency or npm distribution is added.
 Current source checks: full suite **518/518**, focused package/archive/hooks/review
 checks **40/40**, Grok/Muse target checks **14/14**, root type checks, design check
 and build passed. The old beta-release template assertion was corrected.
-Final Git/member byte verification and independent review remain publication gates.
+Final Git/member byte verification passed for all four frozen ZIPs. Independent
+AI review resolved all six P2 findings; no P1/P2 remains. Final source CI and
+public download verification remain publication gates.
 
 Codex account tests use a process-only direct server, with the App companion and
 App tools disabled in that test process. The explicitly supplied Skill is the
@@ -60,4 +62,5 @@ non-TTY login prints a URL without opening a browser, while TTY prompts for Ente
 the owner-terminal-only driver fixes that handoff but does not establish OAuth success.
 
 See [OpenAI/Codex details](guilduo-next-hosts-codex.md), [Grok/Muse details](guilduo-next-hosts-grok-muse.md),
-[installation guide](../guilduo-next-hosts.md) and [submission runbook](../guilduo-plugin-submission.md).
+[independent review](guilduo-next-hosts-review.md), [installation guide](../guilduo-next-hosts.md)
+and [submission runbook](../guilduo-plugin-submission.md).
