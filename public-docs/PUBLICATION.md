@@ -1,6 +1,6 @@
 # Guilduo Docs publication — 2026-10-05 (Asia/Tokyo)
 
-## Next-hosts beta.12 update — deployment pending
+## Next-hosts beta.12 update — published 2026-10-10
 
 The OpenAI, Grok Bot and Muse Code guides are added in Japanese and English;
 Codex is updated. There are 18 articles per language (36 pages). Concurrent
@@ -9,7 +9,26 @@ Claude guide content is preserved. Public source revision:
 [Final source CI](https://github.com/ELRdn/Guilduo/actions/runs/38058236638) passed.
 [The four host ZIPs](https://github.com/ELRdn/Guilduo/releases/tag/guilduo-next-hosts-v0.6.0-beta.12)
 were published as a prerelease. Tag/source, all four downloaded SHA-256 values and
-GitHub asset digests matched the frozen candidates. Live Docs deployment remains pending.
+GitHub asset digests matched the frozen candidates.
+
+[Docs PR #65](https://github.com/ELRdn/Guilduo/pull/65) and
+[final Docs CI](https://github.com/ELRdn/Guilduo/actions/runs/38058874316) completed.
+[Site deployment 38059302339](https://github.com/ELRdn/Guilduo/actions/runs/38059302339)
+succeeded for `9f0ae2696f06441323d82eac22977f26ab5d9f8c`, with the existing
+cache safety, previous-asset retention and missing-static-path guards enabled.
+
+Live acceptance at 2026-10-10T14:27:37.198Z: **41/41 HTTP checks** passed,
+covering all 36 actual article headings, leads, canonicals, pinned source SHA and
+exact command blocks; search index (18 per language), sitemap, robots, llms and a
+genuine missing-path 404. The eight changed guides also passed live browser
+heading/version/source checks, Japanese/English copy success announcements and
+language switching. Both Claude guides remained byte-identical as content data
+to the concurrent main version used for this integration.
+
+[Independent publication evaluation](../docs/acceptance/guilduo-next-hosts-publication.md)
+records public Git/ZIP and per-host acceptance boundaries. No P1/P2 remains in
+the reviewed distribution scope. Official Guilduo Docs publication does not mean
+OpenAI, Cursor or another host's directory approval.
 
 Local validation: 11 Docs tests, build, 40 HTTP checks including every article's
 actual heading/lead/canonical/command, search index, sitemap, robots and llms.

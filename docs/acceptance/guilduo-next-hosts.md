@@ -43,6 +43,12 @@ The prerelease tag points to the same source commit.
 [Download beta.12](https://github.com/ELRdn/Guilduo/releases/tag/guilduo-next-hosts-v0.6.0-beta.12).
 No npm package or public Codex App companion is included.
 
+Official bilingual Docs were deployed from `9f0ae2696f06441323d82eac22977f26ab5d9f8c`.
+All 36 article bodies/canonicals/commands and public discovery/404 checks passed
+(41/41); eight changed-guide browser checks and both copy announcements passed.
+See [publication evidence](../../public-docs/PUBLICATION.md) and
+[independent final evaluation](guilduo-next-hosts-publication.md).
+
 Codex account tests use a process-only direct server, with the App companion and
 App tools disabled in that test process. The explicitly supplied Skill is the
 installed beta.12 canonical file; this is not proof of trusted plugin hook execution.
