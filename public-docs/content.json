@@ -1,5 +1,5 @@
 {
-  "sourceRevision": "60df808c2e4f39b287093240c33d1f7d1d7aedd5",
+  "sourceRevision": "5e8f66e9214bcf48277b1b46f802f189a90acf04",
   "ja": [
     {
       "slug": "",
@@ -213,7 +213,7 @@
             "クライアントがRemote HTTP MCPとOAuthに対応していることを確認します。設定名や利用条件はクライアントの版によって異なります。",
             "Web Appで作業用アカウントにログインし、Questを読めることを確認します。",
             "担当AIを使うならPartyでAgentを登録し、表示名とは別のAgent IDを確認します。",
-            "DSH・OpenCode・OpenClawのプラグイン導入は、関連記事のホスト別手順を使います。検証版、標準OAuth、停止・切断・削除を各記事で確認できます。"
+            "DSH・OpenCode・OpenClaw・Claude Codeのプラグイン導入は、関連記事のホスト別手順を使います。検証版、標準OAuth、停止・切断・削除を各記事で確認できます。"
           ]
         },
         {
@@ -444,85 +444,155 @@
     {
       "slug": "claude",
       "group": "integrations",
-      "title": "ClaudeとGuilduoを接続する：OAuth MCPの設定",
-      "description": "ClaudeのConnectorsからGuilduo MCPへ接続する手順。OAuthのアカウント選択、Agentリンク、最初のQuest取得、書き込み前の確認と接続失敗の診断を解説します。",
-      "lead": "ClaudeのRemote MCP対応Connectorsに https://mcp.guilduo.com/mcp を登録し、OAuthで認証します。Web AppのConnectionsでAgentをリンクしたあと、Claudeから同じQuestを読み取れるか確認します。",
+      "title": "ClaudeでGuilduoを使う：Claude CodeプラグインとConnector",
+      "navTitle": "Claudeとの連携",
+      "description": "Claude CodeにGuilduoプラグインを導入する手順。標準marketplace、OAuth、Agentリンク、接続確認、更新、停止・切断・削除と、Claude Connectorsでの手動接続を解説します。",
+      "lead": "Claude Code（CLI、IDE拡張、デスクトップアプリのCodeタブ）では、GuilduoリポジトリのmarketplaceからGuilduoプラグインを導入し、Claude Code標準OAuthで接続します。検証したプラグイン版は0.6.0-beta.2です。公式MCPとguilduo-workflows Skillだけを追加し、npmは使いません。",
       "sections": [
         {
-          "id": "claude-connector",
-          "title": "ConnectorsでOAuthを設定する",
+          "id": "requirements",
+          "title": "必要な環境",
+          "bullets": [
+            "Claude Code 2.1.286以降。2.1.286と2.1.296で検証しています。",
+            "構成は公式MCP https://mcp.guilduo.com/mcp（表示名plugin:guilduo:guilduo）とguilduo-workflows Skillだけです。hook、コマンド、サブエージェント、自動追加入力、追加モデル呼び出しはありません。",
+            "認証と資格情報の保存はClaude Codeが担当します。プラグイン独自の資格情報保存やトークンbridgeはありません。"
+          ]
+        },
+        {
+          "id": "install",
+          "title": "marketplaceから導入する",
+          "paragraphs": [
+            "Claude Codeのセッション内で次を実行します。既存の設定、他のプラグイン、MCP接続、認証、履歴は保持されます。"
+          ],
+          "code": {
+            "language": "text",
+            "text": "/plugin marketplace add ELRdn/Guilduo\n/plugin install guilduo@guilduo"
+          },
           "steps": [
-            "ClaudeのSettingsからConnectorsを開きます。画面名やカスタムConnectorの利用条件は使用している版で確認します。",
-            "Remote MCP接続を追加し、名前をGuilduo、URLをhttps://mcp.guilduo.com/mcpにします。",
-            "OAuth認証を進め、Web版Guilduoと同じアカウントで許可します。秘密情報を会話や設定欄に貼り付けません。",
-            "Claudeへ戻り、接続が利用可能になっていることを確認します。"
+            "シェルからはclaude plugin marketplace add ELRdn/Guilduo --sparse .claude-plugin plugins/guilduo-claude と claude plugin install guilduo@guilduo を実行します。--sparseでmarketplaceとこのプラグインだけを取得します。",
+            "開いているセッションでは/reload-pluginsを実行するか、新しいセッションを開始します。"
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "Claude Code標準OAuthで認証する",
+          "steps": [
+            "/mcpでplugin:guilduo:guilduoを選び、サインインの案内に従います。シェルからはclaude mcp login plugin:guilduo:guilduoでも同じです。",
+            "ブラウザーでWeb版Guilduoと同じアカウントを許可し、Claude Codeへ戻ります。callback URLやトークンを会話へ貼り付けません。"
+          ],
+          "paragraphs": [
+            "https://mcp.guilduo.com/mcpを既にclaude mcp addなどで手動登録している場合、Claude Codeはその既存接続を使い続け、プラグイン側の接続は起動しません。コマンドのplugin:guilduo:guilduoを既存のサーバー名へ置き換えてください。"
           ]
         },
         {
           "id": "claude-agent-link",
-          "title": "Claude接続とAgentを対応させる",
-          "paragraphs": [
-            "OAuthが成功してもAgent未リンクのことがあります。Agentは接続元の名前では決まらないため、別の担当へ意図せずリンクしていないか確認します。"
-          ],
+          "title": "Agentと作業権限を確認する",
           "steps": [
-            "GuilduoのPartyで担当Agentを登録します。例：表示名「文章レビュー」、役割「文意と表現の確認」。",
-            "Connectionsで今回のClaude接続を対象Agentへリンクします。",
-            "Claudeでget_current_agent_contextを取得し、linked、Agent ID、effectiveExecutionScopesを確認します。"
+            "get_agent_link、list_registered_agents、get_current_agent_contextを読み、接続が意図した既存のRegistry Agentに紐付いているか確認します。表示名やクライアント名からIDを推測しません。",
+            "未リンクの専用接続では、所有者の明示的な許可を得てlink_agentに既存AgentのagentIdを渡します。共有接続を別Agentへ切り替えるためにlink_agentを使いません。requiresAgentSelectionがtrueなら、allowedAgentIdsから選んだactingAgentIdを各呼び出しで保持します。",
+            "更新するQuestと許可する変更を明示してから作業します。対応ツールではdryRunでプレビューし、update_questでは最新のexpectedUpdatedAtを使って狭い変更を送り、再読で保存を確認します。"
+          ],
+          "paragraphs": [
+            "実行できる権限はOAuth認可とAgentのallowedScopesの重なりです。Agentにquests:readだけを許可している場合、OAuthで書き込みを許可していても作成・更新は拒否されます。Freeの上限は2登録Agentで、プラグインはAgentを登録しません。導入・OAuth・Skill読み込みだけでQuest更新や追加モデル実行は許可されません。"
           ]
         },
         {
-          "id": "claude-first-read",
-          "title": "読み取りと最初の更新を分ける",
-          "paragraphs": [
-            "例として「公開前に説明文を見直す」Questを選び、get_questで完了条件を確認します。レビューを任せるなら、ユーザーが許可した担当割り当てをプレビューして保存します。",
-            "更新結果は再取得して確認し、成果をreview_requiredとして返します。好みの判断が必要ならHuman確認を依頼し、保存された回答を読んで再開します。"
-          ],
+          "id": "verify",
+          "title": "読み込みと接続を確認する",
           "code": {
-            "language": "text",
-            "text": "Guilduoのget_current_agent_contextを取得してください。\n次にlist_questsでBacklogを最大5件読み、タイトルだけを報告してください。\n変更はせず、Token、Client ID、UIDは表示しないでください。"
-          }
+            "language": "powershell",
+            "text": "claude --version\nclaude plugin details guilduo@guilduo\nclaude mcp get plugin:guilduo:guilduo"
+          },
+          "paragraphs": [
+            "detailsにguilduo-workflows Skillとguilduo MCPが表示され、認証後のmcp getで接続済みと表示されることを確認します。その後、新しいセッションで書き込みなしの確認を依頼します。例：「/guilduo:guilduo-workflows を使って、何も書き込まずに get_current_agent_context を読み、BacklogのQuestを最大5件、タイトルだけ報告してください」。",
+            "Skillは説明文が一致したときにClaudeが選ぶか、/guilduo:guilduo-workflowsで明示的に呼び出したときに使われます。各フェーズで必ず自動実行されるものではありません。Questが多いアカウントで絞り込みなしのlist_questsを読むと、Claude CodeのMCP出力上限を超えることがあります。範囲を指定するか、起動前にMAX_MCP_OUTPUT_TOKENSを引き上げます。"
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "更新・停止する",
+          "code": {
+            "language": "powershell",
+            "text": "claude plugin marketplace update guilduo\nclaude plugin update guilduo@guilduo"
+          },
+          "paragraphs": [
+            "/pluginのMarketplacesタブからも更新できます。サードパーティmarketplaceの自動更新は既定でオフです。導入済みのコピーはプラグインの版番号が変わったときだけ更新されます。更新後は/reload-pluginsか再起動をします。OAuth認証は有効な間そのまま使われます。",
+            "一時停止はclaude plugin disable guilduo@guilduo、再開はclaude plugin enable guilduo@guilduoです。"
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "切断・削除する",
+          "code": {
+            "language": "powershell",
+            "text": "claude mcp logout plugin:guilduo:guilduo\nclaude plugin uninstall guilduo@guilduo\nclaude plugin marketplace remove guilduo"
+          },
+          "steps": [
+            "Claude Code側のサインアウトは、/mcpのClear authenticationかclaude mcp logoutで行います。ローカルの認証も消したい場合は、削除前に行います。",
+            "サーバー側の認可はhttps://app.guilduo.com/の接続管理で別途失効させます。サインアウトやプラグイン削除だけでは失効しません。",
+            "claude plugin uninstallでプラグインを削除し、必要ならmarketplaceも削除します。Quest、他のプラグイン、他のMCP接続には影響しません。"
+          ]
+        },
+        {
+          "id": "claude-connector",
+          "title": "Claude ConnectorsでMCPを手動接続する",
+          "paragraphs": [
+            "Claude Code以外のClaude（Web・デスクトップアプリのチャットなど）では、プラグインではなくRemote MCP対応のConnectorsで接続できます。この経路にSkillは含まれません。チャット・Coworkでのプラグイン導入は未受入です。"
+          ],
+          "steps": [
+            "ClaudeのSettingsからConnectorsを開きます。画面名やカスタムConnectorの利用条件は使用している版で確認します。",
+            "Remote MCP接続を追加し、名前をGuilduo、URLをhttps://mcp.guilduo.com/mcpにします。",
+            "OAuth認証を進め、Web版Guilduoと同じアカウントで許可します。秘密情報を会話や設定欄に貼り付けません。その後、上のAgent確認と同じ手順で読み取りを確認します。"
+          ]
         },
         {
           "id": "claude-troubleshooting",
-          "title": "Claudeで接続できないとき",
+          "title": "接続できないとき",
           "bullets": [
-            "Connectorsに接続追加の入口がない：Remote MCPとカスタム接続に対応した版・利用条件を確認します。別形式の秘密キーで代用しません。",
-            "401：正式endpointとOAuthアカウントを確認します。移行前の接続なら再登録と再認可が必要です。",
-            "読めるが更新できない：OAuth認可とAgent allowedScopesの両方にquests:writeがあるか確認します。",
-            "Humanツールが見えない：Connectorのメタデータ更新機能を確認し、新しい会話で再確認します。Codex用ローカルpluginがClaudeにも自動で読み込まれるとは考えないでください。"
+            "/mcpにplugin:guilduo:guilduoがない：claude plugin list --jsonで有効か確認し、/reload-pluginsか新しいセッションで再確認します。同じendpointを手動登録している場合はその名前で表示されます。",
+            "401やNeeds authentication：正式endpointとOAuthアカウントを確認し、/mcpかclaude mcp loginで再認証します。",
+            "読めるが更新できない：OAuth認可とAgent allowedScopesの両方にquests:writeがあるか確認します。実行権限を広げてリンクエラーを解消しないでください。",
+            "Humanツールが見えない：新しいセッションでツール一覧を再取得します。通常のQuest更新で代用したり、回答を作ったりしません。"
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "検証範囲と公式掲載",
+          "paragraphs": [
+            "Claude Code 2.1.286／2.1.296で、隔離環境での導入・Skill/MCP検出・更新・停止・再開・削除と無関係な設定の保持、GitHubからの導入と版番号を上げた更新、公開OAuth、別プロセスでの認証再利用、サインアウト・再接続、専用接続のAgentリンク、Agent権限による書き込み拒否、限定Quest更新と再読、no-op、競合の拒否と再読、Human依頼→本人のWeb回答→保存回答の取得→Agent再開の受入記録があります。",
+            "トークンの自動refresh、サーバー側失効、共有接続でのcross-Agent選択、チャット・Coworkでのプラグイン導入は未受入です。Anthropic公式directoryへの掲載は申請前で、導入手順とは別に扱います。"
           ]
         }
       ],
       "related": [
         "mcp-connection",
-        "permissions",
         "agents",
+        "permissions",
         "human-relay",
         "troubleshooting"
       ],
       "sources": [
         {
-          "path": "README.md",
-          "label": "README.md"
+          "path": "plugins/guilduo-claude/README.md",
+          "label": "plugins/guilduo-claude/README.md"
         },
         {
-          "path": "README.jp.md",
-          "label": "README.jp.md"
+          "path": "plugins/guilduo-claude/README.jp.md",
+          "label": "plugins/guilduo-claude/README.jp.md"
         },
         {
-          "path": "API_MCP_SETUP.md",
-          "label": "API_MCP_SETUP.md"
+          "path": "docs/guilduo-host-extensions-status.md",
+          "label": "docs/guilduo-host-extensions-status.md"
         },
         {
-          "path": "skills/questforge-workflows/SKILL.md",
-          "label": "skills/questforge-workflows/SKILL.md"
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
         },
         {
           "path": "api/mcp-tools.json",
           "label": "api/mcp-tools.json"
         }
-      ],
-      "navTitle": "Claudeとの連携"
+      ]
     },
     {
       "slug": "dsh",
@@ -2066,7 +2136,7 @@
             "Check that your client supports Remote HTTP MCP and OAuth. Setting names and availability depend on the client version.",
             "Sign in to your working account in the Web App and verify that you can read Quests.",
             "Register an Agent in Party for delegated work and check its Agent ID, which differs from its display name.",
-            "For DSH, OpenCode and OpenClaw plugins, use the related host guide for tested versions, native OAuth, stopping, disconnecting and removal."
+            "For DSH, OpenCode, OpenClaw and Claude Code plugins, use the related host guide for tested versions, native OAuth, stopping, disconnecting and removal."
           ]
         },
         {
@@ -2297,85 +2367,155 @@
     {
       "slug": "claude",
       "group": "integrations",
-      "title": "Connect Claude to Guilduo with OAuth MCP",
-      "description": "Set up Guilduo in Claude Connectors with OAuth. Link the correct Agent, read your first Quest, preview authorized writes and diagnose connection problems.",
-      "lead": "Add https://mcp.guilduo.com/mcp in a Claude Connector that supports Remote MCP and authenticate with OAuth. Link its Agent in Web App Connections, then verify that Claude can read the same Quest.",
+      "title": "Use Guilduo with Claude: Claude Code plugin and Connectors",
+      "navTitle": "Connect Claude",
+      "description": "Install the Guilduo plugin in Claude Code from the standard marketplace. Covers OAuth, Agent linking, connection checks, updates, stopping, disconnecting, removal and manual Claude Connectors setup.",
+      "lead": "In Claude Code (CLI, IDE extensions and the desktop app's Code tab), install the Guilduo plugin from the Guilduo repository's marketplace and sign in with Claude Code's standard OAuth. The tested plugin release is 0.6.0-beta.2. It adds only the official MCP server and the guilduo-workflows Skill, and does not use npm.",
       "sections": [
         {
-          "id": "claude-connector",
-          "title": "Configure OAuth in Connectors",
+          "id": "requirements",
+          "title": "Requirements",
+          "bullets": [
+            "Claude Code 2.1.286 or later. Tested on 2.1.286 and 2.1.296.",
+            "The plugin contains only the official MCP server https://mcp.guilduo.com/mcp (shown as plugin:guilduo:guilduo) and the guilduo-workflows Skill. It has no hooks, commands, subagents, automatic prompts or extra model requests.",
+            "Claude Code owns authentication and credential storage. The plugin adds no credential store or token bridge."
+          ]
+        },
+        {
+          "id": "install",
+          "title": "Install from the marketplace",
+          "paragraphs": [
+            "Run these in a Claude Code session. Your existing settings, other plugins, MCP servers, sign-ins and history are kept."
+          ],
+          "code": {
+            "language": "text",
+            "text": "/plugin marketplace add ELRdn/Guilduo\n/plugin install guilduo@guilduo"
+          },
           "steps": [
-            "Open Connectors from Claude Settings. Check your version for the setting name and custom connector availability.",
-            "Add a Remote MCP connection named Guilduo with URL https://mcp.guilduo.com/mcp.",
-            "Complete OAuth using the same account as the Guilduo Web App. Do not paste credentials into chat or configuration fields.",
-            "Return to Claude and confirm that the connection is available."
+            "From a shell, run claude plugin marketplace add ELRdn/Guilduo --sparse .claude-plugin plugins/guilduo-claude and then claude plugin install guilduo@guilduo. --sparse checks out only the marketplace and this plugin.",
+            "Run /reload-plugins in an open session or start a new one."
+          ]
+        },
+        {
+          "id": "authenticate",
+          "title": "Sign in with Claude Code OAuth",
+          "steps": [
+            "Run /mcp, select plugin:guilduo:guilduo and follow the sign-in prompt. From a shell, claude mcp login plugin:guilduo:guilduo does the same.",
+            "Approve the same account as the Guilduo Web App in the browser and return to Claude Code. Do not paste callback URLs or tokens into chat."
+          ],
+          "paragraphs": [
+            "If you already added https://mcp.guilduo.com/mcp yourself, for example with claude mcp add, Claude Code keeps using that connection and does not start the plugin's copy. Use your existing server name instead of plugin:guilduo:guilduo in the commands."
           ]
         },
         {
           "id": "claude-agent-link",
-          "title": "Match the Claude connection to an Agent",
-          "paragraphs": [
-            "OAuth can succeed while the Agent remains unlinked. Client names do not determine identity; verify that the connection is not linked to a different assignee."
-          ],
+          "title": "Check the Agent and task permission",
           "steps": [
-            "Register the intended Agent in Guilduo Party. For example: display name Text reviewer, role Check meaning and wording.",
-            "Link this Claude connection to the intended Agent in Connections.",
-            "Call get_current_agent_context in Claude and check linked, the Agent ID and effectiveExecutionScopes."
+            "Read get_agent_link, list_registered_agents and get_current_agent_context to check the association with the intended existing Registry Agent. Never infer IDs from display names or client names.",
+            "For an unlinked dedicated connection, obtain explicit owner approval and pass the existing Agent ID to link_agent. Never use link_agent to switch a shared connection between Agents. When requiresAgentSelection is true, keep the chosen actingAgentId from allowedAgentIds on every call.",
+            "Authorize the exact Quest and allowed changes before working. Preview tools that support dryRun. For update_quest, send a narrow patch with fresh expectedUpdatedAt and read back the saved result."
+          ],
+          "paragraphs": [
+            "Effective permissions are the intersection of the OAuth grant and the Agent's allowedScopes. If the Agent allows only quests:read, creates and updates are rejected even when OAuth granted writes. Free allows 2 registered Agents, and the plugin never registers one. Installation, OAuth or loading the Skill grants no permission to change Quests or run additional models."
           ]
         },
         {
-          "id": "claude-first-read",
-          "title": "Separate the first read from the first write",
-          "paragraphs": [
-            "For example, choose Review the description before publication and use get_quest to check its criteria. Preview and save an assignment only within the user's authorization.",
-            "Reread the saved update and return the result as review_required. Request a Human review for subjective judgment and read the saved answer before resuming."
-          ],
+          "id": "verify",
+          "title": "Check loading and connection",
           "code": {
-            "language": "text",
-            "text": "Read my Guilduo get_current_agent_context.\nThen use list_quests to read at most five Backlog Quests and report only their titles.\nDo not change anything or display tokens, Client IDs or UIDs."
-          }
+            "language": "powershell",
+            "text": "claude --version\nclaude plugin details guilduo@guilduo\nclaude mcp get plugin:guilduo:guilduo"
+          },
+          "paragraphs": [
+            "details should list the guilduo-workflows Skill and the guilduo MCP server, and mcp get should report it as connected after sign-in. Then ask for a read-only check in a new session, for example: \"Use /guilduo:guilduo-workflows. Without writing anything, read get_current_agent_context and report the titles of at most five Backlog Quests.\"",
+            "Claude selects the Skill when its description matches, or you invoke it as /guilduo:guilduo-workflows; it is not guaranteed to run automatically at every phase. An unfiltered list_quests on a large account can exceed Claude Code's MCP output limit. Ask for a narrower view or raise MAX_MCP_OUTPUT_TOKENS before starting Claude Code."
+          ]
+        },
+        {
+          "id": "update-and-stop",
+          "title": "Update and stop",
+          "code": {
+            "language": "powershell",
+            "text": "claude plugin marketplace update guilduo\nclaude plugin update guilduo@guilduo"
+          },
+          "paragraphs": [
+            "You can also update from the Marketplaces tab in /plugin. Auto-update is off by default for third-party marketplaces. Installed copies update only when the plugin version changes. Run /reload-plugins or restart afterwards. Your OAuth sign-in is kept while it remains valid.",
+            "Stop temporarily with claude plugin disable guilduo@guilduo and resume with claude plugin enable guilduo@guilduo."
+          ]
+        },
+        {
+          "id": "disconnect-and-remove",
+          "title": "Disconnect and remove",
+          "code": {
+            "language": "powershell",
+            "text": "claude mcp logout plugin:guilduo:guilduo\nclaude plugin uninstall guilduo@guilduo\nclaude plugin marketplace remove guilduo"
+          },
+          "steps": [
+            "Sign out in Claude Code with Clear authentication in /mcp or claude mcp logout. Do this before uninstalling if you also want the local sign-in removed.",
+            "Revoke server-side authorization separately through connection management at https://app.guilduo.com/. Signing out or uninstalling does not revoke it.",
+            "Remove the plugin with claude plugin uninstall, and optionally remove the marketplace. Your Quests, other plugins and other MCP servers are not affected."
+          ]
+        },
+        {
+          "id": "claude-connector",
+          "title": "Connect MCP manually in Claude Connectors",
+          "paragraphs": [
+            "Outside Claude Code, such as chat in the web or desktop app, connect through a Connector that supports Remote MCP instead of the plugin. This path does not include the Skill. Plugin installation in chat and Cowork is not accepted."
+          ],
+          "steps": [
+            "Open Connectors from Claude Settings. Check your version for the setting name and custom connector availability.",
+            "Add a Remote MCP connection named Guilduo with URL https://mcp.guilduo.com/mcp.",
+            "Complete OAuth using the same account as the Guilduo Web App. Do not paste credentials into chat or configuration fields. Then check the Agent and a first read as above."
+          ]
         },
         {
           "id": "claude-troubleshooting",
-          "title": "Troubleshoot the Claude connection",
+          "title": "Troubleshoot the connection",
           "bullets": [
-            "No connector entry is available: check version support and requirements for Remote MCP and custom connections. Do not substitute a secret-key configuration.",
-            "401: check the canonical endpoint and OAuth account. An old pre-migration connection requires registration and authorization again.",
-            "Reads work but writes fail: check that both the OAuth grant and Agent allowedScopes contain quests:write.",
-            "Human tools are missing: check the connector's metadata refresh and verify in a new conversation. Do not assume a Codex local plugin loads automatically in Claude."
+            "plugin:guilduo:guilduo is missing from /mcp: check that the plugin is enabled with claude plugin list --json, then run /reload-plugins or start a new session. If you added the same endpoint manually, it appears under that name.",
+            "401 or Needs authentication: check the canonical endpoint and OAuth account, then sign in again with /mcp or claude mcp login.",
+            "Reads work but writes fail: check that both the OAuth grant and Agent allowedScopes contain quests:write. Do not broaden execution scopes to fix a linking error.",
+            "Human tools are missing: refresh the tool list in a new session. Never substitute ordinary Quest writes or invent an answer."
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "Accepted scope and directory listing",
+          "paragraphs": [
+            "On Claude Code 2.1.286 and 2.1.296, the records cover isolated install, Skill and MCP discovery, update, disable, enable, removal and unrelated-setting preservation; installation from GitHub and a version-changing update; public OAuth and reuse in a new process; sign-out and reconnection; linking a dedicated connection to an Agent and write rejection by Agent scopes; a narrow Quest update with readback, no-op and stale-write rejection with reread; and Human request → owner's Web answer → saved answer → Agent resumption.",
+            "Token refresh, server-side revocation, cross-Agent selection on shared connections and plugin installation in chat or Cowork are not accepted. The Anthropic directory listing has not been submitted and is separate from installation."
           ]
         }
       ],
       "related": [
         "mcp-connection",
-        "permissions",
         "agents",
+        "permissions",
         "human-relay",
         "troubleshooting"
       ],
       "sources": [
         {
-          "path": "README.md",
-          "label": "README.md"
+          "path": "plugins/guilduo-claude/README.md",
+          "label": "plugins/guilduo-claude/README.md"
         },
         {
-          "path": "README.jp.md",
-          "label": "README.jp.md"
+          "path": "plugins/guilduo-claude/README.jp.md",
+          "label": "plugins/guilduo-claude/README.jp.md"
         },
         {
-          "path": "API_MCP_SETUP.md",
-          "label": "API_MCP_SETUP.md"
+          "path": "docs/guilduo-host-extensions-status.md",
+          "label": "docs/guilduo-host-extensions-status.md"
         },
         {
-          "path": "skills/questforge-workflows/SKILL.md",
-          "label": "skills/questforge-workflows/SKILL.md"
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
         },
         {
           "path": "api/mcp-tools.json",
           "label": "api/mcp-tools.json"
         }
-      ],
-      "navTitle": "Connect Claude"
+      ]
     },
     {
       "slug": "dsh",

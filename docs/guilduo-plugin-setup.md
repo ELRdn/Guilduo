@@ -2,15 +2,16 @@
 
 ## Published host plugins
 
-DSH, OpenCode and OpenClaw plugins are published and entering the polish phase. Normal npm installation uses `latest`; pinned versions remain available for reproducible installation. All three retain their prerelease version numbers. Installing a plugin does not start a model, authorize Quest writes or register an Agent.
+DSH, OpenCode and OpenClaw plugins are published and entering the polish phase. Normal npm installation uses `latest`; pinned versions remain available for reproducible installation. All three retain their prerelease version numbers. The Claude Code plugin is distributed through this repository's Claude Code marketplace instead of npm. Installing a plugin does not start a model, authorize Quest writes or register an Agent.
 
 | Host | Recommended package (`latest`) | Official guide |
 | --- | --- | --- |
 | DSH 0.2.0-rc.2 / Windows | `@guilduo/dsh-oauth-poc@0.6.0-beta.17` | [English](https://guilduo.com/docs/en/dsh/) / [日本語](https://guilduo.com/docs/dsh/) |
 | OpenCode 1.18.32 / 1.18.35 / Windows | `@guilduo/opencode-plugin@0.6.0-beta.16` | [English](https://guilduo.com/docs/en/opencode/) / [日本語](https://guilduo.com/docs/opencode/) |
 | OpenClaw 2026.9.9 / Windows | `@guilduo/openclaw-plugin@0.6.0-beta.16` | [English](https://guilduo.com/docs/en/openclaw/) / [日本語](https://guilduo.com/docs/openclaw/) |
+| Claude Code 2.1.286+ | `guilduo@guilduo` `0.6.0-beta.2` from the Claude Code marketplace `ELRdn/Guilduo` (not npm) | [English](https://guilduo.com/docs/en/claude/) / [日本語](https://guilduo.com/docs/claude/) |
 
-Use these guides for native installation, OAuth, updates, disconnection and removal. [Completion assessments](guilduo-plugins-completion.md) distinguish accepted workflows from remaining checks and upstream directory review. The Codex companion/direct MCP instructions and historical package-preparation records below are separate installation paths, not prerequisites for these three hosts.
+Use these guides for native installation, OAuth, updates, disconnection and removal. [Completion assessments](guilduo-plugins-completion.md) distinguish accepted workflows from remaining checks and upstream directory review. The Codex companion/direct MCP instructions and historical package-preparation records below are separate installation paths, not prerequisites for these hosts.
 
 ## Available approaches
 
