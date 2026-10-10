@@ -432,13 +432,14 @@ if (process.argv[3] === '--worker') {
       } finally { child?.release('logout'); await oldLogout?.catch(() => {}); if (child) await child.stop(); await f.dispose(); }
     });
 
-    await check('15s restore timeout closes transport, releases late file lock, and cannot publish tokens', async filename => {
+    await check('15s restore timeout preserves earlier rotation, closes transport, and rejects late tokens', async filename => {
       const f = await fixture(filename), entered = deferred(), gate = deferred();
       try {
         const root = f.mock('synthetic-timeout-root'); await f.login(root); await f.control.release(root.id);
-        const pointer = await f.shared.read(), before = await f.credentials.readRecord(grantKey(pointer.owner));
+        const pointer = await f.shared.read();
         let rejectedLateToken = false;
         f.onConnect(async client => {
+          await client.provider.saveTokens({ access_token: 'SYNTHETIC_BEFORE_TIMEOUT', refresh_token: 'SYNTHETIC_ROTATED_BEFORE_TIMEOUT', token_type: 'Bearer' });
           entered.resolve(); await gate.promise;
           await assert.rejects(Promise.resolve().then(() => client.provider.saveTokens({ access_token: 'SYNTHETIC_LATE_TOKEN', token_type: 'Bearer' })));
           rejectedLateToken = true;
@@ -453,7 +454,8 @@ if (process.argv[3] === '--worker') {
         gate.resolve();
         await bounded(f.credentials.modifyRecord(SHARED_KEY, async () => undefined), 'late restore releases native lock');
         assert.equal(rejectedLateToken, true);
-        assert.deepEqual(await f.credentials.readRecord(grantKey(pointer.owner)), before);
+        const grant = await createGrantStore(f.credentials, pointer.owner, pointer.createdAt, () => true).read();
+        assert.equal(grant?.tokens.refresh_token === 'SYNTHETIC_ROTATED_BEFORE_TIMEOUT', true, 'Preserve only the pre-deadline rotation');
         await assert.rejects(access(`${filename}.lock`), { code: 'ENOENT' });
       } finally { gate.resolve(); await f.dispose(); }
     });

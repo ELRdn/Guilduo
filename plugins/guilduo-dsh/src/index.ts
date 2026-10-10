@@ -145,7 +145,7 @@ export function createHostControl(ctx: Context, deps?: Dependencies) {
         try {
           const tools = await Promise.race([session.restore(), new Promise<never>((_, reject) => {
             timer = setTimeout(() => {
-              void session.close().catch(() => {});
+              void session.close(true).catch(() => {});
               reject(new Error('Guilduo restoration timed out'));
             }, RESTORE_TIMEOUT_MS);
           })]); live();
@@ -225,8 +225,8 @@ export function createHostControl(ctx: Context, deps?: Dependencies) {
       if (shared) await refreshShared();
       if (shared) {
         const expectedId = sharedState?.connectionId;
-        let legacy = !sharedState ? sources.get(sessionId) : undefined;
-        if (!sharedState && !legacy) {
+        let legacy = sharedState?.state !== 'active' ? sources.get(sessionId) : undefined;
+        if (sharedState?.state !== 'active' && !legacy) {
           try {
             const owner = ctx.agents.get(SessionId(sessionId));
             if (owner) { const native = await nativeOwner(sessionId, false, owner); legacy = { owner: sessionId, createdAt: native.header.createdAt }; }
@@ -240,7 +240,7 @@ export function createHostControl(ctx: Context, deps?: Dependencies) {
         const invalidated = await shared.deactivate(expectedId, true);
         await refreshShared();
         if (invalidated) await createGrantStore(credentials!, invalidated.owner, invalidated.createdAt, () => false, deps?.protection).delete();
-        if (legacy) await createGrantStore(credentials!, legacy.owner, legacy.createdAt, () => true, deps?.protection, async () => {
+        if (legacy && invalidated) await createGrantStore(credentials!, legacy.owner, legacy.createdAt, () => true, deps?.protection, async () => {
           const current = await shared.read();
           if (current?.state === 'active' && current.owner === legacy!.owner) throw new Error('Legacy source was shared');
         }).clear();

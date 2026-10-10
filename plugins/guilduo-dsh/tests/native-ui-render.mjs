@@ -18,7 +18,7 @@ const directory = fileURLToPath(new URL('../', import.meta.url));
 const rootRequire = createRequire(new URL('../../../package.json', import.meta.url));
 const { chromium } = rootRequire('playwright-core');
 const candidate = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'));
-assert.equal(candidate.version, '0.6.0-beta.16');
+assert.equal(candidate.version, '0.6.0-beta.17');
 const load = name => import(pathToFileURL(hostRequire.resolve(`@deepseek-ai/${name}`)).href);
 const publicPackages = join(dirname(dirname(resolve(process.argv[2]))), 'node_modules/@deepseek-ai');
 const assets = join(publicPackages, 'dsh-web-frontend/dist/assets');

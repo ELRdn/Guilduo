@@ -159,7 +159,7 @@ export function createHostControl(ctx, deps) {
                 try {
                     const tools = await Promise.race([session.restore(), new Promise((_, reject) => {
                             timer = setTimeout(() => {
-                                void session.close().catch(() => { });
+                                void session.close(true).catch(() => { });
                                 reject(new Error('Guilduo restoration timed out'));
                             }, RESTORE_TIMEOUT_MS);
                         })]);
@@ -281,8 +281,8 @@ export function createHostControl(ctx, deps) {
                 await refreshShared();
             if (shared) {
                 const expectedId = sharedState?.connectionId;
-                let legacy = !sharedState ? sources.get(sessionId) : undefined;
-                if (!sharedState && !legacy) {
+                let legacy = sharedState?.state !== 'active' ? sources.get(sessionId) : undefined;
+                if (sharedState?.state !== 'active' && !legacy) {
                     try {
                         const owner = ctx.agents.get(SessionId(sessionId));
                         if (owner) {
@@ -307,7 +307,7 @@ export function createHostControl(ctx, deps) {
                 await refreshShared();
                 if (invalidated)
                     await createGrantStore(credentials, invalidated.owner, invalidated.createdAt, () => false, deps?.protection).delete();
-                if (legacy)
+                if (legacy && invalidated)
                     await createGrantStore(credentials, legacy.owner, legacy.createdAt, () => true, deps?.protection, async () => {
                         const current = await shared.read();
                         if (current?.state === 'active' && current.owner === legacy.owner)

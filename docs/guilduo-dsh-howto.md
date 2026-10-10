@@ -15,7 +15,7 @@ Connect DeepSeek Harness to [Guilduo](https://guilduo.com/) through its native S
 Stop old Web/Desktop hosts sharing the same DSH storage before updating. For an existing Web profile named `web`:
 
 ```powershell
-dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.16 --ignore-scripts
+dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.17 --ignore-scripts
 ```
 
 Replace `web` with your actual Web profile name. On October 10, 2026, both `@latest` and `@beta` resolve to this version; the explicit version above makes the installation reproducible. Update each participating profile before restarting its host, then reload the browser.
@@ -70,4 +70,8 @@ Report problems at [GitHub Issues](https://github.com/ELRdn/Guilduo/issues) with
 
 **0.6.0-beta.16** is published as both `latest` and `beta`, with public archive bytes verified. Local package, native lifecycle, synthetic OAuth/Settings and isolated CLI checks passed. On October 10, 2026, the user reported successful public OAuth, MCP discovery, real MCP reads/writes and Desktop saved authentication reuse after restart. After waiting roughly 1–2 minutes, opening Settings showed Connected without reauthorization. This does not establish whether restoration occurred before opening Settings. Settings-free first-input/new-session/fork use, guarded-update readback/conflicts, Registry Agent linking/Handoff and Human answer → resume remain pending. No Registry Agent is linked yet; beta.14's historical grant-loss cause is unproven.
 
-Additional feature development is paused at this beta stopping point. See the [current release/acceptance status](guilduo-dsh-status.md). GitHub source documentation is maintained; the published npm archive and its captured README are unchanged. Updating npm's displayed README requires a new version; no new version is published by this documentation pass. License: [AGPL-3.0-only](../LICENSE).
+Feature expansion remains paused; beta.17 contains only the maintenance fixes below. See the [current release/acceptance status](guilduo-dsh-status.md). GitHub source documentation is maintained; the published npm archive and its captured README are unchanged. Use the pinned beta.17 maintenance version above; do not assume a latest promotion. License: [AGPL-3.0-only](../LICENSE).
+
+## beta.17 maintenance update
+
+Legacy credential-erasure failure now returns a disconnect error. Retry from the original conversation after protection/storage recovers. Credentials refreshed before a restoration deadline stay subject to the original writer lock and admission checks; saves after close are refused. Staging refuses linked Skill and LICENSE output. Published beta.16 stays immutable. See [completion assessment](guilduo-plugins-completion.md) for publication and real-environment acceptance gaps.

@@ -1,5 +1,7 @@
 # Guilduo DSH beta.16 独立レビュー
 
+> 以下はbeta.16時点のレビュー履歴。後続の本人依頼で必要なDSH保守修正が許可され、beta.17でR1/R2/R3を対応した。旧本文の凍結・未修正という記述は当時の状態で、現行判定は[DSH完了評価](guilduo-dsh-completion-review.md)と[現行status](guilduo-dsh-status.md)を参照する。
+
 確認日: 2026-10-10。対象: `@guilduo/dsh-oauth-poc@0.6.0-beta.16`、Windows / DSH `0.2.0-rc.2`。
 
 これは別担当AIによる限定的な独立レビューであり、外部の人間による監査ではない。DSH追加開発停止は維持する。ランタイム修正、再配布、npm公開、Git変更、実profile・資格情報・履歴へのアクセス、実OAuth、モデル要求は行っていない。書き込みはこの文書だけ。

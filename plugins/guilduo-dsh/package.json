@@ -1,6 +1,6 @@
 {
   "name": "@guilduo/dsh-oauth-poc",
-  "version": "0.6.0-beta.16",
+  "version": "0.6.0-beta.17",
   "description": "Guilduo MCP OAuth and native Settings UI for DeepSeek Harness",
   "keywords": [
     "dsh",
@@ -59,7 +59,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node build-client.mjs",
     "stage": "node stage.mjs",
-    "test": "tsx --test tests/poc.test.ts tests/settings.test.ts tests/client.test.ts tests/persistence.test.ts",
+    "test": "tsx --test tests/poc.test.ts tests/settings.test.ts tests/client.test.ts tests/persistence.test.ts tests/stage.test.mjs",
     "test:types": "tsc --ignoreConfig --noEmit --target ES2022 --lib ES2024,DOM --jsx react-jsx --module ESNext --moduleResolution Bundler --skipLibCheck --types node,react --strict tests/poc.test.ts tests/settings.test.ts tests/client.test.ts tests/persistence.test.ts",
     "pack:poc": "npm run stage && npm run build && npm pack --pack-destination ../../.qa-artifacts/guilduo-dsh"
   },

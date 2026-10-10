@@ -894,8 +894,94 @@ test('legacy clear preserves different-birth authentication bytes when exact dec
     await seedLegacy(next); assert.equal(await next.control.restore(next.agent.id), true);
     await next.execute();
     const replacementRecords = structuredClone([...next.store.records]);
-    await stale.clear();
+    await assert.rejects(stale.clear(), /Saved Guilduo credentials could not be cleared/);
     assert.deepEqual([...next.store.records], replacementRecords, 'A decode birth mismatch must preserve the current authentication bytes');
     await next.execute();
   } finally { await first.dispose(); await next.dispose(); }
+});
+
+test('legacy disconnect reports incomplete erasure, disables reuse, and retries after protection recovers', async () => {
+  let fail = false;
+  const protection: Protection = { ...fakeProtection, async unprotect(value, owner) {
+    if (fail) throw new Error('SYNTHETIC_PRIVATE_DIAGNOSTIC');
+    return fakeProtection.unprotect(value, owner);
+  } };
+  const f = fixture(new MemoryStore(), protection);
+  try {
+    await seedLegacy(f); assert.equal(await f.control.restore(f.agent.id), true);
+    const key = [...f.store.records.keys()][0]!;
+    const before = structuredClone(f.store.records.get(key)); fail = true;
+    const result = await f.bridge.handle('guilduo/disconnect', { sessionId: f.agent.id },
+      new AbortController().signal, f.ctx.connection.operator);
+    assert.equal(result.ok, false);
+    assert.doesNotMatch(JSON.stringify(result), /SYNTHETIC|ciphertext|ACCESS|REFRESH/);
+    if (!result.ok) assert.equal(result.error.code, 'guilduo/disconnect-incomplete');
+    assert.deepEqual(f.store.records.get(key), before);
+    assert.equal((await createSharedConnections(f.store).read())?.state, 'disconnected');
+    assert.equal(await f.control.restore(f.agent.id), false);
+    await assert.rejects(f.execute());
+    fail = false;
+    await f.control.logout(f.agent.id); await disconnected(f.store);
+    await f.control.logout(f.agent.id); await disconnected(f.store);
+  } finally { await f.dispose(); }
+});
+
+test('clear rejects admission and write failures without changing a grant or allowing reuse', async () => {
+  for (const mode of ['admission', 'write']) {
+    const store = new MemoryStore();
+    await createGrantStore(store, 'synthetic-clear', 123, () => true, fakeProtection).save({
+      tokens: { access_token: 'SYNTHETIC_ACCESS', token_type: 'Bearer' },
+    });
+    const before = structuredClone([...store.records]);
+    const grant = createGrantStore(store, 'synthetic-clear', 123, () => true, fakeProtection,
+      async () => { if (mode === 'admission') throw new Error('SYNTHETIC_PRIVATE_DIAGNOSTIC'); });
+    if (mode === 'write') store.modifyRecord = async () => { throw new Error('SYNTHETIC_PRIVATE_DIAGNOSTIC'); };
+    await assert.rejects(grant.clear(), /^Error: Saved Guilduo credentials could not be cleared$/);
+    assert.deepEqual([...store.records], before); assert.equal(grant.isLive(), false);
+  }
+});
+
+test('restore timeout preserves only tokens refreshed before close and rejects late saves', { timeout: 3000 }, async t => {
+  const first = fixture(); await login(first); await first.dispose();
+  const f = fixture(first.store); const entered = deferred(); const release = deferred();
+  let lateSaveRejected = false;
+  try {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    f.onConnect(async () => {
+      await f.provider().saveTokens({ access_token: 'BEFORE_TIMEOUT', refresh_token: 'ROTATED_BEFORE_TIMEOUT', token_type: 'Bearer' });
+      entered.resolve(); await release.promise;
+      await assert.rejects(async () => f.provider().saveTokens({ access_token: 'AFTER_TIMEOUT', token_type: 'Bearer' }), /Session closed/);
+      lateSaveRejected = true;
+    });
+    const restoring = assert.rejects(f.control.restore(f.agent.id), /restoration timed out/);
+    await entered.promise; t.mock.timers.tick(RESTORE_TIMEOUT_MS); await restoring;
+    assert.equal(f.control.status(f.agent.id).connected, false); assert.equal(f.definitions.size, 0);
+    release.resolve();
+    const shared = (await createSharedConnections(f.store).read())!;
+    // Wait for the native writer queue through a no-op lock before checking its committed record.
+    await f.store.modifyRecord(SHARED_KEY, async () => undefined);
+    const committed = await createGrantStore(f.store, shared.owner, shared.createdAt, () => true, fakeProtection).read();
+    assert.equal(committed?.tokens.refresh_token, 'ROTATED_BEFORE_TIMEOUT');
+    assert.equal(lateSaveRejected, true);
+    f.onConnect(async () => {}); assert.equal(await f.control.restore(f.agent.id), true);
+    assert.equal((await f.provider().tokens())?.refresh_token, 'ROTATED_BEFORE_TIMEOUT');
+  } finally { release.resolve(); t.mock.timers.reset(); await f.dispose(); }
+});
+
+test('disconnect after a restore timeout cannot save its retained rotation or resurrect authentication', { timeout: 3000 }, async t => {
+  const first = fixture(); await login(first); await first.dispose();
+  const f = fixture(first.store); const entered = deferred(); const release = deferred();
+  try {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    f.onConnect(async () => {
+      await f.provider().saveTokens({ access_token: 'SYNTHETIC_BEFORE_TIMEOUT', token_type: 'Bearer' });
+      entered.resolve(); await release.promise;
+    });
+    const restoring = assert.rejects(f.control.restore(f.agent.id), /restoration timed out/);
+    await entered.promise; t.mock.timers.tick(RESTORE_TIMEOUT_MS); await restoring;
+    const logout = f.control.logout(f.agent.id);
+    release.resolve(); await logout;
+    await disconnected(f.store);
+    assert.equal(await f.control.restore(f.agent.id), false);
+  } finally { release.resolve(); t.mock.timers.reset(); await f.dispose(); }
 });

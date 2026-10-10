@@ -103,12 +103,16 @@ export function createGrantStore(credentials: Pick<CredentialProvider, 'readReco
       live(); return result;
     },
     async clear() {
-      await credentials.modifyRecord(key, async stored => {
-        try { if (!await decode(stored)) return; await admit(); } catch { return; }
-        // Native delete has no compare-and-delete: clear secrets atomically without removing a replacement record.
-        return { kind: 'grant', payload: { discarded: true } };
-      });
-      revoked = true;
+      try {
+        await credentials.modifyRecord(key, async stored => {
+          if (!stored || (stored.kind === 'grant' && record(stored.payload) &&
+              Object.keys(stored.payload).length === 1 && stored.payload.discarded === true)) return;
+          await decode(stored); await admit();
+          // Native delete has no compare-and-delete: never erase a replacement record.
+          return { kind: 'grant', payload: { discarded: true } };
+        });
+      } catch { throw new Error('Saved Guilduo credentials could not be cleared'); }
+      finally { revoked = true; }
     },
     async delete() { revoked = true; await credentials.deleteRecord(key); },
   };

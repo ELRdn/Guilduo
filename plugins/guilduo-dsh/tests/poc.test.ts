@@ -340,7 +340,7 @@ test('plugin loads canonical Skill via native register without network and ships
     assert.deepEqual(staged, canonical);
   }
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.private, undefined); assert.equal(manifest.version, '0.6.0-beta.16');
+  assert.equal(manifest.private, undefined); assert.equal(manifest.version, '0.6.0-beta.17');
   assert.equal(manifest.dependencies['@modelcontextprotocol/client'], '2.0.0');
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml');
   for (const filename of await readdir(new URL('../src/', import.meta.url))) {
