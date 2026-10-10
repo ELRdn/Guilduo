@@ -1,0 +1,4 @@
+Guilduo Claude Code plugin, AGPL-3.0-only.
+Declares the official Guilduo OAuth MCP endpoint and bundles the canonical Guilduo Skill.
+Claude Code remains a separate host; no host runtime, hook, credential or token is bundled.
+Canonical Guilduo Skill and references retain their source license.
