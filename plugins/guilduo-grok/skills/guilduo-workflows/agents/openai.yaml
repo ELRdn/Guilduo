@@ -1,0 +1,6 @@
+interface:
+  display_name: "Guilduo Workflows"
+  short_description: "Continue Guilduo Quests and sync verified phase progress"
+  default_prompt: "Use $guilduo-workflows to continue my authorized Guilduo Quest and proactively sync verified results, blockers, and nextAction at each meaningful phase boundary within my existing authorization."
+policy:
+  allow_implicit_invocation: true

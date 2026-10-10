@@ -230,6 +230,8 @@ dsh plugin --profile web add @guilduo/dsh-oauth-poc@latest --ignore-scripts
 
 ## Skill / OpenAI Plugin・MCP App
 
+OpenAI / ChatGPT・Codex・Grok Bot・Muse Code向けbeta.12候補は、共通の正本Skillを再利用します。[日本語の導入・受入ガイド](docs/guilduo-next-hosts.jp.md) / [English](docs/guilduo-next-hosts.md)を参照してください。OpenAI審査用はhookなしの別ZIP、Codexは信頼確認と明示bindingが必要な補助付きです。Grok・Museの候補配布は実モデル受入を意味しません。
+
 - 正規Skill：[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
 - OpenAI Plugin準備パッケージ：[`plugins/questforge/`](plugins/questforge/)
 - MCP App登録用雛形：[`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "questforge": {
+      "type": "http",
+      "url": "https://mcp.guilduo.com/mcp",
+      "authentication": "oauth"
+    }
+  }
+}

@@ -230,6 +230,8 @@ Use the official guides for installation, OAuth, updates and removal. OpenCode's
 
 ## Skill / OpenAI Plugin / MCP App
 
+OpenAI / ChatGPT, Codex, Grok Bot and Muse Code beta.12 candidates reuse the canonical Skill. See the [English installation and acceptance guide](docs/guilduo-next-hosts.md) / [日本語](docs/guilduo-next-hosts.jp.md). OpenAI submission uses a separate hooks-free ZIP; Codex includes optional trusted lifecycle assistance. Grok and Muse real-model acceptance is not implied by candidate distribution.
+
 - Official Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
 - OpenAI Plugin preparation package: [`plugins/questforge/`](plugins/questforge/)
 - MCP App registration template: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)

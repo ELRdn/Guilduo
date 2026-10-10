@@ -1,5 +1,7 @@
 # Guilduo Project Specification
 
+2026-10-10 追加方針：OpenAI / ChatGPT・Codex Windows・Grok Bot・Muse Codeをbeta.12候補で展開する。[導入・受入ガイド](docs/guilduo-next-hosts.jp.md)に構成と検証境界を記録する。OpenAIのhookなし提出ZIPとCodex通常版は別artifact。認証bridge・自動Agent登録・新規課金は追加しない。Grok／Muse実モデル・Human往復、各公開ディレクトリ掲載は配布検査とは別の工程とする。既存Claude・DSH・OpenCode・OpenClawの配布物は変更しない。
+
 2026-10-10 最新方針：DSH・OpenCode・OpenClawの3プラグインはブラッシュアップ段階へ進み、公式日英Docsで導入を案内する。本人依頼でnpm `latest`を推奨配布タグとして採用し、DSHはbeta.17へ昇格、OpenCode／OpenClawは既存beta.16を維持。β版番号・公開済みarchive・既存互換IDは変更しない。検証範囲と残件は[完成度評価](docs/guilduo-plugins-completion.md)に残す。DSH beta.16の本人OAuth・基本読み書き・Desktop再起動再利用は履歴の証拠で、beta.17の全受入完了には読み替えない。以下は各時点の履歴。
 
 > **English summary:** Guilduo is a Human × AI Work Platform where humans and AI agents coordinate work in the same workspace. This document is the technical source of truth for product responsibilities, data contracts, authentication, synchronization, MCP boundaries, and release safety. Visual rules belong in [`DESIGN.md`](DESIGN.md); `/next/` visual differences belong in [`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md).

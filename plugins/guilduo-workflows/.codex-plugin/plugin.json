@@ -1,5 +1,5 @@
 {
-  "name": "questforge",
+  "name": "guilduo-workflows",
   "version": "0.6.0-beta.12",
   "description": "Coordinate Guilduo Quests, authorized phase progress, Human and Agent handoffs, and reviews through OAuth MCP.",
   "author": {
@@ -17,7 +17,11 @@
     "longDescription": "Plan Guilduo Quests, record verified phase progress within your authorization, request Human feedback, and resume work from saved responses. Connect your own registered Agent through OAuth. Progress updates preserve task completion and review decisions as separate operations. Skill activation depends on the host; the public plugin does not include lifecycle hooks or launch Agents.",
     "developerName": "Radon",
     "category": "Productivity",
-    "capabilities": ["Read Quests", "Record authorized progress", "Human and Agent handoffs"],
+    "capabilities": [
+      "Read Quests",
+      "Record authorized progress",
+      "Human and Agent handoffs"
+    ],
     "websiteURL": "https://guilduo.com/",
     "supportURL": "https://github.com/ELRdn/Guilduo/issues",
     "privacyPolicyURL": "https://guilduo.com/privacy/",
@@ -30,7 +34,6 @@
       "Read the saved Human feedback for my Quest and resume the authorized work."
     ]
   },
-  "mcpServers": "./.mcp.json",
   "extensions": {
     "com.openai": {
       "review": {
@@ -98,5 +101,7 @@
         }
       }
     }
-  }
+  },
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json"
 }
