@@ -1,5 +1,5 @@
 {
-  "sourceRevision": "5e8f66e9214bcf48277b1b46f802f189a90acf04",
+  "sourceRevision": "53793f068546524305d3bc8634edf2918eef4c6b",
   "ja": [
     {
       "slug": "",
@@ -13,7 +13,7 @@
           "title": "目的からガイドを選ぶ",
           "bullets": [
             "初めて使う：はじめにでログインと最初のQuestを確認し、Questガイドで予定・完了・保管を学びます。",
-            "AIを接続する：MCP接続を読み、Codex・Claude・DeepSeek Harness・OpenCode・OpenClawの導入記事へ進みます。接続後はAgentリンクと権限を確認します。",
+            "AIを接続する：MCP接続を読み、ChatGPT / OpenAI・Codex・Claude・DeepSeek Harness・OpenCode・OpenClaw・Grok Bot・Muse Codeの導入記事へ進みます。各ホストの受入範囲とAgent権限を確認します。",
             "仕事を受け渡す：Agentsで担当とHandoffを設定し、Human Relayで確認依頼・回答・再開を学びます。",
             "失敗を解決する：トラブルシューティングで症状を切り分け、権限とAPIで必要な契約を確認します。"
           ]
@@ -82,7 +82,10 @@
         "faq",
         "dsh",
         "opencode",
-        "openclaw"
+        "openclaw",
+        "openai",
+        "grok",
+        "muse"
       ],
       "sources": [
         {
@@ -304,7 +307,10 @@
         "troubleshooting",
         "dsh",
         "opencode",
-        "openclaw"
+        "openclaw",
+        "openai",
+        "grok",
+        "muse"
       ],
       "sources": [
         {
@@ -345,101 +351,110 @@
     {
       "slug": "codex",
       "group": "integrations",
-      "title": "CodexとGuilduoを接続する：MCPとWorkflow Skill",
-      "description": "CodexからGuilduoのQuestを読み、Agentに担当を割り当てる手順。OAuth MCP、既存Appを使うローカルplugin、Skillの読み込み、Human Relayの準備を解説します。",
-      "lead": "Codexからは https://mcp.guilduo.com/mcp へOAuth接続し、Web AppのConnectionsでAgentをリンクします。既存Guilduo Appの接続があれば再登録せずに読み取りで確認し、Workflow Skillは別に追加します。",
+      "title": "CodexとGuilduo：標準plugin・既存App・hook補助",
+      "navTitle": "Codex",
+      "description": "Windows Desktop／CLI向けbeta.12の導入、既存App再利用、OAuth、継続許可とhook停止、更新・削除を案内します。",
+      "lead": "通常版は共通Skill・公式OAuth MCP・SessionStart／Stop補助を同梱します。既存App利用者はローカルcompanionで接続を再利用し、SkillとMCPを重複導入しません。",
       "sections": [
         {
-          "id": "connect-codex",
-          "title": "Codexの接続を用意する",
+          "id": "install",
+          "title": "標準marketplaceから導入する",
           "paragraphs": [
-            "既存デスクトップAppを使う方式と直接MCPを登録する方式は選択肢です。同じ用途で両方を重ねる必要はありません。"
-          ],
-          "steps": [
-            "既存Guilduo Appの接続先とアカウントを確認します。なければMCP接続ガイドに沿ってRemote HTTP MCPを登録します。",
-            "正式URLはhttps://mcp.guilduo.com/mcp、認証はOAuthです。CLIや別ホストの直接MCPでも、そのホストでOAuthを完了します。",
-            "PartyでAgentを登録し、Connectionsで今回の接続へリンクします。"
-          ]
-        },
-        {
-          "id": "verify-codex",
-          "title": "最初は読み取りだけで確認する",
-          "paragraphs": [
-            "Web Appと同じQuestを取得でき、linkedがtrueなら、アカウントとAgentの読み取り確認ができています。書き込みは対象と変更内容を決めて別に検証します。"
-          ],
-          "code": {
-            "language": "text",
-            "text": "Guilduoでget_current_agent_contextとlist_questsを読み取りだけで実行してください。\nリンク状態、effectiveExecutionScopes、取得件数を報告してください。\n作成・更新・完了・担当変更や追加のモデル実行はしないでください。\nToken、Client ID、UIDは出力しないでください。"
-          }
-        },
-        {
-          "id": "install-workflow-skill",
-          "title": "既存AppにWorkflow Skillを追加する",
-          "paragraphs": [
-            "任意のローカル手順です。Guilduoソースリポジトリと、pluginコマンドに対応したCodex環境が必要です。YOUR_REGISTERED_GUILDUO_APP_IDは実際のGuilduo App IDへ置き換えます。OAuthトークンではありません。",
-            "リポジトリのルートで実行します。生成先.qa-artifacts/guilduo-pluginは、ローカルmarketplaceの登録中に保持してください。"
-          ],
-          "steps": [
-            "Codexを再起動し、新しいチャットでGuilduo Workflowsを有効にします。",
-            "読み込まれたSkill一覧にguilduo-workflows:questforge-workflowsがあることを確認します。",
-            "Human Relayにはrequest_human_reviewとlist_human_requestsの両方が必要です。"
+            "Guilduoプラグインの配布版は0.6.0-beta.12です。",
+            "対象はCodex CLI 0.159.2と導入済みWindows Desktopです。既存guilduo-localがApp companionなら、その方式を維持して更新します。通常MCP版と重ねないでください。"
           ],
           "code": {
             "language": "powershell",
-            "text": "npx tsx tools/prepare-guilduo-plugin.mts --app-id YOUR_REGISTERED_GUILDUO_APP_ID\ncodex plugin marketplace add .qa-artifacts/guilduo-plugin\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
+            "text": "codex plugin marketplace add ELRdn/Guilduo --ref main\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
           }
         },
         {
-          "id": "first-codex-task",
-          "title": "Questを担当してレビューへ返す",
-          "steps": [
-            "「ヘルプ文を1か所改善する」をget_questで読み、完了条件と担当を確認します。",
-            "任された範囲でassign_quest_to_agentをプレビューし、実際のAgent IDと最新expectedUpdatedAtで保存します。",
-            "開始時にHandoffをworkingへ進め、Codexの作業環境で修正と検証を行います。",
-            "結果と残る確認点をreview_requiredで返します。実機確認や好みの判断が必要ならHuman Relayを使います。"
+          "id": "companion",
+          "title": "既存Appの接続を再利用する",
+          "paragraphs": [
+            "実App IDはtokenではありません。公開source rootから生成し、生成フォルダーを保持します。再起動後の新しいチャットとcacheで、有効なguilduo-workflows:guilduo-workflows Skillが1つ、接続が1つであることを確認します。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "npx tsx tools/prepare-guilduo-plugin.mts --app-id YOUR_REGISTERED_GUILDUO_APP_ID --hooks\ncodex plugin marketplace add ./.qa-artifacts/guilduo-plugin-hooks\ncodex plugin add guilduo-workflows@guilduo-local"
+          }
+        },
+        {
+          "id": "hook",
+          "title": "継続補助は明示許可とbinding後に使う",
+          "paragraphs": [
+            "hostで正確なhookを確認・trustし、継続許可を得てexact session・canonical cwd・Quest・Agentを確認してbindします。session_id＋turn_idで実行済み記録を排他的に作り、元入力につき追加確認最大1回。再bindでも上限はリセットしません。識別子・再帰フラグ欠落、保存失敗、不正bindingは抑止します。導入だけで同期を始めません。詳細は同梱hooks/README.mdです。"
           ]
         },
         {
-          "id": "codex-diagnosis",
-          "title": "接続・Skill・実作業を切り分ける",
-          "bullets": [
-            "MCPは使えるがSkillがない：MCP単体ではSkillは読み込まれません。pluginと新しいチャットの読み込みを確認します。",
-            "Humanツールがない：既存AppのメタデータをRefreshします。普通のQuest更新で人の回答を代用しません。",
-            "pluginの認識成功はローカル読み込みの確認です。公開ディレクトリ掲載やOpenAI公式審査の完了ではありません。",
-            "担当保存は作業開始の証拠ではありません。workingへの遷移と実際の結果を別に確認します。"
+          "id": "verify-permission",
+          "title": "Agent権限とHuman回答を確認する",
+          "paragraphs": [
+            "導入はAgentを自動登録しません。Freeの上限は2登録Agentです。既存の許可済みAgentを使い、共有接続では毎回actingAgentIdを指定します。get_current_agent_contextでallowlistと実行スコープを確認し、fresh tool discoveryにexpectedUpdatedAtがあることを確かめます。限定更新後はreadbackし、同じ内容なら無更新、競合なら再読取します。update_questにdryRunはありません。Human依頼の回答は本人がWebで保存したものを取得してから再開します。"
+          ]
+        },
+        {
+          "id": "update-remove",
+          "title": "更新・無効化・切断・削除",
+          "paragraphs": [
+            "Git marketplaceはupgrade後、同じpluginを再導入してcacheの版を確認します。unbindは補助停止、hostの停止ボタンは推論中断です。Plan・read-only・fork・許可撤回・中断時に書き込まないことを確認します。無効化はhost設定、OAuth切断は接続設定とGuilduo Web、削除はplugin removeです。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "codex plugin marketplace upgrade guilduo-local\ncodex plugin add guilduo-workflows@guilduo-local\n# Remove only when no longer needed:\ncodex plugin remove guilduo-workflows@guilduo-local"
+          }
+        },
+        {
+          "id": "verified-scope",
+          "title": "今回確認できた範囲",
+          "paragraphs": [
+            "Windows CLI 0.159.2で導入・Skill/hook定義の発見、本人環境のApp companion更新とcache一致を確認しました。専用プロセスの直接OAuthでは認証再利用、ツール発見、限定更新とreadback、本人Web回答取得から同じ実セッションの再開、no-op、競合拒否後のread-only再読取を確認しました。実モデルは既存ChatGPT契約のOpenAI gpt-6-astraです。Appの古いtool schema、trusted hookの実実行、refresh・失効・再接続は未受入です。"
           ]
         }
       ],
       "related": [
+        "openai",
+        "grok",
+        "muse",
         "mcp-connection",
-        "agents",
         "human-relay",
         "permissions",
         "troubleshooting"
       ],
       "sources": [
         {
-          "path": "README.md",
-          "label": "README.md"
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
         },
         {
-          "path": "docs/guilduo-plugin-setup.md",
-          "label": "docs/guilduo-plugin-setup.md"
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
         },
         {
-          "path": "plugins/questforge/README.md",
-          "label": "plugins/questforge/README.md"
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
         },
         {
-          "path": "skills/questforge-workflows/SKILL.md",
-          "label": "skills/questforge-workflows/SKILL.md"
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
         },
         {
-          "path": "api/mcp-tools.json",
-          "label": "api/mcp-tools.json"
+          "path": "plugins/guilduo-workflows/README.md",
+          "label": "plugins/guilduo-workflows/README.md"
+        },
+        {
+          "path": "plugins/guilduo-workflows/hooks/README.md",
+          "label": "plugins/guilduo-workflows/hooks/README.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-codex.md",
+          "label": "docs/acceptance/guilduo-next-hosts-codex.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "ホスト別の受入・未確認範囲"
         }
-      ],
-      "navTitle": "Codexとの連携"
+      ]
     },
     {
       "slug": "claude",
@@ -1921,6 +1936,270 @@
         }
       ],
       "navTitle": "API・MCPリファレンス"
+    },
+    {
+      "slug": "openai",
+      "group": "integrations",
+      "title": "ChatGPTとGuilduo：OpenAI公開候補とOAuth接続",
+      "navTitle": "ChatGPT / OpenAI",
+      "description": "ChatGPT向けbeta.12の構成、標準OAuth MCP、導入と削除、審査・掲載の状況を案内します。Codexのhook付き通常版とは別ZIPです。",
+      "lead": "OpenAI向け候補は共通Skillと公式OAuth MCPを同梱し、App参照とhookを含みません。GitHub配布とOpenAI審査・掲載は別の工程です。",
+      "sections": [
+        {
+          "id": "package",
+          "title": "OpenAI候補の配布と掲載",
+          "paragraphs": [
+            "公開候補は0.6.0-beta.12。Guilduo GitHub ReleaseのOpenAI専用ZIPは審査提出用です。掲載が確認されるまではChatGPTディレクトリで導入済み・承認済みとは案内しません。"
+          ]
+        },
+        {
+          "id": "connect",
+          "title": "ChatGPTの標準OAuth接続",
+          "steps": [
+            "ChatGPT Pluginsで既存Guilduo接続を確認します。既存接続があれば再利用し、必要なtool metadataをRefreshします。",
+            "新規の場合はAdd custom MCP serverでhttps://mcp.guilduo.com/mcpを登録し、OAuthで本人アカウントを承認します。",
+            "新しいチャットで対象pluginを選び、Agent contextと専用Questの読み取りだけを確認します。MCP接続単体は共通Skillの読込確認ではありません。"
+          ]
+        },
+        {
+          "id": "verify-permission",
+          "title": "Agent権限とHuman回答を確認する",
+          "paragraphs": [
+            "導入はAgentを自動登録しません。Freeの上限は2登録Agentです。既存の許可済みAgentを使い、共有接続では毎回actingAgentIdを指定します。get_current_agent_contextでallowlistと実行スコープを確認し、fresh tool discoveryにexpectedUpdatedAtがあることを確かめます。限定更新後はreadbackし、同じ内容なら無更新、競合なら再読取します。update_questにdryRunはありません。Human依頼の回答は本人がWebで保存したものを取得してから再開します。"
+          ]
+        },
+        {
+          "id": "stop-update-remove",
+          "title": "更新・停止・切断・削除",
+          "paragraphs": [
+            "公開versionを確認して同じ接続方式の候補へ更新し、hostを再起動して新Skillを確認します。停止はhostの推論中断、補助停止、plugin無効化を区別します。OAuthはhostとGuilduo Web Settings → MCP接続で切断し、再接続も標準OAuthを使います。plugin削除だけで認証失効を推測しません。無関係な設定と他pluginは保持します。"
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "審査と実受入の範囲",
+          "paragraphs": [
+            "正例5件・負例3件、専用reviewer環境、実demo、domain検証、MCP／Skill scanは個別gateです。未完了gateは検査票へ記録し、draft uploadを審査提出や掲載完了に読み替えません。"
+          ]
+        }
+      ],
+      "related": [
+        "codex",
+        "grok",
+        "muse",
+        "mcp-connection",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
+        },
+        {
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-submission.md",
+          "label": "docs/guilduo-plugin-submission.md"
+        },
+        {
+          "path": "plugins/questforge/openai-submission.json",
+          "label": "plugins/questforge/openai-submission.json"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "ホスト別の受入・未確認範囲"
+        }
+      ]
+    },
+    {
+      "slug": "grok",
+      "group": "integrations",
+      "title": "Grok Bot向けGuilduo候補：構成と受入範囲",
+      "navTitle": "Grok Bot",
+      "description": "Grok Bot向けbeta.12候補のSkill／HTTPS MCP、GitとZIP配布、Cursor marketplace経路、実機未受入の境界を案内します。",
+      "lead": "Grok Bot向けはAgent Plugins形式の候補です。新規課金なしで配布境界を検査し、実機・実モデル・Human往復は未受入と明記します。",
+      "sections": [
+        {
+          "id": "package",
+          "title": "Git／ZIP候補を確認する",
+          "paragraphs": [
+            "0.6.0-beta.12のplugins/guilduo-grokにはroot plugin.json、mcp.json、共通Skill、LICENSEを同梱し、hookは含みません。Guilduo GitHub Releaseの版とSHA-256を照合します。"
+          ]
+        },
+        {
+          "id": "installation",
+          "title": "導入可能性と公式経路",
+          "paragraphs": [
+            "Grok Botで任意ZIPやフォルダーを直接importする公式手順は未確認です。公開候補を実機導入済みとは案内しません。Cursorの標準monorepo marketplaceは.cursor-plugin/marketplace.jsonで定義しますが、Cursorでの掲載はGrok実機受入ではありません。必須の実機検査を満たせない提出は保留します。"
+          ]
+        },
+        {
+          "id": "verify-permission",
+          "title": "Agent権限とHuman回答を確認する",
+          "paragraphs": [
+            "導入はAgentを自動登録しません。Freeの上限は2登録Agentです。既存の許可済みAgentを使い、共有接続では毎回actingAgentIdを指定します。get_current_agent_contextでallowlistと実行スコープを確認し、fresh tool discoveryにexpectedUpdatedAtがあることを確かめます。限定更新後はreadbackし、同じ内容なら無更新、競合なら再読取します。update_questにdryRunはありません。Human依頼の回答は本人がWebで保存したものを取得してから再開します。"
+          ]
+        },
+        {
+          "id": "stop-update-remove",
+          "title": "更新・停止・切断・削除",
+          "paragraphs": [
+            "公開versionを確認して同じ接続方式の候補へ更新し、hostを再起動して新Skillを確認します。停止はhostの推論中断、補助停止、plugin無効化を区別します。OAuthはhostとGuilduo Web Settings → MCP接続で切断し、再接続も標準OAuthを使います。plugin削除だけで認証失効を推測しません。無関係な設定と他pluginは保持します。"
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "未受入工程を確認する",
+          "paragraphs": [
+            "実モデルやHuman往復のための新規契約・API課金は今回行いません。対応hostや導入画面が変わった場合、候補をそのまま動作保証せずnative検査を追加します。中央ディレクトリへの提出と掲載も別に記録します。"
+          ]
+        }
+      ],
+      "related": [
+        "openai",
+        "codex",
+        "muse",
+        "mcp-connection",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
+        },
+        {
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "plugins/guilduo-grok/README.md",
+          "label": "plugins/guilduo-grok/README.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-grok-muse.md",
+          "label": "docs/acceptance/guilduo-next-hosts-grok-muse.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "ホスト別の受入・未確認範囲"
+        }
+      ]
+    },
+    {
+      "slug": "muse",
+      "group": "integrations",
+      "title": "Muse CodeとGuilduo：native候補の導入とMCP設定",
+      "navTitle": "Muse Code",
+      "description": "Muse Code 1.4.4-R5419.1向けbeta.12候補のnative導入、Skill発見、OAuthを分離した設定、更新・削除と未受入範囲を案内します。",
+      "lead": "Muse候補はnative manifestと共通Skillを同梱します。認証MCPは利用者の標準設定へ分離し、hookと自動モデル実行は含みません。",
+      "sections": [
+        {
+          "id": "install",
+          "title": "native pluginを検証・導入する",
+          "paragraphs": [
+            "Guilduoプラグインの配布版は0.6.0-beta.12です。",
+            "対象は最新stable 1.4.4-R5419.1。公式checksumを照合して隔離検査した版を使用します。旧版の検査票は流用しません。公開source rootから次を実行します。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "muse plugins validate ./plugins/guilduo-muse --json\nmuse plugins install ./plugins/guilduo-muse --json\nmuse plugins inspect guilduo-workflows --json\nmuse skills list --source plugin --json"
+          }
+        },
+        {
+          "id": "oauth",
+          "title": "MCPは標準利用者設定へ追加する",
+          "paragraphs": [
+            "利用者設定の実版で検証したキー・書式はplugins/guilduo-muse/README.mdに記載します。https://mcp.guilduo.com/mcpを設定し、標準muse mcp loginを使います。pluginは既存MCP設定や認証情報をコピー・変更しません。model契約とMCP OAuthは別で、課金が必要になる経路では停止します。",
+            "標準CLIの対話端末ではEnterでブラウザーを開きます。今回の実接続は認証ページが開かず失敗したため、OAuthは未受入です。headlessでは最終リダイレクトを本人端末の保護入力にだけ渡し、チャット・ログへ貼らないでください。"
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "muse mcp login questforge\n# Use only in your own visible terminal if browser opening fails:\nmuse mcp login questforge --headless"
+          }
+        },
+        {
+          "id": "verify-permission",
+          "title": "Agent権限とHuman回答を確認する",
+          "paragraphs": [
+            "導入はAgentを自動登録しません。Freeの上限は2登録Agentです。既存の許可済みAgentを使い、共有接続では毎回actingAgentIdを指定します。get_current_agent_contextでallowlistと実行スコープを確認し、fresh tool discoveryにexpectedUpdatedAtがあることを確かめます。限定更新後はreadbackし、同じ内容なら無更新、競合なら再読取します。update_questにdryRunはありません。Human依頼の回答は本人がWebで保存したものを取得してから再開します。"
+          ]
+        },
+        {
+          "id": "update-remove",
+          "title": "更新・停止・削除",
+          "paragraphs": [
+            "native plugin管理で更新後、host再起動とSkill discoveryを確認します。source path変更で更新が拒否された場合は対象pluginのみremove→installします。hook補助はありません。推論はhostで停止し、OAuth切断・plugin削除を別に操作して無関係な設定を保持します。"
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "候補の検査範囲",
+          "paragraphs": [
+            "最新stableのvalidate・導入・発見・更新・削除と認証検査の実結果を検査票で分けて確認します。新規課金を伴う実モデル・Human往復は未受入です。Git／ZIP公開を中央ストア掲載完了とは案内しません。"
+          ]
+        }
+      ],
+      "related": [
+        "openai",
+        "codex",
+        "grok",
+        "mcp-connection",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
+        },
+        {
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "plugins/guilduo-muse/README.md",
+          "label": "plugins/guilduo-muse/README.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-grok-muse.md",
+          "label": "docs/acceptance/guilduo-next-hosts-grok-muse.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "ホスト別の受入・未確認範囲"
+        }
+      ]
     }
   ],
   "en": [
@@ -1936,7 +2215,7 @@
           "title": "Choose a guide for your goal",
           "bullets": [
             "New to Guilduo: use Getting started for sign-in and your first Quest, then Quests for planning, completion and archiving.",
-            "Connect your AI: read the MCP guide, then choose Codex, Claude, DeepSeek Harness, OpenCode or OpenClaw. Check Agent linking and permissions after connecting.",
+            "Connect AI: read MCP connection, then the ChatGPT / OpenAI, Codex, Claude, DeepSeek Harness, OpenCode, OpenClaw, Grok Bot or Muse Code guide. Check each host’s accepted scope and Agent permissions.",
             "Delegate work: use Agents for assignment and Handoff, then Human Relay for review requests, saved answers and resumption.",
             "Resolve an error: isolate the symptom with Troubleshooting, then check the relevant Permissions and API contracts."
           ]
@@ -2005,7 +2284,10 @@
         "faq",
         "dsh",
         "opencode",
-        "openclaw"
+        "openclaw",
+        "openai",
+        "grok",
+        "muse"
       ],
       "sources": [
         {
@@ -2227,7 +2509,10 @@
         "troubleshooting",
         "dsh",
         "opencode",
-        "openclaw"
+        "openclaw",
+        "openai",
+        "grok",
+        "muse"
       ],
       "sources": [
         {
@@ -2268,101 +2553,110 @@
     {
       "slug": "codex",
       "group": "integrations",
-      "title": "Connect Codex to Guilduo: MCP and Workflow Skill",
-      "description": "Connect Codex to Guilduo, verify Agent context and use Quests. Install the local Workflow Skill companion for an existing App and prepare a Human Relay.",
-      "lead": "Connect Codex to https://mcp.guilduo.com/mcp using OAuth and link its Agent in Web App Connections. If a Guilduo App connection already exists, verify it instead of registering another one; add the Workflow Skill separately.",
+      "title": "Guilduo for Codex: standard plugin, App companion and hooks",
+      "navTitle": "Codex",
+      "description": "Install beta.12 on Windows Codex Desktop/CLI, reuse an existing App, authorize OAuth, control phase assistance, update and remove it.",
+      "lead": "The normal package includes the canonical Skill, official OAuth MCP and SessionStart/Stop assistance. Existing App users generate a local companion that reuses their connection.",
       "sections": [
         {
-          "id": "connect-codex",
-          "title": "Set up the Codex connection",
+          "id": "install",
+          "title": "Install from the standard marketplace",
           "paragraphs": [
-            "Reusing a desktop App and registering direct MCP are alternatives. You do not need both for the same purpose."
-          ],
-          "steps": [
-            "Check the endpoint and account of your existing Guilduo App. Otherwise register Remote HTTP MCP using the connection guide.",
-            "Use https://mcp.guilduo.com/mcp with OAuth. For direct MCP in a CLI or another host, complete OAuth there.",
-            "Register an Agent in Party and link this connection in Connections."
-          ]
-        },
-        {
-          "id": "verify-codex",
-          "title": "Start with a read-only check",
-          "paragraphs": [
-            "Reading the same Quests as the Web App with linked: true verifies account and Agent read access. Test writing separately after choosing the exact target and change."
-          ],
-          "code": {
-            "language": "text",
-            "text": "Use Guilduo get_current_agent_context and list_quests with reads only.\nReport the link state, effectiveExecutionScopes and result count.\nDo not create, update, complete or reassign work, or run another model.\nDo not output tokens, Client IDs or UIDs."
-          }
-        },
-        {
-          "id": "install-workflow-skill",
-          "title": "Add the Workflow Skill to an existing App",
-          "paragraphs": [
-            "This optional local procedure requires the Guilduo source repository and Codex with plugin command support. Replace YOUR_REGISTERED_GUILDUO_APP_ID with your registered Guilduo App ID, not an OAuth token.",
-            "Run from the repository root. Keep the generated .qa-artifacts/guilduo-plugin directory while the local marketplace is registered."
-          ],
-          "steps": [
-            "Restart Codex and enable Guilduo Workflows in a new chat.",
-            "Verify that the loaded Skill list includes guilduo-workflows:questforge-workflows.",
-            "A Human Relay requires both request_human_review and list_human_requests."
+            "Guilduo plugin distribution version: 0.6.0-beta.12.",
+            "Targets: Codex CLI 0.159.2 and the installed Windows Desktop. If guilduo-local already supplies an App companion, keep that mode and update it instead of adding the normal MCP package."
           ],
           "code": {
             "language": "powershell",
-            "text": "npx tsx tools/prepare-guilduo-plugin.mts --app-id YOUR_REGISTERED_GUILDUO_APP_ID\ncodex plugin marketplace add .qa-artifacts/guilduo-plugin\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
+            "text": "codex plugin marketplace add ELRdn/Guilduo --ref main\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
           }
         },
         {
-          "id": "first-codex-task",
-          "title": "Take a Quest and return it for review",
-          "steps": [
-            "Read Improve one help message with get_quest and check its criteria and assignee.",
-            "Within delegated scope, preview assign_quest_to_agent and save using the actual Agent ID and current expectedUpdatedAt.",
-            "Move the Handoff to working when starting, then edit and verify in the Codex work environment.",
-            "Return the result and remaining checks as review_required. Use Human Relay for device testing or subjective judgment."
+          "id": "companion",
+          "title": "Reuse an existing App connection",
+          "paragraphs": [
+            "Use the actual App ID, never a token. Generate from the public source root and keep its output directory. After restart, verify the cache and a new chat contain one enabled guilduo-workflows:guilduo-workflows Skill and one intended connection."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "npx tsx tools/prepare-guilduo-plugin.mts --app-id YOUR_REGISTERED_GUILDUO_APP_ID --hooks\ncodex plugin marketplace add ./.qa-artifacts/guilduo-plugin-hooks\ncodex plugin add guilduo-workflows@guilduo-local"
+          }
+        },
+        {
+          "id": "hook",
+          "title": "Enable assistance only after explicit permission and binding",
+          "paragraphs": [
+            "Review and trust the exact hooks in the host, obtain continuation permission, then bind the verified exact session, canonical cwd, Quest and Agent. Exclusive receipts keyed by session_id + turn_id limit additional checks to one per original input, including after rebinding. Missing identifiers/recursion state, storage failure and invalid bindings suppress assistance. Installation alone starts no synchronization; see the bundled hooks/README.md."
           ]
         },
         {
-          "id": "codex-diagnosis",
-          "title": "Separate connection, Skill and execution issues",
-          "bullets": [
-            "MCP works but the Skill is missing: MCP alone does not load a Skill. Check the plugin and loading in a new chat.",
-            "Human tools are missing: refresh existing App metadata. Do not substitute ordinary Quest updates for a human answer.",
-            "Plugin discovery verifies local loading; it is not public-directory publication or OpenAI approval.",
-            "A saved assignment does not prove execution started. Check the working transition and actual result separately."
+          "id": "verify-permission",
+          "title": "Verify Agent permissions and saved Human feedback",
+          "paragraphs": [
+            "Installation does not register an Agent. Free allows two registered Agents. Reuse an authorized Agent and supply actingAgentId on every shared-connection call. Read get_current_agent_context for the allowlist and effective scopes; confirm expectedUpdatedAt in fresh discovery. Read back limited updates, skip unchanged content and reread conflicts. update_quest has no dryRun. Resume only after reading the owner’s actual saved Web response to a Human request."
+          ]
+        },
+        {
+          "id": "update-remove",
+          "title": "Update, disable, disconnect and remove",
+          "paragraphs": [
+            "Upgrade a Git marketplace, reinstall the same plugin and check its cached version. Unbind stops assistance; the host Stop button interrupts inference. Verify write suppression for Plan, read-only, fork, revoked permission and interruption. Disable in host settings, disconnect OAuth in connection settings and Guilduo Web, then remove the plugin."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "codex plugin marketplace upgrade guilduo-local\ncodex plugin add guilduo-workflows@guilduo-local\n# Remove only when no longer needed:\ncodex plugin remove guilduo-workflows@guilduo-local"
+          }
+        },
+        {
+          "id": "verified-scope",
+          "title": "Verified scope",
+          "paragraphs": [
+            "Windows CLI 0.159.2 installation, Skill/hook-definition discovery, owner App-companion update and cache equality are verified. Process-only direct OAuth tests verified credential reuse, discovery, limited update/readback, actual saved owner Web feedback and same-session resume, no-op, and read-only reread after conflict rejection. Model: OpenAI gpt-6-astra under the existing ChatGPT subscription. Stale App schemas, trusted-hook execution, refresh/revocation/reconnection remain unaccepted."
           ]
         }
       ],
       "related": [
+        "openai",
+        "grok",
+        "muse",
         "mcp-connection",
-        "agents",
         "human-relay",
         "permissions",
         "troubleshooting"
       ],
       "sources": [
         {
-          "path": "README.md",
-          "label": "README.md"
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
         },
         {
-          "path": "docs/guilduo-plugin-setup.md",
-          "label": "docs/guilduo-plugin-setup.md"
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
         },
         {
-          "path": "plugins/questforge/README.md",
-          "label": "plugins/questforge/README.md"
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
         },
         {
-          "path": "skills/questforge-workflows/SKILL.md",
-          "label": "skills/questforge-workflows/SKILL.md"
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
         },
         {
-          "path": "api/mcp-tools.json",
-          "label": "api/mcp-tools.json"
+          "path": "plugins/guilduo-workflows/README.md",
+          "label": "plugins/guilduo-workflows/README.md"
+        },
+        {
+          "path": "plugins/guilduo-workflows/hooks/README.md",
+          "label": "plugins/guilduo-workflows/hooks/README.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-codex.md",
+          "label": "docs/acceptance/guilduo-next-hosts-codex.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "Host acceptance and remaining gates"
         }
-      ],
-      "navTitle": "Connect Codex"
+      ]
     },
     {
       "slug": "claude",
@@ -3844,6 +4138,270 @@
         }
       ],
       "navTitle": "API and MCP reference"
+    },
+    {
+      "slug": "openai",
+      "group": "integrations",
+      "title": "Guilduo for ChatGPT: OpenAI candidate and OAuth connection",
+      "navTitle": "ChatGPT / OpenAI",
+      "description": "Understand the beta.12 ChatGPT candidate, standard OAuth MCP setup, updates and removal, and the separate review/publication gates.",
+      "lead": "The OpenAI candidate bundles the canonical Skill and official OAuth MCP, without App references or hooks. GitHub distribution and OpenAI review/listing are separate stages.",
+      "sections": [
+        {
+          "id": "package",
+          "title": "Candidate distribution and listing",
+          "paragraphs": [
+            "Candidate version: 0.6.0-beta.12. The OpenAI-specific GitHub Release ZIP is the review upload artifact. Do not claim directory installation or approval before the listing is verified."
+          ]
+        },
+        {
+          "id": "connect",
+          "title": "Standard ChatGPT OAuth connection",
+          "steps": [
+            "In ChatGPT Plugins, reuse an existing Guilduo connection and Refresh tool metadata when needed.",
+            "For a new connection, use Add custom MCP server with https://mcp.guilduo.com/mcp and authorize your own account with OAuth.",
+            "Select the plugin in a new chat, then read Agent context and a dedicated Quest. An MCP connection alone does not prove the canonical Skill loaded."
+          ]
+        },
+        {
+          "id": "verify-permission",
+          "title": "Verify Agent permissions and saved Human feedback",
+          "paragraphs": [
+            "Installation does not register an Agent. Free allows two registered Agents. Reuse an authorized Agent and supply actingAgentId on every shared-connection call. Read get_current_agent_context for the allowlist and effective scopes; confirm expectedUpdatedAt in fresh discovery. Read back limited updates, skip unchanged content and reread conflicts. update_quest has no dryRun. Resume only after reading the owner’s actual saved Web response to a Human request."
+          ]
+        },
+        {
+          "id": "stop-update-remove",
+          "title": "Update, stop, disconnect and remove",
+          "paragraphs": [
+            "Check the published version, update using the same connection mode, restart the host and rediscover the Skill. Distinguish host inference interruption, helper unbinding and plugin disabling. Disconnect OAuth in the host and Guilduo Web Settings → MCP connections; reconnect with standard OAuth. Plugin removal alone does not prove credential revocation. Preserve other settings and plugins."
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "Review and actual acceptance",
+          "paragraphs": [
+            "Five positive and three negative cases, dedicated reviewer access, a real demo, domain verification and MCP/Skill scans are separate gates. Record unmet gates; a draft upload is neither review submission nor publication."
+          ]
+        }
+      ],
+      "related": [
+        "codex",
+        "grok",
+        "muse",
+        "mcp-connection",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
+        },
+        {
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "docs/guilduo-plugin-submission.md",
+          "label": "docs/guilduo-plugin-submission.md"
+        },
+        {
+          "path": "plugins/questforge/openai-submission.json",
+          "label": "plugins/questforge/openai-submission.json"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "Host acceptance and remaining gates"
+        }
+      ]
+    },
+    {
+      "slug": "grok",
+      "group": "integrations",
+      "title": "Guilduo candidate for Grok Bot: package and acceptance scope",
+      "navTitle": "Grok Bot",
+      "description": "Inspect the beta.12 Grok Bot candidate, Skill/HTTPS MCP package, Git/ZIP distribution, Cursor marketplace path and native acceptance limits.",
+      "lead": "The Grok Bot package is an Agent Plugins candidate validated without new spending. Grok native operation, real-model execution and Human roundtrips remain unaccepted.",
+      "sections": [
+        {
+          "id": "package",
+          "title": "Inspect the Git/ZIP candidate",
+          "paragraphs": [
+            "plugins/guilduo-grok at 0.6.0-beta.12 includes root plugin.json, mcp.json, the canonical Skill and LICENSE, without hooks. Compare the GitHub Release version and SHA-256."
+          ]
+        },
+        {
+          "id": "installation",
+          "title": "Installation availability and official route",
+          "paragraphs": [
+            "An official Grok Bot arbitrary-ZIP/directory import procedure is not established. Candidate publication does not mean native installation. The repository defines Cursor’s standard monorepo marketplace in .cursor-plugin/marketplace.json; Cursor listing is not Grok acceptance. Hold submission when required native testing is unmet."
+          ]
+        },
+        {
+          "id": "verify-permission",
+          "title": "Verify Agent permissions and saved Human feedback",
+          "paragraphs": [
+            "Installation does not register an Agent. Free allows two registered Agents. Reuse an authorized Agent and supply actingAgentId on every shared-connection call. Read get_current_agent_context for the allowlist and effective scopes; confirm expectedUpdatedAt in fresh discovery. Read back limited updates, skip unchanged content and reread conflicts. update_quest has no dryRun. Resume only after reading the owner’s actual saved Web response to a Human request."
+          ]
+        },
+        {
+          "id": "stop-update-remove",
+          "title": "Update, stop, disconnect and remove",
+          "paragraphs": [
+            "Check the published version, update using the same connection mode, restart the host and rediscover the Skill. Distinguish host inference interruption, helper unbinding and plugin disabling. Disconnect OAuth in the host and Guilduo Web Settings → MCP connections; reconnect with standard OAuth. Plugin removal alone does not prove credential revocation. Preserve other settings and plugins."
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "Check remaining acceptance gates",
+          "paragraphs": [
+            "This release adds no paid contract or API usage for real-model/Human acceptance. A changed host or installation UI needs fresh native checks. Record directory submission and listing separately."
+          ]
+        }
+      ],
+      "related": [
+        "openai",
+        "codex",
+        "muse",
+        "mcp-connection",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
+        },
+        {
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "plugins/guilduo-grok/README.md",
+          "label": "plugins/guilduo-grok/README.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-grok-muse.md",
+          "label": "docs/acceptance/guilduo-next-hosts-grok-muse.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "Host acceptance and remaining gates"
+        }
+      ]
+    },
+    {
+      "slug": "muse",
+      "group": "integrations",
+      "title": "Guilduo for Muse Code: native candidate and MCP settings",
+      "navTitle": "Muse Code",
+      "description": "Install the beta.12 native candidate for Muse Code 1.4.4-R5419.1, discover its Skill, configure OAuth separately, update/remove it and check acceptance limits.",
+      "lead": "The Muse candidate includes a native manifest and the canonical Skill. Authenticated MCP uses separate native user settings; the package contains no hooks or automatic model execution.",
+      "sections": [
+        {
+          "id": "install",
+          "title": "Validate and install the native plugin",
+          "paragraphs": [
+            "Guilduo plugin distribution version: 0.6.0-beta.12.",
+            "Target: stable 1.4.4-R5419.1, checked against the official checksum in isolation. Older-version receipts do not accept this version. Run from the published source root."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "muse plugins validate ./plugins/guilduo-muse --json\nmuse plugins install ./plugins/guilduo-muse --json\nmuse plugins inspect guilduo-workflows --json\nmuse skills list --source plugin --json"
+          }
+        },
+        {
+          "id": "oauth",
+          "title": "Configure MCP in native user settings",
+          "paragraphs": [
+            "Use the version-verified settings key and structure in plugins/guilduo-muse/README.md. Configure https://mcp.guilduo.com/mcp and use native muse mcp login. The plugin does not copy/change existing MCP settings or credentials. Model eligibility and MCP OAuth are separate; stop paths requiring new spending.",
+            "Native interactive login asks Enter to open a browser. This acceptance attempt failed before the authorization page opened, so OAuth remains unaccepted. For headless login, enter the final redirect only in native protected terminal input, never chat or logs."
+          ],
+          "code": {
+            "language": "powershell",
+            "text": "muse mcp login questforge\n# Use only in your own visible terminal if browser opening fails:\nmuse mcp login questforge --headless"
+          }
+        },
+        {
+          "id": "verify-permission",
+          "title": "Verify Agent permissions and saved Human feedback",
+          "paragraphs": [
+            "Installation does not register an Agent. Free allows two registered Agents. Reuse an authorized Agent and supply actingAgentId on every shared-connection call. Read get_current_agent_context for the allowlist and effective scopes; confirm expectedUpdatedAt in fresh discovery. Read back limited updates, skip unchanged content and reread conflicts. update_quest has no dryRun. Resume only after reading the owner’s actual saved Web response to a Human request."
+          ]
+        },
+        {
+          "id": "update-remove",
+          "title": "Update, stop and remove",
+          "paragraphs": [
+            "After updating through native plugin management, restart and verify Skill discovery. If changing source paths rejects an update, remove/reinstall only this plugin. There is no hook assistance. Stop inference in the host; disconnect OAuth and remove the plugin separately, preserving unrelated settings."
+          ]
+        },
+        {
+          "id": "acceptance",
+          "title": "Candidate acceptance scope",
+          "paragraphs": [
+            "Read the acceptance report for separate results of latest-stable validation, installation, discovery, update/removal and authentication. Real-model/Human roundtrips requiring new spending remain unaccepted. Git/ZIP publication is not central-store listing."
+          ]
+        }
+      ],
+      "related": [
+        "openai",
+        "codex",
+        "grok",
+        "mcp-connection",
+        "human-relay",
+        "permissions",
+        "troubleshooting"
+      ],
+      "sources": [
+        {
+          "path": "docs/guilduo-next-hosts.md",
+          "label": "docs/guilduo-next-hosts.md"
+        },
+        {
+          "path": "docs/guilduo-next-hosts.jp.md",
+          "label": "docs/guilduo-next-hosts.jp.md"
+        },
+        {
+          "path": "skills/guilduo-workflows/SKILL.md",
+          "label": "skills/guilduo-workflows/SKILL.md"
+        },
+        {
+          "path": "PROJECT_SPEC.md",
+          "label": "PROJECT_SPEC.md"
+        },
+        {
+          "path": "plugins/guilduo-muse/README.md",
+          "label": "plugins/guilduo-muse/README.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-grok-muse.md",
+          "label": "docs/acceptance/guilduo-next-hosts-grok-muse.md"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts.md",
+          "label": "Host acceptance and remaining gates"
+        }
+      ]
     }
   ],
   "reviewedAt": "2026-10-10"
