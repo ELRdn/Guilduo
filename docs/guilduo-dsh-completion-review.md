@@ -81,3 +81,23 @@ OpenCode/OpenClawにも、消去失敗の明示・owner/epoch admission・cancel
 
 今回の信頼度は、固定bytes、実装・合成競合・unit/type/root確認は高、sanitized native結果は実行者receiptの範囲、公開beta.17受入と公開取得は未検証。変更は本書だけ。実装・既存レビュー・package・Gitを変更していない。
 
+## 公開後の独立確認 — 2026-10-10
+
+確認時刻: **2026-10-10 08:29:04 UTC / 17:29:04 JST**。以下はreviewer自身による資格情報なしの公開GET結果。上記の公開前評価・未完了表記は当時の履歴として保持し、この追記で配布ゲートの現在状態を更新する。
+
+**最終判定: beta.17保守版のsource公開・npm配布ゲートは完了。安定版・DSH公開ワークフロー全体の完成とは判定しない。**
+
+| 公開検証 | 今回の直接確認 |
+| --- | --- |
+| exact version | [npm registry exact beta.17](https://registry.npmjs.org/@guilduo%2Fdsh-oauth-poc/0.6.0-beta.17) がHTTP 200。`name=@guilduo/dsh-oauth-poc`、`version=0.6.0-beta.17`。 |
+| 公開tgz | registryのdist.tarballを公開GETしHTTP 200、66,774 bytes。固定最終tgzとBuffer全体がbyte一致。既に独立確認済みの32member・source・canonical Skill・LICENSE一致を同じ配布物へ引き継げる。 |
+| hash / integrity | SHA-256 `89414b1ec3d98fa5d1fa7aa3eb0180f1ed59c913b615942bb46844e5fed3c6d9`。registryのdist.shasumおよびdist.integrityも取得bytesから再計算して一致。 |
+| 現在のtags | [dist-tags](https://registry.npmjs.org/-/package/@guilduo%2Fdsh-oauth-poc/dist-tags) がHTTP 200。`beta=0.6.0-beta.17`、`latest=0.6.0-beta.16`。期待どおりbetaのみ更新、latest昇格なし。tagsは確認時点の状態。 |
+| source merge | [公開PR #57](https://github.com/ELRdn/Guilduo/pull/57) の公開APIがmerged=true、merge commit `8cfd0fd32daa6af69c40efdefcb411882de073e6` を返す。 |
+| CI | [run 38037436398](https://github.com/ELRdn/Guilduo/actions/runs/38037436398) の公開APIがstatus=completed、conclusion=success。run headは `8d13b1943c0683c55b8a6641b4b6d1b9004bc42d`。merge commit自体で再実行されたCIとは主張しない。 |
+
+親のnpm CLI exit 0・upload完了通知と、初回exact GET 404は伝播待ちの履歴であり、その時点を公開済みとは数えない。今回のexact GET成功と公開tgz一致をもって配布PENDINGを閉鎖する。再publishはしていない。
+
+実環境受入の不足は残る。beta.16本人OAuth・基本MCP・Desktop再利用の履歴はbeta.17の直接公開OAuth、settings-free新規/fork、実Web/Desktop共有、guarded更新/readback/no-op/競合、Human回答再開、Agent Handoffの受入に置き換えない。先行P3観測・運用条件もそのまま。今回の公開配布確認で新しいP1/P2阻害事項はない。
+
+今回の追加作業は公開GETと本書追記のみ。Git操作、native/tests/model/OAuth/profile作業、資格情報利用、package/source変更は行っていない。公開tgzはRAMで比較し、実profileへ導入していない。

@@ -3,7 +3,7 @@
 ## 2026-10-10 プラグイン保守・独立完了評価
 
 - [x] 本人の追加依頼によりDSHの必要な保守修正を許可。beta.17で旧認証消去失敗の誤成功、復元期限前更新の保持、Skill／LICENSE出力リンク保護を修正。90 package tests・2 root tests・型／build・native合成認証／Chrome／Settings／隔離CLI更新を確認。
-- [ ] DSH beta.17の公開・公開tgz照合・レビュー最終確認は[現行status](docs/guilduo-dsh-status.md)に記録。実公開Human／Handoffなどの残受入は維持。
+- [x] DSH beta.17の独立レビュー承認（未解決P1/P2なし）、PR #57のmain反映・CI成功、npm公開・公開tgz全32ファイル／SHA-256／integrity一致を確認。beta=17／latest=16、旧beta.16は保持。[現行status](docs/guilduo-dsh-status.md)。実公開Human／Handoffなどの残受入は維持。
 - [x] 最大3担当を再利用し、DSH／OpenCode／OpenClawの[独立完成度評価](docs/guilduo-plugins-completion.md)を実施。限定βの実装・配布と、実ワークフロー／公式掲載の全体完了を区別。
 
 - [x] 2026-10-10 OpenCode／OpenClaw beta.16：Windows native／指定Goモデル／公開OAuth・refresh・失効・再接続／Human回答→再開／限定更新・競合を受入。ソースPR #55をmainへ反映し、両npm公開tgzのbyte・integrityと隔離導入、ClawHub公開配布物のnative導入を確認。DSHはコード変更せず[独立FB](docs/guilduo-dsh-independent-review.md)を保存。
