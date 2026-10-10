@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "guilduo": {
+      "type": "http",
+      "url": "https://mcp.guilduo.com/mcp"
+    }
+  }
+}
