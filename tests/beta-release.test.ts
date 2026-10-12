@@ -90,23 +90,28 @@ test("CLI, Skill bundle, and MCP App handoff package are present without credent
   assert.doesNotMatch([mcp, submission].join("\n"), /AIzaSy|client_secret|private_key|Bearer\s+[A-Za-z0-9]/i);
 });
 
-test("tagged release derives the active Appwrite deployment URL before Worker and semantic smoke checks", () => {
+test("tagged release verifies canonical Worker before Site and signed final Release", () => {
   const workflow = read(".github/workflows/release.yml");
   const deployScript = read("tools/deploy-appwrite-site.sh");
   const d1 = workflow.indexOf("d1 migrations apply");
   const sites = workflow.indexOf("id: appwrite_site");
-  const workerConfig = workflow.indexOf("Regenerate Worker configuration for active Appwrite Site");
+  const workerConfig = workflow.indexOf("Generate ignored public deployment configuration");
   const worker = workflow.indexOf("wrangler-action@v3");
   const appwriteKey = workflow.indexOf("Verify Appwrite Worker key can read the state table");
-  const health = workflow.indexOf("Verify Worker after Appwrite Sites");
+  const health = workflow.indexOf("Verify Worker before Appwrite Site");
+  const prerequisite = workflow.indexOf("Verify active Worker source before Site activation");
   const smoke = workflow.indexOf("Smoke test public routes");
   assert.match(workflow, /tags: \["v\*"\]/);
-  assert.ok(appwriteKey > 0 && appwriteKey < d1 && d1 < sites && sites < workerConfig && workerConfig < worker && worker < health && health < smoke);
+  const evidence = workflow.indexOf("Verify signed source and deployment approval");
+  const finalApproval = workflow.indexOf("Recheck signed acceptance before final Release");
+  const release = workflow.indexOf("softprops/action-gh-release");
+  assert.ok(evidence > 0 && evidence < workerConfig && workerConfig < appwriteKey && appwriteKey < d1
+    && d1 < worker && worker < health && health < prerequisite && prerequisite < sites && sites < smoke
+    && smoke < finalApproval && finalApproval < release);
   assert.match(workflow, /steps\.appwrite_site\.outputs\.url/);
   assert.match(workflow, /APPWRITE_SITE_ENDPOINT:\s*\$\{\{ vars\.APPWRITE_SITE_ENDPOINT \}\}/);
-  assert.match(workflow, /project\/platforms\/web/);
-  assert.match(workflow, /--request POST/);
-  assert.match(workflow, /guilduo-site-/);
+  assert.match(workflow, /Verify canonical origins prerequisite/);
+  assert.doesNotMatch(workflow, /Regenerate Worker configuration for active Appwrite Site/);
   assert.doesNotMatch(workflow, /project\/platforms\/web\/\$APPWRITE_WEB_PLATFORM_ID/);
   assert.match(workflow, /<title>Guilduo/);
   assert.match(workflow, /rel="canonical" href="https:\/\/app\.guilduo\.com\/"/);

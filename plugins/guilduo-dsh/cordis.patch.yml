@@ -1,0 +1,5 @@
+# Isolated PoC bundle; no MCP login or model request is performed on load.
+- insert:
+    - id: guilduo-dsh-oauth-poc
+      name: '@guilduo/dsh-oauth-poc'
+      inject: [tools, skills, credentials, agents, sessions, sessionController]

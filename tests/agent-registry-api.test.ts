@@ -209,7 +209,7 @@ test("MCP Agent linking rejects foreign or nonexistent Agents and preserves old 
 });
 
 test("MCP Agent link tools require an authenticated OAuth connection", async () => {
-  const response = await workerCallUnauthenticated("/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_agent_link", arguments: {} } }) });
+  const response = await workerCallUnauthenticated("/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_agent_link", arguments: {} } }) });
   assert.equal(response.status, 401);
 });
 

@@ -1697,7 +1697,7 @@ function renderParty() {
 
 function renderProfile(): void {
   const profile: LabProfile = state.profile || { displayName: "", handle: "", bio: "" };
-  const accountName = profile.displayName || state.authUser?.displayName || "ひろなお";
+  const accountName = profile.displayName || state.authUser?.displayName || "admin";
   const characterName = "Astra";
   const avatar = state.avatarDataUrl || state.profile?.avatarUrl || "../assets/avatar-role-femme-sentinel.webp";
   const title = $("#profileTitle");
@@ -2872,7 +2872,7 @@ $("#profileAvatarInput").addEventListener("change", async (event: LabEvent) => {
     if (state.remoteMode && state.profile?.handle) {
       try {
         const response = await repository.updateProfile({
-          displayName: state.profile.displayName || state.authUser?.displayName || "ひろなお",
+          displayName: state.profile.displayName || state.authUser?.displayName || "admin",
           handle: state.profile.handle,
           avatarRole: state.profile?.avatarRole || "sentinel",
           avatarVariant: state.profile?.avatarVariant || "femme",

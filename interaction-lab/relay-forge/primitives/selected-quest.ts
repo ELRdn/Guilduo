@@ -27,13 +27,15 @@ import {
 } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el, svg } from "./dom.ts";
-import type { QuestActionId, QuestActionState } from "../quest-actions.ts";
+import { questActionLabel, type QuestActionId, type QuestActionState } from "../quest-actions.ts";
 import { questContext } from "./quest-context.ts";
 import { relayText } from "../relay-copy.ts";
 
 export interface SelectedQuestOptions {
   readonly writeLocked: boolean;
   readonly pendingMessage?: string;
+  readonly resultMessage?: string;
+  readonly resultTone?: "success" | "error" | null;
   /** Artifact whose preview is open, or `null` while the preview is closed. */
   readonly previewArtifactId: string | null;
   readonly onReviewOutput: (artifactId: string) => void;
@@ -105,8 +107,8 @@ function responsibilityRelay(
   });
   return el(
     "section",
-    { class: "rf-resp", "aria-label": "Responsibility relay" },
-    el("h3", { class: "rf-region-label" }, "Responsibility"),
+    { class: "rf-resp", "aria-label": relayText("commandResponsibility") },
+    el("h3", { class: "rf-region-label" }, relayText("commandResponsibility")),
     el("div", { class: "rf-resp-track" }, ...parts),
   );
 }
@@ -118,6 +120,7 @@ function responsibilityRelay(
 function evidenceRow(
   artifact: EvidenceArtifact,
   options: SelectedQuestOptions,
+  scope: "details" | "evidence",
 ): HTMLElement {
   const open = options.previewArtifactId === artifact.id;
   const row = el(
@@ -128,10 +131,13 @@ function evidenceRow(
       "data-primary": artifact.primary ? "true" : "false",
       "data-open": open ? "true" : "false",
       "aria-expanded": artifact.preview === undefined ? null : open ? "true" : "false",
+      "aria-controls": artifact.preview === undefined ? null : "rf-output-preview",
+      "data-command-control": `${scope}-${artifact.id}`,
+      disabled: artifact.preview === undefined,
       "data-artifact-id": artifact.id,
     },
     el("span", { class: "rf-evidence-icon", "aria-hidden": "true" }),
-    artifact.primary ? el("span", { class: "rf-evidence-badge" }, "PRIMARY") : null,
+    artifact.primary ? el("span", { class: "rf-evidence-badge" }, relayText("commandPrimary")) : null,
     el("span", { class: "rf-evidence-name" }, artifact.name),
     el("span", { class: "rf-evidence-summary" }, artifact.summary),
     // Verification is rendered only from a real result (v2 section 6.4).
@@ -152,13 +158,7 @@ function evidenceRow(
   return row;
 }
 
-type EvidenceChange = EvidencePreview["changed"][number];
-
-const CHANGE_LABEL: Readonly<Record<EvidenceChange["kind"], string>> = {
-  added: "追加",
-  changed: "変更",
-  removed: "削除",
-};
+const CHANGE_LABEL = { added:"commandAdded", changed:"commandChanged", removed:"commandRemoved" } as const;
 
 /**
  * The decision-grade preview: what changed, what was checked, and what the
@@ -172,8 +172,8 @@ function evidencePreview(
 ): HTMLElement {
   const close = el(
     "button",
-    { type: "button", class: "rf-quiet-button rf-preview-close" },
-    "Close preview",
+    { type: "button", class: "rf-quiet-button rf-preview-close", "data-command-control": "preview-close" },
+    relayText("commandClosePreview"),
   );
   close.addEventListener("click", options.onClosePreview);
 
@@ -182,12 +182,12 @@ function evidencePreview(
     {
       class: "rf-preview",
       "data-verdict": preview.verdict,
-      "aria-label": `Output preview ${artifact.name}`,
+      "aria-label": `${relayText("commandOutputPreview")} ${artifact.name}`,
     },
     el(
       "header",
       { class: "rf-preview-header" },
-      el("h3", { class: "rf-region-label" }, "Output preview"),
+      el("h3", { class: "rf-region-label" }, relayText("commandOutputPreview")),
       el("span", { class: "rf-preview-artifact" }, artifact.name),
       el("span", { class: "rf-preview-verdict", "data-verdict": preview.verdict }, preview.verdictLabel),
       close,
@@ -201,16 +201,16 @@ function evidencePreview(
       el(
         "div",
         { class: "rf-preview-column" },
-        el("p", { class: "rf-details-sub" }, "変更された field"),
+        el("p", { class: "rf-details-sub" }, relayText("commandChangedFields")),
         preview.changed.length === 0
-          ? el("p", { class: "rf-preview-empty" }, "差分はありません")
+          ? el("p", { class: "rf-preview-empty" }, relayText("commandNoChanges"))
           : el(
             "ul",
             { class: "rf-preview-changes" },
             ...preview.changed.map((change) => el(
               "li",
               { class: "rf-preview-change", "data-kind": change.kind },
-              el("span", { class: "rf-preview-change-kind" }, CHANGE_LABEL[change.kind]),
+              el("span", { class: "rf-preview-change-kind" }, relayText(CHANGE_LABEL[change.kind])),
               el("span", { class: "rf-preview-change-path" }, change.path),
               el("span", { class: "rf-preview-change-detail" }, change.detail),
             )),
@@ -219,7 +219,7 @@ function evidencePreview(
       el(
         "div",
         { class: "rf-preview-column" },
-        el("p", { class: "rf-details-sub" }, "検証結果"),
+        el("p", { class: "rf-details-sub" }, relayText("commandChecks")),
         el(
           "ul",
           { class: "rf-preview-checks" },
@@ -234,13 +234,13 @@ function evidencePreview(
             el("span", { class: "rf-preview-check-result" }, check.result),
           )),
         ),
-        el("p", { class: "rf-details-sub" }, "影響と互換性"),
+        el("p", { class: "rf-details-sub" }, relayText("commandImpactCompatibility")),
         el(
           "p",
           { class: "rf-preview-affected" },
           preview.affected.length === 0
-            ? "影響を受ける Quest はありません"
-            : `${preview.affected.join(", ")} が待機中`,
+            ? relayText("noWaitingQuests")
+            : relayText("commandAffectedWaiting").replace("{quests}", preview.affected.join(", ")),
         ),
         el("p", { class: "rf-preview-compat" }, preview.compatibility),
       ),
@@ -267,11 +267,13 @@ export function selectedQuestWorkspace(
     {
       type: "button",
       class: "rf-review-button",
-      "aria-expanded": previewArtifact !== null ? "true" : "false",
+      "aria-expanded": primary?.preview === undefined ? null : String(previewArtifact !== null),
+      "aria-controls": primary?.preview === undefined ? null : "rf-output-preview",
+      "data-command-control": "review-output",
       disabled: primary === null || primary.preview === undefined ? true : null,
     },
     el("span", { class: "rf-review-glyph", "aria-hidden": "true" }),
-    "Review output",
+    relayText(previewArtifact === null ? "commandReviewOutput" : "commandHideOutput"),
   );
   reviewOutput.addEventListener("click", () => {
     if (primary === null || primary.preview === undefined) return;
@@ -281,20 +283,17 @@ export function selectedQuestWorkspace(
 
   const requestRevision = el(
     "button",
-    { type: "button", class: "rf-secondary-button" },
-    "Request revision",
+    { type: "button", class: "rf-secondary-button", disabled: options.writeLocked },
+    relayText("requestRevision"),
   );
   requestRevision.addEventListener("click", options.onRequestRevision);
-  const actionLabels: Readonly<Record<QuestActionId, string>> = {
-    start: "Start Quest", edit: "Edit", complete: "Complete", stop: "Stop", archive: "Archive", reply: relayText("inbox"),
-  };
   const taskActions = options.questActions.actions.map((action, index) => {
     const button = el("button", {
       type: "button",
       class: index === 0 ? "rf-review-button" : "rf-secondary-button",
       "data-quest-action": action,
       disabled: options.writeLocked ? true : null,
-    }, actionLabels[action]);
+    }, questActionLabel(action));
     button.addEventListener("click", () => options.onQuestAction(action));
     return button;
   });
@@ -316,24 +315,18 @@ export function selectedQuestWorkspace(
         "div",
         { class: "rf-selected-actions" },
         ...(options.questActions.mode === "handoff-decision" ? [view.externalReview ? null : reviewOutput, requestRevision] : taskActions),
-        el(
-          "button",
-          { type: "button", class: "rf-icon-button", title: "More actions" },
-          el("span", { class: "rf-visually-hidden" }, "More actions"),
-          el("span", { class: "rf-overflow-mark", "aria-hidden": "true" }),
-        ),
       ),
     ),
-    el("p", { class: "rf-selected-reason" }, `理由: ${view.reason}`),
-    options.pendingMessage ? el("p", { class: "rf-decision-result", role: "status" }, options.pendingMessage) : null,
+    el("p", { class: "rf-selected-reason" }, `${relayText("commandReason")}: ${view.reason}`),
+    options.pendingMessage || options.resultMessage ? el("p", { class: "rf-decision-result", "data-tone":options.resultTone, role:options.resultTone === "error" ? "alert" : "status" }, options.pendingMessage || options.resultMessage) : null,
   );
 
   const details = el(
     "section",
-    { class: "rf-details", "aria-label": "Details" },
-    el("h3", { class: "rf-region-label" }, "Details"),
+    { class: "rf-details", "aria-label": relayText("commandDetails") },
+    el("h3", { class: "rf-region-label" }, relayText("commandDetails")),
     el("p", { class: "rf-details-headline" }, view.details.headline),
-    el("p", { class: "rf-details-sub" }, "差分の要点"),
+    el("p", { class: "rf-details-sub" }, relayText("commandKeyChanges")),
     el(
       "ul",
       { class: "rf-details-list" },
@@ -344,32 +337,32 @@ export function selectedQuestWorkspace(
       : el(
         "div",
         { class: "rf-details-outputs" },
-        el("p", { class: "rf-details-sub" }, "出力アーティファクト"),
-        ...view.details.outputs.map((artifact) => evidenceRow(artifact, options)),
+        el("p", { class: "rf-details-sub" }, relayText("commandArtifacts")),
+        ...view.details.outputs.map((artifact) => evidenceRow(artifact, options, "details")),
       ),
   );
 
   const evidence = el(
     "section",
-    { class: "rf-evidence-summary", "aria-label": "Evidence summary" },
-    el("h3", { class: "rf-region-label" }, "Evidence Summary"),
+    { class: "rf-evidence-summary", "aria-label": relayText("commandEvidenceSummary") },
+    el("h3", { class: "rf-region-label" }, relayText("commandEvidenceSummary")),
     el("p", { class: "rf-details-headline" }, view.evidenceHeadline),
     el(
       "ul",
       { class: "rf-details-list" },
       ...view.evidencePoints.map((point) => el("li", { class: "rf-details-point" }, point)),
     ),
-    el("p", { class: "rf-details-sub" }, "出力テスト結果"),
+    el("p", { class: "rf-details-sub" }, relayText("commandChecks")),
     el(
       "div",
       { class: "rf-evidence-list" },
-      ...view.evidence.map((artifact) => evidenceRow(artifact, options)),
+      ...view.evidence.map((artifact) => evidenceRow(artifact, options, "evidence")),
     ),
   );
 
   return el(
     "section",
-    { class: "rf-selected", "aria-label": `Selected Quest ${view.ref}` },
+    { class: "rf-selected", "aria-label": `${relayText("selectedQuest")} ${view.ref}` },
     header,
     // A3: the only scrolling region, kept as a sibling of the header so the
     // title can never be clipped by an inherited scroll offset.
@@ -378,9 +371,8 @@ export function selectedQuestWorkspace(
       { class: "rf-selected-scroll" },
       responsibilityRelay(view.responsibility, actors),
       view.externalReview ? questContext(view) : el("div", { class: "rf-selected-lower" }, details, evidence),
-      previewArtifact === null || previewArtifact.preview === undefined
-        ? null
-        : evidencePreview(previewArtifact, previewArtifact.preview, options),
+      el("div", { id:"rf-output-preview", hidden:previewArtifact === null || previewArtifact.preview === undefined },
+        previewArtifact === null || previewArtifact.preview === undefined ? null : evidencePreview(previewArtifact, previewArtifact.preview, options)),
     ),
   );
 }

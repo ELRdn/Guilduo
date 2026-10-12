@@ -23,6 +23,8 @@
  */
 
 import { el } from "../primitives/dom.ts";
+import { relayText } from "../relay-copy.ts";
+import { t } from "../../../i18n.ts";
 import {
   type ConnectionActionResult,
   type ConnectionHealth,
@@ -30,6 +32,7 @@ import {
   type ConnectionsPort,
   type ConnectionView,
   HEALTH_CHIP,
+  connectionSyncDirection,
   needsAttention,
 } from "./connections-model.ts";
 import {
@@ -46,7 +49,7 @@ import {
   screenSkeleton,
   segmentControl,
   stateChip,
-  unavailableAction,
+  countLabel,
 } from "./runtime.ts";
 
 export * from "./connections-model.ts";
@@ -62,6 +65,8 @@ export interface ConnectionsState {
   filter: "all" | "attention" | "connected";
   phase: ConnectionPhase;
   result: ConnectionActionResult | null;
+  resultId: string | null;
+  busyId: string | null;
   /** Set while the disconnect confirmation is open. */
   confirmingDisconnect: boolean;
   mobileDetailOpen: boolean;
@@ -73,6 +78,8 @@ export function initialConnectionsState(): ConnectionsState {
     filter: "all",
     phase: "idle",
     result: null,
+    resultId: null,
+    busyId: null,
     confirmingDisconnect: false,
     mobileDetailOpen: false,
   };
@@ -82,6 +89,18 @@ function visible(model: ConnectionsModel, state: ConnectionsState): readonly Con
   if (state.filter === "attention") return model.connections.filter(needsAttention);
   if (state.filter === "connected") return model.connections.filter((entry) => entry.health === "connected");
   return model.connections;
+}
+
+function selectConnection(state: ConnectionsState, id: string | null): void {
+  state.selectedId = id;
+  state.result = null;
+  state.resultId = null;
+  state.confirmingDisconnect = false;
+  if (state.busyId === null) state.phase = "idle";
+}
+
+function focusConnection(id: string): void {
+  window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`.rf-screen--connections [data-connection-id="${CSS.escape(id)}"]`)?.focus({ preventScroll:true }));
 }
 
 /* ------------------------------------------------------------------ *
@@ -107,6 +126,7 @@ function connectionRow(
       "data-connection-id": connection.id,
       "data-selected": selected ? "true" : "false",
       "aria-current": selected ? "true" : null,
+      tabindex: selected ? 0 : -1,
     },
     el(
       "span",
@@ -119,15 +139,15 @@ function connectionRow(
       "span",
       { class: "rf-c-cell rf-c-cell-impact" },
       connection.affectedQuests.length === 0
-        ? el("span", { class: "rf-srow-sub" }, "影響Questなし")
-        : el("span", { class: "rf-c-impact-count" }, `Quest ${connection.affectedQuests.length}件`),
+        ? el("span", { class: "rf-srow-sub" }, relayText("connectionNoQuests"))
+        : el("span", { class: "rf-c-impact-count" }, `Quest ${countLabel(connection.affectedQuests.length)}`),
     ),
     el(
       "span",
       { class: "rf-c-cell rf-c-cell-sync" },
-      el("span", { class: "rf-srow-sub" }, connection.lastSyncedAt === "" ? "同期なし" : instantLabel(connection.lastSyncedAt)),
+      el("span", { class: "rf-srow-sub" }, connection.lastSyncedAt === "" ? relayText("connectionNoSync") : instantLabel(connection.lastSyncedAt)),
     ),
-    selected ? el("span", { class: "rf-visually-hidden" }, "選択中") : null,
+    selected ? el("span", { class: "rf-visually-hidden" }, relayText("selected")) : null,
   );
   row.addEventListener("click", () => onSelect());
   return row;
@@ -138,14 +158,14 @@ function connectionRow(
  * ------------------------------------------------------------------ */
 
 function actionResult(state: ConnectionsState): HTMLElement | null {
-  if (state.phase === "previewing" || state.phase === "running") {
+  if (state.busyId === state.selectedId && (state.phase === "previewing" || state.phase === "running")) {
     return el(
       "p",
       { class: "rf-c-result", "data-tone": "busy", role: "status" },
-      state.phase === "previewing" ? "変更内容を確認しています…" : "実行しています…",
+      state.phase === "previewing" ? relayText("connectionPreviewing") : relayText("executing"),
     );
   }
-  if (state.result === null) return null;
+  if (state.result === null || state.resultId !== state.selectedId) return null;
   if (!state.result.ok) {
     return el("p", { class: "rf-c-result", "data-tone": "error", role: "alert" }, state.result.message);
   }
@@ -154,18 +174,19 @@ function actionResult(state: ConnectionsState): HTMLElement | null {
     return el(
       "div",
       { class: "rf-c-result", "data-tone": "preview", role: "status" },
-      el("p", { class: "rf-c-result-title" }, "同期するとこうなります"),
+      el("p", { class: "rf-c-result-title" }, t("integration.preview")),
       el(
         "ul",
         { class: "rf-c-preview-list" },
-        el("li", null, `取り込み ${preview.imported}件`),
-        el("li", null, `更新 ${preview.updated}件`),
-        el("li", null, `対象外 ${preview.skipped}件`),
+        el("li", null, `${relayText("connectionCreated")}: ${countLabel(preview.imported)}`),
+        el("li", null, `${relayText("connectionUpdated")}: ${countLabel(preview.updated)}`),
+        el("li", null, `${relayText("connectionSkipped")}: ${countLabel(preview.skipped)}`),
+        el("li", null, `${relayText("connectionConflicts")}: ${countLabel(preview.conflicts ?? 0)}`),
       ),
-      el("p", { class: "rf-c-result-note" }, "ここまでは確認のみで、まだ何も書き込まれていません。"),
+      el("p", { class: "rf-c-result-note" }, relayText("connectionPreviewOnly")),
     );
   }
-  return el("p", { class: "rf-c-result", "data-tone": "success", role: "status" }, state.result.message);
+  return el("p", { class: "rf-c-result", "data-tone": state.result.code === "refresh_failed" ? "error" : "success", role: "status" }, state.result.message);
 }
 
 function detailPanel(
@@ -177,31 +198,42 @@ function detailPanel(
   const connection = model.connections.find((entry) => entry.id === state.selectedId) ?? null;
   if (connection === null) {
     return screenRegion(
-      "選択中の接続",
+      relayText("connectionDetail"),
       { variant: "detail" },
-      screenEmpty("接続を選んでください", "左の一覧から1件選ぶと、権限、最終同期、影響するQuestがここに出ます。"),
+      screenEmpty(relayText("connectionSelect"), relayText("connectionSelectHint")),
     );
   }
 
   const run = async (
     phase: ConnectionPhase,
     work: () => Promise<ConnectionActionResult>,
+    reload = false,
   ): Promise<void> => {
-    if (state.phase === "previewing" || state.phase === "running") return;
+    if (state.busyId !== null || (model.writeHeld && !reload)) return;
+    state.busyId = connection.id;
     state.phase = phase;
     state.result = null;
+    state.resultId = null;
     context.rerender();
-    const result = await work();
-    state.result = result;
-    state.phase = result.ok ? (phase === "previewing" ? "previewed" : "done") : "failed";
+    let result: ConnectionActionResult;
+    try { result = await work(); }
+    catch { result = { ok:false, code:"failed", get message() { return relayText("connectionFailed"); } }; }
+    if (phase === "previewing" && result.ok && result.preview === undefined) result = { ok:false, code:"invalid_response", get message() { return relayText("connectionInvalidResponse"); } };
+    state.busyId = null;
+    if (state.selectedId === connection.id) {
+      state.result = result;
+      state.resultId = connection.id;
+      state.phase = result.ok ? (phase === "previewing" ? "previewed" : "done") : "failed";
+    } else state.phase = "idle";
     context.rerender();
-    context.announce(result.message);
+    context.announce(`${connection.name}: ${result.message}`);
   };
 
   const actions: HTMLElement[] = [];
+  const busy = state.busyId !== null;
 
   if (connection.canSync) {
-    const preview = el("button", { type: "button", class: "rf-secondary-button", disabled: model.writeHeld ? true : null }, "同期を確認");
+    const preview = el("button", { type: "button", class: "rf-secondary-button", "data-connection-action":"preview", disabled: model.writeHeld || busy }, t("integration.previewLive"));
     preview.addEventListener("click", () => { void run("previewing", () => port.previewSync(connection.id)); });
     actions.push(preview);
     const sync = el(
@@ -211,31 +243,38 @@ function detailPanel(
         class: "rf-primary-button",
         // Executing a sync requires having previewed it, exactly like the
         // Handoff decision on Command.
-        disabled: model.writeHeld || state.phase !== "previewed" ? true : null,
+        "data-connection-action":"sync",
+        disabled: model.writeHeld || busy || state.phase !== "previewed" || state.resultId !== connection.id || state.result?.preview === undefined,
       },
-      state.phase === "running" ? "同期中…" : "同期を実行",
+      state.phase === "running" ? relayText("executing") : t("integration.confirmSync"),
     );
-    sync.addEventListener("click", () => { void run("running", () => port.runSync(connection.id)); });
+    sync.addEventListener("click", () => { if (state.phase === "previewed" && state.resultId === connection.id && state.result?.preview !== undefined) void run("running", () => port.runSync(connection.id)); });
     actions.push(sync);
   }
 
   if (connection.canReconnect) {
-    const reconnect = el("button", { type: "button", class: "rf-primary-button", disabled: model.writeHeld ? true : null }, "再接続する");
+    const reconnect = el("button", { type: "button", class: "rf-primary-button", "data-connection-action":"reconnect", disabled: model.writeHeld || busy }, t("integration.reconnect"));
     reconnect.addEventListener("click", () => { void run("running", () => port.reconnect(connection.id)); });
     actions.push(reconnect);
   }
 
   if (connection.canDisconnect) {
-    const disconnect = el("button", { type: "button", class: "rf-secondary-button rf-c-disconnect", disabled: model.writeHeld ? true : null }, "接続を解除");
+    const disconnect = el("button", { type: "button", class: "rf-secondary-button rf-c-disconnect", "data-connection-action":"disconnect", disabled: model.writeHeld || busy }, t("integration.disconnect"));
     disconnect.addEventListener("click", () => {
+      if (state.busyId !== null || model.writeHeld) return;
       state.confirmingDisconnect = true;
       context.rerender();
     });
     actions.push(disconnect);
   }
+  if (port.refresh && model.refreshFailed) {
+    const reload = el("button", { type:"button", class:"rf-secondary-button", "data-connection-action":"reload", disabled:busy }, relayText("connectionReload"));
+    reload.addEventListener("click", () => { void run("running", () => port.refresh!(), true); });
+    actions.push(reload);
+  }
 
   return screenRegion(
-    "選択中の接続",
+    relayText("connectionDetail"),
     { variant: "detail", scroll: true },
     el(
       "div",
@@ -246,43 +285,42 @@ function detailPanel(
     el("p", { class: "rf-c-detail-summary" }, connection.summary),
     connection.lastError === ""
       ? null
-      : el("p", { class: "rf-c-detail-error" }, el("b", { class: "rf-inline-label" }, "直近の失敗 "), connection.lastError),
+      : el("p", { class: "rf-c-detail-error" }, el("b", { class: "rf-inline-label" }, `${relayText("connectionLastError")}: `), connection.lastError),
 
-    el("h4", { class: "rf-c-detail-label" }, "認証と権限"),
+    el("h4", { class: "rf-c-detail-label" }, relayText("connectionAuthScopes")),
     el(
       "dl",
       { class: "rf-c-facts" },
-      el("dt", null, "認証方式"),
+      el("dt", null, relayText("connectionAuthMethod")),
       el("dd", null, connection.auth),
-      el("dt", null, "アカウント"),
-      el("dd", null, connection.accountLabel === "" ? "未接続" : connection.accountLabel),
-      el("dt", null, "最終同期"),
-      el("dd", null, connection.lastSyncedAt === "" ? "同期の記録はありません" : instantLabel(connection.lastSyncedAt)),
+      el("dt", null, t("integration.connectedAccount")),
+      el("dd", null, connection.accountLabel === "" ? relayText("unconnected") : connection.accountLabel),
+      el("dt", null, relayText("connectionLastSync")),
+      el("dd", null, connection.lastSyncedAt === "" ? relayText("connectionNoSync") : instantLabel(connection.lastSyncedAt)),
+      connection.canSync ? el("dt", null, t("integration.direction")) : null,
+      connection.canSync ? el("dd", null, t(`integration.direction.${connectionSyncDirection(connection.id)}`)) : null,
     ),
-    el("h5", { class: "rf-c-scope-label" }, `必要なスコープ ${connection.requiredScopes.length}件`),
+    el("h5", { class: "rf-c-scope-label" }, `${relayText("connectionRequiredScopes")}: ${countLabel(connection.requiredScopes.length)}`),
     connection.requiredScopes.length === 0
-      ? el("p", { class: "rf-c-detail-note" }, "このアダプタはOAuthスコープを必要としません。")
+      ? el("p", { class: "rf-c-detail-note" }, relayText("connectionNoScopeList"))
       : el(
         "ul",
         { class: "rf-c-scopes" },
         ...connection.requiredScopes.map((scope) => el(
           "li",
-          { class: "rf-c-scope", "data-state": connection.health === "connected" || connection.health === "degraded" ? "satisfied" : "unmet" },
+          { class: "rf-c-scope", "data-state": "required" },
           el("span", { class: "rf-c-scope-mark", "aria-hidden": "true" }),
           el("span", { class: "rf-c-scope-name" }, scope),
         )),
       ),
     /* The honest limit, stated where the comparison would otherwise be. */
     model.grantedScopesUnavailable
-      ? unavailableAction(
-        "付与済みスコープの照合",
-        "ゲートウェイは付与済みスコープを返さないため、必要スコープと接続状態のみ表示しています",
-      )
+      ? el("p", { class:"rf-c-detail-note" }, `${relayText("connectionGrantedScopes")}: ${relayText("connectionScopeLimit")}`)
       : null,
 
-    el("h4", { class: "rf-c-detail-label" }, `影響する対象 ${connection.affectedQuests.length + connection.affectedAgents.length}件`),
+    el("h4", { class: "rf-c-detail-label" }, `${relayText("connectionImpact")}: Quest ${countLabel(connection.affectedQuests.length)}`),
     connection.affectedQuests.length === 0
-      ? el("p", { class: "rf-c-detail-note" }, "この接続に紐づくQuestはありません。")
+      ? el("p", { class: "rf-c-detail-note" }, relayText("connectionNoQuests"))
       : el(
         "ul",
         { class: "rf-c-affected" },
@@ -302,40 +340,32 @@ function detailPanel(
       : el(
         "p",
         { class: "rf-c-detail-note" },
-        `連携スコープを持つAgent: ${connection.affectedAgents.join(", ")}`,
+        `${relayText("connectionAllowedAgents")}: ${connection.affectedAgents.join(", ")}`,
       ),
 
-    el("h4", { class: "rf-c-detail-label" }, "操作"),
+    el("h4", { class: "rf-c-detail-label" }, relayText("connectionActions")),
+    model.refreshFailed ? el("p", { class:"rf-c-result", "data-tone":"error", role:"alert" }, relayText("connectionRefreshFailed")) : null,
     model.writeHeld
-      ? el("p", { class: "rf-c-detail-note" }, "接続または鮮度の問題により、書き込みは保留されています。")
+      ? el("p", { class: "rf-c-detail-note" }, relayText("connectionHeld"))
       : null,
     actions.length === 0
-      ? el("p", { class: "rf-c-detail-note" }, "この接続に対して実行できる操作はありません。")
+      ? el("p", { class: "rf-c-detail-note" }, relayText(connection.id.startsWith("toggl-") ? "connectionDedicated" : "connectionNoActions"))
       : el("div", { class: "rf-c-actions" }, ...actions),
     actionResult(state),
-    state.confirmingDisconnect
+    state.confirmingDisconnect && !busy
       ? confirmPanel({
-        action: "接続を解除",
+        action: t("integration.disconnect"),
         impact: [
-          `${connection.name} のアクセス権を失効させます。`,
-          connection.affectedQuests.length === 0
-            ? "紐づいているQuestはありません。"
-            : `${connection.affectedQuests.length}件のQuestの同期が止まります（Quest自体は削除されません）。`,
-          "再度使うには、あらためて接続の許可が必要です。",
+          `${connection.name}: ${relayText("connectionRevokeHint")}`,
+          ...(connection.id === "google-calendar" || connection.id === "google-tasks" ? [relayText("connectionGoogleRevoke")] : []),
+          relayText("connectionStopSync"),
         ],
-        confirmLabel: "解除する",
-        busy: state.phase === "running",
+        confirmLabel: t("integration.disconnect"),
+        busy: busy || model.writeHeld,
         onConfirm: () => {
+          if (state.busyId !== null || model.writeHeld) return;
           state.confirmingDisconnect = false;
-          void (async () => {
-            state.phase = "running";
-            context.rerender();
-            const result = await port.disconnect(connection.id);
-            state.result = result;
-            state.phase = result.ok ? "done" : "failed";
-            context.rerender();
-            context.announce(result.message);
-          })();
+          void run("running", () => port.disconnect(connection.id));
         },
         onCancel: () => {
           state.confirmingDisconnect = false;
@@ -353,14 +383,12 @@ function detailPanel(
 function connectionMetrics(model: ConnectionsModel): readonly Metric[] {
   const attention = model.connections.filter(needsAttention).length;
   const connected = model.connections.filter((entry) => entry.health === "connected").length;
-  const affected = model.connections
-    .filter(needsAttention)
-    .reduce((total, entry) => total + entry.affectedQuests.length, 0);
+  const affected = new Set(model.connections.filter(needsAttention).flatMap(entry => entry.affectedQuests.map(quest => quest.id))).size;
   return [
-    { label: "要対応", value: String(attention), note: "失効 / 劣化 / 権限", tone: attention > 0 ? "danger" : "done" },
-    { label: "影響中のQuest", value: String(affected), note: "要対応の接続に紐づく", tone: "blocked" },
-    { label: "接続中", value: String(connected), tone: "done" },
-    { label: "登録済み", value: String(model.connections.length), tone: "neutral" },
+    { label: relayText("networkAttention"), value: countLabel(attention), tone: attention > 0 ? "danger" : "done" },
+    { label: relayText("connectionImpact"), value: countLabel(affected), tone: "blocked" },
+    { label: relayText("networkConnected"), value: countLabel(connected), tone: "done" },
+    { label: relayText("registered"), value: countLabel(model.connections.length), tone: "neutral" },
   ];
 }
 
@@ -372,31 +400,28 @@ export function renderConnectionsDesktop(
 ): ScreenRender {
   const loading = model.notices.some((notice) => notice.status === "loading");
   const rows = visible(model, state);
-  if (state.selectedId === null && rows.length > 0) state.selectedId = rows[0]?.id ?? null;
+  if (!rows.some(entry => entry.id === state.selectedId)) selectConnection(state, rows[0]?.id ?? null);
 
   const list = el(
     "div",
     { class: "rf-c-list" },
     ...rows.map((connection) => connectionRow(connection, connection.id === state.selectedId, () => {
-      state.selectedId = connection.id;
-      state.phase = "idle";
-      state.result = null;
-      state.confirmingDisconnect = false;
+      selectConnection(state, connection.id);
       context.rerender();
-      context.announce(`${connection.name} を選択しました`);
+      focusConnection(connection.id);
+      context.announce(`${connection.name}: ${relayText("selected")}`);
     })),
   );
 
   list.addEventListener("keydown", (event) => {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     if (rows.length === 0) return;
     event.preventDefault();
     const at = rows.findIndex((connection) => connection.id === state.selectedId);
-    const next = Math.min(rows.length - 1, Math.max(0, (at === -1 ? 0 : at) + (event.key === "ArrowDown" ? 1 : -1)));
-    state.selectedId = rows[next]?.id ?? state.selectedId;
-    state.phase = "idle";
-    state.result = null;
+    const next = event.key === "Home" ? 0 : event.key === "End" ? rows.length - 1 : Math.min(rows.length - 1, Math.max(0, (at === -1 ? 0 : at) + (event.key === "ArrowDown" ? 1 : -1)));
+    selectConnection(state, rows[next]?.id ?? null);
     context.rerender();
+    if (state.selectedId) focusConnection(state.selectedId);
   });
 
   const main = el(
@@ -404,20 +429,20 @@ export function renderConnectionsDesktop(
     { class: "rf-screen rf-screen--connections" },
     screenHeader({
       title: "Connections",
-      question: "どの外部サービスが、どの権限で、安全につながっているか。",
-      meta: [{ label: "登録済み", value: String(model.connections.length) }],
+      question: relayText("connectionQuestion"),
+      meta: [{ label: relayText("registered"), value: countLabel(model.connections.length) }],
       actions: [
         segmentControl(
-          "状態で絞り込む",
+          relayText("filterStatus"),
           [
-            { id: "all", label: "すべて", count: model.connections.length },
-            { id: "attention", label: "要対応", count: model.connections.filter(needsAttention).length },
-            { id: "connected", label: "接続中", count: model.connections.filter((entry) => entry.health === "connected").length },
+            { id: "all", label: relayText("all"), count: model.connections.length },
+            { id: "attention", label: relayText("networkAttention"), count: model.connections.filter(needsAttention).length },
+            { id: "connected", label: relayText("networkConnected"), count: model.connections.filter((entry) => entry.health === "connected").length },
           ],
           state.filter,
           (id) => {
             state.filter = id as ConnectionsState["filter"];
-            state.selectedId = null;
+            selectConnection(state, null);
             context.rerender();
           },
         ),
@@ -429,24 +454,22 @@ export function renderConnectionsDesktop(
       "div",
       { class: "rf-c-workspace" },
       screenRegion(
-        "接続",
+        "Connections",
         { scroll: true, variant: "list" },
         el(
           "div",
           { class: "rf-c-head" },
-          el("span", { class: "rf-col-label" }, "サービス"),
-          el("span", { class: "rf-col-label" }, "状態"),
-          el("span", { class: "rf-col-label" }, "影響"),
-          el("span", { class: "rf-col-label" }, "最終同期"),
+          el("span", { class: "rf-col-label" }, t("integration.service")),
+          el("span", { class: "rf-col-label" }, relayText("status")),
+          el("span", { class: "rf-col-label" }, relayText("impact")),
+          el("span", { class: "rf-col-label" }, relayText("connectionLastSync")),
         ),
         loading
           ? screenSkeleton(6, "row")
           : rows.length === 0
             ? screenEmpty(
-              state.filter === "attention" ? "対応が必要な接続はありません" : "接続がありません",
-              state.filter === "attention"
-                ? "すべての接続が正常です。タブを「すべて」に戻すと一覧が見られます。"
-                : "サービスを接続すると、Questの取り込みと書き出しが行えます。",
+              relayText(state.filter === "attention" ? "connectionNoAttention" : "connectionEmpty"),
+              relayText("connectionEmptyHint"),
             )
             : list,
       ),
@@ -472,14 +495,12 @@ export function renderConnectionsMobile(
 
   if (state.mobileDetailOpen && state.selectedId !== null) {
     const returnTo = state.selectedId;
-    const back = el("button", { type: "button", class: "rf-secondary-button rf-c-back" }, "一覧へ戻る");
+    const back = el("button", { type: "button", class: "rf-secondary-button rf-c-back", "data-connection-action":"back" }, relayText("backToList"));
     back.addEventListener("click", () => {
       state.mobileDetailOpen = false;
       state.confirmingDisconnect = false;
       context.rerender();
-      window.requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>(`.rf-c-card[data-connection-id="${returnTo}"]`)?.focus();
-      });
+      focusConnection(returnTo);
     });
     return {
       main: el(
@@ -496,27 +517,28 @@ export function renderConnectionsMobile(
     { class: "rf-screen rf-screen--connections", "data-mobile-view": "list" },
     screenHeader({
       title: "Connections",
-      question: "どの外部サービスが、どの権限で、安全につながっているか。",
-      meta: [{ label: "要対応", value: String(model.connections.filter(needsAttention).length) }],
+      question: relayText("connectionQuestion"),
+      meta: [{ label: relayText("networkAttention"), value: countLabel(model.connections.filter(needsAttention).length) }],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     segmentControl(
-      "状態で絞り込む",
+      relayText("filterStatus"),
       [
-        { id: "all", label: "すべて", count: model.connections.length },
-        { id: "attention", label: "要対応", count: model.connections.filter(needsAttention).length },
-        { id: "connected", label: "接続中", count: model.connections.filter((entry) => entry.health === "connected").length },
+        { id: "all", label: relayText("all"), count: model.connections.length },
+        { id: "attention", label: relayText("networkAttention"), count: model.connections.filter(needsAttention).length },
+        { id: "connected", label: relayText("networkConnected"), count: model.connections.filter((entry) => entry.health === "connected").length },
       ],
       state.filter,
       (id) => {
         state.filter = id as ConnectionsState["filter"];
+        selectConnection(state, null);
         context.rerender();
       },
     ),
     loading
       ? screenSkeleton(4, "card")
       : rows.length === 0
-        ? screenEmpty("この条件の接続はありません", "タブを切り替えてください。")
+        ? screenEmpty(relayText("connectionEmpty"), relayText("connectionEmptyHint"))
         : el(
           "div",
           { class: "rf-c-cards" },
@@ -539,16 +561,15 @@ export function renderConnectionsMobile(
               el(
                 "span",
                 { class: "rf-c-card-bottom" },
-                el("span", { class: "rf-srow-sub" }, connection.affectedQuests.length === 0 ? "影響Questなし" : `Quest ${connection.affectedQuests.length}件`),
-                el("span", { class: "rf-srow-sub" }, connection.lastSyncedAt === "" ? "同期なし" : instantLabel(connection.lastSyncedAt)),
+                el("span", { class: "rf-srow-sub" }, connection.affectedQuests.length === 0 ? relayText("connectionNoQuests") : `Quest ${countLabel(connection.affectedQuests.length)}`),
+                el("span", { class: "rf-srow-sub" }, connection.lastSyncedAt === "" ? relayText("connectionNoSync") : instantLabel(connection.lastSyncedAt)),
               ),
             );
             card.addEventListener("click", () => {
-              state.selectedId = connection.id;
+              selectConnection(state, connection.id);
               state.mobileDetailOpen = true;
-              state.phase = "idle";
-              state.result = null;
               context.rerender();
+              window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".rf-c-back")?.focus({ preventScroll:true }));
             });
             return card;
           }),

@@ -21,20 +21,26 @@ import "./screens/battle.css";
 import "./screens/connections.css";
 import "./screens/settings.css";
 import "./screens/skills.css";
+import "./screens/productivity.css";
 import { requireElement } from "./primitives/dom.ts";
-import { mountRelayForge } from "./shell.ts";
+import type { mountRelayForge } from "./shell.ts";
 import { dismissOAuthFailure, observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
 import { QuestForgeApiError, QuestForgeRepository } from "../repository.ts";
-import { createProductionRuntime } from "./production.ts";
 import { reportGuiTiming } from "./gui-timing.ts";
 import { prepareWorkspaceReads, type PreparedWorkspace } from "./bootstrap-preparation.ts";
+import { relayText, type RelayCopyKey } from "./relay-copy.ts";
+import { getLocale, LOCALE_METADATA, setLocale, SUPPORTED_LOCALES } from "../../i18n.ts";
+import { captureAcquisitionHandoff, clearAcquisitionHandoff } from "../../launch-analytics-client.ts";
 
 const root = requireElement<HTMLElement>(document, "#relay-forge-root");
 const params = new URLSearchParams(window.location.search);
 const fixtureMode = params.has("state") || params.has("fixture") || params.has("variant");
+if (!fixtureMode && globalThis.QuestForgeConfig?.analyticsEnabled === true) captureAcquisitionHandoff();
 let demoRequested = fixtureMode;
 let loadSequence = 0;
+let authSequence = 0;
 let initialProductionLoad = true;
+let stopAuth: (() => void) | undefined;
 
 /**
  * Tears down whatever mounted UI currently owns `root` — the Shell's own
@@ -55,16 +61,17 @@ function disposeActiveMount(): void {
   unmount?.();
 }
 
-function mount(runtime?: Parameters<typeof mountRelayForge>[1]): void {
+function mount(mountShell: typeof mountRelayForge, runtime?: Parameters<typeof mountRelayForge>[1]): void {
   disposeActiveMount();
-  activeUnmount = mountRelayForge(root, runtime ?? null);
+  activeUnmount = mountShell(root, runtime ?? null);
 }
 
 function bootstrap(
-  title: string,
-  message: string,
-  actions: ReadonlyArray<{ label: string; run: () => void | Promise<void>; primary?: boolean }> = [],
+  title: RelayCopyKey,
+  message: RelayCopyKey,
+  actions: ReadonlyArray<{ label: RelayCopyKey; run: () => void | Promise<void>; primary?: boolean }> = [],
   kind: "loading" | "actionable" | "error" = actions.length === 0 ? "loading" : "actionable",
+  diagnostic = "",
 ): void {
   disposeActiveMount();
   const panel = document.createElement("main");
@@ -80,20 +87,45 @@ function bootstrap(
   brand.textContent = "Guilduo / Relay Forge";
   const heading = document.createElement("h1");
   heading.tabIndex = -1;
-  heading.textContent = title;
+  heading.textContent = relayText(title);
   const copy = document.createElement("p");
-  copy.textContent = message;
+  copy.textContent = `${diagnostic ? `${diagnostic}. ` : ""}${relayText(message)}`;
   const controls = document.createElement("div");
   controls.className = "rf-bootstrap-actions";
   for (const action of actions) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = action.primary ? "rf-bootstrap-primary" : "";
-    button.textContent = action.label;
+    button.textContent = relayText(action.label);
     button.addEventListener("click", () => void action.run());
     controls.append(button);
   }
   panel.append(brand, heading, copy, controls);
+  const language = document.createElement("select");
+  language.setAttribute("aria-label", relayText("language"));
+  for (const locale of SUPPORTED_LOCALES) {
+    const option = document.createElement("option");
+    option.value = locale;
+    option.textContent = LOCALE_METADATA[locale].label;
+    language.append(option);
+  }
+  language.value = getLocale();
+  language.addEventListener("change", () => {
+    setLocale(language.value);
+    bootstrap(title, message, actions, kind, diagnostic);
+    root.querySelector<HTMLSelectElement>("select")?.focus();
+  });
+  panel.append(language);
+  const policies = document.createElement("p");
+  policies.className = "rf-bootstrap-policies";
+  for (const [label, path] of [["Privacy", "privacy"], ["Terms", "terms"]]) {
+    const link = document.createElement("a");
+    link.href = `https://guilduo.com/${path}/`;
+    link.textContent = label;
+    policies.append(link, " ");
+  }
+  panel.append(policies);
+  document.documentElement.lang = getLocale();
   root.replaceChildren(panel);
   // Loading is announced by its status region and must not steal focus or
   // inherit the global interactive focus ring. Actionable/error screens move
@@ -106,8 +138,13 @@ async function mountProduction(uid: string, email: string, prepared?: PreparedWo
   const timingAction = initialProductionLoad ? "reload" : "connect";
   const loadStarted = initialProductionLoad ? 0 : performance.now();
   const sequence = ++loadSequence;
-  bootstrap("Workspaceを読み込んでいます", "Quest、Actor、Relay、Connectionを安全に同期しています。");
+  bootstrap("workspaceLoading", "workspaceLoadingHint");
   try {
+    const [{ createProductionRuntime }, { mountRelayForge }] = await Promise.all([
+      import("./production.ts"),
+      import("./shell.ts"),
+    ]);
+    if (sequence !== loadSequence || demoRequested) return;
     const repository = prepared?.repository ?? new QuestForgeRepository({ getToken: (forceRefresh) => getIdToken(forceRefresh) });
     const runtime = await createProductionRuntime(repository, uid, email, prepared?.snapshot);
     if (sequence !== loadSequence || demoRequested) return;
@@ -116,9 +153,10 @@ async function mountProduction(uid: string, email: string, prepared?: PreparedWo
     // `checkAuth()` re-observes state after sign-out so the existing
     // signed-out bootstrap screen replaces this mount — the shell itself
     // never has to know how to tear itself down.
-    mount({
+    mount(mountRelayForge, {
       ...runtime,
       signOut: async () => {
+        clearAcquisitionHandoff();
         await signOutUser();
         checkAuth();
       },
@@ -129,36 +167,46 @@ async function mountProduction(uid: string, email: string, prepared?: PreparedWo
     if (sequence !== loadSequence || demoRequested) return;
     const diagnostic = error instanceof QuestForgeApiError
       ? `API ${error.status} / ${error.code}`
-      : "接続エラー";
+      : "";
     bootstrap(
-      "Workspaceを読み込めませんでした",
-      `${diagnostic}。接続状態と権限を確認してから再試行してください。データは変更されていません。`,
+      "workspaceFailed",
+      "workspaceFailedHint",
       [
-        { label: "再試行", primary: true, run: () => mountProduction(uid, email) },
-        {
-          label: "デモを見る",
-          run: () => {
-            demoRequested = true;
-            mount();
-          },
-        },
+        { label: "retry", primary: true, run: () => mountProduction(uid, email) },
+        { label: "demoButton", run: showDemo },
       ],
       "error",
+      diagnostic,
     );
   }
 }
 
-function showDemo(): void {
+async function showDemo(): Promise<void> {
+  stopAuth?.();
   demoRequested = true;
-  mount();
+  const sequence = ++loadSequence;
+  try {
+    const { mountRelayForge } = await import("./shell.ts");
+    if (sequence !== loadSequence) return;
+    mount(mountRelayForge);
+  } catch {
+    if (sequence !== loadSequence) return;
+    bootstrap("workspaceFailed", "workspaceFailedHint", [
+      { label: "retry", primary: true, run: showDemo },
+    ], "error");
+  }
 }
 
 function beginSignIn(): void {
-  bootstrap("サインインしています", "Googleの認証が完了するまでお待ちください。");
+  stopAuth?.();
+  demoRequested = false;
+  const sequence = ++loadSequence;
+  bootstrap("authSigning", "authSigningHint");
   void signIn().catch(() => {
-    bootstrap("サインインを開始できませんでした", "Appwriteの設定と接続状態を確認して、もう一度試してください。", [
-      { label: "再試行", primary: true, run: beginSignIn },
-      { label: "デモを見る", run: showDemo },
+    if (sequence !== loadSequence || demoRequested) return;
+    bootstrap("oauthFailed", "oauthFailedHint", [
+      { label: "retry", primary: true, run: beginSignIn },
+      { label: "demoButton", run: showDemo },
     ], "error");
   });
 }
@@ -166,25 +214,29 @@ function beginSignIn(): void {
 function showSignedOut(): void {
   initialProductionLoad = false;
   bootstrap(
-    "Guilduoへサインイン",
-    "実際のQuest、Agent、Handoffを表示するにはGoogleでサインインしてください。",
+    "signInTitle",
+    "signInHint",
     [
-      { label: "Googleでサインイン", primary: true, run: beginSignIn },
-      { label: "デモを見る", run: showDemo },
+      { label: "signIn", primary: true, run: beginSignIn },
+      { label: "demoButton", run: showDemo },
     ],
   );
 }
 
 function checkAuth(): void {
+  stopAuth?.();
+  const sequence = ++authSequence;
+  ++loadSequence;
   const preparation = prepareWorkspaceReads(force => getIdToken(force));
-  observeAuthState((state) => {
-    if (demoRequested) { preparation.finish(); return; }
-    if (state.status === "checking") {
-      bootstrap("サインインを確認しています", "Guilduo workspaceへ安全に接続しています。");
-      return;
-    }
+  const unsubscribe = observeAuthState((state) => {
+    if (sequence !== authSequence || demoRequested) { preparation.finish(); return; }
     if (state.status === "authenticated") {
       void mountProduction(state.user.uid, state.user.email, preparation.finish(state.user.uid));
+      return;
+    }
+    ++loadSequence;
+    if (state.status === "checking") {
+      bootstrap("authChecking", "authCheckingHint");
       return;
     }
     preparation.finish();
@@ -194,20 +246,25 @@ function checkAuth(): void {
     }
     if (state.status === "oauth-failed") {
       dismissOAuthFailure();
-      bootstrap("Googleサインインが完了しませんでした", "認証がキャンセルされたか、Googleとの接続に失敗しました。", [
-        { label: "もう一度試す", primary: true, run: beginSignIn },
-        { label: "デモを見る", run: showDemo },
+      bootstrap("oauthFailed", "oauthFailedHint", [
+        { label: "retry", primary: true, run: beginSignIn },
+        { label: "demoButton", run: showDemo },
       ], "error");
       return;
     }
-    bootstrap("サインイン状態を確認できません", "Appwriteへの接続に失敗しました。ログアウト扱いにはせず、安全に再確認できます。", [
-      { label: "再接続", primary: true, run: checkAuth },
-      { label: "デモを見る", run: showDemo },
+    bootstrap("authFailed", "authFailedHint", [
+      { label: "retry", primary: true, run: checkAuth },
+      { label: "demoButton", run: showDemo },
     ], "error");
   }, (token, subject) => {
-    if (!demoRequested) preparation.onSessionToken(token, subject);
+    if (sequence === authSequence && !demoRequested) preparation.onSessionToken(token, subject);
   });
+  stopAuth = () => {
+    if (sequence === authSequence) ++authSequence;
+    unsubscribe();
+    preparation.finish();
+  };
 }
 
-if (fixtureMode) mount();
+if (fixtureMode) void showDemo();
 else checkAuth();

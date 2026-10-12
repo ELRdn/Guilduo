@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   # The retained-asset chain and active Site must have only one publisher,
@@ -19,14 +20,58 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Require approved evidence artifact
+        env:
+          EVIDENCE_RUN_ID: ${{ vars.LAUNCH_EVIDENCE_RUN_ID }}
+        run: test -n "$EVIDENCE_RUN_ID"
+      - name: Download signed acceptance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: launch-candidate-${{ github.sha }}
+          path: .qa-artifacts
+          run-id: ${{ vars.LAUNCH_EVIDENCE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify signed source and deployment approval
+        run: node --import tsx tools/verify-launch-gates.mts deploy
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+      - name: Verify canonical origins prerequisite
+        run: node --import tsx tools/verify-launch-gates.mts --origins
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Generate ignored public deployment configuration
         run: npm run generate-release-config
         env:
+          BILLING_MODE: ${{ vars.BILLING_MODE || 'test' }}
+          BILLING_CONFIG: ${{ vars.BILLING_CONFIG }}
+          JEV_ENABLED: ${{ vars.JEV_ENABLED || 'false' }}
+          JEV_MODEL: ${{ vars.JEV_MODEL }}
+          JEV_INPUT_USD_PER_MILLION: ${{ vars.JEV_INPUT_USD_PER_MILLION }}
+          JEV_OUTPUT_USD_PER_MILLION: ${{ vars.JEV_OUTPUT_USD_PER_MILLION }}
+          JEV_DATA_POLICY_APPROVED: ${{ vars.JEV_DATA_POLICY_APPROVED || 'false' }}
+          JEV_EVALUATION_BUDGET_USD: ${{ vars.JEV_EVALUATION_BUDGET_USD || '1' }}
+          JEV_BUDGET_SCOPE: ${{ vars.JEV_BUDGET_SCOPE || 'evaluation' }}
+          JEV_COMMERCIAL_CONFIG: ${{ vars.JEV_COMMERCIAL_CONFIG }}
+          ANALYTICS_ENABLED: ${{ vars.ANALYTICS_ENABLED || 'false' }}
+          ANALYTICS_DATA_POLICY_APPROVED: ${{ vars.ANALYTICS_DATA_POLICY_APPROVED || 'false' }}
+          ANALYTICS_CONFIG: ${{ vars.ANALYTICS_CONFIG }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
           APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
@@ -50,6 +95,11 @@ jobs:
           WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
           WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
           APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
+          APPWRITE_PREPARED_TRANSACTIONS: ${{ vars.APPWRITE_PREPARED_TRANSACTIONS || 'false' }}
+      - name: Verify approved runtime configuration
+        run: node --import tsx tools/verify-launch-gates.mts deploy --configuration
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
       - run: npm run design:check
       - run: npx -y -p @google/design.md designmd lint DESIGN.md
@@ -61,6 +111,14 @@ jobs:
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+      - name: Verify launch candidate before deployment
+        shell: bash
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4175 --strictPort > /tmp/guilduo-launch-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in {1..30}; do curl -fsS http://127.0.0.1:4175/privacy/ >/dev/null && break; sleep 1; done
+          npm run launch:verify -- http://127.0.0.1:4175 --built
       - name: Verify Appwrite Worker key can read the state table
         shell: bash
         run: |
@@ -80,6 +138,10 @@ jobs:
           APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
           APPWRITE_STATE_TABLE_ID: ${{ vars.APPWRITE_STATE_TABLE_ID }}
           APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+      - name: Verify reviewed additive migration inventory
+        run: node --import tsx tools/verify-launch-gates.mts deploy --migrations
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
       - name: Apply additive D1 migrations
         run: npx wrangler d1 migrations apply "${{ vars.D1_DATABASE_NAME }}" --remote
         env:
@@ -90,94 +152,6 @@ jobs:
         run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
-      - name: Deploy Appwrite Site
-        id: appwrite_site
-        shell: bash
-        run: |
-          node --import tsx tools/check-site-deploy-cache.mts "$APPWRITE_SITE_URL"
-          node --import tsx tools/retain-site-assets.mts "$APPWRITE_SITE_URL" dist
-          tar -czf "$RUNNER_TEMP/guilduo-site.tar.gz" -C dist .
-          deployment="$(bash tools/deploy-appwrite-site.sh "$RUNNER_TEMP/guilduo-site.tar.gz")"
-          echo "$deployment"
-          echo "url=$(jq -er '.url' <<<"$deployment")" >> "$GITHUB_OUTPUT"
-        env:
-          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
-          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
-          APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
-          APPWRITE_SITE_URL: ${{ vars.WEB_APP_URL || 'https://app.guilduo.com' }}
-      - name: Register active Appwrite Site as the web platform
-        shell: bash
-        run: |
-          register_platform() {
-            local platform_id="$1"
-            local platform_name="$2"
-            local hostname="$3"
-            local response_file="$RUNNER_TEMP/appwrite-platform-${platform_id}.json"
-            local status
-            status="$(curl --silent --show-error \
-              --output "$response_file" \
-              --write-out '%{http_code}' \
-              --request POST \
-              --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-              --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-              --header "Content-Type: application/json" \
-              --data "$(jq -cn --arg platformId "$platform_id" --arg name "$platform_name" --arg hostname "$hostname" '{platformId:$platformId,name:$name,hostname:$hostname}')" \
-              "$APPWRITE_SITE_ENDPOINT/project/platforms/web")"
-            if [[ "$status" == "409" ]]; then
-              curl --silent --show-error --fail \
-                --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-                --header "X-Appwrite-Key: $APPWRITE_DEPLOY_KEY" \
-                "$APPWRITE_SITE_ENDPOINT/project/platforms/web/$platform_id" \
-                | jq -e --arg hostname "$hostname" '.hostname == $hostname' >/dev/null
-            elif [[ "$status" != "200" && "$status" != "201" ]]; then
-              echo "Appwrite web platform registration failed for $hostname with HTTP $status" >&2
-              exit 1
-            fi
-          }
-
-          deployment_hostname="${SITE_URL#https://}"
-          deployment_hostname="${deployment_hostname#http://}"
-          deployment_hostname="${deployment_hostname%%/*}"
-          configured_hostname="${WEB_APP_URL#https://}"
-          configured_hostname="${configured_hostname#http://}"
-          configured_hostname="${configured_hostname%%/*}"
-          register_platform "guilduo-site-${deployment_hostname%%.*}" "Guilduo ${deployment_hostname%%.*}" "$deployment_hostname"
-          if [[ "$configured_hostname" != "$deployment_hostname" ]]; then
-            register_platform "guilduo-web-${configured_hostname//./-}" "Guilduo Web App" "$configured_hostname"
-          fi
-        env:
-          SITE_URL: ${{ steps.appwrite_site.outputs.url }}
-          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
-          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
-          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
-      - name: Regenerate Worker configuration for active Appwrite Site
-        run: npm run generate-release-config
-        env:
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
-          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
-          APPWRITE_STATE_TABLE_ID: ${{ vars.APPWRITE_STATE_TABLE_ID }}
-          APPWRITE_LEGACY_TABLE_ID: ${{ vars.APPWRITE_LEGACY_TABLE_ID }}
-          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
-          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
-          PROVIDER_OAUTH_BASE_URL: ${{ vars.PROVIDER_OAUTH_BASE_URL || vars.WORKER_BASE_URL }}
-          MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
-          WEB_APP_URL: ${{ vars.WEB_APP_URL || steps.appwrite_site.outputs.url }}
-          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
-          SOURCE_URL: ${{ vars.SOURCE_URL }}
-          EXTERNAL_OAUTH_ENABLED: ${{ vars.EXTERNAL_OAUTH_ENABLED || 'false' }}
-          JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || 'https://app.guilduo.com/' }}
-          D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
-          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
-          KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
-          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
-          WEB_API_ROUTE_ZONE_ID: ${{ vars.WEB_API_ROUTE_ZONE_ID }}
-          WEB_API_ROUTE_MANAGEMENT: ${{ vars.WEB_API_ROUTE_MANAGEMENT || 'wrangler' }}
-          WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
-          WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
-          APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
       - name: Publish Appwrite Worker secret
         shell: bash
         run: printf '%s' "$APPWRITE_API_KEY" | npx wrangler secret put APPWRITE_API_KEY
@@ -185,18 +159,78 @@ jobs:
           APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved STRIPE_SECRET_KEY
+        if: vars.BILLING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          case "$BILLING_MODE:$RUNTIME_SECRET" in
+            test:sk_test_*|live:sk_live_*) ;;
+            *) echo "Stripe secret mode mismatch" >&2; exit 1 ;;
+          esac
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put STRIPE_SECRET_KEY
+        env:
+          BILLING_MODE: ${{ vars.BILLING_MODE || 'test' }}
+          RUNTIME_SECRET: ${{ secrets.STRIPE_SECRET_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved STRIPE_WEBHOOK_SECRET
+        if: vars.BILLING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put STRIPE_WEBHOOK_SECRET
+        env:
+          RUNTIME_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved BILLING_ADMIN_TOKEN
+        if: vars.BILLING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put BILLING_ADMIN_TOKEN
+        env:
+          RUNTIME_SECRET: ${{ secrets.BILLING_ADMIN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved TYPESAFE_API_KEY
+        if: vars.JEV_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put TYPESAFE_API_KEY
+        env:
+          RUNTIME_SECRET: ${{ secrets.TYPESAFE_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved analytics secrets
+        if: vars.ANALYTICS_ENABLED == 'true'
+        shell: bash
+        run: |
+          test "${#ANALYTICS_TOKEN_KEY}" -ge 32
+          test "${#ANALYTICS_ADMIN_TOKEN}" -ge 32
+          test "$ANALYTICS_ADMIN_TOKEN" != "$BILLING_ADMIN_TOKEN"
+          printf '%s' "$ANALYTICS_TOKEN_KEY" | npx wrangler secret put ANALYTICS_TOKEN_KEY
+          printf '%s' "$ANALYTICS_ADMIN_TOKEN" | npx wrangler secret put ANALYTICS_ADMIN_TOKEN
+        env:
+          ANALYTICS_TOKEN_KEY: ${{ secrets.ANALYTICS_TOKEN_KEY }}
+          ANALYTICS_ADMIN_TOKEN: ${{ secrets.ANALYTICS_ADMIN_TOKEN }}
+          BILLING_ADMIN_TOKEN: ${{ secrets.BILLING_ADMIN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          command: deploy --tag ${{ github.sha }}
       - name: Verify Web API route
         if: vars.WEB_API_ROUTE_ZONE_ID != ''
         run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
-      - name: Verify Worker after Appwrite Sites
+      - name: Verify Worker before Appwrite Site
         shell: bash
         run: |
           health="$(curl --fail --retry 5 --retry-delay 3 '${{ vars.WORKER_BASE_URL }}/health')"
@@ -213,6 +247,35 @@ jobs:
           resource="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-protected-resource/mcp")"
           node -e 'const [metadata, resource, base] = process.argv.slice(1).map((value, index) => index < 2 ? JSON.parse(value) : value); if (metadata.issuer !== base || metadata.authorization_endpoint !== `${base}/oauth/authorize` || metadata.token_endpoint !== `${base}/oauth/token` || resource.resource !== `${base}/mcp` || !Array.isArray(resource.authorization_servers) || !resource.authorization_servers.includes(base)) process.exit(1)' "$metadata" "$resource" "$mcp_base"
           test "$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 3 -X POST "$mcp_base/mcp")" = "401"
+      - name: Verify active Worker source before Site activation
+        run: node --import tsx tools/verify-launch-gates.mts deploy --worker
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy Appwrite Site
+        id: appwrite_site
+        shell: bash
+        run: |
+          node --import tsx tools/check-site-deploy-cache.mts "$APPWRITE_SITE_URL"
+          node --import tsx tools/retain-site-assets.mts "$APPWRITE_SITE_URL" dist
+          tar -czf "$RUNNER_TEMP/guilduo-site.tar.gz" -C dist .
+          deployment="$(bash tools/deploy-appwrite-site.sh "$RUNNER_TEMP/guilduo-site.tar.gz")"
+          echo "$deployment"
+          echo "url=$(jq -er '.url' <<<"$deployment")" >> "$GITHUB_OUTPUT"
+        env:
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
+          APPWRITE_DEPLOY_KEY: ${{ secrets.APPWRITE_DEPLOY_KEY }}
+          APPWRITE_SITE_URL: ${{ vars.WEB_APP_URL || 'https://app.guilduo.com' }}
       - name: Smoke test public routes
         shell: bash
         run: |
@@ -229,6 +292,19 @@ jobs:
         env:
           SITE_URL: ${{ steps.appwrite_site.outputs.url }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+      - name: Recheck signed acceptance before final Release
+        run: node --import tsx tools/verify-launch-gates.mts release --worker
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

@@ -23,6 +23,7 @@ const BASE_ENV = {
   WEB_API_ROUTE_MANAGEMENT: "wrangler",
   WEB_API_BROWSER_ENABLED: "false",
   APPWRITE_REVISION_BATCH: "",
+  APPWRITE_PREPARED_TRANSACTIONS: "",
   WORKER_PLACEMENT_REGION: "",
   APPWRITE_ENDPOINT: "https://example.cloud.appwrite.io/v1",
   APPWRITE_PROJECT_ID: "example-project",
@@ -113,6 +114,17 @@ test("revision batching is explicitly configurable with a safe default and rejec
   }
   withTempDir((dir) => {
     assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", APPWRITE_REVISION_BATCH: "treu" }));
+    assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
+  });
+});
+
+test("prepared transactions require an explicit switch and revision batch protection", () => {
+  for (const flag of ["", "false", "true"]) withTempDir(dir => {
+    runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", APPWRITE_REVISION_BATCH: "true", APPWRITE_PREPARED_TRANSACTIONS: flag });
+    assert.equal(JSON.parse(readFileSync(path.join(dir, "wrangler.jsonc"), "utf8")).vars.APPWRITE_PREPARED_TRANSACTIONS, flag || "false");
+  });
+  for (const extra of [{ APPWRITE_PREPARED_TRANSACTIONS: "typo" }, { APPWRITE_PREPARED_TRANSACTIONS: "true", APPWRITE_REVISION_BATCH: "false" }]) withTempDir(dir => {
+    assert.throws(() => runGenerator(dir, { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "avatars", ...extra }));
     assert.equal(existsSync(path.join(dir, "wrangler.jsonc")), false);
   });
 });

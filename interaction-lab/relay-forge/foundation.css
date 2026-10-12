@@ -47,6 +47,9 @@ body {
   text-transform: uppercase;
 }
 
+.rf-bootstrap-policies { display: flex; gap: var(--qf-space-4); }
+.rf-bootstrap-policies a { color: var(--qf-color-fg-muted); font: var(--qf-text-metadata); }
+
 /* Bootstrap headings receive programmatic focus only to place the virtual
  * cursor on an actionable/error state. They are not controls; drawing the
  * global control outline around the text looks like a broken card. */
@@ -59,7 +62,7 @@ body {
   margin-top: var(--qf-space-3);
 }
 
-.rf-bootstrap button {
+.rf-bootstrap :is(button, select) {
   min-height: 44px;
   padding: 0 var(--qf-space-5);
   border: 1px solid var(--qf-color-border-strong);

@@ -485,7 +485,7 @@ Actor portrait may appear next to the node but cannot replace node geometry. Ava
 - `Completed`: endpoint fills with `success` and a check; previous Actor identity remains visible in history.
 - `Automated`: System node and dashed connector; text begins with the system verb.
 
-Status must include a verb: `Astra is executing`, `Hironao is reviewing`, `Waiting for OAuth`, `Blocked by Quest QF-184`. Labels such as `Active` or `Pending` alone are insufficient.
+Status must include a verb: `Astra is executing`, `admin is reviewing`, `Waiting for OAuth`, `Blocked by Quest QF-184`. Labels such as `Active` or `Pending` alone are insufficient.
 
 ### 13.3 Spatial placement
 

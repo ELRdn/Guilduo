@@ -41,6 +41,31 @@ const ok = (description: string, schema: OpenApiSchema = { type: "object" }): Op
 const body = (schema: OpenApiSchema): OpenApiSchema => ({ required: true, ...jsonContent(schema) });
 const parameter = (name: string): OpenApiSchema => ({ name, in: "path", required: true, schema: { type: "string" } });
 
+const analyticsConsent = { type: "object", additionalProperties: false, required: ["consent", "policyVersion"], properties: {
+  consent: { type: "string", enum: ["granted", "denied"] }, policyVersion: { type: "string", const: "2026-10-04" },
+  acquisitionToken: { type: "string", pattern: "^[a-f0-9]{64}$" },
+} };
+const analyticsErrors = { "400": { description: "Invalid consent or fields" }, "403": { description: "Owner/origin/admin capability required" }, "413": { description: "Actual body exceeds 4096 bytes" }, "429": { description: "Collector quota exceeded" }, "503": { description: "Optional measurement not approved or unavailable" } };
+openapi.paths["/v1/analytics/consent"] = {
+  get: { operationId: "getAnalyticsConsent", summary: "Read the authenticated Human's optional pseudonymous measurement consent", responses: { ...ok("Own consent state"), ...analyticsErrors } },
+  put: { operationId: "setAnalyticsConsent", summary: "Explicitly consent or withdraw and delete optional linked measurement; never available through MCP", requestBody: body(analyticsConsent), responses: { ...ok("Own consent state"), ...analyticsErrors } },
+};
+openapi.paths["/analytics/acquisition"] = {
+  post: { operationId: "recordConsentingLandingVisit", summary: "Consent-gated LP visit or CTA and a 15-minute single-claim acquisition capability", security: [],
+    requestBody: body({ type: "object", additionalProperties: false, required: ["consent", "policyVersion"], properties: { policyVersion: analyticsConsent.properties.policyVersion,
+      consent: { type: "string", const: "granted" }, action: { type: "string", enum: ["visit", "click", "withdraw"] }, token: { type: "string", pattern: "^[a-f0-9]{64}$" },
+      campaign: { type: "object", additionalProperties: false, properties: Object.fromEntries(["source", "medium", "campaign"].map(k=>[k,{type:"string",maxLength:48}])) },
+    } }), responses: { "201": { description: "Random expiring acquisition capability" }, ...ok("CTA or withdrawal recorded"), ...analyticsErrors } },
+};
+openapi.components.securitySchemes.analyticsAdmin = { type: "http", scheme: "bearer", description: "Separate optional-measurement administrator credential; Human JWT and billing administrator tokens are refused." };
+openapi.paths["/v1/analytics/admin/report"] = {
+  get: { security: [{ analyticsAdmin: [] }], operationId: "getLaunchAnalyticsReport", summary: "Aggregate report using a separate measurement administrator capability; no owner-level data", responses: { ...ok("Mature cohorts, consent coverage, attribution and reconciled cash; unknown costs stay null"), ...analyticsErrors } },
+};
+openapi.paths["/v1/analytics/admin/delete-account"] = {
+  post: { operationId:"deleteOptionalMeasurementAccount",security:[{analyticsAdmin:[]}],summary:"Operator-only scoped deletion of optional measurement and consent preference; pending private-snapshot cleanup is explicit",
+    requestBody:body({type:"object",additionalProperties:false,required:["uid"],properties:{uid:{type:"string",minLength:1,maxLength:240}}}),responses:{...ok("D1 deletion result and private snapshot cleanup pending status"),...analyticsErrors}},
+};
+
 openapi.paths["/v1/workspace/bootstrap"] = {
   get: {
     operationId: "getWorkspaceBootstrap",
@@ -112,7 +137,7 @@ Object.assign(openapi.paths, {
     delete: { summary: "Revoke one OAuth MCP client grant for the signed-in web user", description: "Revokes the OAuth grant and its refresh session without deleting the linked Agent. A later OAuth authorization creates a new grant.", parameters: [parameter("clientId")], responses: ok("OAuth connection revoked") },
   },
   "/v1/agents/{agentId}/connections/{clientId}": {
-    put: { summary: "Link an OAuth MCP client to one Agent", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Linked connection") },
+    put: { summary: "Configure the Agents allowed on an OAuth MCP connection", description:"The path Agent remains the legacy single-Agent default. When allowedAgentIds contains more than one Agent, MCP executions require actingAgentId on every call. Only owned active Agents can be allowed. Omission retains the legacy single-Agent configuration.", parameters: [parameter("agentId"), parameter("clientId")], requestBody: { ...body({ type:"object", properties:{ allowedAgentIds:{ type:"array", maxItems:20, items:{ type:"string", maxLength:80, pattern:"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } } }, additionalProperties:false }), required:false }, responses: ok("Linked connection") },
     delete: { summary: "Unlink an OAuth MCP client from an Agent without revoking its OAuth grant", parameters: [parameter("agentId"), parameter("clientId")], responses: ok("Unlinked connection") },
   },
   "/v1/profile": {
@@ -284,6 +309,13 @@ schemas.QuestInput.properties ||= {};
 schemas.QuestInput.properties.assignee = { $ref: "#/components/schemas/Assignee" };
 schemas.QuestInput.properties.parentQuestId = { type: "string", maxLength: 120 };
 schemas.QuestInput.properties.handoff = { $ref: "#/components/schemas/Handoff" };
+schemas.QuestPatch = { type: "object", properties: { ...schemas.QuestInput.properties, expectedUpdatedAt: { type: "string", format: "date-time", maxLength: 40, description: "Optional optimistic concurrency guard. Use the latest Quest updatedAt; a mismatch returns 409 quest_conflict." } } };
+const questPatch = openapi.paths["/v1/quests/{questId}"].patch!;
+questPatch.requestBody = body({ $ref: "#/components/schemas/QuestPatch" });
+questPatch.responses = { ...(questPatch.responses as OpenApiSchema), "409": { description: "Quest changed since the supplied expectedUpdatedAt (quest_conflict)" } };
+const questScore = openapi.paths["/v1/quests/{questId}/score"].post!;
+questScore.requestBody = body({ type: "object", required: ["direction"], properties: { direction: { type: "string", enum: ["up", "down"] }, source: { type: "string" }, expectedUpdatedAt: schemas.QuestPatch.properties!.expectedUpdatedAt } });
+questScore.responses = { ...(questScore.responses as OpenApiSchema), "409": { description: "Quest changed since the supplied expectedUpdatedAt (quest_conflict)" } };
 schemas.QuestRequester = { type: ["object", "null"], readOnly: true, required: ["type", "id", "label"], properties: { type: { type: "string", enum: ["human", "agent"] }, id: { type: "string" }, label: { type: "string" } }, additionalProperties: false, description: "Trusted creator identity. null means the legacy or unlinked creator is unknown." };
 schemas.HumanRequest = { type: ["object", "null"], readOnly: true, required: ["sourceQuestId", "requestKey", "recipientId", "reason", "checkTarget", "artifactUrl", "status", "seenAt", "respondedAt", "response", "outcome"], properties: { sourceQuestId: { type: "string" }, requestKey: { type: "string" }, recipientId: { type: "string" }, reason: { type: "string" }, checkTarget: { type: "string" }, artifactUrl: { type: "string" }, status: { type: "string", enum: ["pending", "deferred", "answered"] }, seenAt: { type: "string" }, respondedAt: { type: "string" }, response: { type: "string" }, outcome: { type: "string", enum: ["", "approved", "changes_requested"] } }, additionalProperties: false };
 schemas.HumanReviewInput = { ...(MCP_TOOLS.find((tool) => tool.name === "request_human_review")!.inputSchema as OpenApiSchema), required: ["requestKey", "title", "reason", "checkTarget", "completionCriteria"] };
@@ -331,6 +363,86 @@ schemas.TogglFocusConfiguration = { type: "object", properties: { organizationId
 schemas.TogglFocusStartInput = { type: "object", required: ["questId"], properties: { questId: { type: "string" }, expectedCurrentEntryId: { type: "string" }, dryRun: { type: "boolean", default: true } } };
 schemas.TogglFocusStopInput = { type: "object", properties: { expectedEntryId: { type: "string" }, end: { type: "string", format: "date-time" }, dryRun: { type: "boolean", default: true } } };
 schemas.TogglFocusAttributionInput = { type: "object", properties: { questId: { type: "string" }, entryIds: { type: "array", items: { type: "string" }, maxItems: 100 }, dateFrom: { type: "string", format: "date" }, dateTo: { type: "string", format: "date" }, days: { type: "integer", minimum: 1, maximum: 30, default: 30 }, dryRun: { type: "boolean", default: true } } };
+
+const billingErrors = {
+  "400": { description: "Invalid bounded request" }, "401": { description: "Authentication required" },
+  "403": { description: "Human web access, plan, consent, or scope denied" },
+  "409": { description: "Stale state, reused request ID, or insufficient credits" },
+  "503": { description: "Product approval, credentials, or durable storage missing" },
+};
+const billingOperation = (summary: string, input?: OpenApiSchema): OpenApiOperation => ({
+  summary, description: "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+  ...(input ? { requestBody: body(input) } : {}), responses: { ...ok("Owner-scoped result"), ...billingErrors },
+});
+const selectionSchema: OpenApiSchema = { type: "object", required: ["agentIds"], additionalProperties: false, properties: {
+  agentIds: { type: "array", maxItems: 2, uniqueItems: true, items: { type: "string", maxLength: 80 } },
+} };
+const decisionSchema: OpenApiSchema = { type: "object", required: ["questId", "expectedUpdatedAt"], additionalProperties: false, properties: {
+  questId: { type: "string", maxLength: 160 }, expectedUpdatedAt: { type: "string", format: "date-time" },
+  agentIds: { type: "array", minItems: 1, maxItems: 254, uniqueItems: true, items: { type: "string", maxLength: 80 } },
+  consent: { type: "boolean", description: "Explicit consent to transmit minimal Quest text and Agent roles to TypeSafe." },
+  requestId: { type: "string", minLength: 1, maxLength: 100, pattern: "^[A-Za-z0-9_-]+$", description: "Owner-scoped persistent idempotency key; changed content conflicts." },
+} };
+Object.assign(openapi.paths, {
+  "/v1/billing": { get: billingOperation("Get plan, Agent allowance, published prices, Credits, and referral status") },
+  "/v1/billing/agents": { put: billingOperation("Select at most two retained Free Agents without deleting others", selectionSchema) },
+  "/v1/billing/credits": { get: { ...billingOperation("Read the owner's paged Credit ledger"), parameters: [
+    { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } },
+    { name: "cursor", in: "query", schema: { type: "string" } },
+  ] } },
+  "/v1/billing/checkout": { post: billingOperation("Create an approved Stripe subscription Checkout", { type: "object", required: ["interval"], additionalProperties: false, properties: {
+    interval: { type: "string", enum: ["monthly", "annual"] }, referralCode: { type: "string", maxLength: 80 },
+    requestId: { type: "string", pattern: "^[A-Za-z0-9_-]{1,120}$" },
+  } }) },
+  "/v1/billing/portal": { post: billingOperation("Open the owner's Stripe Customer Portal", { type: "object", additionalProperties: false }) },
+  "/v1/billing/webhook": { post: { summary: "Synchronize signed Stripe events; browser return URLs never grant Pro", security: [], parameters: [
+    { name: "Stripe-Signature", in: "header", required: true, schema: { type: "string" } },
+  ], requestBody: body({ type: "object" }), responses: { ...ok("Event accepted once"), ...billingErrors } } },
+  "/v1/decisions/estimate": { post: billingOperation("Estimate a Jev proposal before consent and Credit reservation", decisionSchema) },
+  "/v1/decisions": { post: billingOperation("Reserve Credits and request one idempotent official Jev proposal", { ...decisionSchema, required: ["questId", "expectedUpdatedAt", "consent", "requestId"] }) },
+  "/v1/decisions/{decisionId}": { get: { ...billingOperation("Read an owner-scoped Jev result; uncertain requests are not retried"), parameters: [parameter("decisionId")] } },
+  "/v1/decisions/{decisionId}/apply": { post: { ...billingOperation("Confirm a proposal through the existing Agent assignment and Handoff rules", { type: "object", required: ["expectedUpdatedAt"], additionalProperties: false, properties: { expectedUpdatedAt: { type: "string", format: "date-time" } } }), parameters: [parameter("decisionId")] } },
+});
+const agentList = openapi.paths["/v1/agents"].get!;
+agentList.parameters!.push(
+  { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 }, description: "Optional paging; omitted retains the existing list contract." },
+  { name: "cursor", in: "query", schema: { type: "string" } },
+);
+schemas.RegisteredAgent.allOf!.push({ type: "object", properties: { planAllowed: { type: "boolean" }, restrictionReason: { type: ["string", "null"] } } });
+
+const workErrors = { "400": { description: "Invalid fields, dates, timezone or linked Quest" }, "403": { description: "Authenticated Human Web origin required; OAuth/MCP refused" }, "409": { description: "Record/workspace/current timer conflict" }, "413": { description: "Bounded body or private workspace capacity exceeded; records are not truncated" }, "503": { description: "D1 private workspace unavailable" } };
+const workId = { type: "string", minLength: 1, maxLength: 120, pattern: "^[a-zA-Z0-9_-]+$" };
+const operationId = { operationId: workId };
+const expectedVersion = { expectedUpdatedAt: { type: "string" } };
+const noteFields = { title: { type: "string", minLength: 1, maxLength: 120 }, body: { type: "string", maxLength: 50000 }, questId: { type: "string", maxLength: 120 }, archived: { type: "boolean" } };
+const entryFields = { questId: { type: "string", minLength: 1, maxLength: 120 }, note: { type: "string", maxLength: 1000 }, startAt: { type: "string", format: "date-time" }, stopAt: { type: "string", format: "date-time" }, archived: { type: "boolean" } };
+const prefsFields = { timeSource: { type: "string", enum: ["native", "toggl", "separate"] }, timezone: { type: "string", maxLength: 80 } };
+const workBody = (properties: Record<string, OpenApiSchema>, required: string[]) => body({ type: "object", additionalProperties: false, properties, required });
+const workGet = (summary: string): OpenApiOperation => ({ summary, description: "Private owner Web REST only. no-store. No MCP tools or public profile exposure.", responses: { ...ok("Owner workspace projection"), ...workErrors } });
+const workWrite = (summary: string, properties: Record<string, OpenApiSchema>, required: string[]): OpenApiOperation => ({ ...workGet(summary), requestBody: workBody({ ...operationId, ...properties }, ["operationId", ...required]) });
+for (const kind of ["notes", "entries"] as const) {
+  const props = kind === "notes" ? noteFields : entryFields;
+  const createProps = Object.fromEntries(Object.entries(props).filter(([key]) => key !== "archived"));
+  openapi.paths[`/v1/productivity/${kind}`] = {
+    get: { ...workGet(`List private ${kind} with revision-stable pagination`), parameters: [
+      { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
+      ...["cursor", "revision", "questId"].map(name => ({ name, in: "query", schema: { type: "string" } })),
+      { name: "archived", in: "query", schema: { type: "boolean", default: false } },
+    ] },
+    post: workWrite(`Create private ${kind}; retry only with the same operation ID and input`, createProps, kind === "notes" ? ["title", "body"] : ["questId", "startAt", "stopAt"]),
+  };
+  openapi.paths[`/v1/productivity/${kind}/{recordId}`] = { patch: { ...workWrite(`Edit/archive/restore private ${kind} without deleting history`, { ...props, ...expectedVersion }, ["expectedUpdatedAt"]), parameters: [parameter("recordId")] } };
+}
+openapi.paths["/v1/productivity/timer"] = { get: workGet("Read the exact running native timer") };
+for (const action of ["start", "stop"]) openapi.paths[`/v1/productivity/timer/${action}`] = { post: workWrite(`Atomically ${action} the exact native timer; switching stops the previous entry in the same revision write`, { questId: entryFields.questId, note: entryFields.note, expectedEntryId: { type: "string" }, ...expectedVersion }, action === "start" ? ["questId", "expectedEntryId"] : ["expectedEntryId", "expectedUpdatedAt"]) };
+openapi.paths["/v1/productivity/preferences"] = { get: workGet("Read private work-time source and timezone"), put: workWrite("Set work-time projection without changing legacy actualMinutes", { ...prefsFields, ...expectedVersion }, ["timeSource", "timezone", "expectedUpdatedAt"]) };
+openapi.paths["/v1/productivity/totals"] = { get: workGet("Read native/Toggl presence and selected minutes; separate mode never sums sources") };
+openapi.paths["/v1/productivity/export"] = { get: workGet("Export private Notes, TimeEntries and preferences; independent of legacy Quest backups") };
+openapi.paths["/v1/productivity/operations/{operationId}"] = { get: { ...workGet("Reconcile an uncertain operation using its saved receipt"), parameters: [parameter("operationId")] } };
+openapi.paths["/v1/productivity/import"] = { post: workWrite("Validate and restore a private workspace; stop running timers first", { expectedRevision: { type: "integer", minimum: 0 }, backup: { type: "object" } }, ["expectedRevision", "backup"]) };
+openapi.paths["/v1/productivity"] = { delete: workWrite("Confirmed deletion of owner work data and private settings; stop running timers first", { expectedRevision: { type: "integer", minimum: 0 }, confirm: { type: "string", const: "delete-productivity" } }, ["expectedRevision", "confirm"]) };
+openapi.components.schemas.ProductivityNote = { type: "object", properties: { id: workId, ...noteFields, updatedAt: { type: "string", format: "date-time" } } };
+openapi.components.schemas.ProductivityTimeEntry = { type: "object", description: "Empty stopAt means a running timer. Instants carry a timezone; closed entries span at most 366 days.", properties: { id: workId, ...entryFields, updatedAt: { type: "string", format: "date-time" } } };
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
 await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.7.0", tools: MCP_TOOLS }, null, 2)}\n`);

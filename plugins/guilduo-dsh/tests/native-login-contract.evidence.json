@@ -1,0 +1,37 @@
+{
+  "result": "PASS_NATIVE_PRIMITIVES; TRUSTED_LOGIN_CALLBACK_GATE_OPEN",
+  "checkedAt": "2026-10-08T14:38:49.694Z",
+  "hostVersion": "0.2.0-rc.2",
+  "nodeVersion": "v26.5.1",
+  "sourceReference": "5badb15009ae1756c3afe0ae0cef1faafc290ccc",
+  "sourceBuildEquality": "not established; installed public code identified by hashes below",
+  "nativeCommandFixture": {
+    "exactAgentObject": true,
+    "sessions": 2,
+    "recordInputSuppressed": true,
+    "unregister": true,
+    "thrownErrorPersisted": true
+  },
+  "browserOpener": "web-app.internals.openBrowser is documented as a test hook, not an injected service",
+  "callbackOwner": "no Guilduo login/callback wiring is composed by the current candidate",
+  "hashes": {
+    "dsh-commands/lib/types/index.d.ts": "5208f19179bd638f18b99b9386805896e187a0e64c9b7f76accf24d59ed4784c",
+    "dsh-commands/lib/index.js": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
+    "dsh-host-webserver/lib/types/index.d.ts": "342d45c37bfa5f17197cc2692057b112b795924d40f3b0d337d8fe156867641d",
+    "dsh-host-webserver/lib/index.js": "6efea1375eadeff62d5cfb6d1f515ff75a939d40405a62e5d138e8e7a6b18df5",
+    "dsh-client-connection/lib/types/index.d.ts": "d83649e8d3f48e7e28fe930df033632ae303843d5512ddd1b81a2098d4e33d78",
+    "dsh-client-connection/lib/index.js": "3950f524aed44e28240140a254cd928ea40eba8e2d04cc8fd04f92a687f5c91d",
+    "dsh-web-app/lib/types/index.d.ts": "048ab196d6e6a01b4ece40e314abff5041e7e309856f896990aa5b5493e2fbb7",
+    "dsh-web-app/lib/index.js": "50c7ce5b93e8a7ac0117e066699cd31b553a5a135d38b7051d6a8364ac691af4",
+    "dsh-api-account-controller/lib/types/index.d.ts": "1c81adf23ea71de30eb68a80572a9dcff17e014a2989c7ba4ae1a79f8c6aebea",
+    "dsh-api-account-controller/lib/index.js": "d4b3f1d5972021d0d7983746dc6db50fafc1469c70e87f97aa57e4ef2815677b",
+    "dsh-client-connection/lib/types/rpc-host.d.ts": "4655fdfdef83f155b6aa8d8240b8ae74972ddcc185e8873efde7b819fc0e7426",
+    "guilduo-dsh/package.json": "c4ef93cbb138c12f67e3d49606f0c080e5445ef4325275818db99ba5cc1aa41e",
+    "guilduo-dsh/src/index.ts": "b276eea3073de1057cc2ed1c010b1946ecce857a07727f06caba1fa3f5cfc68f",
+    "guilduo-dsh/src/adapter.ts": "87e33132236869439b6495eb6e4c1bf655e3c56d7f36609c13558369c5d836d8"
+  },
+  "networkRequests": 0,
+  "modelCalls": 0,
+  "publicOAuth": "not attempted",
+  "profileBoot": false
+}

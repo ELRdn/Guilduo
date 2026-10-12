@@ -9,12 +9,19 @@
  * only has to get that right for the common case, not the adversarial one.
  */
 
+import { relayText, type RelayCopyKey } from "../relay-copy.ts";
+
 const ACCEPTED_TYPES: ReadonlySet<string> = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_DIMENSION = 256;
 /** Headroom before decode. Not the stored size — that limit is the server's. */
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 
-export class AvatarImageError extends Error {}
+export class AvatarImageError extends Error {
+  constructor(key: RelayCopyKey) {
+    super();
+    Object.defineProperty(this, "message", { get: () => relayText(key) });
+  }
+}
 
 export interface ResizedAvatar {
   /** WebP bytes, for a binary upload (Agent avatar → R2). */
@@ -31,17 +38,17 @@ export interface ResizedAvatar {
  */
 export async function resizeAvatarImage(file: File): Promise<ResizedAvatar> {
   if (!ACCEPTED_TYPES.has(file.type)) {
-    throw new AvatarImageError("PNG、JPEG、WebPの画像を選択してください。");
+    throw new AvatarImageError("imageTypeError");
   }
   if (file.size > MAX_SOURCE_BYTES) {
-    throw new AvatarImageError("画像が大きすぎます。8MB以下のファイルを選択してください。");
+    throw new AvatarImageError("imageSizeError");
   }
 
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);
   } catch {
-    throw new AvatarImageError("画像を読み込めませんでした。別のファイルをお試しください。");
+    throw new AvatarImageError("imageReadError");
   }
 
   try {
@@ -52,16 +59,16 @@ export async function resizeAvatarImage(file: File): Promise<ResizedAvatar> {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
-    if (context === null) throw new AvatarImageError("画像を処理できませんでした。");
+    if (context === null) throw new AvatarImageError("imageProcessError");
     context.drawImage(bitmap, 0, 0, width, height);
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.85));
-    if (blob === null) throw new AvatarImageError("画像を変換できませんでした。");
+    if (blob === null) throw new AvatarImageError("imageConvertError");
 
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new AvatarImageError("画像を変換できませんでした。"));
+      reader.onerror = () => reject(new AvatarImageError("imageConvertError"));
       reader.readAsDataURL(blob);
     });
 

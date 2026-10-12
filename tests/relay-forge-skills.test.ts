@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { setLocale, SUPPORTED_LOCALES } from "../i18n.ts";
+import { relayText } from "../interaction-lab/relay-forge/relay-copy.ts";
 import {
   normalizeMcpTool,
   normalizeSkillsModel,
@@ -37,7 +39,7 @@ test("Skills: known metadata wins over the name fallback, while an unknown categ
   });
   assert.equal(metadata?.categoryId, "review-activity");
   assert.equal(unknown?.categoryId, "other");
-  assert.equal(unknown?.categoryTitle, "Other / Utilities");
+  assert.equal(unknown?.categoryTitle, relayText("skillsOtherTitle"));
 });
 
 test("Skills: search covers title, description, raw name and category, and empty search restores groups", () => {
@@ -47,7 +49,7 @@ test("Skills: search covers title, description, raw name and category, and empty
   ];
   const byRawName = normalizeSkillsModel({ tools: input, sourceUrl: "https://mcp.guilduo.com/mcp", query: "get_agent_link" });
   const byDescription = normalizeSkillsModel({ tools: input, sourceUrl: "https://mcp.guilduo.com/mcp", query: "acts for" });
-  const byCategory = normalizeSkillsModel({ tools: input, sourceUrl: "https://mcp.guilduo.com/mcp", query: "agent & relay" });
+  const byCategory = normalizeSkillsModel({ tools: input, sourceUrl: "https://mcp.guilduo.com/mcp", query: relayText("skillsAgentTitle") });
   const all = normalizeSkillsModel({ tools: input, sourceUrl: "https://mcp.guilduo.com/mcp" });
   assert.equal(byRawName.visibleToolCount, 1);
   assert.equal(byDescription.visibleToolCount, 1);
@@ -58,6 +60,7 @@ test("Skills: search covers title, description, raw name and category, and empty
 test("Skills: loading, unconnected, error and zero-tool states are distinct", () => {
   assert.equal(normalizeSkillsModel({ tools: [], sourceUrl: "https://mcp.guilduo.com/mcp", loading: true }).status, "loading");
   assert.equal(normalizeSkillsModel({ tools: [], sourceUrl: "", connected: false }).status, "unconnected");
+  assert.equal(normalizeSkillsModel({ tools: [] }).status, "unconnected");
   assert.equal(normalizeSkillsModel({ tools: [], sourceUrl: "https://mcp.guilduo.com/mcp", error: "network" }).status, "error");
   assert.equal(normalizeSkillsModel({ tools: [], sourceUrl: "https://mcp.guilduo.com/mcp" }).status, "empty");
 });
@@ -74,6 +77,25 @@ test("Skills: duplicate or malformed protocol entries never inflate the catalogu
   });
   assert.equal(model.totalToolCount, 1);
   assert.equal(model.groups[0]?.tools[0]?.title, "First");
+});
+
+test("Skills: localized categories are searchable while protocol data and raw input are preserved", () => {
+  try {
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(locale);
+      const tools = [{ name:"link_agent", title:"Custom {name} $&", description:"User supplied description." }];
+      const query = ` ${relayText("skillsAgentTitle")} `;
+      const model = normalizeSkillsModel({ tools, connected:true, query });
+      assert.equal(model.query, query);
+      assert.equal(model.visibleToolCount, 1);
+      assert.equal(model.groups[0]?.title, relayText("skillsAgentTitle"));
+      assert.equal(model.groups[0]?.tools[0]?.name, "link_agent");
+      assert.equal(model.groups[0]?.tools[0]?.title, "Custom {name} $&");
+      assert.equal(model.groups[0]?.tools[0]?.description, "User supplied description.");
+      assert.equal(normalizeSkillsModel({tools, connected:true, query:"agent"}).visibleToolCount, 1);
+      assert.equal(normalizeMcpTool({name:"future_tool"})?.description, relayText("skillsFallbackDescription"));
+    }
+  } finally { setLocale("ja"); }
 });
 
 test("Skills: the checked-in MCP contract is fully catalogued without an unknown bucket", () => {

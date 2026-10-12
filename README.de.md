@@ -31,7 +31,8 @@ Guilduo ist eine **Human × AI Work Platform**, auf der Menschen und KI-Agents i
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Kanonischer Remote-HTTP-MCP-Endpunkt |
 | Appwrite API | `https://api.guilduo.com/v1` | Offizieller Appwrite-API-Endpunkt (Origin: `https://api.guilduo.com`) |
-| Dokumentation | `https://docs.guilduo.com` | Reserved / Future |
+| Dokumentation (JA / EN) | `https://guilduo.com/docs/` / `https://guilduo.com/docs/en/` | Statische Docs; veröffentlicht |
+| Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com` ist für Weiterleitungen zu `https://guilduo.com` reserviert. Die alte `workers.dev`-URL bleibt für kompatible Verbindungen und Rollback erhalten. `api.guilduo.com` ist für die Appwrite API bestimmt und wird vom Appwrite-Browserclient sowie vom `APPWRITE_ENDPOINT` des Workers verwendet; es ist nicht der öffentliche Origin für die REST-Route `/v1` oder die MCP-Route `/mcp` des Workers.
 
@@ -197,7 +198,7 @@ Schreibvorgänge liefern ohne `--execute` nur einen dry-run oder einen Ausführu
 
 ## Skill / OpenAI Plugin / MCP App
 
-- Offizielles Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Offizielles Skill: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - Vorbereitungspaket für das OpenAI Plugin: [`plugins/questforge/`](plugins/questforge/)
 - Vorlage für die MCP-App-Registrierung: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Einreichungs-Checkliste: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

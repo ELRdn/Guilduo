@@ -1,6 +1,6 @@
-const APP_VERSION = "2026.08.29-brand-beta";
+const APP_VERSION = "2026.10.02-launch-hardening";
 const CACHE_PREFIX = "questforge-pwa-";
-const CACHE_VERSION = `${CACHE_PREFIX}v22`;
+const CACHE_VERSION = `${CACHE_PREFIX}v23`;
 const NAVIGATION_FALLBACK = "/index.html";
 const BETA_NAVIGATION_PATH = "/next/index.html";
 
@@ -73,6 +73,11 @@ self.addEventListener("fetch", (event) => {
 
   const requestUrl = new URL(request.url);
   if (requestUrl.origin !== self.location.origin) return;
+  // Authenticated data must never enter an origin-wide offline cache.
+  if (request.headers.has("authorization")
+    || /^\/(?:api|v1|oauth|mcp(?:-next)?|telemetry)(?:\/|$)/.test(requestUrl.pathname)) return;
+  // Static information pages must not replace the application's offline shell.
+  if (request.mode === "navigate" && /^\/(?:privacy|terms|lp)(?:\/|$)/.test(requestUrl.pathname)) return;
 
   if (request.mode === "navigate") {
     const isBetaNavigation = requestUrl.pathname === "/next" || requestUrl.pathname.startsWith("/next/");

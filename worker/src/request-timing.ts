@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 // Fixed labels only: never put paths, IDs, credentials, bodies or errors here.
-const phases = ["auth", "agent_context", "route", "state_read", "state_decode", "state_encode", "tx_begin", "tx_read", "tx_stage", "tx_commit", "tx_discard", "state_create", "domain"] as const;
+const phases = ["auth", "agent_context", "route", "state_read", "state_decode", "state_encode", "tx_begin", "tx_prepare", "tx_prepared", "tx_read", "tx_stage", "tx_commit", "tx_discard", "state_create", "domain"] as const;
 type Phase = typeof phases[number];
 type Metric = { duration: number; count: number };
 const timings = new AsyncLocalStorage<Partial<Record<Phase, Metric>>>();

@@ -16,6 +16,9 @@ import type {
   LifecycleState,
   Quest,
 } from "../../types/questforge.ts";
+import { relayText } from "./relay-copy.ts";
+import { formatDate } from "../../i18n.ts";
+import { elapsedLabel } from "./screens/screen-state.ts";
 
 export type ActorKind = "human" | "agent" | "system" | "companion";
 
@@ -403,11 +406,11 @@ export function toLoomQuest(input: LoomQuestInput): LoomQuest {
     ref: questRef(quest.id),
     title: quest.title,
     context: input.context,
-    startLabel: formatDayTime(quest.scheduledDate, quest.scheduledTime),
-    dueLabel: formatDay(quest.dueDate),
+    get startLabel() { return formatDayTime(quest.scheduledDate, quest.scheduledTime); },
+    get dueLabel() { return formatDay(quest.dueDate); },
     state,
-    stateLabel: input.stateLabel,
-    actionLabel: input.actionLabel,
+    get stateLabel() { return input.stateLabel; },
+    get actionLabel() { return input.actionLabel; },
     relay: input.relay,
     dependencies: input.dependencies,
     priority: priorityFromImpact(quest.impact, quest.isBlockingOthers),
@@ -423,8 +426,8 @@ export function questRef(id: string): string {
 
 function formatDay(iso: string): string {
   if (iso === "") return "—";
-  const parts = iso.split("-");
-  return parts.length === 3 ? `${parts[1]}/${parts[2]}` : iso;
+  const day = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(day.getTime()) ? iso : formatDate(day, { year:undefined, month:"2-digit", day:"2-digit", timeZone:"UTC" });
 }
 
 function formatDayTime(iso: string, time: string): string {
@@ -434,37 +437,27 @@ function formatDayTime(iso: string, time: string): string {
 
 /** Section 14.5: waiting duration is an operational duration, not a date. */
 export function formatWaiting(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m`;
-  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+  return elapsedLabel(minutes);
 }
 
 /* ------------------------------------------------------------------ *
  * Derived workspace view
  * ------------------------------------------------------------------ */
 
-const STATE_SUMMARY: Readonly<Record<QuestVisualState, string>> = {
-  planned: "まだ着手していません",
-  ready: "着手できる状態です",
-  working: "Agent が実行中です",
-  review_required: "人間の承認を待っています",
-  waiting: "外部の応答を待っています",
-  blocked: "上流の Quest によって停止しています",
-  completed: "完了しています",
-  archived: "アーカイブ済みです",
-};
+const STATE_SUMMARY = {
+  planned: "commandPlanned", ready: "commandReady", working: "commandSummaryWorking",
+  review_required: "commandSummaryReview", waiting: "commandSummaryWaiting", blocked: "commandSummaryBlocked",
+  completed: "stateDone", archived: "commandArchived",
+} as const;
 
-const STATE_ROLE: Readonly<Record<ConnectorState | "終端", string>> = {
-  completed: "handed off",
-  active: "executing",
-  waiting: "waiting",
-  review: "review required",
-  blocked: "blocked",
-  pending: "next",
-  automated: "automated",
-  終端: "holds the work",
-};
+const STATE_ROLE = {
+  completed: "commandHandedOff", active: "stateWorking", waiting: "waiting", review: "stateReview",
+  blocked: "stateBlocked", pending: "commandNextHolder", automated: "commandAutomated",
+} as const;
+
+export function connectorLabel(state: ConnectorState | null): string {
+  return relayText(state === null ? "commandHoldsWork" : STATE_ROLE[state]);
+}
 
 function stepStateFor(connector: ConnectorState | null, isCurrent: boolean): ResponsibilityStep["state"] {
   if (connector === "blocked") return "blocked";
@@ -485,44 +478,40 @@ function stepStateFor(connector: ConnectorState | null, isCurrent: boolean): Res
 export function deriveSelectedQuestView(quest: LoomQuest): SelectedQuestView {
   const responsibility: ResponsibilityStep[] = quest.relay.legs.map((leg, index) => ({
     actorId: leg.actorId,
-    roleLabel: "Actor",
-    stateLabel: leg.connectorNote
-      ?? (leg.connector === null ? STATE_ROLE.終端 : STATE_ROLE[leg.connector]),
-    timeLabel: index === quest.relay.currentIndex ? quest.startLabel : "—",
-    state: stepStateFor(leg.connector, index === quest.relay.currentIndex),
+    get roleLabel() { return relayText("commandActor"); },
+    get stateLabel() { return leg.connectorNote ?? (leg.connector === null && index !== quest.relay.currentIndex ? relayText("commandNextHolder") : connectorLabel(leg.connector)); },
+    get timeLabel() { return index === quest.relay.currentIndex ? quest.startLabel : "—"; },
+    state: leg.nodeState === "completed" ? "completed" : leg.nodeState === "idle" ? "pending" : leg.nodeState === "blocked" ? "blocked" : leg.nodeState === "review" ? "review" : stepStateFor(leg.connector, index === quest.relay.currentIndex),
   }));
 
-  const dependencyPoints = quest.dependencies.length === 0
-    ? ["依存している Quest はありません"]
-    : quest.dependencies.map((dependency) =>
-      `${dependency.ref}${dependency.blocking ? " (停止中)" : ""}${dependency.critical ? " · critical path" : ""}`);
-
-  const pending = quest.state === "review_required" || quest.state === "blocked" || quest.state === "waiting";
+  const pending = quest.state === "review_required";
 
   return {
     questId: quest.id,
     ref: quest.ref,
     title: quest.title,
-    stateLabel: quest.state === "completed" ? "Completed" : quest.stateLabel,
+    get stateLabel() { return quest.state === "completed" ? relayText("stateDone") : quest.stateLabel; },
     stateKind: quest.state === "blocked" ? "blocked" : quest.state === "waiting" ? "waiting" : "review",
-    reason: STATE_SUMMARY[quest.state],
+    get reason() { return relayText(STATE_SUMMARY[quest.state]); },
     responsibility,
     details: {
       headline: quest.context,
-      points: [`予定 ${quest.startLabel} · 期限 ${quest.dueLabel}`, `優先度 ${quest.priority}`, ...dependencyPoints],
+      get points() {
+        const dependencyPoints = quest.dependencies.length === 0 ? [relayText("commandNoDependencies")]
+          : quest.dependencies.map(dependency => `${dependency.ref}${dependency.blocking ? ` (${relayText("stateBlocked")})` : ""}${dependency.critical ? ` · ${relayText("commandCritical")}` : ""}`);
+        return [`${relayText("stateScheduled")} ${quest.startLabel} · ${relayText("due")} ${quest.dueLabel}`, `${relayText("commandPriority")} ${quest.priority}`, ...dependencyPoints];
+      },
       outputs: [],
     },
-    evidenceHeadline: "この Quest の Evidence",
-    evidencePoints: ["提出された成果物はまだありません"],
+    get evidenceHeadline() { return relayText("commandEvidenceSummary"); },
+    get evidencePoints() { return [relayText("commandNoOutput")]; },
     evidence: [],
     decision: {
-      statusLabel: pending ? "Human decision required" : "判断待ちではありません",
-      approveLabel: "Approve handoff",
-      reviseLabel: "Request revision",
-      impactLabel: pending
-        ? "この Quest は人間の判断を待っています"
-        : "この Quest は現在人間の判断を必要としていません",
-      blockedReason: pending ? null : "承認できる Handoff がありません",
+      get statusLabel() { return relayText(pending ? "humanDecision" : "notAwaitingDecision"); },
+      get approveLabel() { return relayText("approveHandoff"); },
+      get reviseLabel() { return relayText("requestRevision"); },
+      get impactLabel() { return relayText(pending ? "handoffApprovalImpact" : "notAwaitingDecision"); },
+      get blockedReason() { return pending ? null : relayText("noHandoffApproval"); },
     },
   };
 }

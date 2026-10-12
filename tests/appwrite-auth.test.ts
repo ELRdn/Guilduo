@@ -35,6 +35,17 @@ test("failed account verification discards an early JWT and never releases it", 
   assert.equal(auth.currentAccount(), null);
 });
 
+test("malformed successful account metadata cannot authenticate or release an early token", async () => {
+  for (const account of [{}, { $id:"" }, { $id:"   " }, { $id:7 }]) {
+    const auth = createGuilduoAuth({ prepareAccessToken:true, getOAuthCallback:() => null, account:{
+      get:async () => account as unknown as { $id?:string }, createJWT:async () => ({ jwt:"unusable-token" }),
+      createOAuth2Token:() => {}, createSession:async () => ({}), deleteSession:async () => ({}),
+    } });
+    assert.equal((await auth.resolveAuthState()).status, "connection-error");
+    assert.equal(auth.currentAccount(), null);
+    assert.equal(await auth.getAccessToken(), "");
+  }
+});
 test("sign-out during startup cannot restore the user or prefetched token", async () => {
   let finishAccount!: (value: { $id: string }) => void;
   const account = new Promise<{ $id: string }>(resolve => { finishAccount = resolve; });

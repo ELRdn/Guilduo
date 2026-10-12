@@ -1,0 +1,5 @@
+# Alternative explicit --patch overlay; use this OR the installed bundle, not both.
+- insert:
+    - id: guilduo-dsh-oauth-poc
+      name: ./lib/index.js
+      inject: [tools, skills, credentials, agents, sessions, sessionController]

@@ -5,6 +5,28 @@ const path = require("node:path");
 
 const root = path.join(__dirname, "..");
 
+test("service worker bypasses private API routes and Bearer requests while caching public assets", async () => {
+  const { runInNewContext } = require("node:vm");
+  const handlers = new Map<string, (event: { request: Request; respondWith(response: Promise<Response>): void }) => void>();
+  runInNewContext(fs.readFileSync(path.join(root, "service-worker.ts"), "utf8"), {
+    self: { location: { origin: "https://app.guilduo.com" }, addEventListener: (name: string, handler: typeof handlers extends Map<string, infer H> ? H : never) => handlers.set(name, handler) },
+    URL,
+    caches: { match: async () => new Response("cached public asset") },
+  });
+  const handle = handlers.get("fetch")!;
+  for (const route of ["/api/v1/quests", "/v1/profile/avatar", "/oauth/authorize", "/mcp", "/mcp-next", "/telemetry", "/api"]) {
+    handle({ request: new Request(`https://app.guilduo.com${route}`), respondWith: () => assert.fail(`Private route cached: ${route}`) });
+  }
+  handle({ request: new Request("https://app.guilduo.com/assets/avatar.png", { headers: { authorization: "Bearer synthetic" } }), respondWith: () => assert.fail("Authenticated image cached") });
+  for (const route of ["/privacy/", "/terms/", "/lp/en/"]) {
+    handle({ request: { url: `https://app.guilduo.com${route}`, method: "GET", mode: "navigate", headers: new Headers() } as Request, respondWith: () => assert.fail(`Information page replaced app shell: ${route}`) });
+  }
+  let result: Promise<Response> | undefined;
+  handle({ request: new Request("https://app.guilduo.com/assets/logo.svg"), respondWith: response => { result = response; } });
+  assert.ok(result);
+  assert.equal(await (await result!).text(), "cached public asset");
+});
+
 test("manifest has a stable root-scoped PWA identity", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 

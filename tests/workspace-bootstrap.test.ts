@@ -81,3 +81,123 @@ test("client falls back only for an older Worker and retains optional panel erro
     await assert.rejects(repo.loadSnapshot({ deferPanels: true }), { code: "invalid_workspace_bootstrap" });
   } finally { globalThis.fetch = original; }
 });
+
+test("bootstrap and legacy snapshots read every Quest page and never turn malformed pages into empty data", async () => {
+  const original = globalThis.fetch;
+  const repo = new QuestForgeRepository({ baseUrl:"https://worker.test", getToken:async () => "web" });
+  try {
+    for (const legacy of [false, true]) {
+      const cursors: string[] = [];
+      globalThis.fetch = async input => {
+        const url = new URL(String(input));
+        if (url.pathname === "/v1/workspace/bootstrap" && legacy) return Response.json({}, { status:404 });
+        if (url.pathname === "/v1/workspace/bootstrap" || url.pathname === "/v1/quests") {
+          const cursor = url.searchParams.get("cursor") || "";
+          cursors.push(cursor);
+          return Response.json({ quests:Array.from({ length:cursor ? 7 : 200 }, (_, i) => ({ id:`q-${cursor ? 200+i : i}` })), total:207, nextCursor:cursor ? null : "next page", profile:null, agents:[], panelErrors:[] });
+        }
+        return Response.json({});
+      };
+      const snapshot = await repo.loadSnapshot({ deferPanels:true });
+      assert.equal(snapshot.quests.length, 207);
+      assert.equal(snapshot.total, 207);
+      assert.deepEqual(cursors, ["", "next page"]);
+      assert.equal((await snapshot.loadDeferred!()).quests.length, 207);
+    }
+    globalThis.fetch = async () => Response.json({ quests:[{ id:"repeat" }], nextCursor:"again" });
+    await assert.rejects(repo.listAllQuests(), { code:"invalid_quest_page" });
+    globalThis.fetch = async () => Response.json({});
+    await assert.rejects(repo.loadSnapshot(), { code:"invalid_quest_page" });
+  } finally { globalThis.fetch = original; }
+});
+
+test("new Appwrite accounts bootstrap once, preserve competing state, and fail closed on existing or legacy errors", async () => {
+  const original = globalThis.fetch;
+  const accountEnv: WorkerEnv = {
+    APPWRITE_ENDPOINT: "https://appwrite.test/v1", APPWRITE_PROJECT_ID: "test-project",
+    APPWRITE_DATABASE_ID: "guilduo", APPWRITE_STATE_TABLE_ID: "user_states",
+    APPWRITE_LEGACY_TABLE_ID: "legacy_states", APPWRITE_API_KEY: "fake-server-key",
+  };
+  const token = "new.account.jwt";
+  let row: Record<string, unknown> | null = null;
+  let legacyStatus = 404;
+  let legacyState: unknown = null;
+  let creates = 0;
+  let compete = false;
+  let createStatus = 201;
+  const saved = asQuestForgeState({ schemaVersion: 7, tasks: [{ id: "retained-quest", title: "Keep existing work" }], character: {}, battle: {}, taskEvents: [] });
+  const call = () => request("/v1/workspace/bootstrap", token, accountEnv);
+  try {
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method || "GET";
+      assert.equal(url.hostname, "appwrite.test");
+      if (url.pathname === "/v1/account") return Response.json({ $id: "fresh-owner", email: "new@example.test" });
+      if (url.pathname.includes("/legacy_states/rows/")) {
+        if (method === "DELETE") return new Response(null, { status: 204 });
+        return Response.json({ stateJson: JSON.stringify(legacyState), schemaVersion: 7 }, { status: legacyStatus });
+      }
+      if (url.pathname.endsWith("/rows/fresh-owner")) return row ? Response.json(row) : Response.json({}, { status: 404 });
+      if (url.pathname.endsWith("/user_states/rows") && method === "POST") {
+        creates += 1;
+        const body = JSON.parse(String(init?.body)) as { rowId: string; data: Record<string, unknown> };
+        assert.equal(body.rowId, "fresh-owner");
+        assert.equal(body.data.ownerId, "fresh-owner");
+        assert.equal(body.data.revision, 1);
+        assert.ok(String(body.data.stateJson).startsWith("gzip:"));
+        if (compete) { row = { stateJson: JSON.stringify(saved), revision: 9 }; return Response.json({}, { status: 409 }); }
+        if (createStatus !== 201) return Response.json({}, { status: createStatus });
+        row = body.data;
+        return Response.json(row, { status: 201 });
+      }
+      throw new Error("Unexpected bootstrap persistence call: " + method + " " + url.pathname);
+    };
+    assert.equal((await call()).status, 200, "a new account must receive an empty persisted Workspace");
+    assert.equal(creates, 1);
+    const firstRow = structuredClone(row);
+    const state = (await readState(accountEnv, { uid: "fresh-owner" })).payload.state!;
+    assert.deepEqual(state.tasks, []);
+    assert.equal(state.schemaVersion, 7);
+    assert.ok(state.createdAt);
+    assert.ok(state.updatedAt);
+    assert.equal(state.character.level, 1);
+    assert.equal((await call()).status, 200);
+    assert.equal(creates, 1, "reload must not initialize again");
+    assert.deepEqual(row, firstRow);
+    row = null; compete = true;
+    const racing = await call();
+    assert.equal(racing.status, 200);
+    assert.equal((await racing.json() as { quests: { id: string }[] }).quests[0].id, "retained-quest");
+    assert.equal((row as unknown as Record<string, unknown>).revision, 9, "another device's saved state must win");
+    compete = false;
+    for (const malformed of ["null", "invalid JSON"]) {
+      row = { stateJson: malformed, revision: 3 };
+      const before: number = creates;
+      assert.equal((await call()).status, 409);
+      assert.equal(creates, before, "existing unreadable rows must never be initialized over");
+    }
+    row = null;
+    for (const status of [401, 403, 500]) {
+      legacyStatus = status;
+      const before: number = creates;
+      assert.equal((await call()).status, 500);
+      assert.equal(creates, before, "a failed migration lookup must not become an empty Workspace");
+    }
+    legacyStatus = 200; legacyState = null;
+    const before: number = creates;
+    assert.equal((await call()).status, 409);
+    assert.equal(creates, before, "an unreadable legacy row must remain recoverable");
+    legacyState = saved;
+    assert.equal((await call()).status, 200);
+    assert.equal((await readState(accountEnv, "fresh-owner")).payload.state!.tasks[0].id, "retained-quest");
+    row = null; legacyStatus = 404; createStatus = 403;
+    assert.equal((await call()).status, 500, "initialization must not succeed before persistence succeeds");
+    assert.equal(row, null);
+    const kv = getKv(accountEnv);
+    const agentToken = "fresh-agent-token";
+    await kv.put("access:" + await sha256(agentToken), JSON.stringify({ uid: "fresh-owner", clientId: "fresh-agent", scopes: ["quests:read"], expiresAt: Date.now() + 60000 }));
+    const agentBefore = creates;
+    assert.equal((await request("/v1/workspace/bootstrap", agentToken, accountEnv)).status, 403);
+    assert.equal(creates, agentBefore, "Agent credentials must not initialize human state");
+  } finally { globalThis.fetch = original; }
+});

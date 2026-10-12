@@ -7,7 +7,9 @@
  * ------------------------------------------------------------------ */
 
 .rf-screen--battle {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
   height: 100%;
 }
 
@@ -25,7 +27,8 @@
   border-radius: var(--qf-radius-md);
 }
 
-.rf-b-objective[data-ended="true"] { border-left-color: var(--qf-color-success); }
+.rf-b-objective[data-result="victory"] { border-left-color: var(--qf-color-success); }
+.rf-b-objective[data-result="defeat"] { border-left-color: var(--qf-color-danger); }
 
 .rf-b-objective-copy { min-width: 0; }
 
@@ -113,7 +116,12 @@
   grid-template-columns: minmax(0, 1fr) minmax(360px, 32%);
   gap: var(--qf-pane-gap);
   min-height: 0;
+  flex: 1 0 auto;
 }
+.rf-screen--battle [data-variant="timeline"] { max-height: 70vh; }
+.rf-screen--battle .rf-primary-button,
+.rf-screen--battle .rf-secondary-button { height: auto; min-height: var(--qf-control-default); padding-block: var(--qf-space-3); white-space: normal; }
+.rf-screen--battle button, .rf-b-objective-title, .rf-b-actor-name, .rf-b-event-text, .rf-b-effect-copy { overflow-wrap: anywhere; }
 
 .rf-b-left { display: flex; flex-direction: column; gap: var(--qf-pane-gap); min-height: 0; }
 
@@ -209,7 +217,7 @@
 .rf-b-command-why { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-danger); }
 
 .rf-b-deck-hint { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
-.rf-b-deck-actions { display: flex; gap: var(--qf-space-3); justify-content: flex-end; }
+.rf-b-deck-actions { display: flex; gap: var(--qf-space-3); justify-content: flex-end; flex-wrap: wrap; }
 .rf-b-held { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-warning); margin: 0; }
 
 /* ---------------- preview ---------------- */
@@ -253,17 +261,18 @@
 
 .rf-b-effects { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
 
-.rf-b-effect { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--qf-space-3); }
+.rf-b-effect { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--qf-space-3); }
 .rf-b-effect-type { font: var(--qf-font-mono); font-size: 13px; color: var(--qf-color-fg-muted); }
 .rf-b-effect-copy { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-default); }
 
 /* ---------------- timeline ---------------- */
 
 .rf-b-timeline { display: flex; flex-direction: column; gap: var(--qf-space-2); margin: 0; padding: 0; list-style: none; }
+.rf-b-timeline[hidden] { display: none; }
 
 .rf-b-event {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
   gap: var(--qf-space-3);
   align-items: baseline;
   padding: var(--qf-space-3);
@@ -338,11 +347,15 @@
   .rf-b-objective { grid-template-columns: minmax(0, 1fr) minmax(280px, 44%); }
   .rf-b-command { min-width: 116px; }
 }
+@media (max-width: 1180px) and (min-width: 901px) {
+  .rf-b-workspace, .rf-b-objective { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------------- mobile ---------------- */
 
 @media (max-width: 900px) {
   .rf-screen--battle { grid-template-rows: none; height: auto; }
+  .rf-screen--battle [data-variant="timeline"] { max-height: none; }
   .rf-b-workspace { display: contents; }
 
   .rf-b-objective { grid-template-columns: minmax(0, 1fr); gap: var(--qf-space-4); padding: var(--qf-space-4); }
@@ -367,7 +380,7 @@
     border-radius: var(--qf-radius-sm);
   }
 
-  .rf-b-event { grid-template-columns: 48px minmax(0, 1fr); }
+  .rf-b-event { grid-template-columns: minmax(0, max-content) minmax(0, 1fr); }
   .rf-b-event-at { display: none; }
 
   /* The sticky bar is one line before a preview and a commitment after it —
@@ -381,7 +394,7 @@
     color: var(--qf-color-fg-muted);
   }
   .rf-b-m-bar[data-shape="ready"] .rf-b-m-bar-copy { color: var(--qf-color-fg-strong); }
-  .rf-b-m-bar .rf-primary-button { flex: 0 0 auto; min-height: var(--qf-space-11); }
+  .rf-b-m-bar .rf-primary-button { flex: 1; min-width: 0; height: auto; padding-block: var(--qf-space-3); min-height: var(--qf-space-11); white-space: normal; overflow-wrap: anywhere; }
 }
 
 @media (prefers-reduced-motion: reduce) {

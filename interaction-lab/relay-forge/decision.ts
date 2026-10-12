@@ -67,8 +67,8 @@ export const IDLE_DECISION: DecisionResult = {
 export function blockingReason(gate: DecisionGate, phase: DecisionPhase): string | null {
   if (gate.permissionMissing !== null) return gate.permissionMissing;
   if (gate.conflict !== null) return gate.conflict;
-  if (gate.writeLocked) return "再接続まで書き込みは保留中です";
-  if (phase === "submitting") return "送信中です";
+  if (gate.writeLocked) return relayText("writePaused");
+  if (phase === "submitting") return relayText("sending");
   if (!gate.evidenceReviewed) return relayText("checked");
   return null;
 }
@@ -107,7 +107,7 @@ export async function submitDecision(
     const refused: DecisionResult = {
       phase: "failed",
       kind: "revise",
-      message: "修正内容を入力してください",
+      get message() { return relayText("revisionRequired"); },
       code: "reason_required",
       quest: null,
     };
@@ -115,7 +115,7 @@ export async function submitDecision(
     return refused;
   }
 
-  onPhase({ phase: "submitting", kind: request.kind, message: "送信中です", code: "", quest: null });
+  onPhase({ phase: "submitting", kind: request.kind, message: relayText("sending"), code: "", quest: null });
 
   const outcome: HandoffOutcome = await runHandoff(port, {
     questId: request.questId,
@@ -129,14 +129,14 @@ export async function submitDecision(
     ? {
       phase: "succeeded",
       kind: request.kind,
-      message: request.kind === "approve" ? "Handoff を承認しました" : "修正を依頼しました",
+      get message() { return relayText(request.kind === "approve" ? "handoffApproved" : "revisionSent"); },
       code: outcome.code,
       quest: outcome.quest,
     }
     : {
       phase: "failed",
       kind: request.kind,
-      message: explainFailure(outcome.code),
+      get message() { return explainFailure(outcome.code); },
       code: outcome.code,
       quest: null,
     };

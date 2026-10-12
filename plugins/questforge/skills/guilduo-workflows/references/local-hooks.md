@@ -1,0 +1,17 @@
+# Optional Local Lifecycle Hooks
+
+
+The public Skill is portable guidance with best-effort proactive behavior. [OpenAI's skills guidance](https://developers.openai.com/plugins/concepts/skills) describes selection through name/description matching or direct invocation; metadata cannot force lifecycle invocation. `allow_implicit_invocation: true` allows selection but does not guarantee it.
+
+[OpenAI's submission guidance](https://developers.openai.com/plugins/deploy/submission) excludes lifecycle hooks and app references (`apps` / `.app.json`) from submitted public ZIPs. Keep public packaging on the declared MCP connection plus Skills/references, without hook files or app references. Changes to Skill content require a new submission ZIP; documentation alone does not establish directory approval.
+
+OpenAI and Claude's separate opt-in local packages implement `SessionStart`/`Stop` in `hooks/hooks.json`. Muse stable 1.4.3 declares native argv hooks in `.muse-plugin/plugin.json` with event wrappers. All three invoke the shared `hooks/lifecycle.mjs`; Pi instead uses its documented `/guilduo-sync` Extension command. Read the installed package's hook/Extension README and its session context before binding. `SessionStart` verifies the plugin storage path and its existing ancestors without creating storage, then emits full literal Node argument arrays for bind and unbind, including the script path, session ID, canonical cwd, and storage path. Verify the authorized Quest and Agent through MCP, replace only those two ID placeholders, and run Node 22+ from the session's cwd with the supplied arguments. The shell-hook CLI is:
+
+```text
+node <plugin-root>/hooks/lifecycle.mjs bind <session_id> <questId> <actingAgentId> <absolute-cwd> <plugin-data-dir>
+node <plugin-root>/hooks/lifecycle.mjs unbind <session_id> <absolute-cwd> <plugin-data-dir>
+```
+
+Pass each value as a literal argument. Normal exec tools need not inherit `PLUGIN_DATA` or `PLUGIN_ROOT`: use the full script path and verified final `<plugin-data-dir>` argument from `SessionStart`. That final argument is optional only when the CLI inherits a valid `PLUGIN_DATA`; hook execution itself uses the host-provided `PLUGIN_DATA`. If neither verified storage arguments nor a valid inherited storage path are available, do not bind or substitute workspace storage. Binding stores only the exact session/Quest/Agent/cwd in `<plugin-data-dir>/guilduo-bindings/<sha256(session_id)>.json`; it grants no permission. `SessionStart` does not automatically bind. Bind only within existing standing permission, and unbind on revocation or when the binding no longer applies. Recheck permission after resume; to change cwd, unbind from the old cwd first.
+
+For an exact matching binding and `stop_hook_active: false`, `Stop` emits at most one `decision: "block"` reminder per turn to let the model check the authorized phase end. Unbound sessions, cwd mismatches, invalid input, or an active/missing/invalid recursion flag produce `{}`. Finish that one check without rebinding to force another continuation. The hook does not access MCP, the network, tokens, or transcripts; the model follows this Skill for any authorized update. A reminder still needs verified evidence, current permission, identity checks, no-op detection, and conflict handling; it does not prove progress, completion, or guaranteed host invocation. Keep these local hook files out of the public ZIP.

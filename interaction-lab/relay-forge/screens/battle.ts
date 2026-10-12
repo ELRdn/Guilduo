@@ -29,13 +29,19 @@
  */
 
 import { el } from "../primitives/dom.ts";
-import type { BattleSession } from "../../../types/questforge.ts";
+import { t } from "../../../i18n.ts";
+import { relayText } from "../relay-copy.ts";
 import {
   type BattleModel,
-  type BattleOutcome,
-  type BattlePort,
-  explainBattleFailure,
-  type TimelineEvent,
+  type BattleState,
+  type BattleCallbacks,
+  previewCommand,
+  executeCommand,
+  battleBusy,
+  battlePreviewCurrent,
+  cancelBattlePreview,
+  refreshBattle,
+  battleCommandLabel,
 } from "./battle-model.ts";
 import {
   instantLabel,
@@ -56,125 +62,6 @@ export * from "./battle-model.ts";
 /* ------------------------------------------------------------------ *
  * Screen state
  * ------------------------------------------------------------------ */
-
-export type BattlePhase = "idle" | "previewing" | "previewed" | "submitting" | "failed";
-
-export interface BattleState {
-  /** The command the human is considering. Null until one is chosen. */
-  pendingCommand: string | null;
-  phase: BattlePhase;
-  preview: BattleOutcome | null;
-  failure: { code: string; message: string } | null;
-  /** Session-local record of what the human actually did. */
-  decisions: TimelineEvent[];
-  /** Mobile only: the full timeline is collapsed by default. */
-  timelineOpen: boolean;
-  /** Increments per execution so a replayed commandId is never reused. */
-  sequence: number;
-}
-
-export function initialBattleState(): BattleState {
-  return {
-    pendingCommand: null,
-    phase: "idle",
-    preview: null,
-    failure: null,
-    decisions: [],
-    timelineOpen: false,
-    sequence: 0,
-  };
-}
-
-export interface BattleCallbacks {
-  readonly port: BattlePort;
-  /** Called with the session the domain returned after a real execution. */
-  readonly onSession: (session: BattleSession) => void;
-}
-
-/**
- * Preview then execute — the same shape as Command's Handoff decision.
- *
- * A preview is required before an execution: `pendingCommand` is only armed by
- * a successful dry run, so the user always sees the exact effects the domain
- * computed before anything is written.
- */
-export async function previewCommand(
-  model: BattleModel,
-  state: BattleState,
-  callbacks: BattleCallbacks,
-  commandId: string,
-  rerender: () => void,
-): Promise<void> {
-  if (state.phase === "submitting" || state.phase === "previewing") return;
-  if (model.writeHeld) {
-    state.failure = { code: "offline", message: explainBattleFailure("offline") };
-    state.phase = "failed";
-    rerender();
-    return;
-  }
-  state.pendingCommand = commandId;
-  state.phase = "previewing";
-  state.preview = null;
-  state.failure = null;
-  rerender();
-  const outcome = await callbacks.port.runCommand({
-    command: commandId,
-    expectedTurn: model.turn,
-    commandId: "preview",
-    dryRun: true,
-  });
-  if (!outcome.ok) {
-    state.phase = "failed";
-    state.failure = { code: outcome.code, message: outcome.message };
-    rerender();
-    return;
-  }
-  state.preview = outcome;
-  state.phase = "previewed";
-  rerender();
-}
-
-export async function executeCommand(
-  model: BattleModel,
-  state: BattleState,
-  callbacks: BattleCallbacks,
-  rerender: () => void,
-  announce: (message: string) => void,
-): Promise<void> {
-  const command = state.pendingCommand;
-  // A double submit is refused rather than queued, and an unpreviewed command
-  // never reaches the domain.
-  if (command === null || state.phase !== "previewed") return;
-  state.phase = "submitting";
-  state.failure = null;
-  rerender();
-  state.sequence += 1;
-  const outcome = await callbacks.port.runCommand({
-    command,
-    expectedTurn: model.turn,
-    commandId: `relay-forge-${model.turn}-${state.sequence}`,
-    dryRun: false,
-  });
-  if (!outcome.ok) {
-    state.phase = "failed";
-    state.failure = { code: outcome.code, message: outcome.message };
-    rerender();
-    announce(outcome.message);
-    return;
-  }
-  state.decisions.push({
-    channel: "decision",
-    text: `${command} を実行しました（ターン ${outcome.before?.turn ?? model.turn}、MP -${outcome.cost}）`,
-    tone: "info",
-    at: new Date().toISOString(),
-  });
-  state.pendingCommand = null;
-  state.preview = null;
-  state.phase = "idle";
-  if (outcome.session !== null) callbacks.onSession(outcome.session);
-  rerender();
-  announce(`${command} を実行しました。ターン ${outcome.after?.turn ?? ""}。`);
-}
 
 /* ------------------------------------------------------------------ *
  * Pieces
@@ -210,29 +97,29 @@ function meter(label: string, value: number, max: number, tone: string, detail?:
 function objectiveBanner(model: BattleModel): HTMLElement {
   return el(
     "section",
-    { class: "rf-b-objective", "data-ended": model.ended ? "true" : "false", "aria-label": "目的" },
+    { class: "rf-b-objective", "data-ended": model.ended ? "true" : "false", "data-result": model.ended ? model.bossHp === 0 ? "victory" : "defeat" : "ongoing", "aria-label": relayText("battleObjective") },
     el(
       "div",
       { class: "rf-b-objective-copy" },
-      el("p", { class: "rf-b-objective-label" }, "目的"),
+      el("p", { class: "rf-b-objective-label" }, relayText("battleObjective")),
       el("h2", { class: "rf-b-objective-title" }, model.objective),
       el(
         "p",
         { class: "rf-b-objective-sub" },
         model.bossLabel,
-        model.weakKind === "" ? null : el("span", { class: "rf-b-weak" }, `弱点: ${model.weakKind}`),
+        model.weakKind === "" ? null : el("span", { class: "rf-b-weak" }, t("boss.weakness", { kind:t(`kind.${model.weakKind}`) })),
       ),
     ),
     el(
       "div",
       { class: "rf-b-objective-meters" },
-      meter("ボス HP", model.bossHp, model.bossMaxHp, "boss"),
+      meter(relayText("battleBossHp"), model.bossHp, model.bossMaxHp, "boss"),
       el(
         "div",
         { class: "rf-b-phase" },
-        el("span", { class: "rf-b-phase-label" }, "フェーズ"),
-        el("strong", { class: "rf-b-phase-value" }, `ターン ${model.turn}`),
-        model.ended ? stateChip({ tone: "done", label: "終了", mark: "OK" }) : stateChip({ tone: "working", label: "進行中", mark: ">>" }),
+        el("span", { class: "rf-b-phase-label" }, relayText("battleTurn")),
+        el("strong", { class: "rf-b-phase-value" }, `${relayText("battleTurn")} ${model.turn}`),
+        model.ended ? stateChip({ tone: model.bossHp === 0 ? "done" : "blocked", label: t(model.bossHp === 0 ? "battle.victory" : "battle.defeat"), mark: model.bossHp === 0 ? "OK" : "!" }) : stateChip({ tone: "working", label: t("battle.ongoing"), mark: ">>" }),
       ),
     ),
   );
@@ -240,7 +127,7 @@ function objectiveBanner(model: BattleModel): HTMLElement {
 
 function participants(model: BattleModel): HTMLElement {
   return screenRegion(
-    "現在のフェーズと参加者",
+    relayText("battleParticipants"),
     { variant: "phase" },
     el(
       "div",
@@ -264,14 +151,14 @@ function participants(model: BattleModel): HTMLElement {
     el(
       "div",
       { class: "rf-b-meters" },
-      meter("自分 HP", model.playerHp, model.playerMaxHp, "player"),
-      meter("MP", model.mp, model.maxMp, "mp", "MPはQuestの完了で回復します"),
+      meter(relayText("battlePlayerHp"), model.playerHp, model.playerMaxHp, "player"),
+      meter("MP", model.mp, model.maxMp, "mp", t("battle.intro")),
     ),
     el(
       "div",
       { class: "rf-b-statuses" },
       model.statuses.length === 0
-        ? el("span", { class: "rf-b-status-empty" }, "継続効果はありません")
+        ? el("span", { class: "rf-b-status-empty" }, relayText("battleNoStatuses"))
         : null,
       ...model.statuses.map((status) => stateChip({ tone: status.tone, label: `${status.label} ${status.value}`, mark: "*" })),
     ),
@@ -279,21 +166,22 @@ function participants(model: BattleModel): HTMLElement {
 }
 
 function previewPanel(model: BattleModel, state: BattleState): HTMLElement | null {
-  if (state.phase === "previewing") {
+  if (state.phase === "previewing" || state.phase === "refreshing") {
     return el(
       "div",
-      { class: "rf-b-preview", "data-phase": "previewing", role: "status" },
-      el("p", { class: "rf-b-preview-title" }, "この手の結果を確認しています…"),
+      { class: "rf-b-preview", "data-phase": state.phase, role: "status", tabindex:"-1" },
+      el("p", { class: "rf-b-preview-title" }, relayText(state.phase === "refreshing" ? "statusLoading" : "battlePreviewing")),
     );
   }
   if (state.phase === "failed" && state.failure !== null) {
     return el(
       "div",
-      { class: "rf-b-preview", "data-phase": "failed", role: "alert" },
-      el("p", { class: "rf-b-preview-title" }, "実行できません"),
+      { class: "rf-b-preview", "data-phase": "failed", role: "alert", tabindex:"-1" },
+      el("p", { class: "rf-b-preview-title" }, relayText("battleUnavailable")),
       el("p", { class: "rf-b-preview-body" }, state.failure.message),
     );
   }
+  if (state.phase === "previewed" && !battlePreviewCurrent(model, state)) return el("p", { class:"rf-b-preview-body", role:"alert" }, relayText("battleStale"));
   const preview = state.preview;
   if (preview === null || preview.before === null || preview.after === null) return null;
   /* `invert` marks a value where going down is the good outcome (boss HP).
@@ -309,20 +197,20 @@ function previewPanel(model: BattleModel, state: BattleState): HTMLElement | nul
       { class: "rf-b-delta", "data-direction": direction },
       el("span", { class: "rf-b-delta-label" }, label),
       el("span", { class: "rf-b-delta-value" }, `${before} → ${after}`),
-      el("span", { class: "rf-b-delta-change" }, change === 0 ? "変化なし" : `${change > 0 ? "+" : ""}${change}`),
+      el("span", { class: "rf-b-delta-change" }, change === 0 ? relayText("battleNoChange") : `${change > 0 ? "+" : ""}${change}`),
     );
   };
   return el(
     "div",
     { class: "rf-b-preview", "data-phase": "previewed", role: "status" },
-    el("p", { class: "rf-b-preview-title" }, `${preview.command} を実行するとこうなります`),
+    el("p", { class: "rf-b-preview-title" }, relayText("battlePreview").replace("{command}", battleCommandLabel(preview.command, model.commands.find(command => command.id === preview.command)?.label))),
     el(
       "ul",
       { class: "rf-b-deltas" },
-      delta("ボス HP", preview.before.bossHp, preview.after.bossHp, "down"),
-      delta("自分 HP", preview.before.playerHp, preview.after.playerHp, "up"),
+      delta(relayText("battleBossHp"), preview.before.bossHp, preview.after.bossHp, "down"),
+      delta(relayText("battlePlayerHp"), preview.before.playerHp, preview.after.playerHp, "up"),
       delta("MP", preview.before.mp, preview.after.mp, "up"),
-      delta("ターン", preview.before.turn, preview.after.turn, "neutral"),
+      delta(relayText("battleTurn"), preview.before.turn, preview.after.turn, "neutral"),
     ),
     preview.effects.length === 0
       ? null
@@ -332,11 +220,11 @@ function previewPanel(model: BattleModel, state: BattleState): HTMLElement | nul
         ...preview.effects.map((effect) => el(
           "li",
           { class: "rf-b-effect", "data-type": effect.type },
-          el("span", { class: "rf-b-effect-type" }, effect.type),
-          el("span", { class: "rf-b-effect-copy" }, `${effect.source} ${effect.amount}`),
+          el("span", { class: "rf-b-effect-type" }, ({ boss_damage:relayText("battleBossHp"), player_damage:relayText("battlePlayerHp"), mp_gain:"MP +", mp_drain:"MP -", mp_spend:"MP -", heal:t("battle.heal"), guard:t("battle.guard") } as Record<string, string>)[effect.type] ?? effect.type),
+          el("span", { class: "rf-b-effect-copy" }, `${battleCommandLabel(effect.source, effect.source === "rage" ? relayText("battleRage") : effect.source)} ${effect.amount}`),
         )),
       ),
-    el("p", { class: "rf-b-preview-note" }, "ここまでは確認のみで、まだ何も書き込まれていません。"),
+    el("p", { class: "rf-b-preview-note" }, relayText("battlePreviewOnly")),
   );
 }
 
@@ -351,29 +239,29 @@ function commandDeck(
     {
       type: "button",
       class: "rf-primary-button rf-b-execute",
-      disabled: state.phase === "previewed" ? null : true,
+      "data-battle-action":"execute",
+      disabled: state.phase === "previewed" && !model.writeHeld && battlePreviewCurrent(model, state) ? null : true,
     },
-    state.phase === "submitting" ? "実行中…" : "この手を実行",
+    state.phase === "submitting" ? relayText("executing") : relayText("battleExecute"),
   );
   execute.addEventListener("click", () => {
     void executeCommand(model, state, callbacks, context.rerender, context.announce);
   });
 
-  const cancel = el("button", { type: "button", class: "rf-secondary-button" }, "選び直す");
+  const cancel = el("button", { type: "button", class: "rf-secondary-button", "data-battle-action":"cancel", disabled:battleBusy(state) || state.needsRefresh }, relayText("battleChooseAgain"));
   cancel.addEventListener("click", () => {
-    state.pendingCommand = null;
-    state.preview = null;
-    state.failure = null;
-    state.phase = "idle";
-    context.rerender();
+    if (cancelBattlePreview(state)) context.rerender();
   });
 
+  const refresh = callbacks.onRefresh ? el("button", { type:"button", class:"rf-secondary-button", "data-battle-action":"refresh", disabled:battleBusy(state) }, relayText("refresh")) : null;
+  refresh?.addEventListener("click", () => { void refreshBattle(state, callbacks, context.rerender); });
+
   return screenRegion(
-    "介入 — 次の一手",
+    relayText("battleNextMove"),
     { variant: "deck" },
     el(
       "div",
-      { class: "rf-b-commands", role: "group", "aria-label": "コマンド" },
+      { class: "rf-b-commands", role: "group", "aria-label": t("battle.classPanel") },
       ...model.commands.map((command) => {
         const button = el(
           "button",
@@ -381,8 +269,9 @@ function commandDeck(
             type: "button",
             class: "rf-b-command",
             "data-command": command.id,
+            "aria-pressed": state.pendingCommand === command.id ? "true" : "false",
             "data-selected": state.pendingCommand === command.id ? "true" : "false",
-            disabled: command.enabled && !model.writeHeld ? null : true,
+            disabled: command.enabled && !model.writeHeld && !state.needsRefresh && !battleBusy(state) ? null : true,
             "aria-describedby": command.enabled ? null : `rf-b-why-${command.id}`,
           },
           el("span", { class: "rf-b-command-label" }, command.label),
@@ -398,21 +287,22 @@ function commandDeck(
       }),
     ),
     model.writeHeld
-      ? el("p", { class: "rf-b-held" }, "接続または鮮度の問題により、実行は保留されています。")
+      ? el("p", { class: "rf-b-held" }, relayText("battleHeld"))
       : null,
     previewPanel(model, state),
+    refresh,
     state.phase === "idle" && state.pendingCommand === null
-      ? el("p", { class: "rf-b-deck-hint" }, "コマンドを選ぶと、実行前に結果を確認できます。")
+      ? el("p", { class: "rf-b-deck-hint" }, relayText("battleChooseHint"))
       : el("div", { class: "rf-b-deck-actions" }, cancel, execute),
   );
 }
 
 function timelineRegion(model: BattleModel, context: ScreenContext): HTMLElement {
   return screenRegion(
-    "実行と判断の記録",
+    relayText("battleHistory"),
     { scroll: true, variant: "timeline" },
     model.timeline.length === 0
-      ? el("p", { class: "rf-b-timeline-empty" }, "まだ記録はありません。最初の一手を実行すると、ここに残ります。")
+      ? el("p", { class: "rf-b-timeline-empty" }, relayText("battleNoHistory"))
       : el(
         "ol",
         { class: "rf-b-timeline" },
@@ -422,15 +312,21 @@ function timelineRegion(model: BattleModel, context: ScreenContext): HTMLElement
           el(
             "span",
             { class: "rf-b-event-channel" },
-            event.channel === "decision" ? "判断" : "実行",
+            event.channel === "decision" ? relayText("battleDecision") : relayText("battleExecution"),
           ),
           el("span", { class: "rf-b-event-text" }, event.text),
           el("span", { class: "rf-b-event-at" }, instantLabel(event.at)),
         )),
       ),
-    el("h4", { class: "rf-b-sources-label" }, "MPを回復するQuest"),
+    mpSources(model, context),
+  );
+}
+
+function mpSources(model: BattleModel, context: ScreenContext): HTMLElement {
+  return el("div", { class:"rf-b-mp-sources" },
+    el("h4", { class: "rf-b-sources-label" }, t("battle.questPanel")),
     model.mpSources.length === 0
-      ? el("p", { class: "rf-b-timeline-empty" }, "MPを回復できるQuestは残っていません。")
+      ? el("p", { class: "rf-b-timeline-empty" }, t("battle.empty"))
       : el(
         "ul",
         { class: "rf-b-sources" },
@@ -455,10 +351,10 @@ function timelineRegion(model: BattleModel, context: ScreenContext): HTMLElement
 function battleMetrics(model: BattleModel): readonly Metric[] {
   const blocked = model.commands.filter((command) => !command.enabled).length;
   return [
-    { label: "ターン", value: String(model.turn), note: model.ended ? "終了済み" : "進行中", tone: model.ended ? "done" : "working" },
-    { label: "ボス HP", value: `${model.bossHp}`, note: `/ ${model.bossMaxHp}`, tone: "blocked" },
+    { label: relayText("battleTurn"), value: String(model.turn), note: t(model.ended ? model.bossHp === 0 ? "battle.victory" : "battle.defeat" : "battle.ongoing"), tone: model.ended ? model.bossHp === 0 ? "done" : "blocked" : "working" },
+    { label: relayText("battleBossHp"), value: `${model.bossHp}`, note: `/ ${model.bossMaxHp}`, tone: "blocked" },
     { label: "MP", value: `${model.mp}`, note: `/ ${model.maxMp}`, tone: "waiting" },
-    { label: "選べない手", value: String(blocked), note: blocked === 0 ? "すべて実行できます" : "理由は各ボタンに表示", tone: blocked === 0 ? "done" : "danger" },
+    { label: relayText("battleBlockedMoves"), value: String(blocked), note: blocked === 0 ? relayText("battleAllAvailable") : relayText("battleReasons"), tone: blocked === 0 ? "done" : "danger" },
   ];
 }
 
@@ -473,15 +369,15 @@ export function renderBattleDesktop(
     return {
       main: el(
         "div",
-        { class: "rf-screen rf-screen--battle" },
-        screenHeader({ title: "Battle", question: "今どの実行が進み、どこで問題が起き、人間が介入すべきか。" }),
+        { class: "rf-screen rf-screen--battle", "aria-busy":battleBusy(state) ? "true" : "false" },
+        screenHeader({ title: "Battle", question: relayText("battleQuestion") }),
         ...model.notices.map((notice) => screenNotice(notice)),
         loading
           ? screenSkeleton(3, "tile")
           : screenEmpty(
-            "進行中の戦闘はありません",
-            "Questを完了してMPを蓄えると、次の戦闘を開始できます。",
-            { label: "Questを見る", onAct: () => context.onNavigate("quests") },
+            relayText("battleNoSession"),
+            relayText("battleNoSessionHint"),
+            { label: t("nav.tasks"), onAct: () => context.onNavigate("quests") },
           ),
       ),
     };
@@ -489,13 +385,13 @@ export function renderBattleDesktop(
 
   const main = el(
     "div",
-    { class: "rf-screen rf-screen--battle" },
+    { class: "rf-screen rf-screen--battle", "aria-busy":battleBusy(state) ? "true" : "false" },
     screenHeader({
       title: "Battle",
-      question: "今どの実行が進み、どこで問題が起き、人間が介入すべきか。",
+      question: relayText("battleQuestion"),
       meta: [
-        { label: "フェーズ", value: `ターン ${model.turn}` },
-        { label: "担当", value: model.playerName },
+        { label: relayText("battleTurn"), value: `${relayText("battleTurn")} ${model.turn}` },
+        { label: t("task.assignee"), value: model.playerName },
       ],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
@@ -527,10 +423,10 @@ export function renderBattleMobile(
     return {
       main: el(
         "div",
-        { class: "rf-screen rf-screen--battle" },
-        screenHeader({ title: "Battle", question: "今どの実行が進み、どこで問題が起き、人間が介入すべきか。" }),
+        { class: "rf-screen rf-screen--battle", "aria-busy":battleBusy(state) ? "true" : "false" },
+        screenHeader({ title: "Battle", question: relayText("battleQuestion") }),
         ...model.notices.map((notice) => screenNotice(notice)),
-        loading ? screenSkeleton(3, "card") : screenEmpty("進行中の戦闘はありません", "Questを完了してMPを蓄えてください。"),
+        loading ? screenSkeleton(3, "card") : screenEmpty(relayText("battleNoSession"), relayText("battleNoSessionHint")),
       ),
     };
   }
@@ -538,8 +434,8 @@ export function renderBattleMobile(
   const latest = model.timeline.slice(0, 3);
   const toggle = el(
     "button",
-    { type: "button", class: "rf-b-m-toggle", "aria-expanded": state.timelineOpen ? "true" : "false" },
-    state.timelineOpen ? "記録を閉じる" : `記録をすべて見る（${model.timeline.length}）`,
+    { type: "button", class: "rf-b-m-toggle", "data-battle-action":"timeline", "aria-controls":"rf-b-history", "aria-expanded": state.timelineOpen ? "true" : "false" },
+    state.timelineOpen ? relayText("close") : relayText("battleShowHistory").replace("{count}", String(model.timeline.length)),
   );
   toggle.addEventListener("click", () => {
     state.timelineOpen = !state.timelineOpen;
@@ -548,50 +444,49 @@ export function renderBattleMobile(
 
   const main = el(
     "div",
-    { class: "rf-screen rf-screen--battle", "data-mobile-view": "theatre" },
+    { class: "rf-screen rf-screen--battle", "aria-busy":battleBusy(state) ? "true" : "false", "data-mobile-view": "theatre" },
     screenHeader({
       title: "Battle",
-      question: "今どの実行が進み、どこで問題が起き、人間が介入すべきか。",
-      meta: [{ label: "フェーズ", value: `ターン ${model.turn}` }],
+      question: relayText("battleQuestion"),
+      meta: [{ label: relayText("battleTurn"), value: `${relayText("battleTurn")} ${model.turn}` }],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     objectiveBanner(model),
     el(
       "div",
       { class: "rf-b-m-vitals" },
-      meter("自分 HP", model.playerHp, model.playerMaxHp, "player"),
+      meter(relayText("battlePlayerHp"), model.playerHp, model.playerMaxHp, "player"),
       meter("MP", model.mp, model.maxMp, "mp"),
     ),
     model.statuses.length === 0
       ? null
       : el("div", { class: "rf-b-statuses" }, ...model.statuses.map((status) => stateChip({ tone: status.tone, label: `${status.label} ${status.value}`, mark: "*" }))),
     commandDeck(model, state, callbacks, context),
+    mpSources(model, context),
     el(
       "section",
-      { class: "rf-b-m-latest", "aria-label": "最新のイベント" },
-      el("h3", { class: "rf-b-m-latest-title" }, "最新のイベント"),
+      { class: "rf-b-m-latest", "aria-label": relayText("battleLatest") },
+      el("h3", { class: "rf-b-m-latest-title" }, relayText("battleLatest")),
       latest.length === 0
-        ? el("p", { class: "rf-b-timeline-empty" }, "まだ記録はありません。")
+        ? el("p", { class: "rf-b-timeline-empty" }, relayText("battleNoHistory"))
         : el(
           "ol",
           { class: "rf-b-timeline" },
           ...latest.map((event) => el(
             "li",
             { class: "rf-b-event", "data-channel": event.channel, "data-tone": event.tone },
-            el("span", { class: "rf-b-event-channel" }, event.channel === "decision" ? "判断" : "実行"),
+            el("span", { class: "rf-b-event-channel" }, event.channel === "decision" ? relayText("battleDecision") : relayText("battleExecution")),
             el("span", { class: "rf-b-event-text" }, event.text),
           )),
         ),
       toggle,
-      !state.timelineOpen
-        ? null
-        : el(
+      el(
           "ol",
-          { class: "rf-b-timeline" },
+          { class: "rf-b-timeline", id:"rf-b-history", hidden:!state.timelineOpen },
           ...model.timeline.slice(3).map((event) => el(
             "li",
             { class: "rf-b-event", "data-channel": event.channel, "data-tone": event.tone },
-            el("span", { class: "rf-b-event-channel" }, event.channel === "decision" ? "判断" : "実行"),
+            el("span", { class: "rf-b-event-channel" }, event.channel === "decision" ? relayText("battleDecision") : relayText("battleExecution")),
             el("span", { class: "rf-b-event-text" }, event.text),
           )),
         ),
@@ -604,8 +499,8 @@ export function renderBattleMobile(
    * change. Before that, the bar states what is holding the turn instead. */
   const execute = el(
     "button",
-    { type: "button", class: "rf-primary-button", disabled: state.phase === "previewed" ? null : true },
-    state.phase === "submitting" ? "実行中…" : "この手を実行",
+    { type: "button", class: "rf-primary-button", "data-battle-action":"execute-sticky", disabled: state.phase === "previewed" && !model.writeHeld && battlePreviewCurrent(model, state) ? null : true },
+    state.phase === "submitting" ? relayText("executing") : relayText("battleExecute"),
   );
   execute.addEventListener("click", () => {
     void executeCommand(model, state, callbacks, context.rerender, context.announce);
@@ -615,7 +510,7 @@ export function renderBattleMobile(
     ? el(
       "div",
       { class: "rf-b-m-bar", "data-shape": "ready" },
-      el("span", { class: "rf-b-m-bar-copy" }, `${state.pendingCommand ?? ""} — MP ${state.preview?.cost ?? 0} 消費`),
+      el("span", { class: "rf-b-m-bar-copy" }, `${battleCommandLabel(state.pendingCommand ?? "", model.commands.find(command => command.id === state.pendingCommand)?.label)} · MP -${state.preview?.cost ?? 0}`),
       execute,
     )
     : el(
@@ -625,12 +520,12 @@ export function renderBattleMobile(
         "span",
         { class: "rf-b-m-bar-copy" },
         model.ended
-          ? "この戦闘は終了しています"
+          ? relayText("battleEnded")
           : model.writeHeld
-            ? "実行は保留中です"
+            ? relayText("battleHeld")
             : state.phase === "failed" && state.failure !== null
               ? state.failure.message
-              : "コマンドを選ぶと結果を確認できます",
+              : relayText("battleChooseHint"),
       ),
     );
 

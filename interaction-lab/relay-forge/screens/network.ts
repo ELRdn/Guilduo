@@ -20,6 +20,7 @@
  */
 
 import type { Actor } from "../model.ts";
+import { relayText, type RelayCopyKey } from "../relay-copy.ts";
 import { actorAvatar } from "../primitives/avatar.ts";
 import { el, svg } from "../primitives/dom.ts";
 import {
@@ -40,6 +41,7 @@ import {
   zoomNetworkCameraAt,
 } from "./network-layout.ts";
 import {
+  countLabel,
   type Metric,
   metricRow,
   type ScreenContext,
@@ -118,18 +120,25 @@ function defaultFocus(model: NetworkModel, selectedQuestId: string | null): stri
   return first.done ? null : first.value;
 }
 
+function focusNetworkCentre(): void {
+  window.requestAnimationFrame(() => {
+    const target = document.querySelector<HTMLElement>('.rf-screen--network .rf-n-node[data-focused="true"], .rf-screen--network .rf-n-m-focus-title, .rf-screen--network .rf-n-outline-focus');
+    if (target) { if (!target.matches(".rf-n-node")) target.tabIndex = -1; target.focus({ preventScroll:true }); }
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Node rendering
  * ------------------------------------------------------------------ */
 
 const STATE_CHIP: Readonly<Record<NetworkNode["state"], { label: string; mark: string; tone: "review" | "blocked" | "working" | "scheduled" | "done" | "neutral" | "danger" }>> = {
-  review: { label: "要判断", mark: "!?", tone: "review" },
-  blocked: { label: "停止", mark: "//", tone: "blocked" },
-  working: { label: "進行中", mark: ">>", tone: "working" },
-  scheduled: { label: "予定", mark: "..", tone: "scheduled" },
-  done: { label: "完了", mark: "OK", tone: "done" },
-  healthy: { label: "接続中", mark: "==", tone: "working" },
-  degraded: { label: "要対応", mark: "!!", tone: "danger" },
+  review: { get label() { return relayText("stateReview"); }, mark: "!?", tone: "review" },
+  blocked: { get label() { return relayText("stateBlocked"); }, mark: "//", tone: "blocked" },
+  working: { get label() { return relayText("stateWorking"); }, mark: ">>", tone: "working" },
+  scheduled: { get label() { return relayText("stateScheduled"); }, mark: "..", tone: "scheduled" },
+  done: { get label() { return relayText("stateDone"); }, mark: "OK", tone: "done" },
+  healthy: { get label() { return relayText("networkConnected"); }, mark: "==", tone: "working" },
+  degraded: { get label() { return relayText("networkAttention"); }, mark: "!!", tone: "danger" },
   neutral: { label: "", mark: "", tone: "neutral" },
 };
 
@@ -154,6 +163,7 @@ function nodeCard(
       "data-role": options.role,
       "data-focused": options.focused === true ? "true" : "false",
       "data-node-id": node.id,
+      tabindex: options.focused === true ? 0 : -1,
       "aria-current": options.focused === true ? "true" : null,
     },
     el(
@@ -167,7 +177,7 @@ function nodeCard(
     ),
     el("span", { class: "rf-n-node-label", title: node.label }, node.label),
     el("span", { class: "rf-n-node-sub", title: node.sub }, node.sub),
-    options.focused === true ? el("span", { class: "rf-visually-hidden" }, "中心のノード") : null,
+    options.focused === true ? el("span", { class: "rf-visually-hidden" }, relayText("networkFocusedNode")) : null,
   );
   card.addEventListener("click", () => options.onFocus());
   return card;
@@ -258,8 +268,9 @@ function graphCanvas(
   world.style.height = `${layout.height}px`;
   world.style.visibility = "hidden";
 
-  const control = (label: string, text: string, act: () => void): HTMLButtonElement => {
-    const button = el("button", { type: "button", class: "rf-n-map-control", "aria-label": label, title: label }, text);
+  const control = (key: RelayCopyKey, text: string, act: () => void): HTMLButtonElement => {
+    const label = relayText(key);
+    const button = el("button", { type: "button", class: "rf-n-map-control", "data-network-control":key, "aria-label": label, title: label }, text);
     button.addEventListener("click", act);
     return button;
   };
@@ -269,14 +280,14 @@ function graphCanvas(
     {
       class: "rf-n-canvas",
       role: "group",
-      tabindex: 0,
-      "aria-label": `${view.focus.label} の関係図。ドラッグで移動、ホイールで拡大縮小できます`,
+      tabindex: -1,
+      "aria-label": relayText("networkMapAria").replace("{name}", () => view.focus.label),
     },
     el(
       "div",
       { class: "rf-n-lane-labels", "aria-hidden": "true" },
-      el("span", null, "上流 — これが終わらないと進めない"),
-      el("span", null, "下流 — これを待っている"),
+      el("span", null, relayText("networkUpstream")),
+      el("span", null, relayText("networkDownstream")),
     ),
     world,
   );
@@ -301,17 +312,17 @@ function graphCanvas(
 
   const controls = el(
     "div",
-    { class: "rf-n-map-controls", role: "group", "aria-label": "関係図の表示操作" },
-    control("拡大", "+", () => {
+    { class: "rf-n-map-controls", role: "group", "aria-label": relayText("networkMapControls") },
+    control("networkZoomIn", "+", () => {
       const centre = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
       setCamera(zoomNetworkCameraAt(state.camera, state.camera.scale * 1.2, centre));
     }),
-    control("縮小", "−", () => {
+    control("networkZoomOut", "−", () => {
       const centre = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
       setCamera(zoomNetworkCameraAt(state.camera, state.camera.scale / 1.2, centre));
     }),
-    control("中心へ戻す", "中心", () => centreOn(layout.focus)),
-    control("全体を表示", "全体", () => setCamera(fitNetworkCamera(canvas.clientWidth, canvas.clientHeight, layout))),
+    control("networkCentreOn", relayText("networkFocus"), () => centreOn(layout.focus)),
+    control("networkFit", relayText("networkFit"), () => setCamera(fitNetworkCamera(canvas.clientWidth, canvas.clientHeight, layout))),
   );
   canvas.append(controls);
 
@@ -402,7 +413,7 @@ function graphCanvas(
       const next = Math.min(lane.length - 1, Math.max(0, at + (key === "ArrowRight" ? 1 : -1)));
       const id = lane[next]?.node.id;
       if (id === undefined) return;
-      canvas.querySelector<HTMLElement>(`[data-node-id="${id}"]`)?.focus({ preventScroll: true });
+      canvas.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
       const point = layout.nodes.get(id);
       if (point !== undefined) centreOn(point);
       return;
@@ -411,7 +422,7 @@ function graphCanvas(
       ? (role === "downstream" ? view.focus.id : view.upstream[0]?.node.id)
       : (role === "upstream" ? view.focus.id : view.downstream[0]?.node.id);
     if (target === undefined) return;
-    canvas.querySelector<HTMLElement>(`[data-node-id="${target}"]`)?.focus({ preventScroll: true });
+    canvas.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(target)}"]`)?.focus({ preventScroll: true });
     const point = layout.nodes.get(target);
     if (point !== undefined) centreOn(point);
   });
@@ -453,7 +464,7 @@ function outlineView(view: Neighbourhood, context: ScreenContext, onFocus: (id: 
           "ul",
           { class: "rf-n-outline-list" },
           ...entries.map((entry) => {
-            const jump = el("button", { type: "button", class: "rf-jump" }, "中心にする");
+            const jump = el("button", { type: "button", class: "rf-jump", "data-focus-id":entry.node.id }, relayText("networkCentreOn"));
             jump.addEventListener("click", () => onFocus(entry.node.id));
             return el(
               "li",
@@ -483,8 +494,8 @@ function outlineView(view: Neighbourhood, context: ScreenContext, onFocus: (id: 
       el("strong", null, view.focus.label),
       nodeChip(view.focus),
     ),
-    lane("上流 — これが終わらないと進めない", view.upstream, "上流はありません。このノードは誰も待っていません。"),
-    lane("下流 — これを待っている", view.downstream, "下流はありません。止まっても他へ波及しません。"),
+    lane(relayText("networkUpstream"), view.upstream, relayText("networkNoUpstream")),
+    lane(relayText("networkDownstream"), view.downstream, relayText("networkNoDownstream")),
   );
 }
 
@@ -499,21 +510,23 @@ function reasonRail(
   context: ScreenContext,
   onFocus: (id: string) => void,
 ): HTMLElement {
-  const blocking = [...view.upstream, ...view.downstream].filter((entry) => entry.edge.blocking);
-  const open = el("button", { type: "button", class: "rf-primary-button" }, view.focus.kind === "quest" ? "この Quest を開く" : "この対象を開く");
-  open.addEventListener("click", () => context.onNavigate(view.focus.destination, view.focus.kind === "quest" ? view.focus.id : undefined));
+  const blocking = view.upstream.filter((entry) => entry.edge.blocking);
+  const open = el("button", { type: "button", class: "rf-primary-button rf-n-open" }, relayText("networkOpenTarget"));
+  open.addEventListener("click", () => context.onNavigate(view.focus.destination, view.focus.id));
 
-  const back = el("button", { type: "button", class: "rf-secondary-button" }, "ひとつ戻る");
+  const back = el("button", { type: "button", class: "rf-secondary-button rf-n-back" }, relayText("networkBack"));
   back.addEventListener("click", () => {
     const previous = state.trail.pop();
     if (previous !== undefined) {
       state.focusId = previous;
-      context.rerender();
+      if (model.nodes.get(previous)?.kind === "quest") context.onSelectQuest(previous);
+      else context.rerender();
+      focusNetworkCentre();
     }
   });
 
   return screenRegion(
-    "なぜ繋がっているか",
+    relayText("networkReasons"),
     { scroll: true, variant: "reasons" },
     el(
       "div",
@@ -529,9 +542,9 @@ function reasonRail(
       open,
       state.trail.length === 0 ? null : back,
     ),
-    el("h4", { class: "rf-n-rail-label" }, blocking.length === 0 ? "停止させている接続" : `停止させている接続 ${blocking.length}件`),
+    el("h4", { class: "rf-n-rail-label" }, `${relayText("networkBlockingEdges")} · ${countLabel(blocking.length)}`),
     blocking.length === 0
-      ? el("p", { class: "rf-n-rail-empty" }, "このノードを止めている接続はありません。")
+      ? el("p", { class: "rf-n-rail-empty" }, relayText("networkNoBlockingEdges"))
       : el(
         "ul",
         { class: "rf-n-reasons" },
@@ -542,7 +555,7 @@ function reasonRail(
           el("span", { class: "rf-n-reason-copy" }, entry.edge.reason),
         )),
       ),
-    el("h4", { class: "rf-n-rail-label" }, "すべての接続"),
+    el("h4", { class: "rf-n-rail-label" }, relayText("networkEdges")),
     el(
       "ul",
       { class: "rf-n-reasons" },
@@ -556,9 +569,9 @@ function reasonRail(
         return row;
       }),
     ),
-    el("h4", { class: "rf-n-rail-label" }, "停止の連鎖"),
+    el("h4", { class: "rf-n-rail-label" }, relayText("networkChains")),
     model.chains.length === 0
-      ? el("p", { class: "rf-n-rail-empty" }, "停止している連鎖はありません。")
+      ? el("p", { class: "rf-n-rail-empty" }, relayText("networkNoChains"))
       : el(
         "ul",
         { class: "rf-n-chains" },
@@ -568,7 +581,7 @@ function reasonRail(
             { type: "button", class: "rf-n-chain", "data-selected": chain.rootId === view.focus.id ? "true" : "false" },
             el("span", { class: "rf-srow-id" }, chain.rootRef),
             el("span", { class: "rf-n-chain-reason" }, chain.reason),
-            el("span", { class: "rf-n-chain-count" }, `${chain.waitingIds.length}件が待機`),
+            el("span", { class: "rf-n-chain-count" }, `${relayText("waiting")} · ${countLabel(chain.waitingIds.length)}`),
           );
           button.addEventListener("click", () => onFocus(chain.rootId));
           return el("li", null, button);
@@ -583,12 +596,12 @@ function reasonRail(
 
 function networkMetrics(model: NetworkModel): readonly Metric[] {
   const quests = [...model.nodes.values()].filter((node) => node.kind === "quest");
-  const waiting = model.chains.reduce((total, chain) => total + chain.waitingIds.length, 0);
+  const waiting = new Set(model.chains.flatMap(chain => chain.waitingIds)).size;
   return [
-    { label: "停止の起点", value: String(model.chains.length), note: "根本原因のQuest", tone: "blocked" },
-    { label: "待機中", value: String(waiting), note: "起点の下流", tone: "waiting" },
+    { label: relayText("networkRoots"), value: String(model.chains.length), note: relayText("networkRootNote"), tone: "blocked" },
+    { label: relayText("waiting"), value: String(waiting), note: relayText("networkWaitingNote"), tone: "waiting" },
     { label: "Quest", value: String(quests.length), tone: "neutral" },
-    { label: "接続", value: String(model.edges.length), note: "依存 / 包含 / 担当 / 同期", tone: "neutral" },
+    { label: relayText("networkEdges"), value: String(model.edges.length), note: relayText("networkEdgeNote"), tone: "neutral" },
   ];
 }
 
@@ -601,25 +614,28 @@ export function renderNetworkDesktop(
   const loading = model.notices.some((notice) => notice.status === "loading");
   /* The resolved default is written back to state, so the very first move away
    * from it is recorded in the trail and can be walked back. */
-  const focusId = state.focusId ?? defaultFocus(model, selectedQuestId);
+  const focusId = state.focusId !== null && model.nodes.has(state.focusId) ? state.focusId : defaultFocus(model, selectedQuestId);
+  state.trail = state.trail.filter(id => model.nodes.has(id));
   state.focusId = focusId;
   const view = focusId === null ? null : neighbourhood(model, focusId);
 
   const onFocus = (id: string): void => {
+    if (state.focusId === id) return;
     if (state.focusId !== null && state.focusId !== id) state.trail.push(state.focusId);
     state.focusId = id;
     // A Quest node also moves the shared selection, so Command and Quests agree.
     if (model.nodes.get(id)?.kind === "quest") context.onSelectQuest(id);
     else context.rerender();
-    context.announce(`${model.nodes.get(id)?.label ?? id} を中心にしました`);
+    context.announce(relayText("networkCentred").replace("{name}", () => model.nodes.get(id)?.label ?? id));
+    focusNetworkCentre();
   };
 
   const body = loading
     ? screenSkeleton(3, "node")
     : view === null
       ? screenEmpty(
-        "関係を表示できる対象がありません",
-        "Quest が読み込まれると、依存、担当、同期の接続がここに現れます。",
+        relayText("networkEmpty"),
+        relayText("networkEmptyHint"),
       )
       : state.view === "graph"
         ? graphCanvas(view, context, state, onFocus)
@@ -630,14 +646,14 @@ export function renderNetworkDesktop(
     { class: "rf-screen rf-screen--network" },
     screenHeader({
       title: "Network",
-      question: "どのQuest、Actor、Connectionが、何へ影響しているか。",
-      meta: view === null ? [] : [{ label: "中心", value: view.focus.ref }],
+      question: relayText("networkQuestion"),
+      meta: view === null ? [] : [{ label: relayText("networkFocus"), value: view.focus.ref }],
       actions: [
         segmentControl(
-          "表示",
+          relayText("networkView"),
           [
-            { id: "graph", label: "関係図", count: view === null ? 0 : view.upstream.length + view.downstream.length },
-            { id: "outline", label: "アウトライン", count: view === null ? 0 : view.upstream.length + view.downstream.length },
+            { id: "graph", label: relayText("networkGraph"), count: view === null ? 0 : view.upstream.length + view.downstream.length },
+            { id: "outline", label: relayText("networkOutline"), count: view === null ? 0 : view.upstream.length + view.downstream.length },
           ],
           state.view,
           (id) => {
@@ -652,9 +668,9 @@ export function renderNetworkDesktop(
     el(
       "div",
       { class: "rf-n-workspace" },
-      screenRegion(state.view === "graph" ? "関係図" : "関係アウトライン", { variant: "canvas" }, body),
+      screenRegion(relayText(state.view === "graph" ? "networkGraph" : "networkOutline"), { variant: state.view === "graph" ? "canvas" : "outline", scroll:state.view === "outline" }, body),
       view === null
-        ? screenRegion("なぜ繋がっているか", { variant: "reasons" }, screenEmpty("対象がありません", "中心にするノードを選ぶと理由が出ます。"))
+        ? screenRegion(relayText("networkReasons"), { variant: "reasons" }, screenEmpty(relayText("networkEmpty"), relayText("networkChooseHint")))
         : reasonRail(model, view, state, context, onFocus),
     ),
   );
@@ -673,16 +689,19 @@ export function renderNetworkMobile(
   selectedQuestId: string | null,
 ): ScreenRender {
   const loading = model.notices.some((notice) => notice.status === "loading");
-  const focusId = state.focusId ?? defaultFocus(model, selectedQuestId);
+  const focusId = state.focusId !== null && model.nodes.has(state.focusId) ? state.focusId : defaultFocus(model, selectedQuestId);
+  state.trail = state.trail.filter(id => model.nodes.has(id));
   state.focusId = focusId;
   const view = focusId === null ? null : neighbourhood(model, focusId);
 
   const onFocus = (id: string): void => {
+    if (state.focusId === id) return;
     if (state.focusId !== null && state.focusId !== id) state.trail.push(state.focusId);
     state.focusId = id;
     if (model.nodes.get(id)?.kind === "quest") context.onSelectQuest(id);
     else context.rerender();
-    context.announce(`${model.nodes.get(id)?.label ?? id} を中心にしました`);
+    context.announce(relayText("networkCentred").replace("{name}", () => model.nodes.get(id)?.label ?? id));
+    focusNetworkCentre();
   };
 
   if (loading) {
@@ -690,7 +709,7 @@ export function renderNetworkMobile(
       main: el(
         "div",
         { class: "rf-screen rf-screen--network" },
-        screenHeader({ title: "Network", question: "どのQuest、Actor、Connectionが、何へ影響しているか。" }),
+        screenHeader({ title: "Network", question: relayText("networkQuestion") }),
         ...model.notices.map((notice) => screenNotice(notice)),
         screenSkeleton(4, "row"),
       ),
@@ -702,14 +721,15 @@ export function renderNetworkMobile(
       main: el(
         "div",
         { class: "rf-screen rf-screen--network" },
-        screenHeader({ title: "Network", question: "どのQuest、Actor、Connectionが、何へ影響しているか。" }),
+        screenHeader({ title: "Network", question: relayText("networkQuestion") }),
         ...model.notices.map((notice) => screenNotice(notice)),
-        screenEmpty("関係を表示できる対象がありません", "Quest が読み込まれると接続が現れます。"),
+        screenEmpty(relayText("networkEmpty"), relayText("networkEmptyHint")),
       ),
     };
   }
 
   const lane = (
+    id: "upstream" | "downstream",
     title: string,
     entries: Neighbourhood["upstream"],
     open: boolean,
@@ -718,13 +738,14 @@ export function renderNetworkMobile(
   ): HTMLElement => {
     const header = el(
       "button",
-      { type: "button", class: "rf-n-m-lane-head", "aria-expanded": open ? "true" : "false" },
+      { type: "button", class: "rf-n-m-lane-head", "data-lane":id, "aria-expanded": open ? "true" : "false" },
       el("span", null, title),
       el("span", { class: "rf-n-m-lane-count" }, String(entries.length)),
     );
     header.addEventListener("click", () => {
       toggle();
       context.rerender();
+      window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`.rf-n-m-lane-head[data-lane="${id}"]`)?.focus());
     });
     return el(
       "section",
@@ -740,7 +761,7 @@ export function renderNetworkMobile(
             ...entries.map((entry) => {
               const row = el(
                 "button",
-                { type: "button", class: "rf-n-m-row", "data-blocking": entry.edge.blocking ? "true" : "false" },
+                { type: "button", class: "rf-n-m-row", "data-node-id":entry.node.id, "data-blocking": entry.edge.blocking ? "true" : "false" },
                 el(
                   "span",
                   { class: "rf-n-m-row-top" },
@@ -758,25 +779,27 @@ export function renderNetworkMobile(
     );
   };
 
-  const back = el("button", { type: "button", class: "rf-secondary-button rf-n-m-back" }, "ひとつ戻る");
+  const back = el("button", { type: "button", class: "rf-secondary-button rf-n-m-back rf-n-back" }, relayText("networkBack"));
   back.addEventListener("click", () => {
     const previous = state.trail.pop();
     if (previous !== undefined) {
       state.focusId = previous;
-      context.rerender();
+      if (model.nodes.get(previous)?.kind === "quest") context.onSelectQuest(previous);
+      else context.rerender();
+      focusNetworkCentre();
     }
   });
 
-  const open = el("button", { type: "button", class: "rf-primary-button" }, "この対象を開く");
-  open.addEventListener("click", () => context.onNavigate(view.focus.destination, view.focus.kind === "quest" ? view.focus.id : undefined));
+  const open = el("button", { type: "button", class: "rf-primary-button rf-n-open" }, relayText("networkOpenTarget"));
+  open.addEventListener("click", () => context.onNavigate(view.focus.destination, view.focus.id));
 
   const main = el(
     "div",
     { class: "rf-screen rf-screen--network", "data-mobile-view": "explorer" },
     screenHeader({
       title: "Network",
-      question: "どのQuest、Actor、Connectionが、何へ影響しているか。",
-      meta: [{ label: "停止の起点", value: String(model.chains.length) }],
+      question: relayText("networkQuestion"),
+      meta: [{ label: relayText("networkRoots"), value: String(model.chains.length) }],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     el(
@@ -793,18 +816,20 @@ export function renderNetworkMobile(
       state.trail.length === 0 ? null : back,
     ),
     lane(
-      "上流 — これが終わらないと進めない",
+      "upstream",
+      relayText("networkUpstream"),
       view.upstream,
       state.upstreamOpen,
       () => { state.upstreamOpen = !state.upstreamOpen; },
-      "上流はありません。",
+      relayText("networkNoUpstream"),
     ),
     lane(
-      "下流 — これを待っている",
+      "downstream",
+      relayText("networkDownstream"),
       view.downstream,
       state.downstreamOpen,
       () => { state.downstreamOpen = !state.downstreamOpen; },
-      "下流はありません。",
+      relayText("networkNoDownstream"),
     ),
   );
 

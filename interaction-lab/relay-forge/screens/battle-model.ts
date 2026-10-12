@@ -7,6 +7,8 @@
 
 import type { BattleSession } from "../../../types/questforge.ts";
 import type { ScreenNotice } from "./screen-state.ts";
+import { t } from "../../../i18n.ts";
+import { relayText } from "../relay-copy.ts";
 
 /* ------------------------------------------------------------------ *
  * Port — the same shape `QuestForgeRepository` can satisfy
@@ -31,6 +33,7 @@ export interface BattleOutcome {
   readonly effects: readonly BattleEffectView[];
   /** The session the domain returned. The UI never synthesises one. */
   readonly session: BattleSession | null;
+  readonly replayed?: boolean;
 }
 
 export interface BattlePort {
@@ -42,17 +45,22 @@ export interface BattlePort {
   runCommand(input: { command: string; expectedTurn: number; commandId: string; dryRun: boolean }): Promise<BattleOutcome>;
 }
 
-const FAILURE_COPY: Readonly<Record<string, string>> = {
-  battle_turn_stale: "ターンが進んでいます。最新の状態を読み込んでからやり直してください。",
-  battle_ended: "この戦闘は終了しています。実行できる手はありません。",
-  battle_mp_insufficient: "MPが足りません。Questを完了してMPを回復してください。",
-  battle_command_invalid: "そのコマンドは選べません。",
-  insufficient_scope: "battle:write のスコープが付与されていません。",
-  offline: "接続がありません。復帰するまで実行は保留されます。",
-};
-
 export function explainBattleFailure(code: string): string {
-  return FAILURE_COPY[code] ?? "実行できませんでした。時間をおいて再試行してください。";
+  switch (code) {
+    case "battle_turn_stale": return relayText("battleStale");
+    case "battle_ended": return relayText("battleEnded");
+    case "battle_mp_insufficient": return t("battle.mpInsufficient");
+    case "battle_command_invalid": return relayText("battleUnavailable");
+    case "insufficient_scope": return relayText("battleScope");
+    case "offline": return relayText("battleHeld");
+    case "invalid_response": return relayText("connectionInvalidResponse");
+    case "load_failed": return relayText("loadFailed");
+    default: return t("battle.commandFailed");
+  }
+}
+
+export function battleCommandLabel(command: string, fallback = command): string {
+  return ["attack", "guard", "heal", "burst"].includes(command) ? t(`battle.${command}`) : fallback;
 }
 
 /* ------------------------------------------------------------------ *
@@ -164,12 +172,12 @@ export function normalizeBattleModel(options: NormalizeBattleOptions): BattleMod
   };
 
   const statuses = [
-    statusOf("focus", "集中", "working"),
-    statusOf("guard", "防御", "done"),
-    statusOf("shield", "シールド", "done"),
-    statusOf("rage", "激昂", "blocked"),
-    statusOf("vulnerable", "脆弱", "review"),
-    statusOf("poison", "毒", "blocked"),
+    statusOf("focus", relayText("battleFocus"), "working"),
+    statusOf("guard", t("battle.guard"), "done"),
+    statusOf("shield", relayText("battleShield"), "done"),
+    statusOf("rage", relayText("battleRage"), "blocked"),
+    statusOf("vulnerable", relayText("battleVulnerable"), "review"),
+    statusOf("poison", relayText("battlePoison"), "blocked"),
   ].filter((entry): entry is BattleStatusEffect => entry !== null);
 
   const ended = battle.ended === true;
@@ -179,14 +187,14 @@ export function normalizeBattleModel(options: NormalizeBattleOptions): BattleMod
     const enabled = record.enabled === true && !ended;
     return {
       id: text(record, "id"),
-      label: text(record, "label"),
+      label: battleCommandLabel(text(record, "id"), text(record, "label")),
       mpCost: cost,
       enabled,
       blockedReason: ended
-        ? "戦闘は終了しています"
+        ? relayText("battleEnded")
         : cost > mp
-          ? `MPが${cost - mp}足りません`
-          : record.enabled === true ? "" : "いまは選べません",
+          ? t("battle.mpInsufficient")
+          : record.enabled === true ? "" : relayText("battleUnavailable"),
     };
   });
 
@@ -206,16 +214,16 @@ export function normalizeBattleModel(options: NormalizeBattleOptions): BattleMod
     .sort((left, right) => (left.at < right.at ? 1 : left.at > right.at ? -1 : 0));
 
   return {
-    objective: `${text(boss, "name")} を撃破する`,
+    objective: relayText("battleDefeatBoss").replace("{boss}", text(boss, "name")),
     bossName: text(boss, "name"),
-    bossLabel: text(boss, "label"),
+    bossLabel: ["d", "e", "h", "g3", "h3"].includes(text(boss, "id")) ? t(`boss.${text(boss, "id")}.label`) : text(boss, "label"),
     bossHp: num(boss, "hp"),
     bossMaxHp: num(boss, "maxHp"),
     weakKind: text(boss, "weakKind"),
     turn: num(battle, "turn"),
     ended,
     playerName: text(character, "name"),
-    playerRole: text(character, "role"),
+    playerRole: t(`role.${text(character, "role")}.label`),
     playerHp: num(character, "hp"),
     playerMaxHp: num(character, "maxHp"),
     mp,
@@ -223,7 +231,7 @@ export function normalizeBattleModel(options: NormalizeBattleOptions): BattleMod
     statuses,
     commands,
     timeline,
-    mpSources: session.quests.map((quest) => ({
+    mpSources: session.quests.filter(quest => quest.eligible).map((quest) => ({
       id: quest.id,
       title: quest.title,
       mpGain: quest.mpGain,
@@ -232,4 +240,177 @@ export function normalizeBattleModel(options: NormalizeBattleOptions): BattleMod
     notices: options.notices ?? [],
     writeHeld: options.writeHeld ?? false,
   };
+}
+
+export type BattlePhase = "idle" | "previewing" | "previewed" | "submitting" | "refreshing" | "failed";
+
+export interface BattleState {
+  /** The command the human is considering. Null until one is chosen. */
+  pendingCommand: string | null;
+  phase: BattlePhase;
+  preview: BattleOutcome | null;
+  failure: { code: string; message: string } | null;
+  /** Session-local record of what the human actually did. */
+  decisions: TimelineEvent[];
+  /** Mobile only: the full timeline is collapsed by default. */
+  timelineOpen: boolean;
+  /** An uncertain write must be reconciled by a read before another move. */
+  needsRefresh: boolean;
+}
+
+export function initialBattleState(): BattleState {
+  return {
+    pendingCommand: null,
+    phase: "idle",
+    preview: null,
+    failure: null,
+    decisions: [],
+    timelineOpen: false,
+    needsRefresh: false,
+  };
+}
+
+export interface BattleCallbacks {
+  readonly port: BattlePort;
+  /** Called with the session the domain returned after a real execution. */
+  readonly onSession: (session: BattleSession) => void;
+  readonly isDisposed?: () => boolean;
+  readonly onRefresh?: () => Promise<boolean>;
+}
+
+export function battleBusy(state: BattleState): boolean {
+  return state.phase === "previewing" || state.phase === "submitting" || state.phase === "refreshing";
+}
+
+export function battlePreviewCurrent(model: BattleModel, state: BattleState): boolean {
+  const before = state.preview?.before;
+  return before !== undefined && before !== null && before.turn === model.turn && before.mp === model.mp && before.playerHp === model.playerHp && before.bossHp === model.bossHp;
+}
+
+export function cancelBattlePreview(state: BattleState): boolean {
+  if (battleBusy(state) || state.needsRefresh) return false;
+  state.pendingCommand = null;
+  state.preview = null;
+  state.failure = null;
+  state.phase = "idle";
+  return true;
+}
+
+function failBattle(state: BattleState, code: string): void {
+  state.phase = "failed";
+  state.failure = { code, get message() { return explainBattleFailure(code); } };
+  if (code === "battle_turn_stale" || code === "battle_ended") state.needsRefresh = true;
+}
+
+export async function refreshBattle(state: BattleState, callbacks: BattleCallbacks, rerender: () => void): Promise<void> {
+  if (battleBusy(state) || !callbacks.onRefresh || callbacks.isDisposed?.()) return;
+  state.phase = "refreshing";
+  rerender();
+  let refreshed = false;
+  try { refreshed = await callbacks.onRefresh(); } catch { /* Keep writes held until a successful read. */ }
+  if (callbacks.isDisposed?.()) return;
+  if (refreshed) { state.needsRefresh = false; state.phase = "idle"; cancelBattlePreview(state); }
+  else { state.needsRefresh = true; failBattle(state, "load_failed"); }
+  rerender();
+}
+
+/**
+ * Preview then execute — the same shape as Command's Handoff decision.
+ *
+ * A preview is required before an execution: `pendingCommand` is only armed by
+ * a successful dry run, so the user always sees the exact effects the domain
+ * computed before anything is written.
+ */
+export async function previewCommand(
+  model: BattleModel,
+  state: BattleState,
+  callbacks: BattleCallbacks,
+  commandId: string,
+  rerender: () => void,
+): Promise<void> {
+  if (battleBusy(state) || state.needsRefresh || callbacks.isDisposed?.()) return;
+  if (model.writeHeld) {
+    failBattle(state, "offline");
+    rerender();
+    return;
+  }
+  if (!model.commands.some(command => command.id === commandId && command.enabled)) {
+    failBattle(state, "battle_command_invalid"); rerender(); return;
+  }
+  state.pendingCommand = commandId;
+  state.phase = "previewing";
+  state.preview = null;
+  state.failure = null;
+  rerender();
+  let outcome: BattleOutcome;
+  try { outcome = await callbacks.port.runCommand({
+    command: commandId,
+    expectedTurn: model.turn,
+    commandId: "preview",
+    dryRun: true,
+  }); } catch { if (!callbacks.isDisposed?.()) { failBattle(state, "failed"); rerender(); } return; }
+  if (callbacks.isDisposed?.()) return;
+  if (!outcome.ok) {
+    failBattle(state, outcome.code);
+    rerender();
+    return;
+  }
+  if (!outcome.dryRun || outcome.command !== commandId || outcome.before === null || outcome.after === null || outcome.session === null || outcome.before.turn !== model.turn) {
+    failBattle(state, "invalid_response"); rerender(); return;
+  }
+  state.preview = outcome;
+  state.phase = "previewed";
+  rerender();
+}
+
+export async function executeCommand(
+  model: BattleModel,
+  state: BattleState,
+  callbacks: BattleCallbacks,
+  rerender: () => void,
+  announce: (message: string) => void,
+): Promise<void> {
+  const command = state.pendingCommand;
+  // A double submit is refused rather than queued, and an unpreviewed command
+  // never reaches the domain.
+  if (command === null || state.phase !== "previewed") return;
+  if (callbacks.isDisposed?.()) return;
+  if (model.writeHeld || !model.commands.some(entry => entry.id === command && entry.enabled) || !battlePreviewCurrent(model, state)) {
+    failBattle(state, model.writeHeld ? "offline" : "battle_turn_stale"); rerender(); return;
+  }
+  const expectedTurn = state.preview!.before!.turn;
+  state.phase = "submitting";
+  state.needsRefresh = true;
+  state.failure = null;
+  rerender();
+  let outcome: BattleOutcome;
+  try { outcome = await callbacks.port.runCommand({
+    command,
+    expectedTurn,
+    commandId: `relay-forge-${crypto.randomUUID()}`,
+    dryRun: false,
+  }); } catch { if (!callbacks.isDisposed?.()) { failBattle(state, "failed"); rerender(); announce(state.failure!.message); } return; }
+  if (callbacks.isDisposed?.()) return;
+  if (!outcome.ok) {
+    failBattle(state, outcome.code);
+    rerender();
+    announce(state.failure!.message);
+    return;
+  }
+  if (outcome.dryRun || outcome.command !== command || outcome.before?.turn !== expectedTurn || outcome.after === null || outcome.session === null) {
+    failBattle(state, "invalid_response"); rerender(); announce(state.failure!.message); return;
+  }
+  state.decisions.push({
+    channel: "decision",
+    get text() { return relayText("battleDone").replace("{command}", battleCommandLabel(command, model.commands.find(entry => entry.id === command)?.label)).replace("{turn}", String(expectedTurn)).replace("{cost}", String(outcome.cost)); },
+    tone: "info",
+    at: new Date().toISOString(),
+  });
+  state.pendingCommand = null;
+  state.preview = null;
+  state.phase = "idle";
+  state.needsRefresh = false;
+  if (outcome.session !== null) callbacks.onSession(outcome.session);
+  rerender();
+  announce(state.decisions.at(-1)!.text);
 }

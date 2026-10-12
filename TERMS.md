@@ -1,8 +1,12 @@
 # Terms Of Use
 
-Effective date: 2026-08-12
+Effective date: 2026-10-02
 
 Guilduo is beta Human × AI work-management software with an RPG motivation layer. By using a deployed instance, you agree to use it lawfully and not to disrupt the service, access another user's data, abuse OAuth permissions, send malicious webhooks, or distribute content without the necessary rights.
+
+## Official Service Operator And Contact
+
+The official Guilduo service is operated by Radon. Report bugs through [Guilduo GitHub Issues](https://github.com/ELRdn/Guilduo/issues). For individual inquiries or account/data deletion requests, email [el2radon2official@gmail.com](mailto:el2radon2official@gmail.com). Self-hosted instances are operated separately and must publish their own contact.
 
 ## Accounts And Data
 
@@ -14,10 +18,18 @@ MCP and agent assignments can create or change data. Review previews and confirm
 
 ## External Services
 
-Google, Notion, Toggl Focus, Firebase, Cloudflare, and other connected services are independent providers. Their availability, limits, and terms can change. Guilduo is not responsible for third-party outages or account actions. You are responsible for revoking or rotating a third-party personal API key at its provider when needed.
+Google, Appwrite, Cloudflare, Notion, Toggl Focus, and other connected services are independent providers. Their availability, limits, and terms can change. Guilduo is not responsible for third-party outages or account actions. You are responsible for revoking or rotating a third-party personal API key at its provider when needed. Some integrations are Early Access; registering an Agent or assigning a Quest does not enable those services or start an external Agent automatically.
 
 ## Beta Disclaimer
 
 The software is provided without warranty under the GNU AGPL. It may contain bugs, lose availability, or change data formats. Keep backups before experimental sync, plugin, webhook, or AI operations. Guilduo is not medical, legal, financial, or emergency advice.
 
 An instance operator may suspend abusive access and should publish any additional local terms required for that deployment.
+
+## Conditional Paid Features
+
+Public paid sale is unavailable until approved pricing, seller disclosures, provider eligibility and real payment acceptance. Free allows two registered nonarchived Agents (active and disabled both count); Pro has no registration total limit, while request/connection safety limits still apply. Downgrade preserves records and asks the owner to choose two usable Agents.
+
+Ordinary MCP CRUD, Quest and Handoff do not consume AI Credits. Only approved Guilduo intelligence/compute does; automatic additional charges and top-up sales are not enabled by default. Credit grants/expiry, annual cadence, discounts, referral amounts and tax/refund/cancellation terms await product approval and must be shown before purchase. An earlier proposed amount is not a published offer.
+
+Official TypeSafe Jev finite-choice suggestions require human review and do not constitute task execution or completion. Stripe registration/Live use depend on its age/guardian/identity and regional requirements; they must not be bypassed. This is candidate product disclosure, not legal or payment-provider approval.

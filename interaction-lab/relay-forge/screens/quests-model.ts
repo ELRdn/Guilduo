@@ -8,6 +8,7 @@
 
 import type { HandoffState, Impact, Quest } from "../../../types/questforge.ts";
 import type { ScreenNotice } from "./screen-state.ts";
+import { relayText } from "../relay-copy.ts";
 
 /* ------------------------------------------------------------------ *
  * ViewModel
@@ -46,6 +47,12 @@ export interface QuestRow {
   readonly relay: QuestRelayView;
   readonly impact: Impact;
   readonly dueDate: string;
+  readonly scheduledDate: string;
+  readonly planningMode: Quest["planningMode"];
+  readonly estimatedMinutes: number;
+  readonly actualMinutes: number;
+  readonly workTime?: string;
+  readonly dependencyIds: readonly string[];
   /** True when `dueDate` is before today and the Quest is not completed. */
   readonly overdue: boolean;
   /** Quests this one waits on that are not done yet. */
@@ -79,11 +86,11 @@ export interface QuestsModel {
  * ------------------------------------------------------------------ */
 
 export const BUCKET_LABEL: Readonly<Record<PortfolioBucket, string>> = {
-  review: "要判断",
-  blocked: "停止",
-  working: "進行中",
-  scheduled: "予定",
-  done: "完了",
+  get review() { return relayText("stateReview"); },
+  get blocked() { return relayText("stateBlocked"); },
+  get working() { return relayText("stateWorking"); },
+  get scheduled() { return relayText("stateScheduled"); },
+  get done() { return relayText("stateDone"); },
 };
 
 export const BUCKET_MARK: Readonly<Record<PortfolioBucket, string>> = {
@@ -208,6 +215,11 @@ export function normalizeQuestsModel(options: NormalizeQuestsOptions): QuestsMod
       },
       impact: quest.impact,
       dueDate: quest.dueDate,
+      scheduledDate: quest.scheduledDate,
+      planningMode: quest.planningMode,
+      estimatedMinutes: quest.estimatedMinutes,
+      actualMinutes: quest.actualMinutes,
+      dependencyIds: quest.dependencyIds,
       overdue: quest.dueDate !== "" && quest.dueDate < today && bucket !== "done",
       blockedByIds,
       blockedReason: quest.handoff.blockedReason,

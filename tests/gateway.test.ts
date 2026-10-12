@@ -84,6 +84,20 @@ test("REST create and score share production state and reward claims", async () 
   assert.equal(listed.quests[0].id, created.quest.id);
 });
 
+test("REST and MCP both enforce optional Quest update and score versions", async () => {
+  const created = await json<ApiQuestResponse>(await call("/v1/quests", { method:"POST", body:JSON.stringify({ kind:"todo", title:"Versioned Quest" }) }));
+  const path = `/v1/quests/${created.quest.id}`;
+  const updated = await json<ApiQuestResponse>(await call(path, { method:"PATCH", body:JSON.stringify({ title:"Winning edit", expectedUpdatedAt:created.quest.updatedAt }) }));
+  assert.equal((await call(path, { method:"PATCH", body:JSON.stringify({ title:"Stale REST edit", expectedUpdatedAt:created.quest.updatedAt }) })).status, 409);
+  const mcp = async (name: string, args: Record<string, unknown>) => json<McpCallResponse>(await call("/mcp", { method:"POST", body:JSON.stringify({ jsonrpc:"2.0", id:1, method:"tools/call", params:{ name, arguments:args } }) }));
+  assert.equal((await mcp("update_quest", { questId:created.quest.id, title:"Stale MCP edit", expectedUpdatedAt:created.quest.updatedAt })).result.isError, true);
+  const scored = await mcp("score_quest", { questId:created.quest.id, direction:"up", expectedUpdatedAt:updated.quest.updatedAt });
+  assert.equal(scored.result.structuredContent.quest.done, true);
+  assert.equal((await mcp("score_quest", { questId:created.quest.id, direction:"up", expectedUpdatedAt:updated.quest.updatedAt })).result.isError, true);
+  assert.equal((await call(`${path}/score`, { method:"POST", body:JSON.stringify({ direction:"up", expectedUpdatedAt:updated.quest.updatedAt }) })).status, 409);
+  assert.equal((await json<ApiQuestResponse>(await call(path))).quest.done, true);
+});
+
 test("REST batch-score previews atomically and archives one-off todos", async () => {
   const first = await json<ApiQuestResponse>(await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "todo", title: "一括To Do" }) }));
   const daily = await json<ApiQuestResponse>(await call("/v1/quests", { method: "POST", body: JSON.stringify({ kind: "daily", title: "一括日課" }) }));

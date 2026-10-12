@@ -27,8 +27,6 @@ interface QuestForgeCoreRoot {
   QuestForgeCore?: QuestForgeCoreApi;
 }
 
-declare const module: { exports: QuestForgeCoreApi };
-
 const CURRENT_SCHEMA_VERSION = 7;
 const TASK_EVENT_LIMIT = 250;
 
@@ -193,10 +191,6 @@ const api: QuestForgeCoreApi = {
 
 const runtimeRoot = globalThis as unknown as QuestForgeCoreRoot;
 runtimeRoot.QuestForgeCore = api;
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = api;
-}
 
 export {
   CURRENT_SCHEMA_VERSION,

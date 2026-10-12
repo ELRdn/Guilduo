@@ -103,6 +103,16 @@
 
 .rf-q-cell { min-width: 0; display: flex; align-items: center; overflow: hidden; }
 
+/* Status must stay legible even when the translated label exceeds one line. */
+.rf-q-cell-state .rf-chip {
+  max-width: 100%;
+  flex-shrink: 1;
+  height: auto;
+  min-height: var(--qf-control-compact);
+  padding-block: var(--qf-space-1);
+}
+.rf-q-cell-state .rf-chip-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+
 .rf-q-cell-title { flex-direction: column; align-items: flex-start; gap: var(--qf-space-1); }
 .rf-q-row .rf-srow-id,
 .rf-q-title,
@@ -195,6 +205,7 @@
 
 .rf-q-relay-leg { display: flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
 .rf-q-relay-copy { display: flex; flex-direction: column; min-width: 0; }
+.rf-q-relay-copy .rf-srow-sub { white-space: normal; overflow-wrap: anywhere; }
 
 /* The connector: a solid rule plus an arrow head, matching Command's Relay
  * language rather than an emoji or an icon font. */

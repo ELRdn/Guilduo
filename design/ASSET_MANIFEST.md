@@ -29,6 +29,10 @@
 
 ### Surface rules
 
+- OpenAI pluginのcomposer / directory logoは`assets/brand/guilduo-favicon-48.png`の48×48正方形を再利用できる。`plugins/questforge/assets/guilduo-icon.png`は同一bytesの配布用コピーとし、生成パッケージの`./assets/guilduo-icon.png`へ同梱する。新しい色・形・スクリーンショットは追加しない。
+
+- Public Documentation `/docs/`と`/docs/en/`はLPと同じ公開資料Surfaceとして`guilduo-mark-gold.svg`、既存favicon / Apple touch icon / `og-guilduo.png`を使用できる。マークは幅30px・高さ40pxで縦横比を維持し、本文用の新しい画像は追加しない。
+
 - PWA、favicon、Apple touch icon、OG、GitHubは角丸を焼き込んだフルカラー版を使う。Android `maskable`だけはOSマスク用に背景を端まで敷き、中央66%安全領域へ前景を縮小する。
 - Web UIとLPは背景なし単色版を使う。LPの既存カラーパレットとGolden Referenceはブランドマーク差し替え以外に変更しない。
 - 旧キャラクターアイコンはブランド識別へ戻さず、Astra等の人格表現に限定する。

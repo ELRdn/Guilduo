@@ -1,4 +1,5 @@
 import type { JsonRecord, WorkerEnv, WorkerError } from "./worker-types.ts";
+import { billingMode, billingNow, getMemoryEntitlement, requireBillingDb } from "./billing-store.ts";
 
 type AgentStatus = "active" | "disabled" | "archived";
 type HandoffState = "none" | "ready" | "working" | "blocked" | "review_required" | "accepted";
@@ -37,6 +38,7 @@ export interface AgentConnectionRecord {
   clientId: string;
   uid: string;
   agentId: string;
+  allowedAgentIds?: string[];
   clientName: string;
   scopes: string[];
   firstConnectedAt: string;
@@ -52,7 +54,8 @@ type AgentMemory = {
   connections: Map<string, AgentConnectionRecord>;
 };
 
-const MAX_AGENTS = 20;
+const LEGACY_MAX_AGENTS = 20;
+const MAX_SHARED_AGENTS = 20;
 const AGENT_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const AGENT_STATUSES = new Set(["active", "disabled", "archived"]);
 const HANDOFF_STATES = new Set(["none", "ready", "working", "blocked", "review_required", "accepted"]);
@@ -217,6 +220,7 @@ function normalizeConnection(row: unknown): AgentConnectionRecord | null {
     clientId: String(item.client_id ?? item.clientId ?? ""),
     uid: String(item.uid || ""),
     agentId: String(item.agent_id ?? item.agentId ?? ""),
+    allowedAgentIds: [...new Set([String(item.agent_id ?? item.agentId ?? ""), ...parseScopes(item.allowed_agent_ids ?? item.allowedAgentIds, [])])].filter(Boolean),
     clientName: String(item.client_name ?? item.clientName ?? ""),
     scopes: parseScopes(item.scopes, []),
     firstConnectedAt: String(item.first_connected_at ?? item.firstConnectedAt ?? ""),
@@ -260,13 +264,67 @@ async function countActiveAgents(env: WorkerEnv, uid: string): Promise<number> {
   return [...memory(env).agents.values()].filter((agent) => agent.uid === uid && agent.status !== "archived").length;
 }
 
+export type AgentAccess = { planAllowed: boolean; restrictionReason: string | null };
+
+/** Billing policy only; active/disabled/archived status and scopes retain their own checks. */
+export async function getAgentAccessMap(env: WorkerEnv, uid: string, agents: AgentRecord[]): Promise<Map<string, AgentAccess>> {
+  let pro = true;
+  let count = 0;
+  let selected: string[] = [];
+  let validSelectedCount = 0;
+  if (env.BILLING_ENABLED === "true") {
+    const db = requireBillingDb(env);
+    if (db) {
+      const mode = billingMode(env);
+      const row = await db.prepare(`SELECT
+        EXISTS(SELECT 1 FROM billing_accounts WHERE mode = ? AND uid = ? AND plan = 'pro' AND period_end > ?) AS is_pro,
+        COALESCE((SELECT selected_agent_ids FROM billing_accounts WHERE mode = ? AND uid = ?), '[]') AS selected,
+        (SELECT COUNT(*) FROM agent_registry_agents WHERE uid = ? AND status <> 'archived') AS count,
+        (SELECT COUNT(*) FROM agent_registry_agents WHERE uid = ? AND status <> 'archived'
+          AND agent_id IN (SELECT value FROM json_each(COALESCE((SELECT selected_agent_ids FROM billing_accounts WHERE mode = ? AND uid = ?), '[]')))) AS valid_selected_count`)
+        .bind(mode, uid, billingNow(env).toISOString(), mode, uid, uid, uid, mode, uid).first<JsonRecord>();
+      pro = Boolean(row?.is_pro);
+      selected = parseScopes(row?.selected);
+      count = Number(row?.count || 0);
+      validSelectedCount = Number(row?.valid_selected_count || 0);
+    } else {
+      const entitlement = getMemoryEntitlement(env, uid);
+      pro = entitlement.plan === "pro";
+      selected = entitlement.selectedAgentIds;
+      count = [...memory(env).agents.values()].filter(agent => agent.uid === uid && agent.status !== "archived").length;
+      validSelectedCount = new Set(selected.filter(id => {
+        const agent = memory(env).agents.get(agentKey(uid, id));
+        return agent && agent.status !== "archived";
+      })).size;
+    }
+  }
+  return new Map(agents.map(agent => {
+    const restrictionReason = agent.uid !== uid ? "agent_not_found"
+      : pro || count <= 2 ? null
+      : selected.length !== 2 || validSelectedCount !== 2 ? "free_agent_selection_required"
+      : selected.includes(agent.agentId) ? null : "free_agent_not_selected";
+    return [agent.agentId, { planAllowed: restrictionReason === null, restrictionReason }];
+  }));
+}
+
+export async function getAgentAccess(env: WorkerEnv, uid: string, agentId: string): Promise<AgentAccess> {
+  const agent = await getAgent(env, uid, agentId, { includeArchived: true });
+  return (await getAgentAccessMap(env, uid, [agent])).get(agentId)!;
+}
+
+/** Keep restricted identities linked; treating them as unlinked could widen OAuth execution scopes. */
+export async function assertAgentAccess(env: WorkerEnv, uid: string, agentId: string): Promise<void> {
+  const access = await getAgentAccess(env, uid, agentId);
+  if (!access.planAllowed) throw agentError(403, access.restrictionReason!, "Select this Agent in your Free plan or upgrade to Pro before using it.");
+}
+
 async function revokeAgentConnections(env: WorkerEnv, uid: string, agentId: string, revokedAt: string): Promise<void> {
   if (env.QUESTFORGE_DB) {
-    await env.QUESTFORGE_DB.prepare("UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL")
+    await env.QUESTFORGE_DB.prepare("UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL AND json_array_length(allowed_agent_ids) < 2")
       .bind(revokedAt, revokedAt, uid, agentId).run();
   } else {
     for (const connection of memory(env).connections.values()) {
-      if (connection.uid === uid && connection.agentId === agentId && !connection.revokedAt) {
+      if (connection.uid === uid && connection.agentId === agentId && !connection.revokedAt && (connection.allowedAgentIds?.length ?? 0) < 2) {
         connection.revokedAt = revokedAt;
         connection.updatedAt = revokedAt;
       }
@@ -287,6 +345,48 @@ export async function listAgents(env: WorkerEnv, uid: string, { includeArchived 
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
   return rows.map(normalizeAgent).filter((agent): agent is AgentRecord => Boolean(agent));
+}
+
+/** Keyset pagination keeps same-timestamp Agents stable without loading every registration. */
+export async function listAgentPage(env: WorkerEnv, uid: string, { includeArchived = false, limit = 50, cursor }: { includeArchived?: boolean; limit?: number; cursor?: string } = {}): Promise<{ agents: AgentRecord[]; nextCursor: string | null; total: number }> {
+  if (!Number.isInteger(limit) || limit < 1) throw agentError(400, "agent_page_limit_invalid", "limit must be a positive integer.");
+  limit = Math.min(limit, 200);
+  let after: [string, string] | undefined;
+  if (cursor !== undefined) {
+    try {
+      if (typeof cursor !== "string" || cursor.length > 512 || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw new Error();
+      const value: unknown = JSON.parse(atob(cursor.replace(/-/g, "+").replace(/_/g, "/")));
+      if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== "string" || typeof value[1] !== "string"
+        || !Number.isFinite(Date.parse(value[0])) || new Date(value[0]).toISOString() !== value[0]
+        || !AGENT_ID_PATTERN.test(value[1]) || value[1].length > 80) throw new Error();
+      after = [value[0], value[1]];
+    } catch {
+      throw agentError(400, "agent_page_cursor_invalid", "Invalid Agent page cursor.");
+    }
+  }
+  let rows: unknown[];
+  let total: number;
+  if (env.QUESTFORGE_DB) {
+    const ownerFilter = `uid = ?${includeArchived ? "" : " AND status <> 'archived'"}`;
+    const pageFilter = after ? " AND (created_at < ? OR (created_at = ? AND agent_id < ?))" : "";
+    const values = after ? [uid, after[0], after[0], after[1], limit + 1] : [uid, limit + 1];
+    const [count, page] = await Promise.all([
+      env.QUESTFORGE_DB.prepare(`SELECT COUNT(*) AS count FROM agent_registry_agents WHERE ${ownerFilter}`).bind(uid).first<JsonRecord>(),
+      env.QUESTFORGE_DB.prepare(`SELECT * FROM agent_registry_agents WHERE ${ownerFilter}${pageFilter} ORDER BY created_at DESC, agent_id DESC LIMIT ?`).bind(...values).all<JsonRecord>(),
+    ]);
+    rows = page.results || [];
+    total = Number(count?.count || 0);
+  } else {
+    const all = [...memory(env).agents.values()].filter(agent => agent.uid === uid && (includeArchived || agent.status !== "archived"));
+    total = all.length;
+    rows = all.filter(agent => !after || agent.createdAt < after[0] || (agent.createdAt === after[0] && agent.agentId < after[1]))
+      .sort((a, b) => a.createdAt === b.createdAt ? (a.agentId < b.agentId ? 1 : a.agentId > b.agentId ? -1 : 0) : (a.createdAt < b.createdAt ? 1 : -1))
+      .slice(0, limit + 1);
+  }
+  const agents = rows.slice(0, limit).map(normalizeAgent).filter((agent): agent is AgentRecord => Boolean(agent));
+  const last = agents.at(-1);
+  const nextCursor = rows.length > limit && last ? btoa(JSON.stringify([last.createdAt, last.agentId])).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") : null;
+  return { agents, nextCursor, total };
 }
 
 export async function getAgent(env: WorkerEnv, uid: string, agentId: string, { includeArchived = false }: { includeArchived?: boolean } = {}): Promise<AgentRecord> {
@@ -315,7 +415,7 @@ export async function createAgent(env: WorkerEnv, uid: string, input: AgentInput
   if (await getAgentRow(env, uid, agentId)) {
     throw agentError(409, "agent_exists", "An agent with this ID already exists.");
   }
-  if ((await countActiveAgents(env, uid)) >= MAX_AGENTS) {
+  if (env.BILLING_ENABLED !== "true" && (await countActiveAgents(env, uid)) >= LEGACY_MAX_AGENTS) {
     throw agentError(409, "agent_limit_reached", "You can have at most 20 agents.");
   }
 
@@ -340,14 +440,32 @@ export async function createAgent(env: WorkerEnv, uid: string, input: AgentInput
     revision: 1,
   };
   if (env.QUESTFORGE_DB) {
-    await env.QUESTFORGE_DB.prepare(`INSERT INTO agent_registry_agents
+    // The plan and count must be read by this INSERT, not captured before a concurrent downgrade.
+    const enabled = env.BILLING_ENABLED === "true";
+    const entitlementGuard = enabled
+      ? "EXISTS(SELECT 1 FROM billing_accounts WHERE mode = ? AND uid = ? AND plan = 'pro' AND period_end > ?) OR (SELECT COUNT(*) FROM agent_registry_agents WHERE uid = ? AND status <> 'archived') < 2"
+      : "(SELECT COUNT(*) FROM agent_registry_agents WHERE uid = ? AND status <> 'archived') < 20";
+    const guardValues = enabled ? [billingMode(env), uid, billingNow(env).toISOString(), uid] : [uid];
+    const result = await env.QUESTFORGE_DB.prepare(`INSERT INTO agent_registry_agents
       (uid, agent_id, display_name, provider, role, instructions, status, allowed_scopes, default_handoff_state, review_required, dry_run_default, created_at, updated_at, avatar_version, has_custom_avatar, avatar_asset_id, revision)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (${entitlementGuard})
+      ON CONFLICT(uid, agent_id) DO NOTHING`)
       .bind(row.uid, row.agent_id, row.display_name, row.provider, row.role, row.instructions, row.status, row.allowed_scopes,
         row.default_handoff_state, row.review_required, row.dry_run_default, row.created_at, row.updated_at,
-        row.avatar_version, row.has_custom_avatar, row.avatar_asset_id, row.revision).run();
+        row.avatar_version, row.has_custom_avatar, row.avatar_asset_id, row.revision, ...guardValues).run();
+    if (result.meta?.changes !== 1) {
+      if (await getAgentRow(env, uid, agentId)) throw agentError(409, "agent_exists", "An agent with this ID already exists.");
+      throw agentError(409, "agent_limit_reached", enabled ? "Free supports at most 2 registered Agents." : "You can have at most 20 agents.");
+    }
   } else {
-    memory(env).agents.set(agentKey(uid, agentId), {
+    // No await between recomputing entitlement/count and Map.set: this is the memory commit boundary.
+    const store = memory(env);
+    if (store.agents.has(agentKey(uid, agentId))) throw agentError(409, "agent_exists", "An agent with this ID already exists.");
+    const enabled = env.BILLING_ENABLED === "true";
+    const limit = enabled ? (getMemoryEntitlement(env, uid).plan === "pro" ? Infinity : 2) : LEGACY_MAX_AGENTS;
+    const count = [...store.agents.values()].filter(agent => agent.uid === uid && agent.status !== "archived").length;
+    if (count >= limit) throw agentError(409, "agent_limit_reached", enabled ? "Free supports at most 2 registered Agents." : "You can have at most 20 agents.");
+    store.agents.set(agentKey(uid, agentId), {
       uid,
       agentId,
       displayName,
@@ -429,7 +547,7 @@ export async function updateAgent(env: WorkerEnv, uid: string, agentId: string, 
     ];
     if (revoke) {
       statements.push(env.QUESTFORGE_DB.prepare(
-        "UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL AND changes() = 1",
+        "UPDATE agent_registry_connections SET revoked_at = ?, updated_at = ? WHERE uid = ? AND agent_id = ? AND revoked_at IS NULL AND json_array_length(allowed_agent_ids) < 2 AND changes() = 1",
       ).bind(updatedAt, updatedAt, uid, agentId));
     }
     const results = await env.QUESTFORGE_DB.batch(statements);
@@ -515,10 +633,10 @@ export async function listAgentConnections(env: WorkerEnv, uid: string, agentId:
   }
   let rows;
   if (env.QUESTFORGE_DB) {
-    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND agent_id = ? ORDER BY first_connected_at DESC").bind(uid, agentId).all<JsonRecord>()).results || [];
+    rows = (await env.QUESTFORGE_DB.prepare("SELECT * FROM agent_registry_connections WHERE uid = ? AND (agent_id = ? OR EXISTS (SELECT 1 FROM json_each(allowed_agent_ids) WHERE value = ?)) ORDER BY first_connected_at DESC").bind(uid, agentId, agentId).all<JsonRecord>()).results || [];
   } else {
     rows = [...memory(env).connections.values()]
-      .filter((connection) => connection.uid === uid && connection.agentId === agentId)
+      .filter((connection) => connection.uid === uid && (connection.agentId === agentId || connection.allowedAgentIds?.includes(agentId)))
       .sort((a, b) => b.firstConnectedAt.localeCompare(a.firstConnectedAt));
   }
   return rows.map(normalizeConnection).filter((connection): connection is AgentConnectionRecord => Boolean(connection));
@@ -558,6 +676,10 @@ export async function linkAgentConnection(env: WorkerEnv, uid: string, agentId: 
   const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
   if (!agent) throw agentError(404, "agent_not_found", "Agent was not found.");
   if (agent.status === "archived") throw agentError(409, "agent_archived", "Archived agents cannot be linked to clients.");
+  if (env.BILLING_ENABLED === "true") {
+    if (agent.status !== "active") throw agentError(409, "agent_inactive", "Only an active Agent can be linked to a client.");
+    await assertAgentAccess(env, uid, agentId);
+  }
   const clientId = cleanString(input.clientId, 200, "client_id", { required: true });
   const clientName = cleanString(input.clientName, 80, "client_name", { required: true });
   const scopes = validateScopes(input.scopes, [], ALLOWED_CONNECTION_SCOPES);
@@ -616,11 +738,30 @@ export async function linkAgentConnection(env: WorkerEnv, uid: string, agentId: 
  * invariant and the original connection timestamps are preserved.
  */
 export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId: string, input: AgentInput = {}): Promise<AgentConnectionRecord | null> {
-  assertSafeKeys(input, LINK_CONNECTION_KEYS, "agent connection");
+  assertSafeKeys(input, [...LINK_CONNECTION_KEYS, "allowedAgentIds"], "agent connection");
   const agent = normalizeAgent(await getAgentRow(env, uid, agentId));
   if (!agent) throw agentError(404, "agent_not_found", "Agent was not found.");
   if (agent.status === "archived") throw agentError(409, "agent_archived", "Archived agents cannot be linked to clients.");
   if (agent.status !== "active") throw agentError(409, "agent_inactive", "Only an active Agent can be linked to a client.");
+
+  if (input.allowedAgentIds !== undefined && (!Array.isArray(input.allowedAgentIds) || input.allowedAgentIds.length > MAX_SHARED_AGENTS || input.allowedAgentIds.some(id => typeof id !== "string" || !AGENT_ID_PATTERN.test(id) || id.length > 80))) {
+    throw agentError(400, "invalid_allowed_agents", "allowedAgentIds must contain up to 20 Agent IDs.");
+  }
+  const allowedAgentIds = [...new Set([agentId, ...((input.allowedAgentIds ?? []) as string[])])];
+  if (allowedAgentIds.length > MAX_SHARED_AGENTS) throw agentError(400, "invalid_allowed_agents", "A connection can use up to 20 Agents.");
+  const allowedAgents: AgentRecord[] = [];
+  for (const id of allowedAgentIds) {
+    const allowedAgent = normalizeAgent(await getAgentRow(env, uid, id));
+    if (!allowedAgent) throw agentError(404, "agent_not_found", "Agent was not found.");
+    if (allowedAgent.status !== "active") throw agentError(409, "agent_inactive", "Only active Agents can share a connection.");
+    allowedAgents.push(allowedAgent);
+  }
+  if (env.BILLING_ENABLED === "true") {
+    const access = await getAgentAccessMap(env, uid, allowedAgents);
+    for (const permission of access.values()) {
+      if (!permission.planAllowed) throw agentError(403, permission.restrictionReason!, "Select every linked Agent in your Free plan or upgrade to Pro.");
+    }
+  }
 
   const clientId = cleanString(input.clientId, 200, "client_id", { required: true });
   const clientName = cleanString(input.clientName, 80, "client_name", { required: true });
@@ -634,6 +775,7 @@ export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId
     client_id: clientId,
     uid,
     agent_id: agentId,
+    allowed_agent_ids: JSON.stringify(allowedAgentIds),
     client_name: clientName,
     scopes: JSON.stringify(scopes),
     first_connected_at: firstConnectedAt,
@@ -646,14 +788,14 @@ export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId
   if (env.QUESTFORGE_DB) {
     if (existing) {
       await env.QUESTFORGE_DB.prepare(`UPDATE agent_registry_connections
-        SET agent_id = ?, client_name = ?, scopes = ?, first_connected_at = ?, last_used_at = ?, revoked_at = NULL, updated_at = ?
+        SET agent_id = ?, client_name = ?, scopes = ?, first_connected_at = ?, last_used_at = ?, revoked_at = NULL, updated_at = ?, allowed_agent_ids = ?
         WHERE uid = ? AND client_id = ?`)
-        .bind(agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, updatedAt, uid, clientId).run();
+        .bind(agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, updatedAt, row.allowed_agent_ids, uid, clientId).run();
     } else {
       await env.QUESTFORGE_DB.prepare(`INSERT INTO agent_registry_connections
-        (client_id, uid, agent_id, client_name, scopes, first_connected_at, last_used_at, revoked_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(clientId, uid, agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, null, createdAt, updatedAt).run();
+        (client_id, uid, agent_id, client_name, scopes, first_connected_at, last_used_at, revoked_at, created_at, updated_at, allowed_agent_ids)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(clientId, uid, agentId, clientName, row.scopes, firstConnectedAt, lastUsedAt, null, createdAt, updatedAt, row.allowed_agent_ids).run();
     }
   } else {
     memory(env).connections.set(`${uid}:${clientId}`, {
@@ -667,6 +809,7 @@ export async function relinkAgentConnection(env: WorkerEnv, uid: string, agentId
       revokedAt: null,
       createdAt,
       updatedAt,
+      allowedAgentIds,
     });
   }
   return normalizeConnection(row);

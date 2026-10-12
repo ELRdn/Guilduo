@@ -302,7 +302,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/QuestInput"
+                "$ref": "#/components/schemas/QuestPatch"
               }
             }
           }
@@ -317,6 +317,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Quest changed since the supplied expectedUpdatedAt (quest_conflict)"
           }
         }
       },
@@ -382,12 +385,13 @@
                     ]
                   },
                   "source": {
+                    "type": "string"
+                  },
+                  "expectedUpdatedAt": {
                     "type": "string",
-                    "examples": [
-                      "web",
-                      "mcp",
-                      "plugin"
-                    ]
+                    "format": "date-time",
+                    "maxLength": 40,
+                    "description": "Optional optimistic concurrency guard. Use the latest Quest updatedAt; a mismatch returns 409 quest_conflict."
                   }
                 }
               }
@@ -415,6 +419,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Quest changed since the supplied expectedUpdatedAt (quest_conflict)"
           }
         }
       }
@@ -1843,6 +1850,23 @@
               "type": "boolean",
               "default": false
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "description": "Optional paging; omitted retains the existing list contract."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1971,7 +1995,8 @@
     },
     "/v1/agents/{agentId}/connections/{clientId}": {
       "put": {
-        "summary": "Link an OAuth MCP client to one Agent",
+        "summary": "Configure the Agents allowed on an OAuth MCP connection",
+        "description": "The path Agent remains the legacy single-Agent default. When allowedAgentIds contains more than one Agent, MCP executions require actingAgentId on every call. Only owned active Agents can be allowed. Omission retains the legacy single-Agent configuration.",
         "parameters": [
           {
             "name": "agentId",
@@ -1990,6 +2015,28 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "allowedAgentIds": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80,
+                      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Linked connection",
@@ -2600,6 +2647,1843 @@
           }
         }
       }
+    },
+    "/v1/billing": {
+      "get": {
+        "summary": "Get plan, Agent allowance, published prices, Credits, and referral status",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        }
+      }
+    },
+    "/v1/billing/agents": {
+      "put": {
+        "summary": "Select at most two retained Free Agents without deleting others",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "agentIds"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "agentIds": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        }
+      }
+    },
+    "/v1/billing/credits": {
+      "get": {
+        "summary": "Read the owner's paged Credit ledger",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/billing/checkout": {
+      "post": {
+        "summary": "Create an approved Stripe subscription Checkout",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "interval"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "interval": {
+                    "type": "string",
+                    "enum": [
+                      "monthly",
+                      "annual"
+                    ]
+                  },
+                  "referralCode": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,120}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        }
+      }
+    },
+    "/v1/billing/portal": {
+      "post": {
+        "summary": "Open the owner's Stripe Customer Portal",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        }
+      }
+    },
+    "/v1/billing/webhook": {
+      "post": {
+        "summary": "Synchronize signed Stripe events; browser return URLs never grant Pro",
+        "security": [],
+        "parameters": [
+          {
+            "name": "Stripe-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event accepted once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        }
+      }
+    },
+    "/v1/decisions/estimate": {
+      "post": {
+        "summary": "Estimate a Jev proposal before consent and Credit reservation",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "questId",
+                  "expectedUpdatedAt"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "questId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "agentIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 254,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  },
+                  "consent": {
+                    "type": "boolean",
+                    "description": "Explicit consent to transmit minimal Quest text and Agent roles to TypeSafe."
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Owner-scoped persistent idempotency key; changed content conflicts."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        }
+      }
+    },
+    "/v1/decisions": {
+      "post": {
+        "summary": "Reserve Credits and request one idempotent official Jev proposal",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "questId",
+                  "expectedUpdatedAt",
+                  "consent",
+                  "requestId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "questId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "agentIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 254,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  },
+                  "consent": {
+                    "type": "boolean",
+                    "description": "Explicit consent to transmit minimal Quest text and Agent roles to TypeSafe."
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Owner-scoped persistent idempotency key; changed content conflicts."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        }
+      }
+    },
+    "/v1/decisions/{decisionId}": {
+      "get": {
+        "summary": "Read an owner-scoped Jev result; uncertain requests are not retried",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        },
+        "parameters": [
+          {
+            "name": "decisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/decisions/{decisionId}/apply": {
+      "post": {
+        "summary": "Confirm a proposal through the existing Agent assignment and Handoff rules",
+        "description": "Authenticated Human web access only. Billing and Jev are never MCP tools. Responses are not cached.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "expectedUpdatedAt"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner-scoped result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human web access, plan, consent, or scope denied"
+          },
+          "409": {
+            "description": "Stale state, reused request ID, or insufficient credits"
+          },
+          "503": {
+            "description": "Product approval, credentials, or durable storage missing"
+          }
+        },
+        "parameters": [
+          {
+            "name": "decisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/analytics/consent": {
+      "get": {
+        "operationId": "getAnalyticsConsent",
+        "summary": "Read the authenticated Human's optional pseudonymous measurement consent",
+        "responses": {
+          "200": {
+            "description": "Own consent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid consent or fields"
+          },
+          "403": {
+            "description": "Owner/origin/admin capability required"
+          },
+          "413": {
+            "description": "Actual body exceeds 4096 bytes"
+          },
+          "429": {
+            "description": "Collector quota exceeded"
+          },
+          "503": {
+            "description": "Optional measurement not approved or unavailable"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setAnalyticsConsent",
+        "summary": "Explicitly consent or withdraw and delete optional linked measurement; never available through MCP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "consent",
+                  "policyVersion"
+                ],
+                "properties": {
+                  "consent": {
+                    "type": "string",
+                    "enum": [
+                      "granted",
+                      "denied"
+                    ]
+                  },
+                  "policyVersion": {
+                    "type": "string",
+                    "const": "2026-10-04"
+                  },
+                  "acquisitionToken": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Own consent state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid consent or fields"
+          },
+          "403": {
+            "description": "Owner/origin/admin capability required"
+          },
+          "413": {
+            "description": "Actual body exceeds 4096 bytes"
+          },
+          "429": {
+            "description": "Collector quota exceeded"
+          },
+          "503": {
+            "description": "Optional measurement not approved or unavailable"
+          }
+        }
+      }
+    },
+    "/analytics/acquisition": {
+      "post": {
+        "operationId": "recordConsentingLandingVisit",
+        "summary": "Consent-gated LP visit or CTA and a 15-minute single-claim acquisition capability",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "consent",
+                  "policyVersion"
+                ],
+                "properties": {
+                  "policyVersion": {
+                    "type": "string",
+                    "const": "2026-10-04"
+                  },
+                  "consent": {
+                    "type": "string",
+                    "const": "granted"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "visit",
+                      "click",
+                      "withdraw"
+                    ]
+                  },
+                  "token": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "campaign": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "maxLength": 48
+                      },
+                      "medium": {
+                        "type": "string",
+                        "maxLength": 48
+                      },
+                      "campaign": {
+                        "type": "string",
+                        "maxLength": 48
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "CTA or withdrawal recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Random expiring acquisition capability"
+          },
+          "400": {
+            "description": "Invalid consent or fields"
+          },
+          "403": {
+            "description": "Owner/origin/admin capability required"
+          },
+          "413": {
+            "description": "Actual body exceeds 4096 bytes"
+          },
+          "429": {
+            "description": "Collector quota exceeded"
+          },
+          "503": {
+            "description": "Optional measurement not approved or unavailable"
+          }
+        }
+      }
+    },
+    "/v1/analytics/admin/report": {
+      "get": {
+        "security": [
+          {
+            "analyticsAdmin": []
+          }
+        ],
+        "operationId": "getLaunchAnalyticsReport",
+        "summary": "Aggregate report using a separate measurement administrator capability; no owner-level data",
+        "responses": {
+          "200": {
+            "description": "Mature cohorts, consent coverage, attribution and reconciled cash; unknown costs stay null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid consent or fields"
+          },
+          "403": {
+            "description": "Owner/origin/admin capability required"
+          },
+          "413": {
+            "description": "Actual body exceeds 4096 bytes"
+          },
+          "429": {
+            "description": "Collector quota exceeded"
+          },
+          "503": {
+            "description": "Optional measurement not approved or unavailable"
+          }
+        }
+      }
+    },
+    "/v1/analytics/admin/delete-account": {
+      "post": {
+        "operationId": "deleteOptionalMeasurementAccount",
+        "security": [
+          {
+            "analyticsAdmin": []
+          }
+        ],
+        "summary": "Operator-only scoped deletion of optional measurement and consent preference; pending private-snapshot cleanup is explicit",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "uid"
+                ],
+                "properties": {
+                  "uid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "D1 deletion result and private snapshot cleanup pending status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid consent or fields"
+          },
+          "403": {
+            "description": "Owner/origin/admin capability required"
+          },
+          "413": {
+            "description": "Actual body exceeds 4096 bytes"
+          },
+          "429": {
+            "description": "Collector quota exceeded"
+          },
+          "503": {
+            "description": "Optional measurement not approved or unavailable"
+          }
+        }
+      }
+    },
+    "/v1/productivity/notes": {
+      "get": {
+        "summary": "List private notes with revision-stable pagination",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "questId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create private notes; retry only with the same operation ID and input",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "body": {
+                    "type": "string",
+                    "maxLength": 50000
+                  },
+                  "questId": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "title",
+                  "body"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/productivity/notes/{recordId}": {
+      "patch": {
+        "summary": "Edit/archive/restore private notes without deleting history",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "body": {
+                    "type": "string",
+                    "maxLength": 50000
+                  },
+                  "questId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "expectedUpdatedAt"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/productivity/entries": {
+      "get": {
+        "summary": "List private entries with revision-stable pagination",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "questId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create private entries; retry only with the same operation ID and input",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "questId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "startAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "stopAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "questId",
+                  "startAt",
+                  "stopAt"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/productivity/entries/{recordId}": {
+      "patch": {
+        "summary": "Edit/archive/restore private entries without deleting history",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "questId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "startAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "stopAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "expectedUpdatedAt"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/productivity/timer": {
+      "get": {
+        "summary": "Read the exact running native timer",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        }
+      }
+    },
+    "/v1/productivity/timer/start": {
+      "post": {
+        "summary": "Atomically start the exact native timer; switching stops the previous entry in the same revision write",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "questId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "expectedEntryId": {
+                    "type": "string"
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "questId",
+                  "expectedEntryId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/productivity/timer/stop": {
+      "post": {
+        "summary": "Atomically stop the exact native timer; switching stops the previous entry in the same revision write",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "questId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "expectedEntryId": {
+                    "type": "string"
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "expectedEntryId",
+                  "expectedUpdatedAt"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/productivity/preferences": {
+      "get": {
+        "summary": "Read private work-time source and timezone",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        }
+      },
+      "put": {
+        "summary": "Set work-time projection without changing legacy actualMinutes",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "timeSource": {
+                    "type": "string",
+                    "enum": [
+                      "native",
+                      "toggl",
+                      "separate"
+                    ]
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "timeSource",
+                  "timezone",
+                  "expectedUpdatedAt"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/productivity/totals": {
+      "get": {
+        "summary": "Read native/Toggl presence and selected minutes; separate mode never sums sources",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        }
+      }
+    },
+    "/v1/productivity/export": {
+      "get": {
+        "summary": "Export private Notes, TimeEntries and preferences; independent of legacy Quest backups",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        }
+      }
+    },
+    "/v1/productivity/operations/{operationId}": {
+      "get": {
+        "summary": "Reconcile an uncertain operation using its saved receipt",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/productivity/import": {
+      "post": {
+        "summary": "Validate and restore a private workspace; stop running timers first",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "backup": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "expectedRevision",
+                  "backup"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/productivity": {
+      "delete": {
+        "summary": "Confirmed deletion of owner work data and private settings; stop running timers first",
+        "description": "Private owner Web REST only. no-store. No MCP tools or public profile exposure.",
+        "responses": {
+          "200": {
+            "description": "Owner workspace projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields, dates, timezone or linked Quest"
+          },
+          "403": {
+            "description": "Authenticated Human Web origin required; OAuth/MCP refused"
+          },
+          "409": {
+            "description": "Record/workspace/current timer conflict"
+          },
+          "413": {
+            "description": "Bounded body or private workspace capacity exceeded; records are not truncated"
+          },
+          "503": {
+            "description": "D1 private workspace unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "confirm": {
+                    "type": "string",
+                    "const": "delete-productivity"
+                  }
+                },
+                "required": [
+                  "operationId",
+                  "expectedRevision",
+                  "confirm"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2638,6 +4522,11 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "Appwrite JWT"
+      },
+      "analyticsAdmin": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Separate optional-measurement administrator credential; Human JWT and billing administrator tokens are refused."
       }
     },
     "schemas": {
@@ -3750,6 +5639,20 @@
                 "description": "Derived from whether an avatar asset is currently active. Fetch the image with GET .../agents/{agentId}/avatar?v={avatarVersion} using a Bearer header."
               }
             }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "planAllowed": {
+                "type": "boolean"
+              },
+              "restrictionReason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
           }
         ]
       },
@@ -3962,6 +5865,12 @@
           "dryRun": {
             "type": "boolean",
             "default": true
+          },
+          "actingAgentId": {
+            "type": "string",
+            "maxLength": 80,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+            "description": "Agent acting on this call. Required for a shared connection. Read get_current_agent_context for allowed IDs; this never changes another caller's Agent."
           }
         },
         "additionalProperties": false
@@ -4057,6 +5966,209 @@
           }
         },
         "additionalProperties": false
+      },
+      "QuestPatch": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "habit",
+              "daily",
+              "todo",
+              "reward"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "planningState": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "backlog"
+            ]
+          },
+          "lifecycleState": {
+            "type": "string",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          },
+          "planningMode": {
+            "type": "string",
+            "enum": [
+              "on_date",
+              "until_due"
+            ]
+          },
+          "scheduledDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "scheduledTime": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily",
+              "weekdays",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "trivial",
+              "easy",
+              "medium",
+              "hard"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6
+          },
+          "estimatedMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actualMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "completionCriteria": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "nextAction": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "isBlockingOthers": {
+            "type": "boolean"
+          },
+          "dependencyIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/Assignee"
+          },
+          "parentQuestId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "handoff": {
+            "$ref": "#/components/schemas/Handoff"
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 40,
+            "description": "Optional optimistic concurrency guard. Use the latest Quest updatedAt; a mismatch returns 409 quest_conflict."
+          }
+        }
+      },
+      "ProductivityNote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 50000
+          },
+          "questId": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProductivityTimeEntry": {
+        "type": "object",
+        "description": "Empty stopAt means a running timer. Instants carry a timezone; closed entries span at most 366 days.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "questId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stopAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     }
   }

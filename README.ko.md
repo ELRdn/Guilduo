@@ -31,7 +31,8 @@ Guilduo는 사람과 AI Agent가 같은 workspace에서 일을 의뢰하고, 담
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | 정식 Remote HTTP MCP endpoint |
 | Appwrite API | `https://api.guilduo.com/v1` | 공식 Appwrite API endpoint (origin: `https://api.guilduo.com`) |
-| Documentation | `https://docs.guilduo.com` | Reserved / Future |
+| Documentation (JA / EN) | `https://guilduo.com/docs/` / `https://guilduo.com/docs/en/` | 정적 Docs · 공개 완료 |
+| Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com`은 `https://guilduo.com`으로 리디렉션하기 위한 주소입니다. 기존 `workers.dev` URL은 호환 연결과 rollback을 위해 남아 있습니다. `api.guilduo.com`은 Appwrite API용이며 브라우저의 Appwrite client와 Worker의 `APPWRITE_ENDPOINT`가 사용합니다. Worker REST `/v1` 또는 MCP `/mcp` route의 공개 origin은 아닙니다.
 
@@ -197,7 +198,7 @@ npm run cli -- mcp-config --json
 
 ## Skill / OpenAI Plugin / MCP App
 
-- 공식 Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- 공식 Skill: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - OpenAI Plugin 준비 패키지: [`plugins/questforge/`](plugins/questforge/)
 - MCP App 등록 template: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - 제출 checklist: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

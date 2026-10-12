@@ -1,0 +1,132 @@
+import assert from "node:assert/strict";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+import { prepareGuilduoPlugin } from "../tools/prepare-guilduo-plugin.mts";
+
+async function copySources(root: string): Promise<void> {
+  await cp(new URL("../LICENSE", import.meta.url), join(root, "LICENSE"));
+  await cp(new URL("../plugins/questforge/", import.meta.url), join(root, "plugins", "questforge"), { recursive: true });
+  await cp(new URL("../skills/guilduo-workflows/", import.meta.url), join(root, "skills", "guilduo-workflows"), { recursive: true });
+}
+
+test("Guilduo companion bundles the canonical Skill with exactly one connection and rejects invalid App IDs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "guilduo-plugin-"));
+  try {
+    await copySources(root);
+    const appId = "asdk_app_0123456789abcdef0123456789abcdef";
+    const output = await prepareGuilduoPlugin(appId, root);
+    const plugin = join(output, "plugin");
+    const readJson = async (path: string): Promise<Record<string, unknown>> => JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    const desktop = await readJson(join(plugin, ".codex-plugin", "plugin.json"));
+    assert.equal(desktop.name, "guilduo-workflows");
+    assert.equal(desktop.skills, "./skills/");
+    assert.equal(desktop.apps, "./.app.json");
+    assert.equal(desktop.mcpServers, undefined);
+    assert.deepEqual(await readJson(join(plugin, ".app.json")), { apps: { guilduo: { id: appId } } });
+    assert.equal(await readFile(join(plugin, "assets", "guilduo-icon.png")).then((bytes) => bytes.readUInt32BE(16)), 48);
+    assert.equal(await readFile(join(plugin, "skills", "guilduo-workflows", "SKILL.md"), "utf8"),
+      await readFile(new URL("../skills/guilduo-workflows/SKILL.md", import.meta.url), "utf8"));
+    await readFile(join(plugin, "skills", "guilduo-workflows", "references", "tools.md"), "utf8");
+    await readFile(join(plugin, "skills", "guilduo-workflows", "agents", "openai.yaml"), "utf8");
+    const marketplace = await readJson(join(output, ".agents", "plugins", "marketplace.json"));
+    assert.deepEqual(marketplace.plugins, [{ name: "guilduo-workflows", source: { source: "local", path: "./plugin" },
+      policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" }, category: "Productivity" }]);
+    await prepareGuilduoPlugin(undefined, root);
+    const direct = await readJson(join(plugin, ".codex-plugin", "plugin.json"));
+    assert.equal(direct.apps, undefined);
+    assert.equal(direct.mcpServers, "./.mcp.json");
+    await assert.rejects(readFile(join(plugin, ".app.json")), { code: "ENOENT" });
+    assert.match(await readFile(join(plugin, ".mcp.json"), "utf8"), /https:\/\/mcp\.guilduo\.com\/mcp/);
+    await prepareGuilduoPlugin(`plugin_${appId}`, root);
+    await assert.rejects(readFile(join(plugin, ".mcp.json")), { code: "ENOENT" });
+    for (const invalid of ["", "https://mcp.guilduo.com/mcp", "Bearer secret", `${appId}/../other`]) {
+      await assert.rejects(prepareGuilduoPlugin(invalid, root), /registered Guilduo/);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("package CLI runs through a workspace junction instead of silently skipping generation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "guilduo-cli-"));
+  try {
+    const repository = join(root, "repository");
+    await mkdir(join(repository, "tools"), { recursive: true });
+    await cp(new URL("../tools/prepare-guilduo-plugin.mts", import.meta.url), join(repository, "tools", "prepare-guilduo-plugin.mts"));
+    await copySources(repository);
+    const alias = join(root, "alias");
+    await symlink(repository, alias, "junction");
+    const output = execFileSync(process.execPath, [fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url)),
+      join(alias, "tools", "prepare-guilduo-plugin.mts"), "--submission"], { encoding: "utf8" }).trim();
+    assert.equal(output, join(repository, ".qa-artifacts", "guilduo-submission"));
+    await readFile(join(output, "plugin", ".codex-plugin", "plugin.json"));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("public generation refuses linked output ancestors and preserves their existing contents", async () => {
+  const root = await mkdtemp(join(tmpdir(), "guilduo-output-"));
+  try {
+    await copySources(root);
+    const external = join(root, "other-directory");
+    const marker = join(external, "guilduo-submission", "plugin", "existing-file.txt");
+    await mkdir(join(external, "guilduo-submission", "plugin"), { recursive: true });
+    await writeFile(marker, "keep this file");
+    await symlink(external, join(root, ".qa-artifacts"), "junction");
+    await assert.rejects(prepareGuilduoPlugin(undefined, root, { submission: true }), /Refusing linked/);
+    assert.equal(await readFile(marker, "utf8"), "keep this file");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("public package has review metadata, assets, and direct MCP only, with no stale files or hooks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "guilduo-submission-"));
+  try {
+    await copySources(root);
+    const output = await prepareGuilduoPlugin(undefined, root, { submission: true });
+    const plugin = join(output, "plugin");
+    const manifest = JSON.parse(await readFile(join(plugin, ".codex-plugin", "plugin.json"), "utf8"));
+    assert.equal(manifest.apps, undefined);
+    assert.equal(manifest.hooks, undefined);
+    assert.equal(manifest.mcpServers, "./.mcp.json");
+    assert.deepEqual(await readdir(plugin).then((names) => names.sort()), [".codex-plugin", ".mcp.json", "LICENSE", "assets", "mcp.json", "plugin.json", "skills"]);
+    assert.equal(await readFile(join(plugin, "LICENSE"), "utf8"), await readFile(new URL("../LICENSE", import.meta.url), "utf8"));
+    assert.deepEqual(JSON.parse(await readFile(join(plugin, ".mcp.json"), "utf8")),
+      { mcpServers: { questforge: { url: "https://mcp.guilduo.com/mcp" } } });
+    const listing = manifest.interface;
+    assert.ok(listing.displayName.length <= 30);
+    assert.ok(listing.shortDescription.length <= 30);
+    for (const field of ["websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL"]) {
+      const url = new URL(listing[field]);
+      assert.equal(url.protocol, "https:");
+      assert.equal(url.username + url.password, "");
+    }
+    for (const field of ["logo", "composerIcon"]) {
+      const icon = await readFile(join(plugin, listing[field]));
+      assert.equal(icon.readUInt32BE(16), 48);
+      assert.equal(icon.readUInt32BE(20), 48);
+    }
+    const review = manifest.extensions["com.openai"].review;
+    assert.equal(review.test_cases.positive.length, 5);
+    assert.equal(review.test_cases.negative.length, 3);
+    const catalog = JSON.parse(await readFile(new URL("../api/mcp-tools.json", import.meta.url), "utf8"));
+    const tools = new Set(catalog.tools.map((tool: { name: string }) => tool.name));
+    for (const scenario of review.test_cases.positive) {
+      assert.ok(scenario.prompt && scenario.description && scenario.expected_behavior);
+      for (const name of scenario.tools_triggered.split(", ")) assert.ok(tools.has(name), name);
+    }
+    assert.equal(review.demo_recording_url, undefined, "A real recording must be supplied in the dashboard, never fabricated.");
+    await writeFile(join(plugin, "leftover-secret.txt"), "fake leftover");
+    await mkdir(join(plugin, "skills", "questforge-workflows"));
+    await writeFile(join(plugin, "skills", "questforge-workflows", "SKILL.md"), "old staged Skill");
+    await prepareGuilduoPlugin(undefined, root, { submission: true });
+    assert.deepEqual(await readdir(join(plugin, "skills")), ["guilduo-workflows"]);
+    await assert.rejects(readFile(join(plugin, "leftover-secret.txt")), { code: "ENOENT" });
+    await assert.rejects(prepareGuilduoPlugin(undefined, root, { submission: true, hooks: true }), /exclude/);
+    await assert.rejects(prepareGuilduoPlugin("asdk_app_0123456789abcdef0123456789abcdef", root, { submission: true }), /exclude/);
+    const local = await prepareGuilduoPlugin(undefined, root, { hooks: true });
+    const localManifest = JSON.parse(await readFile(join(local, "plugin", ".codex-plugin", "plugin.json"), "utf8"));
+    assert.equal(localManifest.hooks, "./hooks/hooks.json");
+    await readFile(join(local, "plugin", "hooks", "hooks.json"));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

@@ -31,7 +31,8 @@ Guilduo — это **Human × AI Work Platform**, где люди и AI-аген
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Канонический endpoint Remote HTTP MCP |
 | Appwrite API | `https://api.guilduo.com/v1` | Официальный endpoint Appwrite API (origin: `https://api.guilduo.com`) |
-| Документация | `https://docs.guilduo.com` | Reserved / Future |
+| Документация (JA / EN) | `https://guilduo.com/docs/` / `https://guilduo.com/docs/en/` | Статические Docs; опубликованы |
+| Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com` предназначен только для перенаправления на `https://guilduo.com`. Старый URL `workers.dev` остаётся для совместимых подключений и rollback. `api.guilduo.com` предназначен для Appwrite API и используется браузерным Appwrite client и `APPWRITE_ENDPOINT` Worker; это не публичный origin REST-маршрута `/v1` или MCP-маршрута `/mcp` Worker.
 
@@ -197,7 +198,7 @@ npm run cli -- mcp-config --json
 
 ## Skill / OpenAI Plugin / MCP App
 
-- Официальный Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Официальный Skill: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - Подготовительный пакет OpenAI Plugin: [`plugins/questforge/`](plugins/questforge/)
 - Шаблон регистрации MCP App: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Checklist отправки: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

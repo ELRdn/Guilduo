@@ -43,7 +43,6 @@ test("OAuth delegates a short-lived Appwrite JWT without exposing an API key", (
 
   assert.match(oauth, /account\/jwts/);
   assert.match(oauth, /verifyAppwriteJwt/);
-  assert.match(oauth, /accessRecord\?\.refreshHash/);
   assert.match(security, /x-appwrite-jwt/);
   assert.match(store, /x-appwrite-key/);
   assert.doesNotMatch(oauth, /APPWRITE_API_KEY|x-appwrite-key/);

@@ -15,21 +15,18 @@ export function relayOnboarding(model: SettingsModel, callbacks: SettingsCallbac
   const create = el("button", { type: "button", class: "rf-secondary-button", disabled: model.isDemo || !callbacks.canManageAgents }, t("registerAgent"));
   create.addEventListener("click", callbacks.onCreateAgent);
   steps.firstElementChild?.append(create);
-  steps.append(el("li", {}, el("strong", {}, t("firstExchange")), el("p", {}, t("firstHint")), el("code", {}, "get_current_agent_context → list_quests → get_quest → update_quest")));
+  steps.append(el("li", {}, el("details", {}, el("summary", {}, t("firstExchange")), el("p", {}, t("firstHint")), el("code", {}, "get_current_agent_context → list_quests → get_quest → update_quest"))));
   section.append(el("h3", {}, t("onboard")), el("p", {}, t("ownership")), steps);
-  for (const row of model.mcpConnections) {
-    const scopes = effectiveConnectionScopes(model, row);
-    const agent = model.agents.find((entry) => entry.agentId === row.linkedAgentId);
-    section.append(el("p", {}, `${row.clientName} → ${agent?.displayName || "—"}`, el("br"), `${t("effectiveScopes")}: ${scopes.length ? scopes.join(", ") : t("noScopes")}`));
-    if (!scopes.includes("quests:write")) section.append(el("p", {}, t("readOnlyHint")));
-  }
   return section;
 }
 
 export function relayPreferences(): HTMLElement {
   const language = el("select", { "aria-label": t("language"), class: "rf-set-theme-select" }, ...SUPPORTED_LOCALES.map((locale) => el("option", { value: locale }, LOCALE_METADATA[locale].label)));
   language.value = getLocale();
-  language.addEventListener("change", () => setLocale(language.value));
+  language.addEventListener("change", () => {
+    setLocale(language.value);
+    queueMicrotask(() => document.querySelector<HTMLSelectElement>(".rf-set-theme-select")?.focus({ preventScroll: true }));
+  });
   const motion = el("input", { type: "checkbox" });
   try { motion.checked = localStorage.getItem("questforge-relay-motion") !== "off"; } catch { motion.checked = true; }
   motion.addEventListener("change", () => { try { localStorage.setItem("questforge-relay-motion", motion.checked ? "on" : "off"); } catch { /* Optional preference. */ } });

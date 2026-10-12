@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { OFFICIAL_SITE_ORIGIN } from "../site-routing.ts";
+import { parseAnalyticsConfig } from "../server/launch-analytics.ts";
 
 const required = [
   "APPWRITE_ENDPOINT", "APPWRITE_PROJECT_ID", "APPWRITE_DATABASE_ID", "APPWRITE_STATE_TABLE_ID", "APPWRITE_LEGACY_TABLE_ID",
@@ -29,6 +30,7 @@ const mcpAllowedOrigins = String(process.env.MCP_ALLOWED_ORIGINS || `${workerBas
 const allowedWebOrigins = [...new Set([webAppUrl, publicSiteUrl, "http://localhost:5173", "http://127.0.0.1:5173"])].join(",");
 const placementRegion = String(process.env.WORKER_PLACEMENT_REGION || "").trim();
 const revisionBatch = String(process.env.APPWRITE_REVISION_BATCH || "false").trim();
+const preparedTransactions = String(process.env.APPWRITE_PREPARED_TRANSACTIONS || "false").trim();
 const webApiZone = String(process.env.WEB_API_ROUTE_ZONE_ID || "").trim();
 const webApiBrowser = String(process.env.WEB_API_BROWSER_ENABLED || "false").trim();
 const webApiManagement = String(process.env.WEB_API_ROUTE_MANAGEMENT || "wrangler").trim();
@@ -41,6 +43,9 @@ if ((webApiZone && (!/^[a-f0-9]{32}$/.test(webApiZone) || !webAppUrl.startsWith(
 }
 if (revisionBatch !== "true" && revisionBatch !== "false") {
   throw new Error("Invalid APPWRITE_REVISION_BATCH: expected true or false");
+}
+if (!["true", "false"].includes(preparedTransactions) || (preparedTransactions === "true" && revisionBatch !== "true")) {
+  throw new Error("APPWRITE_PREPARED_TRANSACTIONS requires true/false and revision batching when enabled");
 }
 if (placementRegion && !/^(aws|gcp|azure):[a-z][a-z0-9-]{1,63}$/.test(placementRegion)) {
   throw new Error("Invalid WORKER_PLACEMENT_REGION: expected provider:region");
@@ -55,6 +60,8 @@ const runtime = {
   sourceUrl: process.env.SOURCE_URL || "",
   externalOAuthEnabled: String(process.env.EXTERNAL_OAUTH_ENABLED || "false").toLowerCase() === "true",
   telemetryEndpoint: process.env.TELEMETRY_ENDPOINT || `${mcpBaseUrl}/telemetry`,
+  analyticsEnabled: process.env.ANALYTICS_ENABLED === "true" && process.env.ANALYTICS_DATA_POLICY_APPROVED === "true",
+  analyticsCampaigns: process.env.ANALYTICS_ENABLED === "true" ? parseAnalyticsConfig(process.env.ANALYTICS_CONFIG || "").campaigns : [],
   appwriteEndpoint: process.env.APPWRITE_ENDPOINT,
   appwriteProjectId: process.env.APPWRITE_PROJECT_ID,
   joinGuildUrl: process.env.JOIN_GUILD_URL || `${webAppUrl}/`,
@@ -78,12 +85,27 @@ const wrangler = {
     APPWRITE_STATE_TABLE_ID: process.env.APPWRITE_STATE_TABLE_ID,
     APPWRITE_LEGACY_TABLE_ID: process.env.APPWRITE_LEGACY_TABLE_ID,
     APPWRITE_REVISION_BATCH: revisionBatch,
+    APPWRITE_PREPARED_TRANSACTIONS: preparedTransactions,
     PUBLIC_BASE_URL: workerBaseUrl,
     PROVIDER_OAUTH_BASE_URL: providerOAuthBaseUrl,
     MCP_ALLOWED_ORIGINS: mcpAllowedOrigins,
     WEB_APP_URL: webAppUrl,
     WEB_API_ENABLED: webApiZone ? "true" : "false",
     ALLOWED_ORIGINS: allowedWebOrigins,
+    BILLING_ENABLED: process.env.BILLING_ENABLED || "false",
+    BILLING_MODE: process.env.BILLING_MODE || "test",
+    ANALYTICS_ENABLED: process.env.ANALYTICS_ENABLED || "false",
+    ANALYTICS_DATA_POLICY_APPROVED: process.env.ANALYTICS_DATA_POLICY_APPROVED || "false",
+    ...(process.env.ANALYTICS_CONFIG ? { ANALYTICS_CONFIG: process.env.ANALYTICS_CONFIG } : {}),
+    ...(process.env.BILLING_CONFIG ? { BILLING_CONFIG: process.env.BILLING_CONFIG } : {}),
+    JEV_ENABLED: process.env.JEV_ENABLED || "false",
+    ...(process.env.JEV_MODEL ? { JEV_MODEL: process.env.JEV_MODEL } : {}),
+    ...(process.env.JEV_INPUT_USD_PER_MILLION ? { JEV_INPUT_USD_PER_MILLION: process.env.JEV_INPUT_USD_PER_MILLION } : {}),
+    ...(process.env.JEV_OUTPUT_USD_PER_MILLION ? { JEV_OUTPUT_USD_PER_MILLION: process.env.JEV_OUTPUT_USD_PER_MILLION } : {}),
+    JEV_DATA_POLICY_APPROVED: process.env.JEV_DATA_POLICY_APPROVED || "false",
+    JEV_EVALUATION_BUDGET_USD: process.env.JEV_EVALUATION_BUDGET_USD || "1",
+    JEV_BUDGET_SCOPE: process.env.JEV_BUDGET_SCOPE || "evaluation",
+    ...(process.env.JEV_COMMERCIAL_CONFIG ? { JEV_COMMERCIAL_CONFIG: process.env.JEV_COMMERCIAL_CONFIG } : {}),
   },
   triggers: { crons: ["*/15 * * * *"] },
   d1_databases: [{ binding: "QUESTFORGE_DB", database_name: process.env.D1_DATABASE_NAME, database_id: process.env.D1_DATABASE_ID }],

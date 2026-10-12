@@ -10,6 +10,7 @@
 import { type Actor, type LoomQuest } from "../model.ts";
 import { actorAvatar } from "./avatar.ts";
 import { el } from "./dom.ts";
+import { relayText } from "../relay-copy.ts";
 
 function relation(
   label: string,
@@ -54,7 +55,7 @@ export function dependencyOutline(
     return el(
       "div",
       { class: "rf-outline" },
-      el("p", { class: "rf-outline-empty" }, "Quest を選ぶと依存関係の文字アウトラインが表示されます。"),
+      el("p", { class: "rf-outline-empty" }, relayText("shellChooseHint")),
     );
   }
   const byId = new Map(quests.map((quest) => [quest.id, quest]));
@@ -66,14 +67,14 @@ export function dependencyOutline(
 
   return el(
     "div",
-    { class: "rf-outline", "aria-label": "Dependency outline" },
+    { class: "rf-outline", "aria-label": relayText("networkOutline") },
     el(
       "p",
       { class: "rf-outline-subject" },
       el("span", { class: "rf-outline-ref" }, selected.ref),
       el("span", { class: "rf-outline-quest" }, selected.title),
     ),
-    relation("この Quest が待っているもの", upstream, actors, "上流の依存はありません。"),
-    relation("この Quest を待っているもの", downstream, actors, "下流で待っている Quest はありません。"),
+    relation(relayText("networkUpstream"), upstream, actors, relayText("networkNoUpstream")),
+    relation(relayText("networkDownstream"), downstream, actors, relayText("networkNoDownstream")),
   );
 }

@@ -5,9 +5,10 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: deploy-appwrite-worker-production
+  group: appwrite-site-production
   cancel-in-progress: false
 
 jobs:
@@ -16,14 +17,58 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Require approved evidence artifact
+        env:
+          EVIDENCE_RUN_ID: ${{ vars.LAUNCH_EVIDENCE_RUN_ID }}
+        run: test -n "$EVIDENCE_RUN_ID"
+      - name: Download signed acceptance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: launch-candidate-${{ github.sha }}
+          path: .qa-artifacts
+          run-id: ${{ vars.LAUNCH_EVIDENCE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify signed source and deployment approval
+        run: node --import tsx tools/verify-launch-gates.mts deploy
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+      - name: Verify canonical origins prerequisite
+        run: node --import tsx tools/verify-launch-gates.mts --origins
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Generate ignored production configuration
         run: npm run generate-release-config
         env:
+          BILLING_MODE: ${{ vars.BILLING_MODE || 'test' }}
+          BILLING_CONFIG: ${{ vars.BILLING_CONFIG }}
+          JEV_ENABLED: ${{ vars.JEV_ENABLED || 'false' }}
+          JEV_MODEL: ${{ vars.JEV_MODEL }}
+          JEV_INPUT_USD_PER_MILLION: ${{ vars.JEV_INPUT_USD_PER_MILLION }}
+          JEV_OUTPUT_USD_PER_MILLION: ${{ vars.JEV_OUTPUT_USD_PER_MILLION }}
+          JEV_DATA_POLICY_APPROVED: ${{ vars.JEV_DATA_POLICY_APPROVED || 'false' }}
+          JEV_EVALUATION_BUDGET_USD: ${{ vars.JEV_EVALUATION_BUDGET_USD || '1' }}
+          JEV_BUDGET_SCOPE: ${{ vars.JEV_BUDGET_SCOPE || 'evaluation' }}
+          JEV_COMMERCIAL_CONFIG: ${{ vars.JEV_COMMERCIAL_CONFIG }}
+          ANALYTICS_ENABLED: ${{ vars.ANALYTICS_ENABLED || 'false' }}
+          ANALYTICS_DATA_POLICY_APPROVED: ${{ vars.ANALYTICS_DATA_POLICY_APPROVED || 'false' }}
+          ANALYTICS_CONFIG: ${{ vars.ANALYTICS_CONFIG }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
           APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
@@ -47,12 +92,21 @@ jobs:
           WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
           WORKER_PLACEMENT_REGION: ${{ vars.WORKER_PLACEMENT_REGION }}
           APPWRITE_REVISION_BATCH: ${{ vars.APPWRITE_REVISION_BATCH || 'false' }}
+          APPWRITE_PREPARED_TRANSACTIONS: ${{ vars.APPWRITE_PREPARED_TRANSACTIONS || 'false' }}
+      - name: Verify approved runtime configuration
+        run: node --import tsx tools/verify-launch-gates.mts deploy --configuration
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
       - run: npm run api:generate && git diff --exit-code -- api/openapi.json api/mcp-tools.json
       - run: npm run check
       - run: npm test
       - run: npm run build
         env:
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+      - name: Verify reviewed additive migration inventory
+        run: node --import tsx tools/verify-launch-gates.mts deploy --migrations
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
       - name: Apply additive D1 migrations
         run: npx wrangler d1 migrations apply "${{ vars.D1_DATABASE_NAME }}" --remote
         env:
@@ -65,12 +119,72 @@ jobs:
           APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved STRIPE_SECRET_KEY
+        if: vars.BILLING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          case "$BILLING_MODE:$RUNTIME_SECRET" in
+            test:sk_test_*|live:sk_live_*) ;;
+            *) echo "Stripe secret mode mismatch" >&2; exit 1 ;;
+          esac
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put STRIPE_SECRET_KEY
+        env:
+          BILLING_MODE: ${{ vars.BILLING_MODE || 'test' }}
+          RUNTIME_SECRET: ${{ secrets.STRIPE_SECRET_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved STRIPE_WEBHOOK_SECRET
+        if: vars.BILLING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put STRIPE_WEBHOOK_SECRET
+        env:
+          RUNTIME_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved BILLING_ADMIN_TOKEN
+        if: vars.BILLING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put BILLING_ADMIN_TOKEN
+        env:
+          RUNTIME_SECRET: ${{ secrets.BILLING_ADMIN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved TYPESAFE_API_KEY
+        if: vars.JEV_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$RUNTIME_SECRET"
+          printf '%s' "$RUNTIME_SECRET" | npx wrangler secret put TYPESAFE_API_KEY
+        env:
+          RUNTIME_SECRET: ${{ secrets.TYPESAFE_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Publish approved analytics secrets
+        if: vars.ANALYTICS_ENABLED == 'true'
+        shell: bash
+        run: |
+          test "${#ANALYTICS_TOKEN_KEY}" -ge 32
+          test "${#ANALYTICS_ADMIN_TOKEN}" -ge 32
+          test "$ANALYTICS_ADMIN_TOKEN" != "$BILLING_ADMIN_TOKEN"
+          printf '%s' "$ANALYTICS_TOKEN_KEY" | npx wrangler secret put ANALYTICS_TOKEN_KEY
+          printf '%s' "$ANALYTICS_ADMIN_TOKEN" | npx wrangler secret put ANALYTICS_ADMIN_TOKEN
+        env:
+          ANALYTICS_TOKEN_KEY: ${{ secrets.ANALYTICS_TOKEN_KEY }}
+          ANALYTICS_ADMIN_TOKEN: ${{ secrets.ANALYTICS_ADMIN_TOKEN }}
+          BILLING_ADMIN_TOKEN: ${{ secrets.BILLING_ADMIN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          command: deploy --tag ${{ github.sha }}
       - name: Verify Web API route
         if: vars.WEB_API_ROUTE_ZONE_ID != ''
         run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"
@@ -106,3 +220,16 @@ jobs:
           resource="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-protected-resource/mcp")"
           node -e 'const [metadata, resource, base] = process.argv.slice(1).map((value, index) => index < 2 ? JSON.parse(value) : value); if (metadata.issuer !== base || metadata.authorization_endpoint !== `${base}/oauth/authorize` || metadata.token_endpoint !== `${base}/oauth/token` || resource.resource !== `${base}/mcp` || !Array.isArray(resource.authorization_servers) || !resource.authorization_servers.includes(base)) process.exit(1)' "$metadata" "$resource" "$mcp_base"
           test "$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 3 -X POST "$mcp_base/mcp")" = "401"
+      - name: Verify active Worker candidate
+        run: node --import tsx tools/verify-launch-gates.mts deploy --worker
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

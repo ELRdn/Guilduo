@@ -31,7 +31,9 @@ Guilduo is a **Human × AI Work Platform** where people and AI Agents can commis
 | Web App | `https://app.guilduo.com` | Appwrite Site Custom Domain |
 | MCP | `https://mcp.guilduo.com/mcp` | Canonical Remote HTTP MCP endpoint |
 | Appwrite API | `https://api.guilduo.com/v1` | Official Appwrite API endpoint (origin: `https://api.guilduo.com`) |
-| Documentation | `https://docs.guilduo.com` | Reserved / Future |
+| Documentation | `https://guilduo.com/docs/` | Static Japanese Docs; published |
+| English Documentation | `https://guilduo.com/docs/en/` | Static English Docs; published |
+| Documentation subdomain | `https://docs.guilduo.com` | Reserved / Future |
 
 `https://www.guilduo.com` is reserved for redirects to `https://guilduo.com`. The old `workers.dev` URL remains for compatibility connections and rollback. `api.guilduo.com` is for the Appwrite API and is used by the browser Appwrite client and the Worker's `APPWRITE_ENDPOINT`; it is not the public origin for the Worker's REST `/v1` or MCP `/mcp` routes.
 
@@ -195,9 +197,23 @@ npm run cli -- mcp-config --json
 
 Writes return only a dry-run or execution plan unless `--execute` is supplied. Authentication uses `QUESTFORGE_TOKEN` or `--token-stdin`, and tokens are never written to logs. General production users use OAuth rather than a fixed API key.
 
+## DSH plugin: install and connect
+
+The Guilduo plugin for **DeepSeek Harness (DSH)** is available on npm as [`@guilduo/dsh-oauth-poc`](https://www.npmjs.com/package/@guilduo/dsh-oauth-poc). As of October 10, 2026, `latest` and `beta` both resolve to **0.6.0-beta.16**. It adds **Settings → Guilduo**, browser OAuth and the `guilduo-workflows` Skill. Tested host: Windows, DSH **0.2.0-rc.2**.
+
+Stop the Web/Desktop hosts before installing or updating this existing Web profile:
+
+```powershell
+dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.16 --ignore-scripts
+```
+
+Restart the host and reload the browser. Open a conversation → **Settings → Guilduo → 接続 → ブラウザーで認証**, then approve in the browser. Desktop uses its native plugin manager, with the same package and version.
+
+See the **[English How-to](docs/guilduo-dsh-howto.md)** / **[日本語の導入・使い方](docs/guilduo-dsh-howto.jp.md)** for sharing, updates, safe removal and troubleshooting. The user confirmed public OAuth, MCP reads/writes and Desktop saved authentication reuse after restart. Settings-free first-input/new-session/fork use, Agent Handoff and Human answer → resume remain pending. Feature development is paused at this beta stopping point; see [current acceptance status](docs/guilduo-dsh-status.md).
+
 ## Skill / OpenAI Plugin / MCP App
 
-- Official Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Official Skill: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - OpenAI Plugin preparation package: [`plugins/questforge/`](plugins/questforge/)
 - MCP App registration template: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Submission checklist: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

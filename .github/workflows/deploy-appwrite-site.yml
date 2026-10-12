@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: appwrite-site-production
@@ -26,9 +27,51 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Require approved evidence artifact
+        env:
+          EVIDENCE_RUN_ID: ${{ vars.LAUNCH_EVIDENCE_RUN_ID }}
+        run: test -n "$EVIDENCE_RUN_ID"
+      - name: Download signed acceptance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: launch-candidate-${{ github.sha }}
+          path: .qa-artifacts
+          run-id: ${{ vars.LAUNCH_EVIDENCE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify signed source and deployment approval
+        run: node --import tsx tools/verify-launch-gates.mts deploy
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+      - name: Verify canonical origins prerequisite
+        run: node --import tsx tools/verify-launch-gates.mts --origins
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Generate public deployment configuration
         run: npm run generate-release-config
         env:
+          BILLING_MODE: ${{ vars.BILLING_MODE || 'test' }}
+          BILLING_CONFIG: ${{ vars.BILLING_CONFIG }}
+          JEV_ENABLED: ${{ vars.JEV_ENABLED || 'false' }}
+          JEV_MODEL: ${{ vars.JEV_MODEL }}
+          JEV_INPUT_USD_PER_MILLION: ${{ vars.JEV_INPUT_USD_PER_MILLION }}
+          JEV_OUTPUT_USD_PER_MILLION: ${{ vars.JEV_OUTPUT_USD_PER_MILLION }}
+          JEV_DATA_POLICY_APPROVED: ${{ vars.JEV_DATA_POLICY_APPROVED || 'false' }}
+          JEV_EVALUATION_BUDGET_USD: ${{ vars.JEV_EVALUATION_BUDGET_USD || '1' }}
+          JEV_BUDGET_SCOPE: ${{ vars.JEV_BUDGET_SCOPE || 'evaluation' }}
+          JEV_COMMERCIAL_CONFIG: ${{ vars.JEV_COMMERCIAL_CONFIG }}
+          ANALYTICS_ENABLED: ${{ vars.ANALYTICS_ENABLED || 'false' }}
+          ANALYTICS_DATA_POLICY_APPROVED: ${{ vars.ANALYTICS_DATA_POLICY_APPROVED || 'false' }}
+          ANALYTICS_CONFIG: ${{ vars.ANALYTICS_CONFIG }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
           APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
@@ -50,6 +93,10 @@ jobs:
           WEB_API_ROUTE_ZONE_ID: ${{ vars.WEB_API_ROUTE_ZONE_ID }}
           WEB_API_ROUTE_MANAGEMENT: ${{ vars.WEB_API_ROUTE_MANAGEMENT || 'wrangler' }}
           WEB_API_BROWSER_ENABLED: ${{ vars.WEB_API_BROWSER_ENABLED || 'false' }}
+      - name: Verify approved runtime configuration
+        run: node --import tsx tools/verify-launch-gates.mts deploy --configuration
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
       - run: npm run check
       - run: npm run brand:assets -- --check
       - run: npm test
@@ -57,6 +104,28 @@ jobs:
         env:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+      - name: Verify launch candidate before deployment
+        shell: bash
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4175 --strictPort > /tmp/guilduo-launch-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in {1..30}; do curl -fsS http://127.0.0.1:4175/privacy/ >/dev/null && break; sleep 1; done
+          npm run launch:verify -- http://127.0.0.1:4175 --built
+          npm run docs:verify -- http://127.0.0.1:4175
+      - name: Verify active Worker source before Site activation
+        run: node --import tsx tools/verify-launch-gates.mts deploy --worker
+        env:
+          LAUNCH_APPROVAL_PUBLIC_KEY: ${{ vars.LAUNCH_APPROVAL_PUBLIC_KEY }}
+          WEB_APP_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL || 'https://mcp.guilduo.com' }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_SITE_ENDPOINT: ${{ vars.APPWRITE_SITE_ENDPOINT }}
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+          BILLING_ENABLED: ${{ vars.BILLING_ENABLED || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Verify Web API route before enabling browser transport
         if: vars.WEB_API_BROWSER_ENABLED == 'true'
         run: node --import tsx tools/check-web-api-route.mts "$WEB_APP_URL"
@@ -79,3 +148,19 @@ jobs:
           archive="$RUNNER_TEMP/guilduo-site.tar.gz"
           tar -czf "$archive" -C dist .
           bash tools/deploy-appwrite-site.sh "$archive"
+      - name: Smoke test public routes
+        shell: bash
+        run: |
+          app_html="$(curl --fail --retry 5 --retry-delay 3 "$SITE_URL/")"
+          grep -q '<title>Guilduo' <<<"$app_html"
+          grep -q 'rel="canonical" href="https://app.guilduo.com/"' <<<"$app_html"
+          curl --fail --retry 5 --retry-delay 3 "$SITE_URL/next/" >/dev/null
+          official_html="$(curl --fail --retry 5 --retry-delay 3 "${PUBLIC_SITE_URL%/}/")"
+          grep -q '<title>Guilduo' <<<"$official_html"
+          grep -q 'rel="canonical" href="https://guilduo.com/"' <<<"$official_html"
+          curl --fail --retry 5 --retry-delay 3 "${PUBLIC_SITE_URL%/}/lp/en/" >/dev/null
+          curl --fail '${{ vars.WORKER_BASE_URL }}/.well-known/oauth-protected-resource/mcp' >/dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST '${{ vars.WORKER_BASE_URL }}/mcp')" = "401"
+        env:
+          SITE_URL: ${{ vars.WEB_APP_URL }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}

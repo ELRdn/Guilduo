@@ -92,6 +92,8 @@ declare global {
     sourceUrl?: string;
     externalOAuthEnabled?: boolean;
     telemetryEndpoint?: string;
+    analyticsEnabled?: boolean;
+    analyticsCampaigns?: {id:string;source:string;medium:string;campaign:string}[];
     appwriteEndpoint?: string;
     appwriteProjectId?: string;
   }
