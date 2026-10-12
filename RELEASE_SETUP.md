@@ -1,6 +1,6 @@
 # Guilduo tagged release setup
 
-`main`へのpushではCIだけが動きます。`v*`タグは、版番号・main上の履歴・版別ノートを照合して検証後にGitHubのソースReleaseを公開します。本番配備は既存の手動Site／Worker workflowへ分離しました。2026-10-12、ひろなおの依頼で本体`v0.6.0-beta.8`のRelease更新を進めます。公開βのままで、実機・外部連携の全受入完了を意味しません。
+`main`へのpushではCIだけが動きます。`v*`タグは、版番号・main上の履歴・版別ノートを照合して検証後にGitHubのソースReleaseを公開します。本番配備は既存の手動Site／Worker workflowへ分離しました。本体`v0.6.0-beta.8`は公開済み。2026-10-12の統合候補は`v0.6.0-beta.9`です。公開βのままで、実機・外部連携の全受入完了を意味しません。
 
 公開URLの役割は[`docs/public-urls.md`](docs/public-urls.md)を正本の案内として参照します。正式Web Appは`https://app.guilduo.com/`、正式MCP endpointは`https://mcp.guilduo.com/mcp`、Appwrite API endpointは`https://api.guilduo.com/v1`です。
 
@@ -45,7 +45,7 @@
 
 タグ公開でD1 migration、Site／Worker配備、Secrets更新は行わない。本番配備は`.github/workflows/deploy-appwrite-site.yml`と`deploy-appwrite-worker.yml`の手動実行で管理し、既存のproduction保護・キャッシュ停止・旧asset保持・配備後の起動確認を維持する。実Google OAuth・外部クライアント・実機の受入は別に記録する。
 
-**2026-10-12のWorker配備注意:** 本番にはmainへ未統合の既存runtime修正がある。今回のSEO計測は稼働moduleに限定patchして配備済みで、タグのソースが本番Workerと完全一致するとは主張しない。汎用Worker workflowを実行する前にこの差分を統合・検証すること。詳細は[`docs/growth/seo-aeo-2026-10-12.md`](docs/growth/seo-aeo-2026-10-12.md)。
+**2026-10-12のWorker統合:** SEO公開時点では本番runtimeの追加修正がmainに未統合だった。beta.9候補は稼働moduleとの比較と回帰検証でこれらを統合し、追加D1 migration → Worker → Siteの順で配備する。固定SHA・バックアップ・配備結果は[`docs/work-integration-20261012.md`](docs/work-integration-20261012.md)とPRの実行記録で確認する。以前のSEO配備記録は[`docs/growth/seo-aeo-2026-10-12.md`](docs/growth/seo-aeo-2026-10-12.md)に残す。
 
 ## Custom Domainの現在状態
 
