@@ -196,3 +196,34 @@ test("productivity REST is private Human-only, validates inputs and fails closed
     env.QUESTFORGE_DB = undefined; assert.equal((await call("/timer")).status, 503);
   } finally { db.close(); }
 });
+
+test("same-origin productivity routes share records and timer receipts with direct REST", async () => {
+  const { db, env, state, quest } = setup();
+  const web = "https://app.example.test";
+  try {
+    Object.assign(env, { DEV_BEARER_TOKEN: "human", DEV_USER_ID: "web-owner", ALLOWED_ORIGINS: web, WEB_APP_URL: web, WEB_API_ENABLED: "true" });
+    const previous = await readState(env, "web-owner");
+    await writeState(env, "web-owner", { state, schemaVersion: 7, clientUpdatedAt: "2026-01-01T00:00:00Z" }, previous.etag);
+    const call = (path: string, input?: Record<string, unknown>, method = input ? "POST" : "GET", direct = false) => worker.fetch(new Request(`${direct ? "https://mcp.example.test/v1" : `${web}/api/v1`}/productivity${path}`, {
+      method, headers: { authorization: "Bearer human", origin: web, "content-type": "application/json" }, ...(input ? { body: JSON.stringify(input) } : {}),
+    }), env, { waitUntil: () => {} });
+    for (const path of ["/notes?limit=200", "/entries?limit=200", "/preferences", "/timer"]) assert.equal((await call(path)).status, 200, path);
+    const input = { operationId: "webNote", title: "Web record", body: "Retained", questId: quest.id };
+    const created = await call("/notes", input);
+    assert.equal(created.status, 200);
+    const note = (await created.json() as { note: NoteRecord }).note;
+    assert.deepEqual(await (await call("/notes", input, "POST", true)).json(), { note }, "operation replay is shared across transports");
+    const page = await (await call("/notes?limit=1&archived=true", undefined, "GET", true)).json() as { items: NoteRecord[] };
+    assert.deepEqual(page.items, [note]);
+    const archived = await call(`/notes/${note.id}`, { operationId: "webArchive", expectedUpdatedAt: note.updatedAt, archived: true }, "PATCH");
+    assert.equal(archived.status, 200);
+    assert.equal((await call("/notes?limit=201")).status, 400, "pagination validation remains enforced");
+    const started = await call("/timer/start", { operationId: "webStart", questId: quest.id, expectedEntryId: "" });
+    assert.equal(started.status, 200);
+    const current = (await started.json() as { current: TimeEntry }).current;
+    assert.equal((await call("/timer/stop", { operationId: "webStop", expectedEntryId: current.id, expectedUpdatedAt: current.updatedAt })).status, 200);
+    assert.equal((await (await call("/timer", undefined, "GET", true)).json() as { current: TimeEntry | null }).current, null);
+    env.WEB_API_ENABLED = "false";
+    assert.equal((await call("/notes")).status, 404, "disabled Web transport still refuses aliases");
+  } finally { db.close(); }
+});
