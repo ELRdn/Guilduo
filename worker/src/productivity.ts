@@ -95,7 +95,7 @@ function entry(input: JsonRecord, quests: readonly Quest[], previous?: TimeEntry
 }
 
 export async function productivityRoute(request: Request, env: WorkerEnv, uid: string, quests: readonly Quest[], existing: boolean, input: JsonRecord = {}): Promise<Response> {
-  const url = new URL(request.url), path = url.pathname.slice("/v1/productivity".length), method = request.method;
+  const url = new URL(request.url), path = url.pathname.replace(/^\/api(?=\/v1\/)/, "").slice("/v1/productivity".length), method = request.method;
   const reply = (value: unknown) => new Response(JSON.stringify(value), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
   const loaded = await read(env, uid, existing);
   const { data, revision } = loaded;
