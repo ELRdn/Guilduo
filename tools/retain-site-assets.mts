@@ -7,6 +7,11 @@ export const RETAINED_ASSET_MANIFEST = "/assets/retained-releases.json";
 export const ASSET_RETENTION_MS = 48 * 60 * 60 * 1000;
 export const PREVIOUS_SHELL_PATH = "/deployment-check/previous-shell.html";
 export const PREVIOUS_SHELL_META_PATH = "/deployment-check/previous-shell.json";
+export function normalizePublicShell(html: string): string {
+  // Compare only this known Cloudflare JSD request metadata; keep its code and the stored probe intact.
+  return html.replace(/(d\.innerHTML="window\.__CF\$cv\$params=\{r:')[a-f0-9]{16}(',t:')([A-Za-z0-9+/]+={0,2})('\};var a=document\.createElement\('script'\);a\.src='\/cdn-cgi\/challenge-platform\/scripts\/jsd\/main\.js';)/g,
+    (match, before: string, between: string, time: string, after: string) => /^\d{10}$/.test(Buffer.from(time, "base64").toString("utf8")) ? `${before}REQUEST_RAY${between}REQUEST_TIME${after}` : match);
+}
 export function previousShellProbe(html: string, origin: URL): string {
   if (!/<head(?:\s[^>]*)?>/i.test(html) || /<base\b/i.test(html)) throw new Error("Previous shell needs a verifiable head without base overrides.");
   for (const match of html.matchAll(/\b(?:src|href)=["']([^"']+)["']/g)) {
@@ -157,7 +162,7 @@ export async function retainSiteAssets(options: {
   await mkdir(probeDirectory); // Fresh builds only; never follow or replace an existing directory/link.
   await writeFile(resolve(options.dist, PREVIOUS_SHELL_PATH.slice(1)), probe, { flag: "wx" });
   await writeFile(resolve(options.dist, PREVIOUS_SHELL_META_PATH.slice(1)), JSON.stringify({
-    version: 1, capturedAt: now, sourcePath: "/next/relay-forge/", sourceSha256: digest(Buffer.from(previousHtml)), probeSha256: digest(Buffer.from(probe)),
+    version: 2, capturedAt: now, sourcePath: "/next/relay-forge/", sourceSha256: digest(Buffer.from(normalizePublicShell(previousHtml))), probeSha256: digest(Buffer.from(probe)),
   }), { flag: "wx" });
   const manifest: Manifest = { version: 1, generatedAt: now, assets: [...output.values()].sort((a, b) => a.name.localeCompare(b.name)) };
   await writeFile(resolve(directory, "retained-releases.json"), JSON.stringify(manifest));

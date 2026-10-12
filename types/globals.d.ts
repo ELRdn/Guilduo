@@ -92,6 +92,7 @@ declare global {
     sourceUrl?: string;
     externalOAuthEnabled?: boolean;
     telemetryEndpoint?: string;
+    ga4MeasurementId?: string;
     appwriteEndpoint?: string;
     appwriteProjectId?: string;
   }

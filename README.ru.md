@@ -251,7 +251,7 @@ npm run worker:dev
 
 Во время разработки TypeScript типы runtime Worker генерируются из конфигурации Wrangler. `npm run typecheck` объединяет генерацию типов, проверку согласованности сгенерированного результата, проверки явного `any` и `@ts-nocheck`, а также строгие проверки типов для browser, Worker, Node и battle prototype. Преобразование Vite и проверка типов разделены, а контракты API/MCP поддерживаются отдельными тестами.
 
-Публичный deployment выполняется только GitHub Actions для тегов `v*`. Pipeline по очереди проверяет D1 migration, deployment Worker и health checks, затем выполняет smoke test публикации Appwrite Sites. Для проверки и переключения с Firebase следуйте [`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md).
+Workflow для тегов `v*` сверяет версию пакета, наличие помеченного коммита среди предков `main` и примечания к релизу, затем публикует GitHub Release исходного кода после прохождения проверок CI, типов, тестов, сборки и preview. Он не использует секреты deployment и не выполняет автоматически production-миграции или deployment Site и Worker. Deployment в production выполняется отдельно через существующие ручные workflows `.github/workflows/deploy-appwrite-site.yml` и `.github/workflows/deploy-appwrite-worker.yml`; защита окружения `production` и проверки сохранённых кешей остаются в силе. В production runtime Worker остаются исправления, внесённые прямым deployment и ещё не интегрированные в публичный исходный код; не запускайте сначала общий workflow deployment Worker. Release исходного кода основного продукта `v0.6.0-beta.8` и расширения хостов `beta.12` версионируются отдельно; Guilduo остаётся в публичной beta. См. [`RELEASE_SETUP.md`](RELEASE_SETUP.md).
 
 ## Документация
 

@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 import { QuestForgeRepository } from "../interaction-lab/repository.ts";
 
 const root = path.join(__dirname, "..");
@@ -95,34 +96,33 @@ test("CLI and direct MCP template keep the optional App example separate and cre
   assert.doesNotMatch([mcp, submission, JSON.stringify(appExample)].join("\n"), /AIzaSy|client_secret|private_key|Bearer\s+[A-Za-z0-9]/i);
 });
 
-test("tagged release derives the active Appwrite deployment URL before Worker and semantic smoke checks", () => {
+test("tagged release validates the source candidate without production writes or secrets", () => {
   const workflow = read(".github/workflows/release.yml");
-  const deployScript = read("tools/deploy-appwrite-site.sh");
-  const d1 = workflow.indexOf("d1 migrations apply");
-  const sites = workflow.indexOf("id: appwrite_site");
-  const workerConfig = workflow.indexOf("Regenerate Worker configuration for active Appwrite Site");
-  const worker = workflow.indexOf("wrangler-action@v3");
-  const appwriteKey = workflow.indexOf("Verify Appwrite Worker key can read the state table");
-  const health = workflow.indexOf("Verify Worker after Appwrite Sites");
-  const smoke = workflow.indexOf("Smoke test public routes");
   assert.match(workflow, /tags: \["v\*"\]/);
-  assert.ok(appwriteKey > 0 && appwriteKey < d1 && d1 < sites && sites < workerConfig && workerConfig < worker && worker < health && health < smoke);
-  assert.match(workflow, /steps\.appwrite_site\.outputs\.url/);
-  assert.match(workflow, /APPWRITE_SITE_ENDPOINT:\s*\$\{\{ vars\.APPWRITE_SITE_ENDPOINT \}\}/);
-  assert.match(workflow, /project\/platforms\/web/);
-  assert.match(workflow, /--request POST/);
-  assert.match(workflow, /guilduo-site-/);
-  assert.doesNotMatch(workflow, /project\/platforms\/web\/\$APPWRITE_WEB_PLATFORM_ID/);
-  assert.match(workflow, /<title>Guilduo/);
-  assert.match(workflow, /rel="canonical" href="https:\/\/app\.guilduo\.com\/"/);
-  assert.match(workflow, /rel="canonical" href="https:\/\/guilduo\.com\/"/);
-  assert.match(deployScript, /sites\/\$APPWRITE_SITE_ID\/logs/);
-  assert.match(deployScript, /APPWRITE_SITE_ENDPOINT/);
-  assert.match(deployScript, /site_endpoint=/);
-  assert.match(deployScript, /deploymentId/);
-  assert.match(deployScript, /appwrite\.network/);
-  assert.match(workflow, /agentStorage!=="d1"/);
-  assert.doesNotMatch(workflow, /firebase deploy/);
+  assert.match(workflow, /git merge-base --is-ancestor HEAD origin\/main/);
+  assert.match(workflow, /fetch-depth: 0/);
+  assert.match(workflow, /assert.equal\(process.env.GITHUB_REF_NAME,`v\$\{version\}`\)/);
+  assert.doesNotMatch(workflow, /environment: production|secrets\.|d1 migrations|deploy-appwrite|wrangler-action|wrangler (?:deploy|secret)|project\/platforms|--remote/);
+  for (const gate of ["api:generate", "design:check", "npm run check", "npm test", "npm run build", "lp:verify", "docs:verify", "solutions:verify", "launch:verify"]) {
+    assert.ok(workflow.indexOf(gate) > 0 && workflow.indexOf(gate) < workflow.indexOf("softprops/action-gh-release"), gate);
+  }
+  assert.match(workflow, /body_path: docs\/releases\/\$\{\{ github.ref_name \}\}\.md/);
+  for (const file of ["deploy-appwrite-site.yml", "deploy-appwrite-worker.yml"]) {
+    const deploy = read(`.github/workflows/${file}`);
+    assert.match(deploy, /workflow_dispatch:/);
+    assert.match(deploy, /environment: production/);
+    assert.doesNotMatch(deploy, /\n  push:/);
+  }
+});
+
+test("release tag guard rejects another version and path-like tags before publication", () => {
+  const script = read(".github/workflows/release.yml").match(/node -e '([^'\n]+)'/)![1];
+  const version = JSON.parse(read("package.json")).version;
+  const run = (tag: string) => execFileSync(process.execPath, ["-e", script], {
+    cwd: root, env: { ...process.env, GITHUB_REF_NAME: tag }, stdio: "pipe",
+  });
+  assert.doesNotThrow(() => run(`v${version}`));
+  for (const tag of ["v0.6.0-beta.7", "v0.6.0", "../../package.json", `v${version}/../other`]) assert.throws(() => run(tag), tag);
 });
 
 test("anonymous telemetry is opt-in, delayed, and retained in the Worker only", () => {

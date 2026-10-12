@@ -1,0 +1,5 @@
+.public-measurement { margin:24px auto; padding:16px; max-width:74ch; font-size:14px; line-height:1.6; border-top:1px solid currentColor; }
+.public-measurement summary { cursor:pointer; min-height:44px; display:list-item; }
+.public-measurement p { margin-block:12px; }
+.public-measurement button { font:inherit; color:inherit; background:transparent; border:1px solid currentColor; border-radius:4px; min-height:44px; padding:8px 16px; margin:4px 8px 4px 0; cursor:pointer; }
+.public-measurement :focus-visible { outline:2px solid currentColor; outline-offset:4px; }

@@ -351,11 +351,21 @@
     {
       "slug": "codex",
       "group": "integrations",
-      "title": "CodexとGuilduo：標準plugin・既存App・hook補助",
+      "title": "CodexでGuilduoを使う：MCP接続と最初のQuest",
       "navTitle": "Codex",
-      "description": "Windows Desktop／CLI向けbeta.12の導入、既存App再利用、OAuth、継続許可とhook停止、更新・削除を案内します。",
-      "lead": "通常版は共通Skill・公式OAuth MCP・SessionStart／Stop補助を同梱します。既存App利用者はローカルcompanionで接続を再利用し、SkillとMCPを重複導入しません。",
+      "description": "CodexからGuilduoのQuestを読み、進捗と人の回答を確認する導入ガイド。必要環境、beta.12のMCP接続、成功確認、既存Appの再利用と検証済み範囲を解説します。",
+      "lead": "CodexでGuilduoのタスクを読み、目的・進捗・人の回答を確かめて作業を続けるためのガイドです。まず1件の読み取りから始めます。導入やAgent登録だけで作業の自動実行や書き込み許可が生まれることはありません。",
       "sections": [
+        {
+          "id": "prerequisites",
+          "title": "接続前に用意するもの",
+          "bullets": [
+            "Guilduo / Relay Forge用のGoogleアカウントと、目的・完了条件を書いた小さなQuestを1件。",
+            "Codex CLI 0.159.2または導入済みWindows Desktopと、通常利用しているAI契約・API環境。外部AIの条件と費用は別です。",
+            "https://mcp.guilduo.com/mcp へのRemote HTTP MCP・OAuth接続。公開β版の手順で、所要時間は保証しません。",
+            "Guilduo Appへ接続済みなら、MCPを二重に追加せず、下の既存App companionの手順を使います。"
+          ]
+        },
         {
           "id": "install",
           "title": "標準marketplaceから導入する",
@@ -367,6 +377,25 @@
             "language": "powershell",
             "text": "codex plugin marketplace add ELRdn/Guilduo --ref main\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
           }
+        },
+        {
+          "id": "first-read",
+          "title": "1件を読んで接続成功を確認する",
+          "steps": [
+            "Codexの接続設定からOAuth認証を完了し、Guilduo Skillを使える新しいチャットを開きます。",
+            "「現在のAgent contextとQuest一覧を確認し、私が作った小さなQuestを1件読んで。まだ書き込まないで」と依頼します。",
+            "取得したタイトル・目的・保存状態をGuilduo Webと照合します。plugin一覧や56ツールの発見だけでは、タスクの読み取り成功を示しません。",
+            "書き込みへ進むときはWebのConnectionsで許可済み登録Agentへリンクし、実行権限と任せる範囲を確認します。最新状態を読み、変更後も再読取します。"
+          ]
+        },
+        {
+          "id": "verified-scope",
+          "title": "2026年10月10日の受入記録と未確認範囲",
+          "paragraphs": [
+            "2026年10月10日の開発者本人による受入記録では、Windows CLI 0.159.2での導入とSkill・hook定義の発見、本人環境のApp companion更新とcache一致が確認されています。専用プロセスの直接OAuth接続（process-only direct OAuth）で、認証情報の再利用とツール発見が記録されています。",
+            "実モデルIDはopenai/gpt-6-astraで、正本Skillを明示指定した限定更新と保存結果の再読取、変更不要時の無更新、古い状態を基にした書き込みの拒否後の読み取りが記録されています。本人がWebで保存したHuman確認依頼への回答を取得し、同じAgentセッションで再開した結果も記録されています。",
+            "これは過去の開発者検証の紹介であり、2026年10月12日の内容確認で実機検証を再実行したものではありません。CodexからClaudeへの引き継ぎ実証や時間短縮の測定でもありません。包括的なDesktop lifecycle、trusted hookの実行、OAuth refresh・失効・再接続は未受入です。Appの古いtool schemaや、通常プラグインのSkill自動読込を、この結果から書き込み受入済みとは判断しません。"
+          ]
         },
         {
           "id": "companion",
@@ -403,13 +432,6 @@
             "language": "powershell",
             "text": "codex plugin marketplace upgrade guilduo-local\ncodex plugin add guilduo-workflows@guilduo-local\n# Remove only when no longer needed:\ncodex plugin remove guilduo-workflows@guilduo-local"
           }
-        },
-        {
-          "id": "verified-scope",
-          "title": "今回確認できた範囲",
-          "paragraphs": [
-            "Windows CLI 0.159.2で導入・Skill/hook定義の発見、本人環境のApp companion更新とcache一致を確認しました。専用プロセスの直接OAuthでは認証再利用、ツール発見、限定更新とreadback、本人Web回答取得から同じ実セッションの再開、no-op、競合拒否後のread-only再読取を確認しました。実モデルは既存ChatGPT契約のOpenAI gpt-6-astraです。Appの古いtool schema、trusted hookの実実行、refresh・失効・再接続は未受入です。"
-          ]
         }
       ],
       "related": [
@@ -453,8 +475,14 @@
         {
           "path": "docs/acceptance/guilduo-next-hosts.md",
           "label": "ホスト別の受入・未確認範囲"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-publication.md",
+          "label": "日付付きの最終受入記録と未確認範囲"
         }
-      ]
+      ],
+      "reviewedAt": "2026-10-12",
+      "sourceRevision": "479b21113d5cd9590c552fed5f0b1de2631be2ed"
     },
     {
       "slug": "claude",
@@ -2553,11 +2581,21 @@
     {
       "slug": "codex",
       "group": "integrations",
-      "title": "Guilduo for Codex: standard plugin, App companion and hooks",
+      "title": "Use Guilduo with Codex: MCP Setup and Your First Quest",
       "navTitle": "Codex",
-      "description": "Install beta.12 on Windows Codex Desktop/CLI, reuse an existing App, authorize OAuth, control phase assistance, update and remove it.",
-      "lead": "The normal package includes the canonical Skill, official OAuth MCP and SessionStart/Stop assistance. Existing App users generate a local companion that reuses their connection.",
+      "description": "Connect Codex to Guilduo, read your first shared Quest and verify saved human feedback. Prerequisites, beta.12 installation, success checks and recorded acceptance limits.",
+      "lead": "Use Codex to read a task saved in Guilduo and continue from its goal, progress and human feedback. Start with one read-only check; installation and an Agent record alone do not start work or authorize writes.",
       "sections": [
+        {
+          "id": "prerequisites",
+          "title": "Before you connect",
+          "bullets": [
+            "A Google account for Guilduo / Relay Forge and one small saved Quest with a goal and completion criteria.",
+            "Codex CLI 0.159.2 or your installed Windows Desktop, with access to its normal AI subscription or API environment. External AI costs and requirements are separate.",
+            "Remote HTTP MCP and OAuth access to https://mcp.guilduo.com/mcp. This is a public beta guide; setup time is not guaranteed.",
+            "If Guilduo is already connected as an App, keep the App companion route below instead of installing a second MCP connection."
+          ]
+        },
         {
           "id": "install",
           "title": "Install from the standard marketplace",
@@ -2569,6 +2607,25 @@
             "language": "powershell",
             "text": "codex plugin marketplace add ELRdn/Guilduo --ref main\ncodex plugin add guilduo-workflows@guilduo-local\ncodex plugin list --marketplace guilduo-local --json"
           }
+        },
+        {
+          "id": "first-read",
+          "title": "Read one Quest and check success",
+          "steps": [
+            "Complete OAuth in Codex connection settings, then open a fresh chat with the Guilduo Skill available.",
+            "Ask Codex to read its current Agent context, list your Quests and read the exact small Quest you created. Do not authorize a write for this check.",
+            "Compare the returned title, goal and saved state with Guilduo Web. A listed plugin or 56 discovered tools alone does not establish a successful task read.",
+            "For later writes, link an authorized registered Agent in Web Connections, confirm its effective permissions and scope the task explicitly. Recheck the latest state and read back changes."
+          ]
+        },
+        {
+          "id": "verified-scope",
+          "title": "October 10, 2026 acceptance record and limits",
+          "paragraphs": [
+            "The developer acceptance record dated October 10, 2026 reports Windows CLI 0.159.2 installation and discovery of Skill and hook definitions, plus the owner's App-companion update and cache match. Credential reuse and tool discovery were recorded through process-only direct OAuth.",
+            "Using the exact model ID openai/gpt-6-astra and an explicitly selected canonical Skill, the record covers limited updates and readback, no-op behavior, and read-only rereads after stale-write rejection. It also records retrieval of the owner's saved Web answer to a Human request and resumption in the same Agent session.",
+            "This summarizes historical developer acceptance; the October 12, 2026 content review did not rerun real-environment tests. It does not establish a Codex-to-Claude handoff or measured time savings. Full Desktop lifecycle, trusted-hook execution, OAuth refresh, revocation and reconnection remain unaccepted. The result does not establish write acceptance through stale App tool schemas or automatic Skill loading by the standard plugin."
+          ]
         },
         {
           "id": "companion",
@@ -2605,13 +2662,6 @@
             "language": "powershell",
             "text": "codex plugin marketplace upgrade guilduo-local\ncodex plugin add guilduo-workflows@guilduo-local\n# Remove only when no longer needed:\ncodex plugin remove guilduo-workflows@guilduo-local"
           }
-        },
-        {
-          "id": "verified-scope",
-          "title": "Verified scope",
-          "paragraphs": [
-            "Windows CLI 0.159.2 installation, Skill/hook-definition discovery, owner App-companion update and cache equality are verified. Process-only direct OAuth tests verified credential reuse, discovery, limited update/readback, actual saved owner Web feedback and same-session resume, no-op, and read-only reread after conflict rejection. Model: OpenAI gpt-6-astra under the existing ChatGPT subscription. Stale App schemas, trusted-hook execution, refresh/revocation/reconnection remain unaccepted."
-          ]
         }
       ],
       "related": [
@@ -2655,8 +2705,14 @@
         {
           "path": "docs/acceptance/guilduo-next-hosts.md",
           "label": "Host acceptance and remaining gates"
+        },
+        {
+          "path": "docs/acceptance/guilduo-next-hosts-publication.md",
+          "label": "Dated final acceptance and remaining gates"
         }
-      ]
+      ],
+      "reviewedAt": "2026-10-12",
+      "sourceRevision": "479b21113d5cd9590c552fed5f0b1de2631be2ed"
     },
     {
       "slug": "claude",

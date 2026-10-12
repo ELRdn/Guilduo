@@ -251,7 +251,7 @@ npm run worker:dev
 
 TypeScript 개발 중에는 Wrangler 설정에서 Worker runtime type을 자동 생성합니다. `npm run typecheck`는 type 생성, 생성 결과의 일관성 검사, 명시적 `any` 및 `@ts-nocheck` 검사, browser·Worker·Node·battle prototype의 strict type check를 함께 수행합니다. Vite 변환과 type check는 분리하며 API/MCP contract는 별도 test로 유지합니다.
 
-공개 배포는 `v*` tag 전용 GitHub Actions에서 수행합니다. pipeline은 D1 migration, Worker deploy, health check 순서로 gate를 통과시킨 뒤 Appwrite Sites 공개본을 smoke test합니다. Firebase migration의 검증과 전환은 [`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)를 따르세요.
+`v*` 태그 workflow는 package version, 태그 commit이 `main`의 조상인지 여부, 릴리스 노트를 대조하고 CI·타입 검사·테스트·빌드·preview gate를 통과한 뒤 GitHub 소스 Release를 공개합니다. 배포용 secret을 사용하지 않으며 production migration이나 Site·Worker 자동 배포를 수행하지 않습니다. production 배포는 기존 수동 workflow `.github/workflows/deploy-appwrite-site.yml` / `.github/workflows/deploy-appwrite-worker.yml`에서 별도로 수행하며 `production` 환경 보호와 보존 캐시 gate를 유지합니다. production Worker runtime에는 공개 소스에 아직 통합되지 않은 직접 배포 수정 사항이 남아 있으므로 범용 Worker 배포를 먼저 실행하지 마세요. 본체 소스 Release `v0.6.0-beta.8`과 host extensions `beta.12`는 별도 버전으로 관리하며 Guilduo는 공개 베타를 유지합니다. 자세한 내용은 [`RELEASE_SETUP.md`](RELEASE_SETUP.md)를 참고하세요.
 
 ## 문서
 

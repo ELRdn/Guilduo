@@ -233,6 +233,12 @@ components:
 
 # Guilduo Design
 
+### Public search entry and anonymous measurement (2026-10-12)
+
+日英LPは既存Heroを維持し、その下で人とAIのタスク管理・MCP連携、公開β、Google sign-inと外部AIの前提を説明する。用途ページは課題→必要環境→fixture画面・日付付き検証記録→短い試用手順→制限→技術詳細。公開ページのfooterに折り畳み式の匿名計測設定を置き、明示同意・拒否・撤回を同じ場所で行う。既存色・fontを継承し、44px操作とfocus-visibleを維持する。
+
+GA4追加後の設定名は「アクセス解析の設定」。同意説明では運営者の匿名計測とGoogle Analytics 4の宛先、ブラウザ識別Cookie、送らないaccount/Questデータを区別する。
+
 > **English summary:** Guilduo is a Human × AI Work Platform presented as a tactical operations board. The work interface is primary, RPG language adds motivation and identity, and Relay, Evidence, and Decision make human-agent coordination explicit. The root `/` surface is the visual baseline; `/next/` documents only its intentional visual and interaction differences.
 
 最終更新: 2026-08-29

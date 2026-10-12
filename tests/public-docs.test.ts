@@ -138,7 +138,7 @@ test("the complete sourced article, sections, tables and code exist before JavaS
       assert.ok(path.startsWith(root + sep), `source stays in repository: ${source.path}`);
       assert.ok(statSync(path).isFile(), source.path);
       assert.ok(body.includes(source.label), `${page.slug} source label ${source.label}`);
-      assert.ok(tags(main, "a").some(link => link.href === `https://github.com/ELRdn/Guilduo/blob/${content.sourceRevision ?? "main"}/${source.path}`), `${page.slug} published source ${source.path}`);
+      assert.ok(tags(main, "a").some(link => link.href === `https://github.com/ELRdn/Guilduo/blob/${page.sourceRevision ?? content.sourceRevision ?? "main"}/${source.path}`), `${page.slug} published source ${source.path}`);
     }
     for (const related of page.related) {
       assert.ok(content[locale].some(candidate => candidate.slug === related), `${page.slug} known related ${related}`);
@@ -261,9 +261,9 @@ test("review provenance is visible and machine navigation covers all canonical g
   assert.ok(navigation.includes(content.sourceRevision!));
   for (const locale of locales) for (const page of content[locale]) {
     const html = htmlFor(locale, page);
-    assert.ok(tags(html, "time").some(tag => tag.datetime === content.reviewedAt));
+    assert.ok(tags(html, "time").some(tag => tag.datetime === (page.reviewedAt ?? content.reviewedAt)));
     const article = scripts(html).flatMap(structuredNodes).find(node => node["@type"] === "TechArticle");
-    assert.equal(article?.dateModified, content.reviewedAt);
+    assert.equal(article?.dateModified, page.reviewedAt ?? content.reviewedAt);
     assert.equal(article?.isAccessibleForFree, true);
     assert.ok(navigation.includes(OFFICIAL_SITE_ORIGIN + pathFor(locale, page.slug)));
   }

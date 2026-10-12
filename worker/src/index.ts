@@ -1,4 +1,5 @@
 import { timePhase, withRequestTiming } from "./request-timing.ts";
+import { PUBLIC_EVENT_NAMES, validPublicEvent } from "../../shared/public-measurement.ts";
 import {
   DomainError,
   archiveQuests,
@@ -276,7 +277,7 @@ const DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS = { readOnlyHint: false, destructiveHin
 const OPEN_WORLD_READ_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 const OPEN_WORLD_WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
 const OPEN_WORLD_IDEMPOTENT_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true };
-const TELEMETRY_EVENT_NAMES = new Set(["web_vitals", "js_error", "sync_success", "sync_failure", "first_quest_complete", "mcp_connection_success", "agent_assignment_success"]);
+const TELEMETRY_EVENT_NAMES = new Set(["web_vitals", "js_error", "sync_success", "sync_failure", "first_quest_complete", "mcp_connection_success", "agent_assignment_success", ...PUBLIC_EVENT_NAMES]);
 
 const QUEST_OBJECT = { type: "object" };
 const HUMAN_REVIEW_INPUT = {
@@ -572,6 +573,7 @@ async function acceptTelemetry(request: Request, env: WorkerEnv): Promise<Respon
     const name = String(event?.name || "");
     const surface = String(event?.surface || "unknown").slice(0, 24);
     if (!TELEMETRY_EVENT_NAMES.has(name) || !/^[a-z0-9_-]+$/.test(surface)) return null;
+    if (PUBLIC_EVENT_NAMES.has(name) && !validPublicEvent(event)) return null;
     const metrics: JsonRecord = {};
     for (const key of ["lcp", "cls", "inp", "duration", "count"]) {
       if (Number.isFinite(Number(event?.[key]))) metrics[key] = Math.round(Number(event[key]) * 100) / 100;

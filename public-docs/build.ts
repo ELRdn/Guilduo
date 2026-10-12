@@ -15,6 +15,8 @@ const sectionSchema = z.object({
   table: z.object({ headers: z.array(z.string()).min(1), rows: z.array(z.array(z.string())) }).optional(),
 });
 const pageSchema = z.object({
+  reviewedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  sourceRevision: z.string().regex(/^[a-f0-9]{40}$/).optional(),
   slug, group: z.enum(["start", "workflows", "integrations", "reference"]),
   title: z.string().min(1), navTitle: z.string().min(1).optional(), description: z.string().min(1), lead: z.string().min(1),
   sections: z.array(sectionSchema).min(1), related: z.array(slug),
@@ -79,12 +81,13 @@ export function renderDocsPage(locale: DocsLocale, page: DocPage, content: DocsC
   const t = copy[locale];
   const path = docsPath(locale, page.slug);
   const title = `${page.title} | Guilduo Docs`;
-  const sourceRevision = content.sourceRevision ?? "main";
+  const sourceRevision = page.sourceRevision ?? content.sourceRevision ?? "main";
+  const reviewedAt = page.reviewedAt ?? content.reviewedAt;
   const breadcrumbs = [{ "@type": "ListItem", position: 1, name: "Guilduo", item: `${origin}/` }, { "@type": "ListItem", position: 2, name: t.docs, item: `${origin}${docsPath(locale, "")}` }];
   if (page.slug) breadcrumbs.push({ "@type": "ListItem", position: 3, name: page.title, item: `${origin}${path}` });
   const schemas = { "@context": "https://schema.org", "@graph": [
     { "@type": "BreadcrumbList", itemListElement: breadcrumbs },
-    { "@type": "TechArticle", headline: page.title, description: page.description, inLanguage: locale, url: `${origin}${path}`, mainEntityOfPage: `${origin}${path}`, author: { "@type": "Organization", name: "Guilduo", url: `${origin}/` }, publisher: { "@type": "Organization", name: "Guilduo", url: `${origin}/` }, isAccessibleForFree: true, ...(content.reviewedAt ? { dateModified: content.reviewedAt } : {}), isPartOf: { "@type": "WebSite", name: "Guilduo Docs", url: `${origin}${docsPath(locale, "")}` }, citation: page.sources.map(source => `https://github.com/ELRdn/Guilduo/blob/${sourceRevision}/${source.path}`) },
+    { "@type": "TechArticle", headline: page.title, description: page.description, inLanguage: locale, url: `${origin}${path}`, mainEntityOfPage: `${origin}${path}`, author: { "@type": "Organization", name: "Guilduo", url: `${origin}/` }, publisher: { "@type": "Organization", name: "Guilduo", url: `${origin}/` }, isAccessibleForFree: true, ...(reviewedAt ? { dateModified: reviewedAt } : {}), isPartOf: { "@type": "WebSite", name: "Guilduo Docs", url: `${origin}${docsPath(locale, "")}` }, citation: page.sources.map(source => `https://github.com/ELRdn/Guilduo/blob/${sourceRevision}/${source.path}`) },
     ...(page.slug === "faq" ? [{ "@type": "FAQPage", inLanguage: locale, url: `${origin}${path}`, mainEntity: page.sections.filter(section => section.paragraphs?.length).map(section => ({ "@type": "Question", name: section.title, acceptedAnswer: { "@type": "Answer", text: section.paragraphs!.join("\n\n") } })) }] : []),
   ] };
   const nav = groups.map(group => `<div class="doc-nav-group"><p>${t[group]}</p>${articleLinks(locale, content[locale].filter(item => item.group === group), page.slug)}</div>`).join("");
@@ -109,8 +112,8 @@ ${(["ja", "en", "x-default"] as const).map(lang => `<link rel="alternate" hrefla
 <article class="doc-article"><div class="doc-article-heading"><p class="doc-eyebrow">${t[page.group]} <span aria-hidden="true">/</span> GUILDUO</p><h1>${e(page.title)}</h1><p class="doc-lead">${e(page.lead)}</p></div>
 ${quick}<nav class="doc-toc-inline" aria-label="${t.toc}"><p>${t.toc}</p>${toc}</nav>${page.sections.map(section => renderSection(section, locale)).join("\n")}
 ${!page.slug ? `<section class="doc-directory"><h2>${t.overview}</h2><p>${t.overviewHint}</p>${groups.map(group => `<h3>${t[group]}</h3><div>${content[locale].filter(item => item.group === group && item.slug).map(item => `<a href="${docsPath(locale, item.slug)}"><strong>${e(item.title)}</strong><span>${e(item.description)}</span></a>`).join("")}</div>`).join("")}</section>` : ""}
-<section class="doc-sources"><h2>${t.sources}</h2><p>${t.sourceHint}</p>${content.reviewedAt ? `<p>${locale === "ja" ? "内容確認日" : "Content reviewed"}: <time datetime="${e(content.reviewedAt)}">${e(content.reviewedAt)}</time> · ${locale === "ja" ? "公開資料の版" : "Public source revision"}: <a href="https://github.com/ELRdn/Guilduo/commit/${sourceRevision}">${e(sourceRevision.slice(0, 7))}</a></p>` : ""}<ul>${page.sources.map(source => `<li><a href="https://github.com/ELRdn/Guilduo/blob/${sourceRevision}/${e(source.path)}">${e(source.label)} <span aria-hidden="true">↗</span></a></li>`).join("")}</ul></section>
-${["", "mcp-connection", "quests", "agents", "human-relay"].includes(page.slug) ? `<nav class="doc-related" aria-label="${locale === "ja" ? "活用例" : "Use cases"}"><h2>${locale === "ja" ? "Guilduoの活用例" : "Guilduo use cases"}</h2>${solutionSlugs.filter(slug => !["mcp-connection", "quests"].includes(page.slug) || slug === "mcp-task-management").filter(slug => !["agents", "human-relay"].includes(page.slug) || slug === "ai-agent-handoff").map(slug => `<a href="${solutionPath(locale, slug)}">${slug === "mcp-task-management" ? (locale === "ja" ? "MCPで人とAIのタスクを管理する" : "MCP task management for humans and AI") : (locale === "ja" ? "人とAIの引き継ぎとレビュー" : "AI agent handoff and human review")}</a>`).join("")}</nav>` : ""}
+<section class="doc-sources"><h2>${t.sources}</h2><p>${t.sourceHint}</p>${reviewedAt ? `<p>${locale === "ja" ? "内容確認日" : "Content reviewed"}: <time datetime="${e(reviewedAt)}">${e(reviewedAt)}</time> · ${locale === "ja" ? "公開資料の版" : "Public source revision"}: <a href="https://github.com/ELRdn/Guilduo/commit/${sourceRevision}">${e(sourceRevision.slice(0, 7))}</a></p>` : ""}<ul>${page.sources.map(source => `<li><a href="https://github.com/ELRdn/Guilduo/blob/${sourceRevision}/${e(source.path)}">${e(source.label)} <span aria-hidden="true">↗</span></a></li>`).join("")}</ul></section>
+${["", "mcp-connection", "quests", "agents", "human-relay", "codex"].includes(page.slug) ? `<nav class="doc-related" aria-label="${locale === "ja" ? "活用例" : "Use cases"}"><h2>${locale === "ja" ? "Guilduoの活用例" : "Guilduo use cases"}</h2>${solutionSlugs.filter(slug => !["mcp-connection", "quests"].includes(page.slug) || slug === "mcp-task-management").filter(slug => !["agents", "human-relay"].includes(page.slug) || slug === "ai-agent-handoff").map(slug => `<a href="${solutionPath(locale, slug)}">${slug === "mcp-task-management" ? (locale === "ja" ? "MCPで人とAIのタスクを管理する" : "MCP task management for humans and AI") : (locale === "ja" ? "人とAIの引き継ぎとレビュー" : "AI agent handoff and human review")}</a>`).join("")}</nav>` : ""}
 ${page.related.length ? `<nav class="doc-related" aria-label="${t.related}"><h2>${t.related}</h2>${page.related.map(name => content[locale].find(item => item.slug === name)).filter((item): item is DocPage => !!item).map(item => `<a href="${docsPath(locale, item.slug)}"><span>${e(item.title)}</span><span aria-hidden="true">→</span></a>`).join("")}</nav>` : ""}</article>
 <footer class="doc-footer"><p>${t.footer}</p><div><a href="/privacy/">${t.privacy}</a><a href="/terms/">${t.terms}</a><a href="https://github.com/ELRdn/Guilduo/issues">${t.issues}</a></div><p>Guilduo · AGPL-3.0-only</p></footer></main>
 <aside class="doc-toc"><nav aria-label="${t.toc}"><p>${t.toc}</p>${toc}<a class="doc-toc-source" href="https://github.com/ELRdn/Guilduo">GitHub ↗</a></nav></aside></div><p class="doc-sr-only" id="docs-copy-status" role="status" aria-live="polite"></p>
@@ -142,8 +145,8 @@ export function buildDocsAssets(origin = "https://guilduo.com"): Map<string, str
     }
     return (["ja", "en", "x-default"] as const).map(lang => `<xhtml:link rel="alternate" hreflang="${lang}" href="${e(origin + docsPath(lang === "en" ? "en" : "ja", page.slug))}"/>`).join("");
   };
-  assets.set("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${paths.map(path => `<url><loc>${e(origin + path)}</loc>${path.startsWith("/solutions/") ? "<lastmod>2026-10-06</lastmod>" : ""}${alternates(path)}</url>`).join("")}</urlset>`);
-  assets.set("robots.txt", `User-agent: *\nAllow: /docs/\nDisallow: /interaction-lab/\nDisallow: /next/\nDisallow: /lpv2/\nDisallow: /lpv2-1/\nDisallow: /api/\nDisallow: /public-docs/\n\nSitemap: ${origin}/sitemap.xml\n`);
+  assets.set("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${paths.map(path => `<url><loc>${e(origin + path)}</loc>${path.startsWith("/solutions/") || ["/", "/lp/en/"].includes(path) ? "<lastmod>2026-10-12</lastmod>" : (() => { const article = [...content.ja, ...content.en].find(p => docsPath(path.startsWith("/docs/en/") ? "en" : "ja", p.slug) === path); return article?.reviewedAt ? `<lastmod>${article.reviewedAt}</lastmod>` : ""; })()}${alternates(path)}</url>`).join("")}</urlset>`);
+  assets.set("robots.txt", `User-agent: *\nAllow: /docs/\nDisallow: /interaction-lab/\nDisallow: /lpv2/\nDisallow: /lpv2-1/\nDisallow: /api/\nDisallow: /public-docs/\n\nSitemap: ${origin}/sitemap.xml\n`);
   return assets;
 }
 
@@ -175,7 +178,19 @@ export function publicDocsPlugin(getOrigin: () => string): Plugin {
       const client = Object.values(bundle).find(item => item.type === "chunk" && item.isEntry && item.facadeModuleId?.replaceAll("\\", "/") === clientPath);
       if (!client || client.type !== "chunk") throw new Error("Docs client entry missing");
       const metadata = client as typeof client & { viteMetadata?: { importedCss?: Set<string> } };
-      const css = [...(metadata.viteMetadata?.importedCss ?? [])];
+      const styles = new Set(metadata.viteMetadata?.importedCss ?? []);
+      const visited = new Set<string>();
+      const pending = [...client.imports];
+      while (pending.length) {
+        const name = pending.pop()!;
+        if (visited.has(name)) continue;
+        visited.add(name);
+        const chunk = bundle[name];
+        if (chunk?.type !== "chunk") continue;
+        for (const file of (chunk as typeof client & { viteMetadata?: { importedCss?: Set<string> } }).viteMetadata?.importedCss ?? []) styles.add(file);
+        pending.push(...chunk.imports);
+      }
+      const css = [...styles];
       if (!css.length) throw new Error("Docs CSS missing");
       for (const [fileName, body] of buildDocsAssets(getOrigin())) {
         const source = body.replace('<link rel="stylesheet" href="/public-docs/styles.css">', css.map(file => `<link rel="stylesheet" href="/${file}">`).join(""))

@@ -1,4 +1,5 @@
 import "./styles.css";
+import "../public-measurement";
 
 type SearchArticle = { title: string; description: string; path: string; text: string };
 type SearchIndex = { ja: SearchArticle[]; en: SearchArticle[] };

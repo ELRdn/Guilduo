@@ -5,7 +5,7 @@ Two bilingual use-case articles explain the shipped public beta to individual de
 - Japanese: `/solutions/mcp-task-management/`, `/solutions/ai-agent-handoff/`
 - English: `/solutions/en/mcp-task-management/`, `/solutions/en/ai-agent-handoff/`
 
-The four ordinary HTML inputs use the existing Vite build and the official LP stylesheet through `styles.css`. There is no CMS, new dependency or executable page script. Language links, sources, task examples and calls to action work without JavaScript. Source claims are pinned to public revision `42caab0fa1f396f15e4e1277f6e36dda1ac9bd04`. The example is illustrative, not a customer or device-test result.
+The four ordinary HTML inputs use the existing Vite build and the official LP stylesheet through `styles.css`. There is no CMS or new dependency. A small shared client adds optional consented operator telemetry and GA4; language links, sources, task examples and calls to action still work without JavaScript. Source claims are pinned to public revision `479b21113d5cd9590c552fed5f0b1de2631be2ed`. The fixture screen is illustrative; dated developer acceptance is cited separately from customer or new device-test results.
 
 Update both languages together. Recheck the actual public product and source contracts before changing a claim. A significant content change must update the page's visible review date and JSON-LD `dateModified`, and its known update date in the root sitemap maintained by `public-docs/build.ts`. Do not replace dates on every build. Keep internal links relative and canonical/social/structured URLs on the official public origin. Do not add a link to a `/solutions/` directory index: no hub is published in this release.
 

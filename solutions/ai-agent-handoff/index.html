@@ -21,7 +21,7 @@
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="深い青緑の背景に金色のGuilduoブランドマーク">
-  <meta property="article:modified_time" content="2026-10-06">
+  <meta property="article:modified_time" content="2026-10-12">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="人とAIエージェントの引き継ぎとレビュー | Guilduo">
   <meta name="twitter:description" content="スマホメニューの修正を例に、作業の引き継ぎ、人の指摘の保存、エージェントによる読み直しと再開を説明します。">
@@ -49,12 +49,13 @@
         "headline": "人とAIエージェントの引き継ぎとレビュー",
         "description": "Guilduoで担当・進捗・検証根拠・人の指摘を引き継ぐ方法。スマホメニュー修正の例で、外部ツールでの作業からレビュー、保存された回答の読み直しまで説明します。",
         "inLanguage": "ja",
-        "dateModified": "2026-10-06",
+        "dateModified": "2026-10-12",
         "publisher": { "@type": "Organization", "name": "Guilduo", "url": "__GUILDUO_PUBLIC_ORIGIN__/" },
         "image": { "@type": "ImageObject", "url": "__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png", "width": 1200, "height": 630 },
         "citation": [
-          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json",
-          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json"
+          "https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/public-docs/content.json",
+          "https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/api/mcp-tools.json",
+          "https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/docs/acceptance/guilduo-next-hosts-publication.md"
         ]
       }
     ]
@@ -87,6 +88,36 @@
       <p>AIエージェントから「直しました」と返ってきても、何が未確認か分からないことがあります。人が別のチャットで指摘すると、次の作業セッションには判断が伝わらないこともあります。引き継ぎには、元の目的、担当、進捗、検証根拠、次にすることを一緒に残す必要があります。</p>
       <p>GuilduoのQuestは仕事の記録、Handoffは引き継ぎの状態です。Agent登録で保存するのは役割と権限の設定であり、モデルは起動しません。担当の割り当てや状態変更も実行を開始しません。接続したCodexやClaudeなどの外部環境で、エージェントが明示的にQuestを読み、作業を進めます。</p>
       <p>エージェントSDKの「handoff」は、実行中のランタイムで別のエージェントへ処理を渡す意味で使われることがあります。Guilduoの永続化されたHandoffは、担当責任とレビューの文脈を記録するものです。実行中のモデルセッションや、その内部の文脈を移す機能ではありません。</p>
+    </section>
+
+    <section id="prerequisites" class="solution-section" aria-labelledby="prerequisites-title">
+      <h2 id="prerequisites-title">試す前に必要なもの</h2>
+      <p>公開β版のGuilduo / Relay Forge、サインイン用のGoogleアカウント、目的と完了条件を書いたQuestを1件用意します。AI連携にはRemote HTTP MCP・OAuthに対応したCodexやClaudeなどの外部クライアントが必要です。</p>
+      <p>外部AIのアカウント・契約・API料金は別です。Guilduoはモデルをホストせず、Agent登録だけでAIを起動しません。接続・権限の状態で手順は変わるため、所要時間や時間削減を保証しません。</p>
+    </section>
+
+    <section id="proof" class="solution-section" aria-labelledby="proof-title">
+      <h2 id="proof-title">画面例と、2026年10月10日の開発者受入記録</h2>
+      <figure class="solution-figure"><img src="/assets/lp/command-dark.webp" width="2160" height="1350" loading="lazy" alt="Guilduo / Relay ForgeのCommand画面例。担当Questと人への確認依頼を同じ作戦盤で見る。"><figcaption>説明用fixtureの画面例です。以下の検証で保存された実Questの画面や顧客実績ではありません。</figcaption></figure>
+      <p>2026年10月10日の開発者本人による受入記録では、専用プロセスの直接OAuth接続からCodexがQuestを限定更新し、保存結果を読み直すところまで確認されています。本人がWebでHuman確認依頼にテキスト回答を保存し、同じAgentセッションがその回答を取得して再開した結果も記録されています。</p>
+      <ol class="solution-flow"><li>Agentが最新のQuest・権限を読み、許可された変更を保存して再読取。</li><li>人がWeb Appで確認内容を読み、実際のテキスト回答を保存。</li><li>同じAgentセッションが保存済み回答を取得し、次の作業を再開。</li></ol>
+      <p>実モデルIDは <code>openai/gpt-6-astra</code>で、正本Skillを明示指定しています。変更不要時の無更新と、古い保存状態での書き込み拒否も記録されています。これは過去の開発者検証で、今回の新規実行、顧客事例、CodexからClaudeへの実証、時間短縮の測定ではありません。Desktopのtrusted hook実行・refresh・失効・再接続は未受入です。</p>
+      <p><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/docs/acceptance/guilduo-next-hosts-publication.md">日付付きの公開検証記録を読む</a> · <a href="/#experience">保存・外部AI接続なしの操作デモを試す</a></p>
+    </section>
+
+    <section id="try-it" class="solution-section" aria-labelledby="try-it-title">
+      <h2 id="try-it-title">まず1件のQuestで試す</h2>
+      <ol class="solution-flow"><li><a href="https://app.guilduo.com/">Guilduoを開く</a>。Googleでサインインし、目的と完了条件を書いたQuestを作ります。</li>
+      <li><a href="/docs/codex/">Codex導入ガイド</a>、または<a href="/docs/mcp-connection/">MCP接続ガイド</a>で接続し、AIから同じQuestを読み取れるか確認します。</li>
+      <li>書き込みにはConnectionsで許可済みAgentをリンクし、任せる範囲を明示します。「このQuestを読んで、次に何をすべきか説明して。まだ変更しないで」から始められます。</li>
+      <li>人への確認が必要なら、<a href="/docs/human-relay/">Human Relay</a>の手順に沿って依頼と回答を保存します。Agentの再読取、Handoffの承認、元Questの完了は別に確認します。</li></ol>
+    </section>
+
+    <section id="limits" class="solution-section" aria-labelledby="limits-title">
+      <h2 id="limits-title">向いている仕事と、任せきれない範囲</h2>
+      <p>作業が複数のセッションにまたがるとき、担当が変わるとき、実機の挙動や好みに人の判断が必要なときに向いています。次の担当が、済んだチェックと推測を区別できる根拠を残します。エージェント自身で実行できる通常のlint確認なら、人への依頼は不要です。</p>
+      <p>Guilduoはモデルの実行環境ではなく、別のエージェントの起動を保証するものでもありません。接続先での明示的な読み取りと再開を手順に含めてください。実行権限はOAuthの許可とAgentポリシーの共通部分で決まり、登録や接続の紐付けだけでは拡張されません。</p>
+      <p>タスク例、共有ログ、成果物URLに認証情報や個人情報を含めないでください。エージェントは通常のQuest更新で本人の回答を代行できません。対応する変更はプレビューし、Handoff遷移には現在の<code>expectedState</code>を使います。競合したら最新の内容を読み直します。</p>
     </section>
 
     <section id="practical-flow" class="solution-section" aria-labelledby="flow-title">
@@ -122,13 +153,6 @@
       <p>もう一度レビューするなら、新しい<code>requestKey</code>を使い、以前の回答は残します。人が<code>approved</code>を保存した後も、残る完了条件を確認し、Handoff承認と元Quest完了を別の操作として行います。</p>
     </section>
 
-    <section id="limits" class="solution-section" aria-labelledby="limits-title">
-      <h2 id="limits-title">向いている仕事と、任せきれない範囲</h2>
-      <p>作業が複数のセッションにまたがるとき、担当が変わるとき、実機の挙動や好みに人の判断が必要なときに向いています。次の担当が、済んだチェックと推測を区別できる根拠を残します。エージェント自身で実行できる通常のlint確認なら、人への依頼は不要です。</p>
-      <p>Guilduoはモデルの実行環境ではなく、別のエージェントの起動を保証するものでもありません。接続先での明示的な読み取りと再開を手順に含めてください。実行権限はOAuthの許可とAgentポリシーの共通部分で決まり、登録や接続の紐付けだけでは拡張されません。</p>
-      <p>タスク例、共有ログ、成果物URLに認証情報や個人情報を含めないでください。エージェントは通常のQuest更新で本人の回答を代行できません。対応する変更はプレビューし、Handoff遷移には現在の<code>expectedState</code>を使います。競合したら最新の内容を読み直します。</p>
-    </section>
-
     <section id="get-started" class="solution-section" aria-labelledby="start-title">
       <h2 id="start-title">ひとつの仕事と、ひとつの確認から始める</h2>
       <p><a href="/docs/agents/">Agent登録とHandoff</a>でAgentを登録し、コーディングクライアントを紐付けます。続いて<a href="/docs/human-relay/">Human Relay</a>で確認依頼と回答の読み取りを進めます。書き込み前に<a href="/docs/permissions/">認証と権限</a>も確認。まずは双方が完了条件を確認できる小さなタスクで、一往復を試してください。</p>
@@ -136,10 +160,11 @@
 
     <section id="sources" class="solution-section" aria-labelledby="sources-title">
       <h2 id="sources-title">公開資料と内容確認日</h2>
-      <p>内容確認日：<time datetime="2026-10-06">2026年10月6日</time>。公開ソースrevision <a href="https://github.com/ELRdn/Guilduo/commit/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04"><code>42caab0fa1f396f15e4e1277f6e36dda1ac9bd04</code></a>を根拠に編集しています。</p>
+      <p>内容確認日：<time datetime="2026-10-12">2026年10月12日</time>。公開ソースrevision <a href="https://github.com/ELRdn/Guilduo/commit/479b21113d5cd9590c552fed5f0b1de2631be2ed"><code>479b21113d5cd9590c552fed5f0b1de2631be2ed</code></a>を根拠に編集しています。</p>
       <ul>
-        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json">public-docs/content.json</a>：Agent、Human Relay、Permissionsの記事。指摘の保存、外部環境での実行、各完了操作の区別。</li>
-        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json">api/mcp-tools.json</a>：担当割り当て、Handoff遷移、人への確認依頼、回答読み取りの契約。</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/public-docs/content.json">public-docs/content.json</a>：Agent、Human Relay、Permissionsの記事。指摘の保存、外部環境での実行、各完了操作の区別。</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/api/mcp-tools.json">api/mcp-tools.json</a>：担当割り当て、Handoff遷移、人への確認依頼、回答読み取りの契約。</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/docs/acceptance/guilduo-next-hosts-publication.md">2026年10月10日の開発者受入記録</a>：Codexの確認範囲と未受入項目。上記の内容確認日は、実機検証の再実行日ではありません。</li>
       </ul>
     </section>
   </main>
@@ -151,5 +176,6 @@
       <a href="/terms/">利用規約</a>
     </nav>
   </footer>
+<script type="module" src="/public-measurement.ts"></script>
 </body>
 </html>

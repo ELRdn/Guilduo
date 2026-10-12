@@ -251,7 +251,7 @@ npm run worker:dev
 
 TypeScript 开发时，Worker runtime type 会根据 Wrangler 配置自动生成。`npm run typecheck` 会合并类型生成、生成结果一致性检查、显式 `any` 和 `@ts-nocheck` 检查，以及 browser、Worker、Node 和 battle prototype 的 strict type check。Vite 转换与类型检查分离，API/MCP contract 由独立 test 维护。
 
-公开部署仅通过带有 `v*` tag 的 GitHub Actions 进行。pipeline 按 D1 migration、Worker deploy、health check 的顺序 gate，随后对 Appwrite Sites 公布内容执行 smoke test。Firebase migration 的验证和切换请遵循 [`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)。
+`v*` 标签 workflow 会核对 package version、带标签的 commit 是否为 `main` 的祖先以及 release notes，通过 CI、类型检查、测试、构建和 preview gate 后发布 GitHub 源码 Release。它不使用部署 secret，也不会自动执行生产 migration 或部署 Site、Worker。生产部署由现有手动 workflow `.github/workflows/deploy-appwrite-site.yml` / `.github/workflows/deploy-appwrite-worker.yml` 单独执行，并保留 `production` 环境保护和保留缓存的 gate。生产 Worker runtime 中仍保留直接部署的修复，尚未集成到公开源码，请勿先执行通用 Worker 部署。本体源码 Release `v0.6.0-beta.8` 与 host extensions `beta.12` 分别管理版本；Guilduo 仍处于公开 Beta。详情请参阅 [`RELEASE_SETUP.md`](RELEASE_SETUP.md)。
 
 ## 文档
 

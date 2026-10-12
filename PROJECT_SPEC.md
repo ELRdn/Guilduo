@@ -191,6 +191,10 @@ local
 
 ### 5.2 保存してはいけない情報
 
+公開LP・Docs・Solutionsの同意済み匿名計測は既存POST /telemetry（schemaVersion 1）へpublic_page_view / app_cta_clickを追加する。page（kind）、source、language（status）とsurfaceは有限allowlistで検証し、URL・任意UTM・検索語・account IDを送らない。既存D1と90日保存を使い、登録・活性化と結合しない。JST日次集計は運営者の既存D1権限によるCLIで取得し、人数・実ユーザー数として扱わない。拒否・撤回時は待機中イベントと端末内の流入分類を破棄する。
+
+ユーザー承認により公開ページへ専用GA4も追加する。GA4_MEASUREMENT_IDは公開設定としてrelease configへ注入し、同意後だけGoogle tagを読み込む。canonical URLのみを送りquery/hash/任意UTMを除去し、同じ有限流入区分を使う。広告同意・Google Signals・拡張自動計測・account ID連携は無効。Cookieは公開ホストに限定し最長90日、GA4のuser/event保存は2か月。撤回でga-disableを立て待機イベントとCookieを破棄する。Web App・認証・登録・Quest操作にはGA4を追加しない。
+
 - Appwrite JWT、OAuthトークン、Appwrite API Key、Provider Secret
 - モデルAPIキー、パスワード、外部実行URL
 - Quest本文・メモ・UIDを匿名計測へ送信すること
@@ -255,7 +259,8 @@ Windows native acceptance, public OAuth, guarded writes, Human answer/resumption
 - `PRIVACY.md` and `TERMS.md` are the content sources for the static `/privacy/` and `/terms/` pages. Local output does not establish production availability, handling of deletion requests or legal acceptance. See `docs/launch-readiness.md`.
 - The official service operator is Radon. Public bug reports go to the existing Guilduo GitHub Issues page; individual inquiries and account/data deletion requests go to `el2radon2official@gmail.com`. Self-hosted instances publish their own operator contact. Policy pages render the canonical documents' HTTPS and mailto links without requiring JavaScript. Publishing this contact does not establish legal review or completion of a deletion request.
 
-- CI, manual Site deployment and tagged release run the existing launch verifier against the built candidate in a local preview before publication. Privacy/Terms must contain their canonical content and Radon contact links without JavaScript; signed-out entry and demo return must pass in nine languages. A failed verifier stops deployment before remote migrations, uploads or activation. This local gate does not establish live OAuth, production policy delivery or legal/operational acceptance.
+- CI, manual Site deployment and tagged source release run the existing launch verifier against the built candidate in a local preview before publication. Privacy/Terms must contain their canonical content and Radon contact links without JavaScript; signed-out entry and demo return must pass in nine languages. A failed verifier stops publication. This local gate does not establish live OAuth, production policy delivery or legal/operational acceptance.
+- From October 12, 2026, `v*` tags publish GitHub source releases only after matching package version, nonempty versioned notes and main ancestry. The tagged workflow uses isolated example configuration and performs no production migrations, deployments or secret updates. Site and Worker deployment remain separate manual workflows with their existing safety gates. GitHub Latest follows the current core beta and does not establish GA readiness. Independently versioned host extensions remain separate; unreconciled live Worker changes must be integrated before generic Worker deployment.
 
 - Mobile Quest Flow uses a native modal dialog: background controls are excluded from accessibility and cannot receive focus. Explicit close, Escape, scrim dismissal, selection and desktop resize release modality; focus returns to the current trigger. Queued opening after disposal is ignored. Browser accessibility-tree evidence does not establish physical screen-reader acceptance.
 
@@ -275,6 +280,7 @@ Windows native acceptance, public OAuth, guarded writes, Human answer/resumption
 - UIの見た目、コンポーネント、レイアウト、モーションを変更する場合は[`DESIGN.md`](DESIGN.md)を先に更新する。
 - `/next/`のUI実験は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)へ記録し、現行版へ自動昇格しない。
 - 本番リリースは型チェック、テスト、ビルド、契約差分、Worker health、Appwrite Auth/TablesDB/Sites smoke testを通過してから行う。
+- Siteのprevious-shell receipt v2はCloudflare JSDの既知のrequest Ray IDと10桁timestampだけを比較時に正規化する。保存probeの実bytes、その他のHTML/script、全asset hashと48時間retentionは維持し、v1は従来の完全一致で読み続ける。未知のscript形状や不正timestampは拒否する。
 - Unity、外部OAuth、Agent自動実行は、この文書の更新なしに公開βへ戻さない。
 
 ## 8. 参照先

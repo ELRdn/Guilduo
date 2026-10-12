@@ -80,7 +80,7 @@ test("service worker upgrades an existing Guilduo client once", () => {
   assert.match(worker, /fetch\(request, \{ cache: "no-store" \}\)/);
   assert.match(app, /updateViaCache: "none"/);
   assert.match(app, /showAppUpdateAvailable/);
-  assert.match(fs.readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8"), /Deploy Appwrite Site/);
+  assert.match(fs.readFileSync(path.join(root, ".github/workflows/deploy-appwrite-site.yml"), "utf8"), /Upload and activate Appwrite Site/);
 });
 
 test("Vite emits the LP and beta UI as Appwrite Sites static routes", () => {

@@ -181,10 +181,8 @@ test("release config rejects a path-bearing public origin instead of silently ch
   });
 });
 
-test("release config generation still emits the AGENT_AVATARS binding on a second (tagged-release) regeneration pass", () => {
-  // The workflow calls the generator twice: once before the Appwrite Site
-  // deploy, once after (to pick up the real Site URL). The binding must
-  // survive being regenerated, not just appear on a first run.
+test("release config generation retains AGENT_AVATARS when the Site URL changes", () => {
+  // Regeneration must retain the binding while replacing the Site URL.
   withTempDir((dir) => {
     const env = { ...process.env, ...BASE_ENV, R2_BUCKET_NAME: "guilduo-agent-avatars-prod" };
     runGenerator(dir, env);

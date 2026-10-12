@@ -199,6 +199,8 @@ npm test
 
 upload前のarchive検査は、実際のtarに含まれる検証HTMLが、その時点で公開中のHTMLと一致することを確認する。欠落・改変・別のHTMLへの差し替え・古い配備への巻き戻しは失敗させる。検証ページは毎回、直前のHTMLに置き換える。参照先assetは従来どおり48時間保持する。
 
+2026-10-12のreceipt v2では、Cloudflare JSDが挿入する既知のrequest Ray IDとbase64の10桁timestampだけを比較時に正規化する。元HTMLのSHAはこの比較用表現、検証HTMLのSHAは保存した実bytesから計算する。検証HTMLには元のsecurity scriptをそのまま残す。その他のHTML・script本文・loader URL・assetは完全一致を要求し、未知形状や不正timestampは拒否する。v1 receiptは従来のraw SHAと完全一致で読み続ける。security ruleやキャッシュガードを解除するための例外ではない。
+
 Site配備後、ログイン済みブラウザでこのURLを新規navigationとして開き、旧scriptが200・正しいMIMEで読み込まれること、認証済みCommandとQuest一覧が描画されることを確認する。必要なら現在の正式rootへ戻り、同じデータと新bundleの起動も比較する。書き込みは不要。元HTMLとの差分検査やassetのhash一致だけではこの起動確認を代替しない。
 
 **この仕組みの追加だけではTTL/SWRを変更しない。** 本番で旧HTMLの起動を確認してから、保持48時間を超えないキャッシュ期間を個別に評価する。配備時の両キャッシュルール停止・DYNAMIC/BYPASS確認・起動検証・240秒経過の手順は、設定変更を文書化するまで維持する。
