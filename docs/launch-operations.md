@@ -18,7 +18,7 @@ The checker validates records and file hashes. It cannot prove that a human actu
 | `node --import tsx tools/verify-launch-gates.mts release` | LA-01–08, LA-11–16 and BM-01–05; approved Live sale and Jev | Final pre-Release approval; LA-08 here means **Go**, not that Release already exists |
 | `node --import tsx tools/verify-launch-gates.mts complete` | All 21 gates plus elapsed observation and final operator approval | Launch closure eligible only after actual publication and observation |
 
-Normal CI runs local tests without a manifest. Every public workflow requires the signed artifact, even manual deployments. Missing/stale/failed acceptance refuses final Release. Manual workflows use the same `appwrite-site-production` lock as tagged Release. Nothing in this runbook commits, pushes, tags, deploys, posts, purchases or creates monitors by itself.
+These signed stages describe the planned paid commercial launch. Billing, Jev and linked analytics remain disabled in the free beta. Current source tags and manual free-beta deployments follow `RELEASE_SETUP.md`; the tag workflow publishes source only and has no production secrets. A source Release does not close commercial acceptance. Missing or stale signed acceptance still refuses the commercial launch verifier. Nothing in this runbook performs publication or activation by itself.
 
 Minimal **incomplete template**, deliberately rejected until reviewed records replace the placeholders:
 

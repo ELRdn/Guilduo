@@ -5,7 +5,7 @@ const root = resolve(process.cwd());
 const failures: string[] = [];
 
 function read(path: string): string {
-  return readFileSync(join(root, path), "utf8");
+  return readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n");
 }
 
 function requireText(path: string, text: string): void {

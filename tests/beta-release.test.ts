@@ -85,7 +85,7 @@ test("CLI and direct MCP template keep the optional App example separate and cre
   const submission = read("plugins/questforge/openai-submission.json");
   const appExample = JSON.parse(read("plugins/questforge/.app.json"));
   assert.equal(packageJson.bin.questforge, "cli/questforge.ts");
-  assert.equal(packageJson.version, "0.6.0-beta.8");
+  assert.equal(packageJson.version, "0.6.0-beta.9");
   assert.equal(plugin.name, "questforge");
   assert.equal(plugin.version, "0.6.0-beta.12");
   assert.equal(plugin.mcpServers, "./.mcp.json");

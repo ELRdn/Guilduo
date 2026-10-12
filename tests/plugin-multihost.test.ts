@@ -43,24 +43,19 @@ test("five host packages share canonical files and keep host authentication and 
         await assert.rejects(readFile(join(plugin, "assets", "private.json")), { code: "ENOENT" });
         await assert.rejects(readFile(join(plugin, ".app.json")), { code: "ENOENT" });
         const readJson = async (path: string): Promise<Record<string, unknown>> => JSON.parse(await readFile(join(plugin, path), "utf8")) as Record<string, unknown>;
-        if (target === "openai" || target === "grok") {
+        if (target === "openai") {
+          const manifest = await readJson(".codex-plugin/plugin.json");
+          assert.equal(manifest.name, "guilduo-workflows");
+          assert.equal(manifest.skills, "./skills/");
+          assert.equal(manifest.hooks, hooks ? "./hooks/hooks.json" : undefined);
+          await assert.rejects(readFile(join(plugin, "plugin.json")), { code: "ENOENT" });
+          assert.deepEqual(await readJson(".mcp.json"), { mcpServers: { questforge: { type: "http", url: "https://mcp.guilduo.com/mcp", authentication: "oauth" } } });
+        } else if (target === "grok") {
           const manifest = await readJson("plugin.json");
           assert.equal(manifest.$schema, "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json");
           assert.equal(manifest.name, "guilduo-workflows");
-          assert.equal(manifest.skills, undefined);
-          assert.equal(manifest.mcpServers, undefined);
-          assert.deepEqual(await readJson("mcp.json"), { $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
-            mcpServers: { questforge: { type: "streamable-http", url: "https://mcp.guilduo.com/mcp" } } });
-          if (target === "grok") assert.equal(manifest.extensions, undefined);
-          else {
-            const inline = (manifest.extensions as Record<string, Record<string, unknown>>)["com.openai"]!;
-            const compatibility = await readJson(".codex-plugin/plugin.json");
-            assert.equal(compatibility.name, "guilduo-workflows");
-            assert.equal(compatibility.skills, "./skills/");
-            assert.deepEqual(inline.interface, compatibility.interface);
-            assert.deepEqual(inline.hooks, compatibility.hooks);
-            assert.deepEqual(inline.review, (compatibility.extensions as Record<string, Record<string, unknown>>)["com.openai"]!.review);
-          }
+          assert.equal(manifest.extensions, undefined);
+          assert.deepEqual(await readJson("mcp.json"), { $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: { questforge: { type: "streamable-http", url: "https://mcp.guilduo.com/mcp" } } });
         } else if (target === "pi") {
           const manifest = await readJson("package.json");
           assert.equal(manifest.name, "guilduo-workflows");
@@ -101,8 +96,7 @@ test("five host packages share canonical files and keep host authentication and 
         }
         if (hooks && target !== "pi" && target !== "muse") {
           const hookText = await readFile(join(plugin, "hooks", "hooks.json"), "utf8");
-          assert.match(hookText, /CLAUDE_PLUGIN_ROOT/);
-          assert.match(hookText, /MUSE_PLUGIN_ROOT/);
+          assert.match(hookText, target === "openai" ? /PLUGIN_ROOT/ : /CLAUDE_PLUGIN_ROOT|MUSE_PLUGIN_ROOT/);
         }
         const validation = JSON.parse(await readFile(join(output, "validation.json"), "utf8")) as {
           liveAcceptance: string; target: string; version: string; files: { path: string; sha256: string }[];
