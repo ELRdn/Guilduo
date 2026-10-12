@@ -41,7 +41,7 @@ for (const [firebaseUid, rawUser] of Object.entries(rootUsers)) {
   if (!email || !Array.isArray(state.tasks)) { skipped.push(firebaseUid); continue; }
   const rawStateJson = JSON.stringify(state);
   const stateJson = `gzip:${gzipSync(rawStateJson).toString("base64")}`;
-  if (stateJson.length > 60_000) throw new Error(`State for ${firebaseUid} exceeds the compressed Appwrite row limit.`);
+  // legacy_states.stateJson uses longtext, matching the Worker's user_states storage contract.
   items.push({
     firebaseUid,
     email,
