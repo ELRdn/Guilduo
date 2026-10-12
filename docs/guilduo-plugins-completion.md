@@ -12,6 +12,8 @@
 
 ## 独立評価と証拠
 
+2026-10-11の本人報告追記：DSH beta.17で安定動作を確認。Guilduoの再接続には**New Chat**で新しい会話を開始する必要があり、本人は許容できる操作上の制約と評価しています。これは本人報告であり、上表の独立レビューやHuman／Handoff等の未受入項目を完了に読み替えるものではありません。
+
 - Faraday担当: [OpenCode完了評価](guilduo-opencode-completion-review.md)。公開tgz、固定archive、公開source commitの14ファイルを今回直接比較。新しいruntime修正必須事項はなし。
 - Boyle担当: [OpenClaw完了評価](guilduo-openclaw-completion-review.md)。npm tgz・ClawHub公開ZIPの16ファイルと公開sourceを直接比較し、公開registryのscan／検索状態を確認。
 - Darwin担当: [DSH完了評価](guilduo-dsh-completion-review.md)。親の保守実装に対する独立レビュー。beta.16の[元の所見・再現条件・優先度](guilduo-dsh-independent-review.md)は履歴として保持。

@@ -35,6 +35,8 @@ The endpoint is `https://mcp.guilduo.com/mcp`; the plugin configures it. Install
 
 ## 3. Check the connection and start work
 
+**When reconnecting with beta.17, press New Chat to start a new conversation.** On October 11, 2026, the user reported stable operation with this required step in their environment. Reconnection within an existing conversation has not been verified.
+
 Ask DSH: **“Check the Guilduo MCP connection read-only with get_agent_link and get_current_agent_context. Do not create, update or delete anything.”** Successful responses confirm a live connection. Do not paste OAuth callbacks or credential files into a conversation or issue.
 
 To work on a Quest, name the target and what changes you authorize. Sharing login does not grant standing Quest-write permission. Link an existing Registry Agent through Guilduo's connection settings when the workflow requires one; the DSH runtime Agent and Guilduo Registry Agent are different identities. Do not create an Agent per conversation or host; Free remains **2 registered Agents**.
@@ -58,6 +60,7 @@ Desktop removal uses its native plugin manager. Removing the plugin alone is not
 | Symptom | Action |
 | --- | --- |
 | No Guilduo Settings section | Confirm the package is installed in the profile you launched; restart that host and reload the browser. |
+| Reconnecting Guilduo | Press **New Chat** to start a new conversation, then check the connection. This step is required in the user's beta.17 environment. |
 | Browser authorization cannot return | Use a browser on the host computer via localhost/loopback; a LAN or remote browser is unsupported. Retry explicitly if the flow expires. |
 | Connected in one old conversation only | Use **全会話で使う** in that original conversation. No automatic migration searches other credentials. |
 | OAuth works but no tools appear | Check the target conversation is eligible, and use the read-only check above. If discovery fails or the catalog changes, restart the host and check Settings. |
