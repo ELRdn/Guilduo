@@ -32,6 +32,7 @@
     "visual:check": "tsx tools/visual-regression.mts check",
     "visual:matrix": "tsx tools/visual-regression.mts matrix",
     "lp:verify": "tsx tools/verify-lp.mts",
+    "docs:verify": "tsx tools/verify-public-docs.mts",
     "lp:capture": "tsx tools/capture-lp.mts",
     "cli": "tsx cli/questforge.ts",
     "generate-release-config": "tsx tools/generate-release-config.mts",
@@ -47,7 +48,6 @@
     "generate-types": "wrangler types",
     "lpv2:verify": "tsx tools/verify-lpv2.mts",
     "lpv21:verify": "tsx tools/verify-lpv21.mts",
-    "docs:verify": "tsx tools/verify-public-docs.mts",
     "solutions:verify": "tsx tools/verify-public-solutions.mts"
   },
   "bin": {

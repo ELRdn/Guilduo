@@ -60,6 +60,31 @@ export interface R2BucketLike {
 }
 
 export interface WorkerEnv {
+  ANALYTICS_ENABLED?: string;
+  ANALYTICS_CONFIG?: string;
+  ANALYTICS_DATA_POLICY_APPROVED?: string;
+  ANALYTICS_TOKEN_KEY?: string;
+  ANALYTICS_ADMIN_TOKEN?: string;
+  /** Isolated-test clock/origin switches; not emitted by release configuration. */
+  ANALYTICS_NOW?: string;
+  ANALYTICS_ALLOW_LOCAL?: string;
+  /** Billing rollout is opt-in; credentials and product approval are separate gates. */
+  BILLING_ENABLED?: string;
+  BILLING_MODE?: string;
+  BILLING_CONFIG?: string;
+  BILLING_NOW?: string;
+  BILLING_ADMIN_TOKEN?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  JEV_ENABLED?: string;
+  JEV_MODEL?: string;
+  TYPESAFE_API_KEY?: string;
+  JEV_INPUT_USD_PER_MILLION?: string;
+  JEV_OUTPUT_USD_PER_MILLION?: string;
+  JEV_DATA_POLICY_APPROVED?: string;
+  JEV_EVALUATION_BUDGET_USD?: string;
+  JEV_BUDGET_SCOPE?: string;
+  JEV_COMMERCIAL_CONFIG?: string;
   QUESTFORGE_KV?: KvNamespaceLike;
   QUESTFORGE_DB?: D1DatabaseLike;
   /** Private Agent and profile avatar image bytes. Namespace prefixes and D1 metadata keep ownership separate. */
@@ -71,7 +96,10 @@ export interface WorkerEnv {
   APPWRITE_LEGACY_TABLE_ID?: string;
   APPWRITE_API_KEY?: string;
   APPWRITE_REVISION_BATCH?: string;
+  APPWRITE_PREPARED_TRANSACTIONS?: string;
   PUBLIC_BASE_URL?: string;
+  /** Public portal-issued domain verification challenge; unset disables the route. */
+  OPENAI_APPS_CHALLENGE_TOKEN?: string;
   /** Provider OAuth callback origin; falls back to PUBLIC_BASE_URL for compatibility. */
   PROVIDER_OAUTH_BASE_URL?: string;
   /** Comma/space separated exact origins allowed to identify the MCP server. */

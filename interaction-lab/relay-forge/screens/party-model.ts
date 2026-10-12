@@ -6,7 +6,7 @@
  */
 
 import type { Quest } from "../../../types/questforge.ts";
-import { type Actor, questRef } from "../model.ts";
+import { questRef, type Actor } from "../model.ts";
 import { t } from "../../../i18n.ts";
 import { relayText } from "../relay-copy.ts";
 import { instantLabel, type ScreenNotice } from "./screen-state.ts";

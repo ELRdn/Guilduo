@@ -1,5 +1,5 @@
 import { getOAuthRecordStore, oauthStorageKind, oauthStorageLogContext, purgeOAuthRecordKeys } from "./oauth-record-store.ts";
-import { ALL_SCOPES, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
+import { ALL_SCOPES, getKv, isAllowedOAuthResource, oauthClientDisconnectKey, randomToken, sha256, verifyAppwriteJwt } from "./security.ts";
 import type { AuthIdentity } from "./security.ts";
 import { mcpOriginForRequest, primaryMcpOrigin } from "./mcp-origin.ts";
 import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
@@ -15,7 +15,7 @@ type AuthorizationRequest = {
   uid?: string;
   email?: string;
 };
-type ClientGrant = { uid: string; clientId: string; clientName?: string; scopes: string[]; firstConnectedAt?: string; lastUsedAt?: string; revokedAt?: string; accessHash?: string; refreshHash?: string; refreshExpiresAt?: number; email?: string; redirectUri?: string; challenge?: string };
+type ClientGrant = { uid: string; clientId: string; clientName?: string; scopes: string[]; resource?: string; firstConnectedAt?: string; lastUsedAt?: string; revokedAt?: string; accessHash?: string; refreshHash?: string; refreshExpiresAt?: number; email?: string; redirectUri?: string; challenge?: string };
 
 const MAX_CLIENT_ID_LENGTH = 128;
 const MAX_REDIRECT_URI_LENGTH = 2048;
@@ -70,6 +70,7 @@ function asClient(value: unknown): ClientRecord | null {
 function asAuthorizationRequest(value: unknown): AuthorizationRequest | null {
   const item = asRecord(value);
   if (typeof item.clientId !== "string" || typeof item.redirectUri !== "string" || typeof item.challenge !== "string") return null;
+  if (item.resource !== undefined && typeof item.resource !== "string") return null;
   return {
     clientId: item.clientId,
     redirectUri: item.redirectUri,
@@ -83,8 +84,14 @@ function asAuthorizationRequest(value: unknown): AuthorizationRequest | null {
 }
 
 function asClientGrant(value: unknown): ClientGrant | null {
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { return null; }
+  }
   const item = asRecord(value);
-  if (typeof item.uid !== "string" || typeof item.clientId !== "string" || !Array.isArray(item.scopes)) return null;
+  if (typeof item.uid !== "string" || !item.uid || typeof item.clientId !== "string" || !item.clientId || !Array.isArray(item.scopes)
+    || item.scopes.some(scope => typeof scope !== "string" || !ALL_SCOPES.includes(scope))
+    || (item.revokedAt !== undefined && typeof item.revokedAt !== "string")
+    || (item.refreshHash !== undefined && typeof item.refreshHash !== "string")) return null;
   return {
     ...item,
     uid: item.uid,
@@ -141,13 +148,15 @@ function oauthBase(request: Request, env: WorkerEnv): string {
 }
 
 function allowedScopes(value: unknown): string[] | null {
+  if (value === null || value === undefined) return [...ALL_SCOPES];
   if (typeof value === "string" && value.length > MAX_SCOPE_LENGTH) return null;
   const requested = typeof value === "string" ? value.trim().split(/\s+/).filter(Boolean) : [];
   // An explicit scope is the snapshot for this authorization request. Never
   // merge it with an existing grant: OAuth permissions are not escalated
   // silently. Missing scope keeps the backwards-compatible full-scope default
   // for a new authorization request.
-  const scopes = requested.length ? [...new Set(requested)] : [...ALL_SCOPES];
+  if (!requested.length) return null;
+  const scopes = [...new Set(requested)];
   return scopes.every((scope) => ALL_SCOPES.includes(scope)) ? scopes : null;
 }
 
@@ -222,6 +231,7 @@ export async function registerClient(request: Request, env: WorkerEnv): Promise<
 
 export async function authorizePage(request: Request, env: WorkerEnv): Promise<Response> {
   const url = new URL(request.url);
+  if (["response_type", "client_id", "redirect_uri", "code_challenge", "code_challenge_method", "state", "scope"].some(key => url.searchParams.getAll(key).length > 1)) return oauthError("invalid_request");
   const requestedLanguage = url.searchParams.get("lang") || request.headers.get("accept-language") || "ja";
   const locale = requestedLanguage.toLowerCase().startsWith("ja") ? "ja" : "en";
   const copy = locale === "ja" ? {
@@ -253,6 +263,7 @@ export async function authorizePage(request: Request, env: WorkerEnv): Promise<R
   const resource = url.searchParams.get("resource") || "";
   const scopes = allowedScopes(url.searchParams.get("scope"));
   if (responseType !== "code" || !isSafeClientId(clientId) || !isAllowedRedirectUri(redirectUri) || !isSafePkceChallenge(challenge) || url.searchParams.get("code_challenge_method") !== "S256" || state.length > MAX_STATE_LENGTH || resource.length > MAX_RESOURCE_LENGTH) return oauthError("invalid_request");
+  if (url.searchParams.has("resource") && (url.searchParams.getAll("resource").length !== 1 || !isAllowedOAuthResource(resource, env))) return oauthError("invalid_target");
   if (!scopes) return oauthError("invalid_scope");
   const store = getOAuthRecordStore(env);
   const client = asClient(await atOAuthStage("client_load", env, "get", () => store.get(`client:${clientId}`, "json")));
@@ -311,13 +322,30 @@ export async function approveAuthorization(request: Request, env: WorkerEnv): Pr
   if (!pending) return json({ error: "authorization_request_expired" }, 400);
   let identity;
   try { identity = await verifyAppwriteJwt(jwt, env); } catch { return json({ error: "invalid_appwrite_token" }, 401); }
+  if (!await consumeOAuthRecord(env, `authorize:${requestId}`)) return oauthError("authorization_request_expired");
   const code = randomToken("qfcode");
   await kv.put(`code:${await sha256(code)}`, JSON.stringify({ ...pending, uid: identity.uid, email: identity.email }), { expirationTtl: 300 });
-  await kv.delete(`authorize:${requestId}`);
   const redirect = new URL(pending.redirectUri);
   redirect.searchParams.set("code", code);
   if (pending.state) redirect.searchParams.set("state", pending.state);
   return json({ redirect: redirect.toString() });
+}
+
+async function consumeOAuthRecord(env: WorkerEnv, key: string): Promise<boolean> {
+  if (env.QUESTFORGE_DB) {
+    const now = Date.now();
+    // A tombstone also masks legacy KV read-through. Only one concurrent
+    // consumer may insert it or change a live D1 row into a tombstone.
+    const result = await env.QUESTFORGE_DB.prepare(`INSERT INTO oauth_records
+      (record_key, value_json, expires_at, is_deleted, updated_at) VALUES (?, '', 0, 1, ?)
+      ON CONFLICT(record_key) DO UPDATE SET value_json = '', expires_at = 0, is_deleted = 1, updated_at = excluded.updated_at
+      WHERE oauth_records.is_deleted = 0 AND (oauth_records.expires_at = 0 OR oauth_records.expires_at > ?)`)
+      .bind(key, now, now).run();
+    return result.meta?.changes === 1;
+  }
+  // ponytail: KV has no atomic consume; use D1 for cross-isolate single-use guarantees.
+  await getOAuthRecordStore(env).delete(key);
+  return true;
 }
 
 async function readClientGrantIndex(env: WorkerEnv, uid: string, clientId: string): Promise<ClientGrant | null> {
@@ -335,6 +363,7 @@ async function writeClientGrantIndex(env: WorkerEnv, grant: ClientGrant, tokenHa
     clientId: grant.clientId,
     clientName: client?.clientName || "Guilduo MCP client",
     scopes: grant.scopes || [],
+    ...(grant.resource ? { resource: grant.resource } : {}),
     firstConnectedAt: existing?.firstConnectedAt || now,
     lastUsedAt: now,
     revokedAt: "",
@@ -373,13 +402,23 @@ export async function noteAuthorizedClientUse(env: WorkerEnv, identity: AuthIden
   try {
     const kv = getOAuthRecordStore(env);
     const key = `user-client:${identity.uid}:${identity.clientId}`;
-    const record = await readClientGrantIndex(env, identity.uid, identity.clientId);
+    const previousValue = await kv.get<string>(key);
+    const record = asClientGrant(previousValue);
     if (!record || record.revokedAt) return;
     const now = Date.now();
     const previous = Date.parse(record.lastUsedAt || "");
     if (Number.isFinite(previous) && now - previous < CLIENT_LAST_USED_WRITE_INTERVAL_MS) return;
     record.lastUsedAt = new Date(now).toISOString();
-    await kv.put(key, JSON.stringify(record));
+    if (env.QUESTFORGE_DB) {
+      // Observability must never restore a deleted/revoked/replaced grant.
+      // Legacy read-through rows wait for an explicit lifecycle write to migrate.
+      await env.QUESTFORGE_DB.prepare(`UPDATE oauth_records SET value_json = ?, updated_at = ?
+        WHERE record_key = ? AND value_json = ? AND is_deleted = 0 AND (expires_at = 0 OR expires_at > ?)`)
+        .bind(JSON.stringify(record), now, key, previousValue, now).run();
+    } else {
+      // ponytail: KV cannot compare-and-set; use D1 for concurrent lifecycle writes.
+      await kv.put(key, JSON.stringify(record));
+    }
   } catch (error) {
     // Activity metadata is observability, not authorization state. A quota or
     // storage outage must not turn a valid MCP request into an authentication
@@ -396,11 +435,18 @@ export async function noteAuthorizedClientUse(env: WorkerEnv, identity: AuthIden
   }
 }
 
-export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
+export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, clientId: string, expectedRefreshHash?: string): Promise<JsonRecord | null> {
   const kv = getOAuthRecordStore(env);
   const key = `user-client:${uid}:${clientId}`;
+  // Explicit owner Disconnect survives history deletion. Exact-token-family
+  // revocation must leave other/current consent for this client untouched.
+  if (expectedRefreshHash === undefined) await kv.put(await oauthClientDisconnectKey(uid, clientId), "1");
+  const persisted = env.QUESTFORGE_DB && await env.QUESTFORGE_DB.prepare(
+    "SELECT record_key FROM oauth_records WHERE record_key = ?",
+  ).bind(key).first();
   const record = await readClientGrantIndex(env, uid, clientId);
   if (!record) return null;
+  if (expectedRefreshHash !== undefined && (record.refreshHash || "") !== expectedRefreshHash) return null;
   // Keep Disconnect idempotent, but do not treat a legacy revoked marker as
   // proof that its access/refresh records were cleaned up. Replaying this
   // explicit lifecycle action must fail closed before returning the history.
@@ -414,7 +460,22 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
   // handles. They are never returned by publicClientGrant(), and retaining
   // them lets a later hard delete remove the corresponding D1/legacy token
   // metadata while the refresh-revoked tombstone continues to block replay.
-  await kv.put(key, JSON.stringify(record));
+  if (env.QUESTFORGE_DB) {
+    // Migrate a legacy row only if no D1 record exists; otherwise match the
+    // refresh family and patch only revokedAt, preserving concurrent activity.
+    await env.QUESTFORGE_DB.prepare(`INSERT INTO oauth_records
+      (record_key, value_json, expires_at, is_deleted, updated_at)
+      SELECT ?, ?, 0, 0, ? WHERE ? = 0 OR EXISTS (SELECT 1 FROM oauth_records WHERE record_key = ?)
+      ON CONFLICT(record_key) DO UPDATE SET
+        value_json = json_set(oauth_records.value_json, '$.revokedAt',
+          COALESCE(NULLIF(json_extract(oauth_records.value_json, '$.revokedAt'), ''), ?)),
+        updated_at = excluded.updated_at
+      WHERE oauth_records.is_deleted = 0 AND json_valid(oauth_records.value_json)
+        AND COALESCE(json_extract(oauth_records.value_json, '$.refreshHash'), '') = ?`)
+      .bind(key, JSON.stringify(record), Date.now(), persisted ? 1 : 0, key, record.revokedAt, record.refreshHash || "").run();
+  } else {
+    await kv.put(key, JSON.stringify(record));
+  }
   return publicClientGrant(record);
 }
 
@@ -426,28 +487,42 @@ export async function revokeAuthorizedClient(env: WorkerEnv, uid: string, client
  */
 export async function deleteAuthorizedClient(env: WorkerEnv, uid: string, clientId: string): Promise<JsonRecord | null> {
   const key = `user-client:${uid}:${clientId}`;
-  const record = await readClientGrantIndex(env, uid, clientId);
-  if (!record) {
-    await purgeOAuthRecordKeys(env, [key]);
-    return null;
-  }
-  if (!record.revokedAt) {
+  const kv = getOAuthRecordStore(env);
+  const previousValue = await kv.get<string>(key);
+  const record = asClientGrant(previousValue);
+  if (record && !record.revokedAt) {
     throw Object.assign(new Error("Disconnect the active OAuth connection before deleting its history."), {
       status: 409,
       code: "oauth_connection_active",
     });
   }
-
-  const kv = getOAuthRecordStore(env);
+  await kv.put(await oauthClientDisconnectKey(uid, clientId), "1");
+  if (!record) {
+    if (env.QUESTFORGE_DB) {
+      await getKv(env).delete(key);
+      await env.QUESTFORGE_DB.prepare(`DELETE FROM oauth_records
+        WHERE record_key = ? AND (is_deleted = 1 OR (expires_at > 0 AND expires_at <= ?))`)
+        .bind(key, Date.now()).run();
+    } else {
+      await purgeOAuthRecordKeys(env, [key]);
+    }
+    return null;
+  }
   // Legacy rows may have been marked revoked by an older build without a
   // replay tombstone. Establish the fail-closed marker before removing the
   // token record; it is intentionally retained after the hard delete.
   if (record.refreshHash) await kv.put(`refresh-revoked:${record.refreshHash}`, "1");
   await purgeOAuthRecordKeys(env, [
-    key,
     record.accessHash ? `access:${record.accessHash}` : "",
     record.refreshHash ? `refresh:${record.refreshHash}` : "",
   ]);
+  if (env.QUESTFORGE_DB) {
+    await getKv(env).delete(key);
+    await env.QUESTFORGE_DB.prepare("DELETE FROM oauth_records WHERE record_key = ? AND value_json = ? AND is_deleted = 0")
+      .bind(key, previousValue).run();
+  } else {
+    await purgeOAuthRecordKeys(env, [key]);
+  }
   return publicClientGrant(record);
 }
 
@@ -464,7 +539,8 @@ async function issueTokens(env: WorkerEnv, grant: ClientGrant, options: TokenIss
   const refreshExpiresAt = Number.isFinite(options.refreshExpiresAt) && Number(options.refreshExpiresAt) > now
     ? Number(options.refreshExpiresAt)
     : now + REFRESH_TOKEN_TTL_SECONDS * 1000;
-  const record = { uid: grant.uid, email: grant.email, scopes: grant.scopes, clientId: grant.clientId };
+  const record = { uid: grant.uid, email: grant.email, scopes: grant.scopes, clientId: grant.clientId,
+    ...(grant.resource ? { resource: grant.resource } : {}) };
   await kv.put(`access:${accessHash}`, JSON.stringify({ ...record, refreshHash, expiresAt: now + expiresIn * 1000 }), { expirationTtl: expiresIn });
   // Keep the refresh credential stable across refreshes. This makes retries and
   // concurrent refresh requests idempotent; revocation is represented by the
@@ -474,6 +550,7 @@ async function issueTokens(env: WorkerEnv, grant: ClientGrant, options: TokenIss
   // both its record and the grant on every refresh added two writes without
   // changing authorization. Revocation remains complete because every access
   // record carries refreshHash and authenticateRequest checks its tombstone.
+  // Narrowed scope/resource applies only to this access token, not the stored grant.
   if (!options.refreshToken) {
     const refreshTtl = Math.max(1, Math.ceil((refreshExpiresAt - now) / 1000));
     await kv.put(`refresh:${refreshHash}`, JSON.stringify({ ...record, accessHash, refreshHash, refreshExpiresAt }), { expirationTtl: refreshTtl });
@@ -490,8 +567,12 @@ export async function tokenEndpoint(request: Request, env: WorkerEnv): Promise<R
     return oauthError("invalid_request");
   }
   const grantType = formText(body, "grant_type");
+  if (["grant_type", "code", "redirect_uri", "code_verifier", "refresh_token"].some(key => body.getAll(key).length > 1)) return oauthError("invalid_request");
+  const resource = formText(body, "resource");
+  if (body.has("resource") && (body.getAll("resource").length !== 1 || !isAllowedOAuthResource(resource, env))) return oauthError("invalid_target");
   const kv = getOAuthRecordStore(env);
   if (grantType === "authorization_code") {
+    if (body.getAll("client_id").length > 1) return oauthError("invalid_request");
     const code = formText(body, "code");
     const clientId = formText(body, "client_id");
     const redirectUri = formText(body, "redirect_uri");
@@ -500,9 +581,11 @@ export async function tokenEndpoint(request: Request, env: WorkerEnv): Promise<R
     const codeHash = await sha256(code);
     const pending = asAuthorizationRequest(await kv.get(`code:${codeHash}`, "json"));
     if (!pending || !pending.uid || pending.clientId !== clientId || pending.redirectUri !== redirectUri) return oauthError("invalid_grant");
+    if ((pending.resource && !isAllowedOAuthResource(pending.resource, env)) || (resource && pending.resource && resource !== pending.resource)) return oauthError("invalid_target");
     const grant: ClientGrant = { ...pending, uid: pending.uid };
+    if (resource) grant.resource = resource;
     if (await sha256(codeVerifier) !== grant.challenge) return oauthError("invalid_grant");
-    await kv.delete(`code:${codeHash}`);
+    if (!await consumeOAuthRecord(env, `code:${codeHash}`)) return oauthError("invalid_grant");
     return json(await issueTokens(env, grant), 200, { "cache-control": "no-store" });
   }
   if (grantType === "refresh_token") {
@@ -512,10 +595,22 @@ export async function tokenEndpoint(request: Request, env: WorkerEnv): Promise<R
     if (await kv.get(`refresh-revoked:${refreshHash}`)) return oauthError("invalid_grant");
     const grant = asClientGrant(await kv.get(`refresh:${refreshHash}`, "json"));
     if (!grant || grant.revokedAt) return oauthError("invalid_grant");
+    if (body.has("client_id") && (body.getAll("client_id").length !== 1 || formText(body, "client_id") !== grant.clientId)) return oauthError("invalid_grant");
+    if ((grant.resource !== undefined && grant.resource !== "" && !isAllowedOAuthResource(grant.resource, env)) || (resource && grant.resource && resource !== grant.resource)) return oauthError("invalid_target");
+    if (resource) grant.resource = resource;
+    if (body.has("scope")) {
+      const requested = formText(body, "scope");
+      const scopes = requested.trim().split(/\s+/).filter(Boolean);
+      if (body.getAll("scope").length !== 1 || requested.length > MAX_SCOPE_LENGTH || !scopes.length || scopes.some((scope) => !grant.scopes.includes(scope))) return oauthError("invalid_scope");
+      grant.scopes = [...new Set(scopes)];
+    }
     const refreshExpiresAt = Number(grant.refreshExpiresAt || 0);
     if (!Number.isFinite(refreshExpiresAt) || refreshExpiresAt < 0 || (refreshExpiresAt > 0 && refreshExpiresAt <= Date.now())) return oauthError("invalid_grant");
-    const current = await readClientGrantIndex(env, grant.uid, grant.clientId);
-    if (current?.revokedAt || (current?.refreshHash && current.refreshHash !== refreshHash)) return oauthError("invalid_grant");
+    const currentValue = await kv.get<string>(`user-client:${grant.uid}:${grant.clientId}`);
+    const current = asClientGrant(currentValue);
+    if (currentValue !== null && (!current || current.uid !== grant.uid || current.clientId !== grant.clientId
+      || current.revokedAt || (current.refreshHash && current.refreshHash !== refreshHash))) return oauthError("invalid_grant");
+    if (!current?.refreshHash && await kv.get(await oauthClientDisconnectKey(grant.uid, grant.clientId))) return oauthError("invalid_grant");
     return json(await issueTokens(env, grant, { refreshToken, refreshHash, refreshExpiresAt: refreshExpiresAt || undefined }), 200, { "cache-control": "no-store" });
   }
   return oauthError(grantType ? "unsupported_grant_type" : "invalid_request");
@@ -528,6 +623,9 @@ export async function revokeToken(request: Request, env: WorkerEnv): Promise<Res
   } catch {
     return oauthError("invalid_request");
   }
+  if (["token", "client_id", "token_type_hint"].some(key => body.getAll(key).length > 1)) return oauthError("invalid_request");
+  const clientId = formText(body, "client_id");
+  if (body.has("client_id") && !isSafeClientId(clientId)) return oauthError("invalid_client");
   const token = formText(body, "token");
   if (!token || token.length > MAX_JWT_LENGTH) return new Response(null, { status: 200 });
   const hash = await sha256(token);
@@ -536,15 +634,23 @@ export async function revokeToken(request: Request, env: WorkerEnv): Promise<Res
     kv.get<JsonRecord>(`access:${hash}`, "json"),
     kv.get<JsonRecord>(`refresh:${hash}`, "json"),
   ]);
+  const record = accessRecord || refreshRecord;
+  if (!record) return new Response(null, { status: 200 });
+  if (body.has("client_id") && clientId !== record.clientId) return oauthError("invalid_client");
+  const refreshHash = accessRecord
+    ? typeof accessRecord.refreshHash === "string" ? accessRecord.refreshHash : ""
+    : hash;
+  // Revoke this family before deleting any records, including an orphaned or
+  // superseded grant. A new consent for the same client is a different family.
+  if (refreshHash) await kv.put(`refresh-revoked:${refreshHash}`, "1");
   await Promise.all([
     kv.delete(`access:${hash}`),
     kv.delete(`refresh:${hash}`),
-    accessRecord?.refreshHash ? kv.delete(`refresh:${accessRecord.refreshHash}`) : Promise.resolve(),
+    refreshHash ? kv.delete(`refresh:${refreshHash}`) : Promise.resolve(),
     refreshRecord?.accessHash ? kv.delete(`access:${refreshRecord.accessHash}`) : Promise.resolve(),
   ]);
-  const record = accessRecord || refreshRecord;
   if (record?.uid && record?.clientId) {
-    await revokeAuthorizedClient(env, String(record.uid), String(record.clientId));
+    await revokeAuthorizedClient(env, String(record.uid), String(record.clientId), refreshHash);
   }
   return new Response(null, { status: 200 });
 }

@@ -3,6 +3,7 @@ import { timePhase } from "./request-timing.ts";
 import { sha256 } from "./security.ts";
 import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
 import type { QuestForgeState } from "../../types/questforge.ts";
+import { PreparedTransaction } from "./prepared-transaction.ts";
 
 type Identity = string | Pick<AuthIdentity, "uid"> & Partial<Pick<AuthIdentity, "email">>;
 type StatePayload = JsonRecord & { schemaVersion?: number; clientUpdatedAt?: string; state?: QuestForgeState | null };
@@ -12,6 +13,7 @@ type AppwriteRow = JsonRecord & { $id?: string; stateJson?: string; revision?: n
 
 const localStates = new Map<string, LocalState>();
 const APPWRITE_TRANSACTION_TTL_SECONDS = 60;
+const preparedTransactions = new WeakMap<WorkerEnv, PreparedTransaction>();
 const uidOf = (identity: Identity): string => typeof identity === "string" ? identity : identity.uid;
 const asState = (value: unknown): QuestForgeState | null => {
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
@@ -86,8 +88,8 @@ function transactionsUrl(env: WorkerEnv, transactionId = ""): string {
   return transactionId ? `${base}/${encodeURIComponent(transactionId)}` : base;
 }
 
-async function createStateTransaction(env: WorkerEnv): Promise<string> {
-  const response = await timePhase("tx_begin", () => fetch(transactionsUrl(env), {
+async function createStateTransaction(env: WorkerEnv, preparation = false): Promise<string> {
+  const response = await timePhase(preparation ? "tx_prepare" : "tx_begin", () => fetch(transactionsUrl(env), {
     method: "POST", headers: appwriteHeaders(env),
     body: JSON.stringify({ ttl: APPWRITE_TRANSACTION_TTL_SECONDS }),
   }));
@@ -96,6 +98,18 @@ async function createStateTransaction(env: WorkerEnv): Promise<string> {
   const id = String(transaction.$id || "");
   if (!id) throw new Error("Appwrite transaction did not return an ID.");
   return id;
+}
+
+function preparedTransaction(env: WorkerEnv): PreparedTransaction | undefined {
+  if (!configured(env) || env.APPWRITE_PREPARED_TRANSACTIONS !== "true" || env.APPWRITE_REVISION_BATCH !== "true") return;
+  let slot = preparedTransactions.get(env);
+  if (!slot) { slot = new PreparedTransaction(); preparedTransactions.set(env, slot); }
+  return slot;
+}
+
+/** Call through waitUntil only after a successful authenticated Web bootstrap/save. */
+export async function prepareStateTransaction(env: WorkerEnv): Promise<void> {
+  await preparedTransaction(env)?.prepare(() => createStateTransaction(env, true));
 }
 
 async function discardStateTransaction(env: WorkerEnv, id: string): Promise<void> {
@@ -269,13 +283,15 @@ async function writeRevisionBatch(env: WorkerEnv, uid: string, data: JsonRecord,
   }
 }
 
-export async function mutateState(env: WorkerEnv, identity: Identity, mutator: StateMutation): Promise<{ state: QuestForgeState; result: unknown }> {
+export async function mutateState(env: WorkerEnv, identity: Identity, mutator: StateMutation, usePreparedTransaction = false): Promise<{ state: QuestForgeState; result: unknown }> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     // Neither operation depends on the other. Keep the transactional revision
     // recheck below: a concurrent update between these reads must still conflict.
+    const preparedId = usePreparedTransaction && attempt === 0 ? preparedTransaction(env)?.take() : undefined;
     const [read, transaction] = await Promise.allSettled([
       readState(env, identity),
-      configured(env) ? createStateTransaction(env) : Promise.resolve(undefined),
+      preparedId ? timePhase("tx_prepared", async () => preparedId)
+        : configured(env) ? createStateTransaction(env) : Promise.resolve(undefined),
     ]);
     const transactionId = transaction.status === "fulfilled" ? transaction.value : undefined;
     let committed = false;

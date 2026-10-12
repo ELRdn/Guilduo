@@ -48,6 +48,12 @@ export interface QuestRow {
   readonly relay: QuestRelayView;
   readonly impact: Impact;
   readonly dueDate: string;
+  readonly scheduledDate: string;
+  readonly planningMode: Quest["planningMode"];
+  readonly estimatedMinutes: number;
+  readonly actualMinutes: number;
+  readonly workTime?: string;
+  readonly dependencyIds: readonly string[];
   /** True when `dueDate` is before today and the Quest is not completed. */
   readonly overdue: boolean;
   /** Quests this one waits on that are not done yet. */
@@ -210,6 +216,11 @@ export function normalizeQuestsModel(options: NormalizeQuestsOptions): QuestsMod
       },
       impact: quest.impact,
       dueDate: quest.dueDate,
+      scheduledDate: quest.scheduledDate,
+      planningMode: quest.planningMode,
+      estimatedMinutes: quest.estimatedMinutes,
+      actualMinutes: quest.actualMinutes,
+      dependencyIds: quest.dependencyIds,
       overdue: quest.dueDate !== "" && quest.dueDate < today && bucket !== "done",
       blockedByIds,
       blockedReason: quest.handoff.blockedReason,

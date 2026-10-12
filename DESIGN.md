@@ -499,6 +499,7 @@ error
 - selectedは背景、境界線、ARIA状態で示す。
 - 状態を点滅だけに依存しない。
 - 同期中の書き込みボタンは無効化し、再接続ボタンを提示する。
+- 別端末とのQuest保存競合は成功扱いせず、編集内容とエラーを保持する。最新状態の取得前に古い操作を繰り返さない。タイトル・見積の入力上限は保存先の契約に揃える。
 
 ## 7. Elevation & Depth
 
@@ -570,6 +571,10 @@ error
 - `/next/`固有の実験は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)へ記録する。
 - ドメイン、API、MCP、認証、リリースの変更は[`PROJECT_SPEC.md`](PROJECT_SPEC.md)を先に更新する。
 - 現行版とNext版の昇格は自動化せず、実アカウント・PC・Pixel 9・9言語・MCP・アクセシビリティの明示受入を通す。
+
+## Productivity workspace (2026-10-12)
+
+Relay Forge places Home, Quests, Calendar, Notes, Party and Connections in the primary rail; Network/Battle/Skills are grouped in More. Quests owns a compact Board/List/Gantt view selector, shared filters and the existing detail rail. Calendar and Notes are independent destinations. The shell timer survives navigation without covering sticky actions or mobile navigation. Existing Relay Forge tokens, status labels, keyboard focus and reduced-motion rules apply. Calendar schedules, deadlines and recorded work use explicit text labels, not color alone; unknown/zero durations are not fabricated into time blocks.
 
 ## 13. English glossary
 

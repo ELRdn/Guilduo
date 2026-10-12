@@ -198,7 +198,7 @@ Schreibvorgänge liefern ohne `--execute` nur einen dry-run oder einen Ausführu
 
 ## Skill / OpenAI Plugin / MCP App
 
-- Offizielles Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Offizielles Skill: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - Vorbereitungspaket für das OpenAI Plugin: [`plugins/questforge/`](plugins/questforge/)
 - Vorlage für die MCP-App-Registrierung: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Einreichungs-Checkliste: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

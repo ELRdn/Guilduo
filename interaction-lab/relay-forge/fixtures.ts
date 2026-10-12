@@ -35,14 +35,14 @@ export const FIXTURE_REVISION = "relay-forge-golden-1" as const;
 /**
  * Fixture actors carry the same identity fields a real profile or Agent record
  * carries, so the avatar resolution chain is exercised end to end:
- *   Hironao / Mika  role crest from assets/avatar-role-*.webp
+ *   admin / Mika  role crest from assets/avatar-role-*.webp
  *   Astra           companion crest
  *   Agents          no image asset ships for a provider, so they resolve to
  *                   initials, which is the production behaviour today
  *   System          initials
  */
 const ACTOR_LIST: readonly Actor[] = [
-  { id: "u-hironao", kind: "human", name: "Hironao", role: "Operator / reviewer", initials: "HN", avatarRole: "operator", avatarVariant: "masc" },
+  { id: "u-admin", kind: "human", name: "admin", role: "Operator / reviewer", initials: "AD", avatarRole: "operator", avatarVariant: "masc" },
   { id: "u-mika", kind: "human", name: "Mika", role: "Integrations owner", initials: "MK", avatarRole: "archivist", avatarVariant: "femme" },
   { id: "a-astra", kind: "companion", name: "Astra", role: "Companion planner", initials: "AS", avatarRole: "sentinel", avatarVariant: "femme" },
   { id: "a-forge", kind: "agent", name: "Forge Runner", role: "Build and test executor", initials: "FR", provider: "generic" },
@@ -161,9 +161,9 @@ export const fixtureQuests: readonly LoomQuest[] = [
       },
     }),
     relay: spine([
-      ["u-hironao", "completed"],
+      ["u-admin", "completed"],
       ["a-warden", "review"],
-      ["u-hironao", null],
+      ["u-admin", null],
     ], 1),
     dependencies: [
       { questId: "q-186", ref: "QF-186", critical: true, blocking: false },
@@ -193,7 +193,7 @@ export const fixtureQuests: readonly LoomQuest[] = [
     relay: spine([
       ["a-scribe", "completed"],
       ["a-forge", "active"],
-      ["u-hironao", null],
+      ["u-admin", null],
     ], 1),
     dependencies: [],
     stateLabel: "Forge Runner is executing",
@@ -218,7 +218,7 @@ export const fixtureQuests: readonly LoomQuest[] = [
       },
     }),
     relay: spine([
-      ["u-hironao", "completed"],
+      ["u-admin", "completed"],
       ["a-scribe", "active"],
       ["a-warden", null],
     ], 1),
@@ -275,7 +275,7 @@ export const fixtureQuests: readonly LoomQuest[] = [
     }),
     relay: spine([
       ["a-scribe", "blocked", "Blocked by QF-184"],
-      ["u-hironao", null],
+      ["u-admin", null],
     ], 0),
     dependencies: [{ questId: "q-184", ref: "QF-184", critical: true, blocking: true }],
     stateLabel: "Blocked by QF-184",
@@ -303,7 +303,7 @@ export const fixtureQuests: readonly LoomQuest[] = [
     }),
     relay: spine([
       ["a-forge", "blocked", "Blocked by QF-184"],
-      ["u-hironao", null],
+      ["u-admin", null],
     ], 0),
     dependencies: [{ questId: "q-184", ref: "QF-184", critical: true, blocking: true }],
     stateLabel: "Blocked by QF-184",
@@ -331,7 +331,7 @@ export const fixtureQuests: readonly LoomQuest[] = [
     }),
     relay: spine([
       ["a-warden", "blocked", "Blocked by QF-184"],
-      ["u-hironao", null],
+      ["u-admin", null],
     ], 0),
     dependencies: [{ questId: "q-184", ref: "QF-184", critical: true, blocking: true }],
     stateLabel: "Blocked by QF-184",
@@ -373,15 +373,15 @@ export const fixtureQuests: readonly LoomQuest[] = [
         startedAt: "2026-08-25T08:30:00.000Z",
         reviewRequestedAt: "2026-08-25T08:58:00.000Z",
         reviewedAt: "2026-08-25T09:05:00.000Z",
-        reviewedBy: "u-hironao",
+        reviewedBy: "u-admin",
       },
     }),
     relay: spine([
       ["a-forge", "completed", undefined, "completed"],
-      ["u-hironao", null, undefined, "completed"],
+      ["u-admin", null, undefined, "completed"],
     ], 1, 1),
     dependencies: [],
-    stateLabel: "Hironao accepted the output",
+    stateLabel: "admin accepted the output",
     actionLabel: "Open evidence",
     context: "CI 3 ジョブ緑 / 09:05 承認",
   }),
@@ -396,7 +396,7 @@ export const fixtureInterventions: readonly Intervention[] = [
     questRef: "QF-184",
     questTitle: "Worker REST の handoff 契約を確定する",
     waitingMinutes: 98,
-    ownerActorId: "u-hironao",
+    ownerActorId: "u-admin",
     actionLabel: "Review output",
     affectedCount: 1,
   },
@@ -408,7 +408,7 @@ export const fixtureInterventions: readonly Intervention[] = [
     questRef: "QF-191",
     questTitle: "Chronicle のイベント整形を移す",
     waitingMinutes: 62,
-    ownerActorId: "u-hironao",
+    ownerActorId: "u-admin",
     actionLabel: "Resolve blocker",
     affectedCount: 3,
   },
@@ -438,7 +438,7 @@ export const fixtureEvidence: Readonly<Record<string, readonly Evidence[]>> = {
   "iv-2": [
     { label: "Blocker", value: "QF-184 contract undecided", operational: false },
     { label: "影響", value: "3 Quests / 62m stalled", operational: true },
-    { label: "Owner", value: "Hironao", operational: false },
+    { label: "Owner", value: "admin", operational: false },
   ],
   "iv-3": [
     { label: "Connection", value: "Toggl Track", operational: false },
@@ -505,7 +505,7 @@ export const fixtureChronicle: readonly ChronicleEvent[] = [
   {
     id: "ev-3",
     timeLabel: "09:05",
-    actorId: "u-hironao",
+    actorId: "u-admin",
     kind: "review_result",
     verb: "accepted",
     object: "QF-181 Token generation CI gate",
@@ -523,11 +523,11 @@ export const fixtureChronicle: readonly ChronicleEvent[] = [
   {
     id: "ev-1",
     timeLabel: "08:30",
-    actorId: "u-hironao",
+    actorId: "u-admin",
     kind: "human_action",
     verb: "delegated",
     object: "QF-181 Token generation CI gate",
-    detail: "Hironao → Forge Runner",
+    detail: "admin → Forge Runner",
   },
 ];
 
@@ -560,7 +560,7 @@ const SELECTED_VIEWS: readonly SelectedQuestView[] = [
     stateKind: "review",
     reason: "Warden の契約差分を人が承認する必要があります",
     responsibility: [
-      { actorId: "u-hironao", roleLabel: "Human", stateLabel: "handed off", timeLabel: "10:05", state: "completed" },
+      { actorId: "u-admin", roleLabel: "Human", stateLabel: "handed off", timeLabel: "10:05", state: "completed" },
       { actorId: "a-forge", roleLabel: "Agent", stateLabel: "executing", timeLabel: "10:05–10:41", state: "executing" },
       { actorId: "a-warden", roleLabel: "Human Review", stateLabel: "review required", timeLabel: "since 10:41", state: "review" },
     ],
@@ -629,9 +629,9 @@ const SELECTED_VIEWS: readonly SelectedQuestView[] = [
     stateKind: "blocked",
     reason: "QF-184 の契約が確定するまで実行できません",
     responsibility: [
-      { actorId: "u-hironao", roleLabel: "Human", stateLabel: "handed off", timeLabel: "11:30", state: "completed" },
+      { actorId: "u-admin", roleLabel: "Human", stateLabel: "handed off", timeLabel: "11:30", state: "completed" },
       { actorId: "a-scribe", roleLabel: "Agent", stateLabel: "blocked by QF-184", timeLabel: "since 11:32", state: "blocked" },
-      { actorId: "u-hironao", roleLabel: "Human", stateLabel: "resolve blocker", timeLabel: "pending", state: "pending" },
+      { actorId: "u-admin", roleLabel: "Human", stateLabel: "resolve blocker", timeLabel: "pending", state: "pending" },
     ],
     details: {
       headline: "上流 1 件 / 同一原因 3 件",

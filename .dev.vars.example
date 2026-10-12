@@ -1,0 +1,33 @@
+# Copy only missing entries into the ignored .dev.vars file. Never commit real keys.
+# Optional public domain challenge: exact portal-issued value; leave empty until approved.
+OPENAI_APPS_CHALLENGE_TOKEN=""
+TYPESAFE_API_KEY=""
+JEV_ENABLED="false"
+JEV_MODEL="jev-1.13.0"
+# Fill using the verified official account tariff, not OpenRouter prices.
+JEV_INPUT_USD_PER_MILLION=""
+JEV_OUTPUT_USD_PER_MILLION=""
+JEV_DATA_POLICY_APPROVED="false"
+JEV_EVALUATION_BUDGET_USD="1"
+
+BILLING_ENABLED="false"
+BILLING_MODE="test"
+# Product amounts and policies must be approved before supplying BILLING_CONFIG.
+BILLING_CONFIG=""
+STRIPE_SECRET_KEY=""
+# Server key: sk_test_… or rk_test_…. STRIPE_API_KEY=pk_… is publishable and
+# is unnecessary for this Hosted Checkout integration; never use it as a secret.
+# Local Stripe CLI forwarding and a production endpoint have separate signing secrets.
+STRIPE_WEBHOOK_SECRET=""
+BILLING_ADMIN_TOKEN=""
+
+# Optional linked measurement. Keep disabled until data-policy/config approval.
+ANALYTICS_ENABLED="false"
+ANALYTICS_DATA_POLICY_APPROVED="false"
+ANALYTICS_CONFIG=""
+# Independently generated private secrets, each >=32 chars. Do not reuse billing token.
+ANALYTICS_TOKEN_KEY=""
+ANALYTICS_ADMIN_TOKEN=""
+# Keep evaluation lifetime USD1. Live requires a separately approved commercial period.
+JEV_BUDGET_SCOPE="evaluation"
+JEV_COMMERCIAL_CONFIG=""

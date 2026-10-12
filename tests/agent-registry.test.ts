@@ -199,7 +199,7 @@ test("connections track client metadata without credentials and client IDs are u
     scopes: ["quests:read"],
   }));
   assert.deepEqual(Object.keys(linked).sort(), [
-    "agentId", "clientId", "clientName", "createdAt", "firstConnectedAt", "lastUsedAt", "revokedAt",
+    "agentId", "allowedAgentIds", "clientId", "clientName", "createdAt", "firstConnectedAt", "lastUsedAt", "revokedAt",
     "scopes", "uid", "updatedAt",
   ].sort());
   assert.equal(JSON.stringify(linked).includes("token"), false);

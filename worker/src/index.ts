@@ -1,5 +1,6 @@
 import { timePhase, withRequestTiming } from "./request-timing.ts";
 import { PUBLIC_EVENT_NAMES, validPublicEvent } from "../../shared/public-measurement.ts";
+import { productivityRoute } from "./productivity.ts";
 import {
   DomainError,
   archiveQuests,
@@ -27,8 +28,9 @@ import {
 } from "../../server/questforge-domain.ts";
 import type { DomainInput, DomainRecord } from "../../server/questforge-domain.ts";
 import { listHumanRequests, preserveRelayState, requestHumanReview, respondHumanReview, type RelayContext } from "../../server/human-requests.ts";
-import { mutateState, readState, writeState } from "./appwrite-store.ts";
+import { mutateState, prepareStateTransaction, readState, writeState } from "./appwrite-store.ts";
 import { authenticateRequest } from "./security.ts";
+import { MCP_PROTOCOL_VERSION, mcpPingResponse, negotiateMcpProtocolVersion, validateMcpEnvelope, validateMcpHttpRequest, validateMcpToolInput } from "./mcp-transport.ts";
 import {
   approveAuthorization,
   authorizePage,
@@ -132,8 +134,14 @@ import type { AgentConnectionRecord, AgentRecord } from "./agent-store.ts";
 import type { JsonRecord, R2ObjectLike, WorkerEnv, WorkerError } from "./worker-types.ts";
 import { isQuest } from "../../types/questforge.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
+import { assertAgentAccess, getAgentAccessMap, listAgentPage } from "./agent-store.ts";
+import { getBillingStatus, selectFreeAgents, listCreditLedger, getBillingAdminReport } from "./billing-store.ts";
+import { createCheckout, createPortal, handleStripeWebhook, reconcileBilling, runBillingMaintenance } from "./stripe-billing.ts";
+import { estimateDecision, executeDecision, getDecision, applyDecision, getDecisionReconciliationReport, reconcileDecisionSettlement } from "./jev.ts";
+import { appendAnalyticsOutbox, flushAnalyticsOutbox, analyticsBackground, handleAnalyticsPublic, handleAnalyticsOwner, analyticsAdminReport, requireAnalyticsAdmin, deleteAnalyticsAccount, purgeLaunchAnalytics, recordAgentConnection, boundedAnalyticsBody } from "./launch-analytics.ts";
 
 type WorkerIdentity = AuthIdentity & {
+  agentConnection?: AgentConnectionRecord | null;
   agent?: AgentRecord;
   connectionScopes?: string[];
   agentAllowedScopes?: string[];
@@ -270,8 +278,9 @@ const LIST_QUEST_PROPERTIES = {
 };
 
 const READ_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-const WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
-const IDEMPOTENT_WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+// Modifying existing user data is destructive for connector review/confirmation purposes.
+const WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
+const IDEMPOTENT_WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
 const DESTRUCTIVE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
 const DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
 const OPEN_WORLD_READ_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
@@ -389,6 +398,7 @@ const AGENT_PUBLIC_RESPONSE_SCHEMA = {
     defaultHandoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, reviewRequired: { type: "boolean" }, dryRunDefault: { type: "boolean" },
     createdAt: { type: "string" }, updatedAt: { type: "string" },
     avatarVersion: { type: "integer", minimum: 0 }, hasCustomAvatar: { type: "boolean" },
+    planAllowed: { type: "boolean" }, restrictionReason: { type: ["string", "null"] },
   },
   additionalProperties: false,
 };
@@ -403,6 +413,7 @@ const AGENT_CONNECTION_OBJECT = {
   required: ["clientId", "clientName", "scopes", "firstConnectedAt", "lastUsedAt", "revokedAt"],
   properties: {
     clientId: { type: "string" }, clientName: { type: "string" }, scopes: { type: "array", items: { type: "string" } },
+    allowedAgentIds: { type: "array", items: { type: "string" }, maxItems: 20 },
     firstConnectedAt: { type: "string" }, lastUsedAt: { type: "string" }, revokedAt: { type: ["string", "null"] },
   },
   additionalProperties: false,
@@ -423,6 +434,8 @@ const AGENT_CONTEXT_OUTPUT = {
   properties: {
     agent: { anyOf: [AGENT_PUBLIC_RESPONSE_SCHEMA, { type: "null" }] },
     clientId: { type: ["string", "null"] },
+    allowedAgentIds: { type: "array", items: { type: "string" }, maxItems: 20 },
+    requiresAgentSelection: { type: "boolean" },
     connectionScopes: { type: "array", items: { type: "string" } },
     agentAllowedScopes: { type: "array", items: { type: "string", enum: AGENT_SCOPES } },
     effectiveExecutionScopes: { type: "array", items: { type: "string" } },
@@ -461,12 +474,12 @@ const MCP_TOOLS = [
   { name: "list_today_quests", title: "List Today's Quests", description: "List active scheduled Guilduo quests visible today, including overdue work.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_quests", title: "List Quests", description: "List Guilduo quests by today, week, future, backlog, completed, archive, or all views.", inputSchema: { type: "object", properties: LIST_QUEST_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "create_quest", title: "Create Quest", description: "Create a Guilduo habit, daily, todo, or reward with planning and priority details.", inputSchema: { type: "object", required: ["kind", "title"], properties: QUEST_INPUT_PROPERTIES, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: WRITE_ANNOTATIONS },
-  { name: "update_quest", title: "Update Quest", description: "Edit one Guilduo quest. Moving a scheduled date later increments rolloverCount.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, ...QUEST_INPUT_PROPERTIES }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "update_quest", title: "Update Quest", description: "Edit one Guilduo quest. Pass its latest expectedUpdatedAt to reject stale edits. Moving a scheduled date later increments rolloverCount.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" }, ...QUEST_INPUT_PROPERTIES, expectedUpdatedAt: { type: "string", format: "date-time", maxLength: 40 } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "batch_update_quests", title: "Batch Update Quests", description: "Preview or atomically update up to 100 quests, including postponing or moving them to backlog.", inputSchema: { type: "object", required: ["questIds"], properties: { questIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 }, patch: { type: "object", properties: QUEST_INPUT_PROPERTIES }, postponeDays: { type: "integer", minimum: -365, maximum: 365 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "batch_score_quests", title: "Batch Score Quests", description: "Preview or atomically complete or reopen up to 100 quests. One-off todo quests become archived when completed.", inputSchema: { type: "object", required: ["questIds", "direction"], properties: { questIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 }, direction: { type: "string", enum: ["up", "down"] }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_SCORE_OUTPUT, annotations: WRITE_ANNOTATIONS },
   { name: "archive_quests", title: "Archive Quests", description: "Preview or archive completed one-off todo quests. Archived quests are retained permanently.", inputSchema: { type: "object", properties: { questIds: { type: "array", items: { type: "string" }, maxItems: 100 }, throughDate: { type: "string", format: "date" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: BATCH_OUTPUT, annotations: DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS },
   { name: "link_external_record", title: "Link External Record", description: "Link a Google Calendar, Toggl, or other external record to a quest.", inputSchema: { type: "object", required: ["questId", "service", "externalId"], properties: { questId: { type: "string" }, service: { type: "string" }, externalId: { type: "string" }, type: { type: "string" }, url: { type: "string", format: "uri" }, projectId: { type: "string" }, durationMinutes: { type: "integer", minimum: 0 }, syncedAt: { type: "string" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { quest: QUEST_OBJECT, link: QUEST_OBJECT, event: QUEST_OBJECT }, additionalProperties: false }, annotations: OPEN_WORLD_IDEMPOTENT_ANNOTATIONS },
-  { name: "score_quest", title: "Score Quest", description: "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects. A completed one-off todo is archived automatically.", inputSchema: { type: "object", required: ["questId", "direction"], properties: { questId: { type: "string" }, direction: { type: "string", enum: ["up", "down"] } }, additionalProperties: false }, outputSchema: SCORE_OUTPUT, annotations: WRITE_ANNOTATIONS },
+  { name: "score_quest", title: "Score Quest", description: "Complete, reopen, or score a quest and apply its HP, XP, Gem, and MP effects. A completed one-off todo is archived automatically. Pass its latest expectedUpdatedAt to reject stale or repeated completion.", inputSchema: { type: "object", required: ["questId", "direction"], properties: { questId: { type: "string" }, direction: { type: "string", enum: ["up", "down"] }, expectedUpdatedAt: { type: "string", format: "date-time", maxLength: 40 } }, additionalProperties: false }, outputSchema: SCORE_OUTPUT, annotations: WRITE_ANNOTATIONS },
   { name: "get_character_state", title: "Get Character State", description: "Return the current character, MP, equipment, and boss state.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: CHARACTER_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "buy_reward", title: "Buy Reward", description: "Redeem a reward quest using Gems.", inputSchema: { type: "object", required: ["questId"], properties: { questId: { type: "string" } }, additionalProperties: false }, outputSchema: REWARD_OUTPUT, annotations: DESTRUCTIVE_ANNOTATIONS },
   { name: "list_integrations", title: "List Integrations", description: "List per-user integration connection, configuration, and reconnect status without exposing provider tokens.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: { type: "object", properties: { integrations: { type: "array", items: QUEST_OBJECT } }, additionalProperties: false }, annotations: READ_ANNOTATIONS },
@@ -512,7 +525,10 @@ const MCP_TOOLS = [
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate Guilduo activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_calendar_schedule", title: "Get Calendar Schedule", description: "Read the cached Google Calendar schedule for a date. Connect and sync Calendar first.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { schedule: GENERIC_OBJECT_OUTPUT }, additionalProperties: false }, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "convert_calendar_event_to_quest", title: "Convert Calendar Event to Quest", description: "Create a Guilduo quest from a cached Calendar event and optional safe task-field overrides.", inputSchema: { type: "object", required: ["eventId"], properties: { eventId: { type: "string", minLength: 1 }, calendarId: { type: "string", minLength: 1 }, overrides: { type: "object", properties: CALENDAR_OVERRIDE_PROPERTIES, additionalProperties: false } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
-];
+].map(tool => ({ ...tool, inputSchema: { ...tool.inputSchema, properties: {
+  ...tool.inputSchema.properties,
+  actingAgentId: { type:"string", maxLength:80, pattern:"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", description:"Agent acting on this call. Required for a shared connection. Read get_current_agent_context for allowed IDs; this never changes another caller's Agent." },
+} } }));
 
 function json(value: unknown, status = 200, headers: JsonHeaders = {}): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
@@ -566,7 +582,7 @@ async function acceptTelemetry(request: Request, env: WorkerEnv): Promise<Respon
   if (request.method !== "POST") return json({ error: { code: "method_not_allowed", message: "POST is required." } }, 405);
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > 20000) return json({ error: { code: "payload_too_large", message: "Telemetry payload is too large." } }, 413);
-  const body = asRecord(await request.json().catch(() => null));
+  const body = await boundedAnalyticsBody(request, 20000);
   const events = Array.isArray(body.events) ? body.events.slice(0, 20).filter((event): event is JsonRecord => Boolean(event && typeof event === "object" && !Array.isArray(event))) : [];
   if (body.schemaVersion !== 1 || !events.length) return json({ accepted: 0 }, 202);
   const safeEvents = events.map((event: JsonRecord) => {
@@ -576,7 +592,7 @@ async function acceptTelemetry(request: Request, env: WorkerEnv): Promise<Respon
     if (PUBLIC_EVENT_NAMES.has(name) && !validPublicEvent(event)) return null;
     const metrics: JsonRecord = {};
     for (const key of ["lcp", "cls", "inp", "duration", "count"]) {
-      if (Number.isFinite(Number(event?.[key]))) metrics[key] = Math.round(Number(event[key]) * 100) / 100;
+      if (Number.isFinite(Number(event?.[key]))) { const scale=key==="cls"?10000:100;metrics[key] = Math.round(Number(event[key]) * scale) / scale; }
     }
     for (const key of ["kind", "source", "status"]) {
       if (typeof event?.[key] === "string" && event[key].length <= 40 && /^[a-z0-9_-]+$/i.test(event[key])) metrics[key] = event[key];
@@ -587,6 +603,10 @@ async function acceptTelemetry(request: Request, env: WorkerEnv): Promise<Respon
   const database = env.QUESTFORGE_DB;
   if (database) {
     const createdAt = new Date().toISOString();
+    const minute=Math.floor(Date.now()/60000);
+    const quota=await database.prepare("INSERT INTO launch_analytics_rate(bucket,count,expires_at) VALUES (?,?,?) ON CONFLICT(bucket) DO UPDATE SET count=count+excluded.count WHERE count+excluded.count<=1000")
+      .bind(`telemetry:${minute}`,safeEvents.length,new Date((minute+2)*60000).toISOString()).run();
+    if(quota.meta?.changes!==1)return json({error:{code:"telemetry_rate_limited",message:"Telemetry quota exceeded."}},429);
     await database.batch(safeEvents.map((event) => database.prepare(
       "INSERT INTO telemetry_events (event_id, name, surface, metrics_json, created_at) VALUES (?, ?, ?, ?, ?)",
     ).bind(crypto.randomUUID(), event.name, event.surface, JSON.stringify(event.metrics), createdAt)));
@@ -695,6 +715,12 @@ function toPublicAgents(agents: AgentRecord[]): Array<Omit<AgentRecord, "avatarA
   return agents.map(toPublicAgent);
 }
 
+async function publicAgentsWithAccess(env: WorkerEnv, uid: string, agents: AgentRecord[]) {
+  if (env.BILLING_ENABLED !== "true") return toPublicAgents(agents);
+  const access = await getAgentAccessMap(env, uid, agents);
+  return agents.map(agent => ({ ...toPublicAgent(agent), ...access.get(agent.agentId) }));
+}
+
 /** Agent Registry reads and connection-link operations are control-plane
  * actions. Once an Agent is linked, `identity.scopes` is the execution-scope
  * intersection; these checks must use the original OAuth connection grant. */
@@ -712,6 +738,7 @@ function toPublicAgentConnection(connection: AgentConnectionRecord | null, clien
   return {
     clientId: String(source.clientId || ""),
     clientName: String(source.clientName || "Guilduo MCP client"),
+    allowedAgentIds: connection?.allowedAgentIds ?? (connection ? [connection.agentId] : []),
     scopes,
     firstConnectedAt: String(source.firstConnectedAt || ""),
     lastUsedAt: String(source.lastUsedAt || ""),
@@ -763,7 +790,7 @@ async function currentMcpAgentLink(env: WorkerEnv, identity: WorkerIdentity, cli
   return {
     linked,
     stale,
-    agent: agent ? toPublicAgent(agent) : null,
+    agent: agent ? (await publicAgentsWithAccess(env, identity.uid, [agent]))[0] : null,
     connection: toPublicAgentConnection(connection, client),
   };
 }
@@ -807,26 +834,31 @@ async function identityWithAgentContext(env: WorkerEnv, identity: AuthIdentity):
   if (identity?.authType !== "oauth" || !identity.clientId) return identity;
   const connectionScopes = [...(identity.scopes || [])];
   await noteAuthorizedClientUse(env, identity);
+  const agentConnection = await getAgentConnection(env, identity.uid, identity.clientId);
   const agent = await getAgentForClient(env, identity.uid, identity.clientId);
   if (!agent || agent.uid !== identity.uid) {
     return {
       ...identity,
+      agentConnection,
       connectionScopes,
       agentAllowedScopes: [],
-      effectiveExecutionScopes: connectionScopes,
+      // Never-linked legacy clients retain their grant; a saved invalid link does not.
+      effectiveExecutionScopes: agentConnection ? [] : connectionScopes,
+      scopes: agentConnection ? [] : connectionScopes,
     };
   }
   await noteAgentConnectionUse(env, identity.uid, identity.clientId).catch(() => undefined);
   const agentAllowedScopes = [...(agent.allowedScopes || [])];
   const allowed = new Set(agentAllowedScopes);
   const effectiveExecutionScopes = (identity.scopes || []).filter((scope) => allowed.has(scope));
-  return { ...identity, connectionScopes, agentAllowedScopes, effectiveExecutionScopes, scopes: effectiveExecutionScopes, agent };
+  return { ...identity, agentConnection, connectionScopes, agentAllowedScopes, effectiveExecutionScopes, scopes: effectiveExecutionScopes, agent };
 }
 
 async function assignQuestToAgent(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, input: WorkerArgs): Promise<JsonRecord> {
   assertScope(identity.scopes, "quests:write");
   const agent = await getAgent(env, identity.uid, String(input.agentId || ""));
   if (agent.status !== "active") throw new DomainError(409, "agent_inactive", "Only an active registered Agent can receive a Quest.");
+  await assertAgentAccess(env, identity.uid, agent.agentId);
   const state = await stateFor(env, identity);
   const current = getQuest(state, String(input.questId || "")).quest;
   if (input.expectedUpdatedAt && input.expectedUpdatedAt !== current.updatedAt) {
@@ -894,28 +926,133 @@ async function stateFor(env: WorkerEnv, identity: WorkerIdentity, initialize = f
   return payload.state;
 }
 
-async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, mutation: (state: QuestForgeState) => unknown | Promise<unknown>): Promise<MutationResult> {
-  const { result: rawResult } = await mutateState(env, identity, mutation);
+async function mutateAndNotify(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, mutation: (state: QuestForgeState) => unknown | Promise<unknown>, prepareNext = false): Promise<MutationResult> {
+  const prepare = prepareNext && identity.authType !== "oauth";
+  const { result: rawResult, state: savedState } = await mutateState(env, identity, async state => {
+    const before = env.BILLING_ENABLED === "true" ? structuredClone(state) : null;
+    const result = await mutation(state);
+    await validateAgentAssignments(env, identity.uid, before, state);
+    await analyticsBackground(env, appendAnalyticsOutbox(env, identity.uid, state, result, identity));
+    return result;
+  }, prepare);
+  if (prepare) context.waitUntil(prepareStateTransaction(env));
+  if (savedState.launchAnalyticsOutbox) context.waitUntil(analyticsBackground(env, flushAnalyticsOutbox(env, identity.uid, savedState)));
   const result = asRecord(rawResult) as MutationResult;
   const events = Array.isArray(result.events) ? result.events : result.event ? [result.event] : [];
   for (const event of events) context.waitUntil(deliverEvent(env, identity.uid, webhookEvent(asRecord(event))));
   return result;
 }
 
+/** All command writers and full snapshots share this entitlement boundary. */
+async function validateAgentAssignments(env: WorkerEnv, uid: string, before: QuestForgeState | null, next: QuestForgeState): Promise<void> {
+  if (env.BILLING_ENABLED !== "true") return;
+  const previous = new Map((before?.tasks || []).map(quest => [quest.id, quest]));
+  const changed = new Set<string>();
+  for (const quest of next.tasks || []) {
+    if (quest.assignee?.type !== "agent") continue;
+    const old = previous.get(quest.id);
+    if (old?.assignee?.id !== quest.assignee.id || old.assignee?.type !== "agent"
+      || old.assignee.handoffState !== quest.assignee.handoffState) changed.add(quest.assignee.id);
+  }
+    for (const agentId of changed) {
+      const agent = await getAgent(env, uid, agentId);
+      if (agent.status !== "active") throw new DomainError(409, "agent_inactive", "Only an active registered Agent can receive a Quest.");
+      await assertAgentAccess(env, uid, agentId);
+    }
+}
+
+async function billingInput(request: Request): Promise<JsonRecord> {
+  let bytes: Uint8Array;
+  try { bytes = await readBoundedBody(request, 32768); }
+  catch (error) {
+    if (errorCode(error) === "avatar_too_large") throw new DomainError(413, "payload_too_large", "Request must be at most 32 KB.");
+    throw error;
+  }
+  let value: unknown;
+  try { value = JSON.parse(new TextDecoder().decode(bytes)); }
+  catch { throw new DomainError(400, "invalid_json", "A JSON object is required."); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new DomainError(400, "invalid_json", "A JSON object is required.");
+  return value as JsonRecord;
+}
+
+async function routeBilling(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
+  const method = request.method;
+  const reply = (value: unknown, status = 200) => json(value, status, { "cache-control": "no-store" });
+  if (path === "/v1/billing" && method === "GET") return reply(await getBillingStatus(env, identity.uid));
+  if (path === "/v1/billing/credits" && method === "GET") {
+    const query = new URL(request.url).searchParams;
+    return reply(await listCreditLedger(env, identity.uid, { limit: Number(query.get("limit") || 50), cursor: query.get("cursor") || undefined }));
+  }
+  if (path === "/v1/billing/checkout" && method === "POST") {
+    const input = await billingInput(request);
+    if (input.interval !== "monthly" && input.interval !== "annual") throw new DomainError(400, "billing_checkout_invalid", "Choose a monthly or annual subscription.");
+    return reply(await createCheckout(env, identity.uid, { ...input, interval: input.interval }));
+  }
+  if (path === "/v1/billing/portal" && method === "POST") {
+    const input = await billingInput(request);
+    if (Object.keys(input).length) throw new DomainError(400, "invalid_request", "Portal requests do not accept fields.");
+    return reply(await createPortal(env, identity.uid));
+  }
+  if (path === "/v1/billing/agents" && method === "PUT") {
+    const input = await billingInput(request);
+    if (Object.keys(input).some(key => key !== "agentIds") || !Array.isArray(input.agentIds) || input.agentIds.some(id => typeof id !== "string")) throw new DomainError(400, "invalid_agent_selection", "agentIds must be an array of Agent IDs.");
+    await selectFreeAgents(env, identity.uid, input.agentIds as string[]);
+    return reply(await getBillingStatus(env, identity.uid));
+  }
+  if (path === "/v1/decisions/estimate" && method === "POST") return reply(await estimateDecision(env, identity.uid, await billingInput(request)));
+  if (path === "/v1/decisions" && method === "POST") return reply(await executeDecision(env, identity.uid, await billingInput(request)));
+  const match = path.match(/^\/v1\/decisions\/([a-zA-Z0-9_-]{1,120})(\/apply)?$/);
+  if (match && !match[2] && method === "GET") return reply(await getDecision(env, identity.uid, match[1]));
+  if (match && match[2] && method === "POST") {
+    const input = await billingInput(request);
+    const assignment = await applyDecision(env, identity.uid, match[1], input);
+    return reply(await assignQuestToAgent(env, identity, context, { ...assignment, dryRun: false }));
+  }
+  throw new DomainError(404, "not_found", "Route not found.");
+}
+
 async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
   const method = request.method;
+  if (path === "/v1/productivity" || path.startsWith("/v1/productivity/")) {
+    assertAgentRegistryWebMutation(request, env, identity);
+    assertScope(identity.scopes, method === "GET" ? "quests:read" : "quests:write");
+    const snapshot = await readState(env, identity);
+    const state = snapshot.payload.state;
+    let input: JsonRecord = {};
+    if (method !== "GET") {
+      const bytes = await readBoundedBody(request, 1100000);
+      try { const value: unknown = JSON.parse(new TextDecoder().decode(bytes)); if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(); input = value as JsonRecord; }
+      catch { throw new DomainError(400, "invalid_json", "A JSON object is required."); }
+    }
+    const rollout = await env.QUESTFORGE_DB?.prepare("SELECT started_at FROM productivity_rollout WHERE id=1").first<{ started_at: string }>();
+    const existing = Boolean(state) && (!rollout || !Number.isFinite(Date.parse(state!.createdAt)) || Date.parse(state!.createdAt) <= Date.parse(rollout.started_at));
+    return productivityRoute(request, env, identity.uid, state?.tasks ?? [], existing, input);
+  }
+  if (path === "/v1/analytics/consent") return handleAnalyticsOwner(request, env, identity);
+  if (path.startsWith("/v1/billing") || path.startsWith("/v1/decisions")) {
+    assertAgentRegistryWebMutation(request, env, identity);
+    return routeBilling(request, env, context, identity, path);
+  }
+  if (env.BILLING_ENABLED === "true" && identity.authType === "oauth" && !path.startsWith("/v1/agents") && !path.startsWith("/v1/agent-connections")) {
+    if ((identity.agentConnection?.allowedAgentIds?.length ?? 0) > 1) throw new DomainError(403, "acting_agent_required", "Use MCP with actingAgentId for a shared connection.");
+    if (identity.agentConnection) await assertAgentAccess(env, identity.uid, identity.agentConnection.agentId);
+  }
   if (path === "/v1/workspace/bootstrap" && method === "GET") {
     if (identity.authType === "oauth") throw new DomainError(403, "workspace_bootstrap_web_only", "Use the scoped REST or MCP resources for Agent access.");
     assertScope(identity.scopes, "quests:read");
     // Authenticate once, then perform the same bounded reads as the three
     // existing endpoints. A failed optional panel must not hide the Quest list.
     const [questPage, panels] = await Promise.all([
-      stateFor(env, identity, true).then(state => listQuestPage(state, { view: "all", limit: 200 })),
+      stateFor(env, identity, true).then(state => {
+        if (state.launchAnalyticsOutbox) context.waitUntil(analyticsBackground(env, flushAnalyticsOutbox(env, identity.uid, state)));
+        return listQuestPage(state, { view: "all", limit: 200 });
+      }),
       Promise.allSettled([
         (async () => { assertScope(identity.scopes, "profiles:read"); return getOwnProfile(env, identity.uid); })(),
-        (async () => { assertConnectionScope(identity, "agents:read"); return toPublicAgents(await listAgents(env, identity.uid, { includeArchived: true })); })(),
+        (async () => { assertConnectionScope(identity, "agents:read"); return publicAgentsWithAccess(env, identity.uid, await listAgents(env, identity.uid, { includeArchived: true })); })(),
       ]),
     ]);
+    if (identity.scopes.includes("quests:write")) context.waitUntil(prepareStateTransaction(env));
     return json({
       ...questPage,
       profile: panels[0].status === "fulfilled" ? panels[0].value : null,
@@ -944,6 +1081,9 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
       deviceId: String(input.deviceId || "guilduo-web"),
       state: preserveRelayState(input.state as unknown as QuestForgeState, current.payload.state || null),
     };
+    // A browser/import cannot forge server-attested analytics milestones.
+    payload.state.launchAnalyticsOutbox = current.payload.state?.launchAnalyticsOutbox;
+    await validateAgentAssignments(env, identity.uid, current.payload.state || null, payload.state);
     if (!await writeState(env, identity, payload, current.etag)) {
       throw new DomainError(409, "state_conflict", "The Guilduo state changed on another device.");
     }
@@ -951,13 +1091,18 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   }
   if (path === "/v1/agents" && method === "GET") {
     assertConnectionScope(identity, "agents:read");
-    const includeArchived = new URL(request.url).searchParams.get("includeArchived") === "true";
-    return json({ agents: toPublicAgents(await listAgents(env, identity.uid, { includeArchived })) });
+    const query = new URL(request.url).searchParams;
+    const includeArchived = query.get("includeArchived") === "true";
+    if (query.has("limit") || query.has("cursor")) {
+      const page = await listAgentPage(env, identity.uid, { includeArchived, limit: query.has("limit") ? Number(query.get("limit")) : 100, cursor: query.get("cursor") || undefined });
+      return json({ ...page, agents: await publicAgentsWithAccess(env, identity.uid, page.agents) });
+    }
+    return json({ agents: await publicAgentsWithAccess(env, identity.uid, await listAgents(env, identity.uid, { includeArchived })) });
   }
   if (path === "/v1/agents" && method === "POST") {
     assertAgentRegistryWebMutation(request, env, identity);
     const created = await createAgent(env, identity.uid, await requestRecord(request));
-    return json({ agent: created === null ? null : toPublicAgent(created) }, 201);
+    return json({ agent: created === null ? null : (await publicAgentsWithAccess(env, identity.uid, [created]))[0] }, 201);
   }
   if (path === "/v1/agent-connections" && method === "GET") {
     assertAgentRegistryWebMutation(request, env, identity);
@@ -1001,7 +1146,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   if (agentMatch && method === "GET") {
     assertConnectionScope(identity, "agents:read");
     const agent = await getAgent(env, identity.uid, decodeURIComponent(agentMatch[1]), { includeArchived: true });
-    return json({ agent: toPublicAgent(agent) });
+    return json({ agent: (await publicAgentsWithAccess(env, identity.uid, [agent]))[0] });
   }
   if (agentMatch && method === "PATCH") {
     assertAgentRegistryWebMutation(request, env, identity);
@@ -1009,9 +1154,10 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const agent = await updateAgent(env, identity.uid, agentId, await requestRecord(request));
     if (["disabled", "archived"].includes(agent.status)) {
       const connections = await listAgentConnections(env, identity.uid, agentId);
-      await Promise.all(connections.map((connection) => revokeAuthorizedClient(env, identity.uid, connection.clientId)));
+      await Promise.all(connections.filter(connection => (connection.allowedAgentIds?.length ?? 0) < 2)
+        .map(connection => revokeAuthorizedClient(env, identity.uid, connection.clientId)));
     }
-    return json({ agent: toPublicAgent(agent) });
+    return json({ agent: (await publicAgentsWithAccess(env, identity.uid, [agent]))[0] });
   }
   const agentAvatarMatch = path.match(/^\/v1\/agents\/([^/]+)\/avatar$/);
   if (agentAvatarMatch && method === "GET") {
@@ -1034,7 +1180,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const { assetId } = await putAgentAvatar(env, bytes);
     try {
       const agent = await bumpAgentAvatarVersion(env, identity.uid, agentId, assetId, expectedUpdatedAt);
-      return json({ agent: toPublicAgent(agent), avatarVersion: agent.avatarVersion });
+      return json({ agent: (await publicAgentsWithAccess(env, identity.uid, [agent]))[0], avatarVersion: agent.avatarVersion });
     } catch (error) {
       // A thrown D1 call can have an ambiguous commit outcome. Deleting the R2
       // object in that state risks removing the image that D1 just activated.
@@ -1068,7 +1214,10 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const clientId = decodeURIComponent(agentConnectionMatch[2]);
     const client = await getAuthorizedClient(env, identity.uid, clientId);
     if (!client) throw new DomainError(404, "oauth_client_not_found", "An active OAuth MCP client with this ID was not found for the signed-in user.");
+    const input = request.body ? await requestRecord(request) : {};
+    if (Object.keys(input).some(key => key !== "allowedAgentIds")) throw new DomainError(400, "invalid_connection_input", "Only allowedAgentIds can be configured here.");
     return json({ connection: await relinkAgentConnection(env, identity.uid, agentId, {
+      allowedAgentIds: input.allowedAgentIds,
       clientId: client.clientId,
       clientName: client.clientName,
       scopes: client.scopes,
@@ -1252,7 +1401,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
     const actor = await relayContext(env, identity, "api");
-    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { ...actor, returnEvent: true }));
+    const created = await mutateAndNotify(env, identity, context, (state) => createQuest(state, input, { ...actor, returnEvent: true }), true);
     const createdQuest = created.quest;
     if (createdQuest && await isTogglFocusAutoCreateEnabled(env, identity)) {
       try {
@@ -1314,7 +1463,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   if (questMatch && method === "PATCH") {
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
-    return json(await mutateAndNotify(env, identity, context, (state) => patchQuest(state, decodeURIComponent(questMatch[1]), input, { source: "api", returnEvent: true })));
+    return json(await mutateAndNotify(env, identity, context, (state) => patchQuest(state, decodeURIComponent(questMatch[1]), input, { source: "api", returnEvent: true }), true));
   }
   const handoffMatch = path.match(/^\/v1\/quests\/([^/]+)\/handoff$/);
   if (handoffMatch && method === "POST") {
@@ -1330,7 +1479,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     assertScope(identity.scopes, "quests:write");
     const input = await requestRecord(request);
     const direction = input.direction === "down" ? "down" : "up";
-    return json(await mutateAndNotify(env, identity, context, (state) => scoreQuest(state, decodeURIComponent(scoreMatch[1]), direction, { source: "api" })));
+    return json(await mutateAndNotify(env, identity, context, (state) => scoreQuest(state, decodeURIComponent(scoreMatch[1]), direction, { source: "api", expectedUpdatedAt: input.expectedUpdatedAt }), true));
   }
   if (path === "/v1/character" && method === "GET") {
     assertScope(identity.scopes, "character:read");
@@ -1528,9 +1677,36 @@ async function convertCalendarEventWithOverrides(env: WorkerEnv, identity: Worke
 }
 
 async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<unknown> {
+  const tool = MCP_TOOLS.find(tool => tool.name === name);
+  if (!tool) throw new DomainError(400, "unknown_tool", "Unknown MCP tool.");
+  if (!validateMcpToolInput(tool.inputSchema, args).valid) throw new DomainError(400, "invalid_tool_arguments", "Arguments do not match the declared tool input schema.");
+  const allowedAgentIds = identity.agentConnection?.allowedAgentIds ?? (identity.agentConnection ? [identity.agentConnection.agentId] : []);
+  if (Object.prototype.hasOwnProperty.call(args, "actingAgentId")) {
+    const { actingAgentId, ...input } = args;
+    if (typeof actingAgentId !== "string" || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(actingAgentId) || actingAgentId.length > 80) throw new DomainError(400, "invalid_acting_agent", "actingAgentId must be a registered Agent ID.");
+    if (identity.authType !== "oauth" || !identity.clientId || !identity.agentConnection || identity.agentConnection.revokedAt || !allowedAgentIds.includes(actingAgentId)) throw new DomainError(403, "agent_not_allowed", "This Agent is not allowed on the current MCP connection. Configure the connection in Settings first.");
+    const agent = await getAgent(env, identity.uid, actingAgentId);
+    if (agent.status !== "active") throw new DomainError(403, "agent_inactive", "This Agent is not active.");
+    const connectionScopes = identity.connectionScopes || identity.scopes;
+    const effectiveExecutionScopes = connectionScopes.filter(scope => agent.allowedScopes.includes(scope));
+    identity = { ...identity, agent, agentAllowedScopes:agent.allowedScopes, scopes:effectiveExecutionScopes, effectiveExecutionScopes };
+    args = input;
+  } else if (allowedAgentIds.length > 1 && !["get_current_agent_context", "get_agent_link", "list_registered_agents", "link_agent", "unlink_agent"].includes(name)) {
+    throw new DomainError(400, "acting_agent_required", "This MCP connection is shared. Pass actingAgentId on every tool call; read get_current_agent_context for allowed IDs. Do not change the shared link to switch callers.");
+  }
+  if (identity.authType === "oauth" && identity.agentConnection && !identity.agent && !["get_current_agent_context", "get_agent_link", "list_registered_agents", "link_agent", "unlink_agent"].includes(name)) {
+    throw new DomainError(403, "agent_not_allowed", "The linked Agent is unavailable or this link was revoked. Restore the connection explicitly before execution.");
+  }
+  if (env.BILLING_ENABLED === "true" && identity.authType === "oauth" && !["get_current_agent_context", "get_agent_link", "list_registered_agents", "link_agent", "unlink_agent"].includes(name)) {
+    const agentId = identity.agent?.agentId || identity.agentConnection?.agentId;
+    if (agentId) await assertAgentAccess(env, identity.uid, agentId);
+  }
+  if (identity.authType === "oauth" && identity.agent?.status === "active" && env.ANALYTICS_ENABLED === "true") {
+    context.waitUntil(analyticsBackground(env, recordAgentConnection(env, identity.uid, identity.agent.agentId)));
+  }
   if (name === "list_registered_agents") {
     assertConnectionScope(identity, "agents:read");
-    return { agents: toPublicAgents(await listAgents(env, identity.uid)) };
+    return { agents: await publicAgentsWithAccess(env, identity.uid, await listAgents(env, identity.uid)) };
   }
   if (name === "get_current_agent_context") {
     assertConnectionScope(identity, "agents:read");
@@ -1538,8 +1714,10 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
     const agentAllowedScopes = identity.agentAllowedScopes || identity.agent?.allowedScopes || [];
     const effectiveExecutionScopes = identity.effectiveExecutionScopes || identity.scopes || [];
     return {
-      agent: identity.agent ? toPublicAgent(identity.agent) : null,
+      agent: identity.agent ? (await publicAgentsWithAccess(env, identity.uid, [identity.agent]))[0] : null,
       clientId: identity.clientId || null,
+      allowedAgentIds,
+      requiresAgentSelection: allowedAgentIds.length > 1,
       connectionScopes,
       agentAllowedScopes,
       effectiveExecutionScopes,
@@ -1555,6 +1733,7 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
   }
   if (name === "link_agent") {
     const client = await requireMcpConnection(env, identity, "agents:write");
+    if (allowedAgentIds.length > 1) throw new DomainError(409, "shared_connection_managed", "This connection is shared. Use actingAgentId on each call; change allowed Agents in Settings instead of relinking every caller.");
     const agentId = requiredString(args.agentId, "agentId");
     const previous = await getAgentConnection(env, identity.uid, identity.clientId || "");
     await relinkAgentConnection(env, identity.uid, agentId, {
@@ -1653,7 +1832,7 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
     const { questId, ...link } = args;
     return mutateAndNotify(env, identity, context, (state) => linkExternalRecord(state, requiredString(questId, "questId"), link as DomainRecord, { source: "mcp" }));
   }
-  if (name === "score_quest") { assertScope(identity.scopes, "quests:write"); return mutateAndNotify(env, identity, context, (state) => scoreQuest(state, requiredString(args.questId, "questId"), args.direction === "down" ? "down" : "up", { source: "mcp" })); }
+  if (name === "score_quest") { assertScope(identity.scopes, "quests:write"); return mutateAndNotify(env, identity, context, (state) => scoreQuest(state, requiredString(args.questId, "questId"), args.direction === "down" ? "down" : "up", { source: "mcp", expectedUpdatedAt: args.expectedUpdatedAt })); }
   if (name === "get_character_state") { assertScope(identity.scopes, "character:read"); return { character: characterState(await stateFor(env, identity)) }; }
   if (name === "buy_reward") { assertScope(identity.scopes, "rewards:write"); return mutateAndNotify(env, identity, context, (state) => buyReward(state, requiredString(args.questId, "questId"), { source: "mcp" })); }
   if (name === "list_integrations") { assertScope(identity.scopes, "integrations:read"); return { integrations: await listIntegrations(env, identity) }; }
@@ -1768,18 +1947,27 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
 }
 
 async function handleMcp(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity): Promise<Response> {
-  if (request.method === "GET") return json({ name: "questforge-mcp", transport: "streamable-http", protocol: "2025-06-18" });
-  const message = asRecord(await request.json().catch(() => null));
-  const params = asRecord(message.params);
-  if (message.method === "notifications/initialized") return new Response(null, { status: 202 });
+  const rejected = validateMcpHttpRequest(request, env.ALLOWED_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173");
+  if (rejected) return rejected;
+  let body: unknown;
+  try { body = await request.json(); }
+  catch { return json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400); }
+  const envelope = validateMcpEnvelope(body);
+  if (envelope.kind === "error") return json({ jsonrpc: "2.0", id: envelope.id, error: envelope.error }, 400);
+  if (envelope.kind === "notification") return new Response(null, { status: 202 });
+  const { message } = envelope;
+  const { params } = message;
+  const protocol = message.method === "initialize" ? negotiateMcpProtocolVersion(params.protocolVersion) : request.headers.get("mcp-protocol-version") || MCP_PROTOCOL_VERSION;
+  if (message.method === "ping") return json(mcpPingResponse(message.id), 200, { "mcp-protocol-version": protocol });
   let result: unknown;
-  if (message.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "questforge-mcp", version: "2.7.0" }, instructions: "Use Guilduo to organize quests, Quest Trees, registered Agents, daily plans, reviews, agent handoffs, profiles, friends, parties, command battles, and Toggl Focus. Read before writing. Preview Agent assignments, batch updates, batch scoring, archives, handoff transitions, battle commands, Focus tasks, timers, and time attribution before execution. Never request or accept API keys through MCP. Ask for confirmation before destructive actions. Quest deletion is not supported." };
+  if (message.method === "initialize") result = { protocolVersion: protocol, capabilities: { tools: {} }, serverInfo: { name: "questforge-mcp", version: "2.7.0" }, instructions: "Use Guilduo to organize quests, Quest Trees, registered Agents, daily plans, reviews, agent handoffs, profiles, friends, parties, command battles, and Toggl Focus. Read before writing. Preview Agent assignments, batch updates, batch scoring, archives, handoff transitions, battle commands, Focus tasks, timers, and time attribution before execution. Never request or accept API keys through MCP. Ask for confirmation before destructive actions. Quest deletion is not supported." };
   else if (message.method === "tools/list") result = { tools: MCP_TOOLS };
   else if (message.method === "tools/call") {
     try {
       const value = await callMcpTool(String(params.name || ""), asRecord(params.arguments), env, context, identity);
       result = { content: [{ type: "text", text: JSON.stringify(value, null, 2) }], structuredContent: value, isError: false };
     } catch (error) {
+      if (["invalid_tool_arguments", "unknown_tool"].includes(errorCode(error))) return json({ jsonrpc: "2.0", id: message.id, error: { code: -32602, message: errorMessage(error) } }, 400);
       result = {
         content: [{ type: "text", text: errorMessage(error) || "Guilduo tool failed." }],
         structuredContent: { error: { code: errorCode(error) || "tool_error", message: errorMessage(error) } },
@@ -1787,11 +1975,20 @@ async function handleMcp(request: Request, env: WorkerEnv, context: WorkerContex
       };
     }
   } else return json({ jsonrpc: "2.0", id: message.id ?? null, error: { code: -32601, message: "Method not found" } });
-  return json({ jsonrpc: "2.0", id: message.id ?? null, result }, 200, { "mcp-protocol-version": "2025-06-18" });
+  return json({ jsonrpc: "2.0", id: message.id, result }, 200, { "mcp-protocol-version": protocol });
 }
 
 async function handleRequest(request: Request, env: WorkerEnv, context: WorkerContext): Promise<Response> {
   const url = new URL(request.url); let path = url.pathname;
+  if (path === "/.well-known/openai-apps-challenge") {
+    const headers = { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" };
+    if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { ...headers, allow: "GET" } });
+    const token = env.OPENAI_APPS_CHALLENGE_TOKEN;
+    if (typeof token !== "string" || !token.trim() || /[\u0000-\u001f\u007f-\u009f]/.test(token)) {
+      return new Response("Not found", { status: 404, headers });
+    }
+    return new Response(token, { headers });
+  }
   if (path.startsWith("/api/")) {
     if (!isWebApiRequest(request, env)) {
       return json({ error: { code: "not_found", message: "Route not found." } }, 404);
@@ -1802,6 +1999,38 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
     path = path.slice(4);
   }
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+  if (path === "/analytics/acquisition") return handleAnalyticsPublic(request, env);
+  if (path === "/v1/analytics/admin/report" && request.method === "GET") {
+    const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+    return json(await analyticsAdminReport(env, token), 200, { "cache-control": "no-store" });
+  }
+  if (path === "/v1/analytics/admin/delete-account" && request.method === "POST") {
+    const token=request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1]||"";
+    requireAnalyticsAdmin(env,token);
+    const input=await boundedAnalyticsBody(request);
+    if(Object.keys(input).length!==1 || typeof input.uid!=="string" || !input.uid.trim() || input.uid.length>240)throw new DomainError(400,"invalid_request","One exact owner ID is required.");
+    return json(await deleteAnalyticsAccount(env,input.uid),200,{"cache-control":"no-store"});
+  }
+  if (path === "/v1/billing/webhook" && request.method === "POST") return handleStripeWebhook(request, env);
+  if (path.startsWith("/v1/billing/admin/")) {
+    const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+    const report = await getBillingAdminReport(env, token);
+    if (path === "/v1/billing/admin/report" && request.method === "GET") return json(report, 200, { "cache-control": "no-store" });
+    if (path === "/v1/billing/admin/decisions" && request.method === "GET") return json(await getDecisionReconciliationReport(env), 200, { "cache-control": "no-store" });
+    if (path === "/v1/billing/admin/decisions/reconcile" && request.method === "POST") {
+      const input = await billingInput(request);
+      if (Object.keys(input).some(key => !["uid", "requestId"].includes(key))) throw new DomainError(400, "invalid_request", "Only uid and requestId are accepted.");
+      const result = await reconcileDecisionSettlement(env, requiredString(input.uid, "uid"), requiredString(input.requestId, "requestId"));
+      return json({ reconciled: true, status: result.status }, 200, { "cache-control": "no-store" });
+    }
+    if (path === "/v1/billing/admin/reconcile" && request.method === "POST") {
+      const input = await billingInput(request);
+      if (Object.keys(input).some(key => key !== "uid")) throw new DomainError(400, "invalid_request", "Only uid is accepted.");
+      await reconcileBilling(env, requiredString(input.uid, "uid"));
+      return json({ reconciled: true }, 200, { "cache-control": "no-store" });
+    }
+    return json({ error: { code: "not_found", message: "Route not found." } }, 404);
+  }
   if (path === "/health") return json({ ok: true, service: "questforge-gateway", version: "2.7.0", schemaVersion: 7, mcp: { stable: "/mcp", preview: "/mcp-next", tools: MCP_TOOLS.length }, oauthStorage: oauthStorageKind(env), integrationStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", socialStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral", agentStorage: env.QUESTFORGE_DB ? "d1" : "ephemeral" });
   const mcpOrigin = mcpOriginForRequest(request, env);
   const rejectUntrustedMcpHost = () => json({ error: { code: "mcp_host_not_allowed", message: "MCP host is not configured." } }, 421, { "cache-control": "no-store" });
@@ -1820,6 +2049,10 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
   if (path === "/openapi.json") return fetch(new URL("/api/openapi.json", env.WEB_APP_URL || "http://localhost:5173"));
 
   if ((path === "/mcp" || path === "/mcp-next") && !mcpOrigin) return rejectUntrustedMcpHost();
+  if (path === "/mcp") {
+    const rejected = validateMcpHttpRequest(request, env.ALLOWED_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173");
+    if (rejected) return rejected;
+  }
   const authenticated = await timePhase("auth", () => authenticateRequest(request, env));
   if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${mcpOrigin || primaryMcpOrigin(env)}/.well-known/oauth-protected-resource/mcp"` });
   const identity = await timePhase("agent_context", () => identityWithAgentContext(env, authenticated));
@@ -1840,14 +2073,19 @@ export default {
         return withCors(errorResponse(error), request, env);
       }
     });
-    if (new URL(request.url).pathname.startsWith("/api/v1/")) response.headers.set("cache-control", "no-store");
+    const path = new URL(request.url).pathname;
+    if (path.startsWith("/api/v1/") || path.startsWith("/v1/billing") || path.startsWith("/v1/decisions") || path.includes("/analytics/")) response.headers.set("cache-control", "no-store");
     return response;
   },
   async scheduled(_controller: unknown, env: WorkerEnv, context: WorkerContext): Promise<void> {
     context.waitUntil(retryDeliveries(env));
     context.waitUntil(runScheduledIntegrations(env));
     context.waitUntil(purgeTelemetry(env));
+    context.waitUntil(analyticsBackground(env, purgeLaunchAnalytics(env)));
     context.waitUntil(runAgentAvatarCleanup(env));
+    context.waitUntil(runBillingMaintenance(env).then(result => {
+      if (result.failed.length) console.error("billing_maintenance_failed", { failed: result.failed, nextCursor: result.nextCursor });
+    }));
   },
 };
 

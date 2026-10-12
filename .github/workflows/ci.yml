@@ -11,6 +11,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      QF_CHROME_PATH: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,12 +47,22 @@ jobs:
           npm run launch:verify -- http://127.0.0.1:4173 --built
           npm run accessibility:verify -- http://127.0.0.1:4173 --built
           npm run entry:verify -- http://127.0.0.1:4173 --built
+          node --import tsx tools/verify-launch-analytics.mts --built
+          node --import tsx tools/verify-relay-battle.mts http://127.0.0.1:4173 --built
+          node --import tsx tools/verify-relay-connections.mts http://127.0.0.1:4173 --built
       - name: Verify workspace refresh against isolated Worker
         shell: bash
         run: |
+          node --import tsx tools/verify-billing-ui.mts
+          node --import tsx tools/verify-launch-analytics.mts
+          node --import tsx tools/verify-launch-operations.mts
           npm run dev -- --host 127.0.0.1 --port 4174 > /tmp/guilduo-sync-dev.log 2>&1 &
           dev_pid=$!
           trap 'kill "$dev_pid"' EXIT
           for attempt in {1..30}; do curl -fsS http://127.0.0.1:4174/tests/browser/production-relay.html >/dev/null && break; sleep 1; done
           npm run sync:verify -- http://127.0.0.1:4174
+          node --import tsx tools/verify-quiet-refresh.mts http://127.0.0.1:4174
+          npm run relay:verify -- http://127.0.0.1:4174
           node --import tsx tools/verify-relay-settings.mts http://127.0.0.1:4174
+          node --import tsx tools/verify-relay-battle.mts http://127.0.0.1:4174
+          node --import tsx tools/verify-relay-connections.mts http://127.0.0.1:4174

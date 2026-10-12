@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 import { authenticateRequest, sha256 } from "../worker/src/security.ts";
-import { approveAuthorization, authorizePage, noteAuthorizedClientUse, registerClient, revokeToken, tokenEndpoint } from "../worker/src/oauth.ts";
+import { approveAuthorization, authorizePage, deleteAuthorizedClient, noteAuthorizedClientUse, registerClient, revokeAuthorizedClient, revokeToken, tokenEndpoint } from "../worker/src/oauth.ts";
 import { getOAuthRecordStore } from "../worker/src/oauth-record-store.ts";
 import type { KvNamespaceLike, WorkerEnv } from "../worker/src/worker-types.ts";
 import { SqliteD1Database } from "./test-helpers.ts";
@@ -189,7 +189,7 @@ test("OAuth authorization preserves requested Agent scopes and never silently es
     const oldTokenAfterReauthorization = await authenticateRequest(new Request("https://mcp.guilduo.com/mcp", {
       headers: { authorization: `Bearer ${readOnly.tokens.access_token}` },
     }), authEnv);
-    assert.deepEqual(oldTokenAfterReauthorization?.scopes, ["agents:read"], "an existing access token must not gain a new scope");
+    assert.equal(oldTokenAfterReauthorization, null, "a new consent replaces the indexed authorization family");
 
     const invalid = await authorizePage(new Request(`https://mcp.guilduo.com/oauth/authorize?${new URLSearchParams({
       response_type: "code",
@@ -363,7 +363,7 @@ test("normal MCP initialize, tools/list, and ordinary tool calls perform zero KV
   }), env, context());
 
   try {
-    const initialized = await call(1, "initialize");
+    const initialized = await call(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });
     assert.equal(initialized.status, 200);
     assert.equal(kv.puts, 0, "initialize must not attempt a KV write");
 
@@ -503,7 +503,7 @@ test("the legacy KV lifecycle operation budget is explicit at every OAuth seam",
     }), { ...env, APPWRITE_ENDPOINT: "", APPWRITE_PROJECT_ID: "" });
     assert.ok(identity);
     await noteAuthorizedClientUse(env, identity!);
-    assert.deepEqual({ reads: kv.reads, puts: kv.puts, deletes: kv.deletes }, { reads: 3, puts: 1, deletes: 0 });
+    assert.deepEqual({ reads: kv.reads, puts: kv.puts, deletes: kv.deletes }, { reads: 4, puts: 1, deletes: 0 });
   } finally {
     global.fetch = originalFetch;
   }
@@ -817,6 +817,175 @@ test("MCP connection lifecycle requires Disconnect before hard delete and preser
 
     const foreign = await worker.fetch(new Request(`http://worker.test/v1/agent-connections/${clientId}/permanent`, { method: "DELETE", headers }), { ...env, DEV_USER_ID: "other-user" }, context());
     assert.equal(foreign.status, 404);
+  } finally {
+    db.close();
+  }
+});
+
+test("D1 activity and revocation writes preserve concurrent lifecycle changes", { timeout: 5000 }, async () => {
+  for (const [operation, mutation] of [["activity", "revoke"], ["activity", "delete"], ["activity", "reauthorize"],
+    ["activity", "hard-delete"], ["disconnect", "delete"], ["disconnect", "hard-delete"],
+    ["disconnect", "reauthorize"], ["disconnect", "activity"], ["hard-delete", "reauthorize"]]) {
+    const db = new SqliteD1Database();
+    const env: WorkerEnv = { QUESTFORGE_DB: db, QUESTFORGE_KV: new MemoryKv() };
+    const store = getOAuthRecordStore(env);
+    const identity = { uid: "race-owner", email: "", clientId: "race-client", scopes: ["quests:read"], authType: "oauth" as const };
+    const key = `user-client:${identity.uid}:${identity.clientId}`;
+    const old = { ...identity, refreshHash: "old-family", accessHash: "old-access", lastUsedAt: "2026-01-01T00:00:00.000Z",
+      revokedAt: operation === "hard-delete" ? "2026-01-01T00:00:00.000Z" : "" };
+    try {
+      await store.put(key, JSON.stringify(old));
+      let release!: () => void;
+      let read!: () => void;
+      const paused = new Promise<void>(resolve => { release = resolve; });
+      const snapshotRead = new Promise<void>(resolve => { read = resolve; });
+      const prepare = db.prepare.bind(db);
+      let armed = true;
+      db.prepare = sql => {
+        const statement = prepare(sql);
+        const bind = statement.bind.bind(statement);
+        statement.bind = (...values) => {
+          const bound = bind(...values);
+          const first = bound.first.bind(bound);
+          bound.first = async <T>() => {
+            const result = await first<T>();
+            if (armed && sql.includes("value_json") && sql.includes("FROM oauth_records WHERE record_key = ?") && (result as { record_key?: string })?.record_key === key) {
+              armed = false;
+              read();
+              await paused;
+            }
+            return result;
+          };
+          return bound;
+        };
+        return statement;
+      };
+      const pending = operation === "activity" ? noteAuthorizedClientUse(env, identity)
+        : operation === "disconnect" ? revokeAuthorizedClient(env, identity.uid, identity.clientId)
+          : deleteAuthorizedClient(env, identity.uid, identity.clientId);
+      await snapshotRead;
+      if (mutation === "revoke") await revokeAuthorizedClient(env, identity.uid, identity.clientId);
+      if (mutation === "delete") await store.delete(key);
+      if (mutation === "hard-delete") {
+        await revokeAuthorizedClient(env, identity.uid, identity.clientId);
+        await deleteAuthorizedClient(env, identity.uid, identity.clientId);
+      }
+      if (mutation === "reauthorize") await store.put(key, JSON.stringify({ ...old, revokedAt: "", refreshHash: "new-family", scopes: ["quests:write"] }));
+      if (mutation === "activity") await noteAuthorizedClientUse(env, identity);
+      const expected = await store.get(key);
+      release();
+      await pending;
+      if (mutation === "activity") {
+        const current = await store.get<Record<string, unknown>>(key, "json");
+        assert.ok(current?.revokedAt, "activity must not suppress a concurrent Disconnect");
+        assert.equal(current?.lastUsedAt, JSON.parse(expected as string).lastUsedAt);
+      } else {
+        assert.equal(await store.get(key), expected, `${operation}/${mutation}`);
+      }
+    } finally {
+      db.close();
+    }
+  }
+});
+
+test("D1 authorization codes are consumed once across concurrent exchanges, including legacy KV read-through", async () => {
+  for (const legacy of [false, true]) {
+    const db = new SqliteD1Database();
+    const kv = new MemoryKv();
+    const env: WorkerEnv = { QUESTFORGE_DB: db, QUESTFORGE_KV: kv };
+    const store = getOAuthRecordStore(env);
+    const code = "one-time-code";
+    const verifier = "one-time-verifier";
+    const key = `code:${await sha256(code)}`;
+    try {
+      await (legacy ? kv : store).put(key, JSON.stringify({ uid: "code-owner", clientId: "code-client",
+        redirectUri: "http://localhost/callback", challenge: await sha256(verifier), scopes: ["quests:read"] }), { expirationTtl: 300 });
+      const exchange = () => tokenEndpoint(formRequest("/oauth/token", { grant_type: "authorization_code", code,
+        client_id: "code-client", redirect_uri: "http://localhost/callback", code_verifier: verifier }), env);
+      const responses = await Promise.all([exchange(), exchange()]);
+      assert.deepEqual(responses.map(response => response.status).sort(), [200, 400]);
+      assert.deepEqual(await responses.find(response => response.status === 400)!.json(), { error: "invalid_grant" });
+      assert.equal((await exchange()).status, 400);
+      assert.equal(await store.get(key), null);
+      assert.equal((await store.list({ prefix: "refresh:" })).keys.length, 1);
+    } finally {
+      db.close();
+    }
+  }
+});
+
+test("D1 pending consent can issue only one code after overlapping account verifications", async () => {
+  const db = new SqliteD1Database();
+  const env: WorkerEnv = { QUESTFORGE_DB: db, APPWRITE_ENDPOINT: "https://consent.test/v1", APPWRITE_PROJECT_ID: "test" };
+  const store = getOAuthRecordStore(env);
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({ $id: "consent-owner", email: "" }));
+  try {
+    await store.put("authorize:one-consent", JSON.stringify({ clientId: "consent-client", redirectUri: "http://localhost/callback",
+      challenge: await sha256("consent-verifier"), scopes: ["quests:read"] }), { expirationTtl: 600 });
+    const approve = () => approveAuthorization(new Request("https://worker.test/oauth/approve", { method: "POST",
+      headers: { "content-type": "application/json" }, body: JSON.stringify({ requestId: "one-consent", jwt: "mock-appwrite-jwt" }) }), env);
+    const responses = await Promise.all([approve(), approve()]);
+    assert.deepEqual(responses.map(response => response.status).sort(), [200, 400]);
+    assert.equal((await store.list({ prefix: "code:" })).keys.length, 1);
+    assert.equal(await store.get("authorize:one-consent"), null);
+  } finally {
+    global.fetch = originalFetch;
+    db.close();
+  }
+});
+
+test("D1 Web Disconnect denies every owner/client family after reconsent and permanent history deletion", async () => {
+  const db = new SqliteD1Database();
+  const env: WorkerEnv = { QUESTFORGE_DB: db, QUESTFORGE_KV: new MemoryKv() };
+  const store = getOAuthRecordStore(env);
+  const clientId = "disconnect-client";
+  const uid = "disconnect-owner";
+  const exchange = async (owner = uid, client = clientId) => {
+    const code = `code-${owner}-${client}`;
+    await store.put(`code:${await sha256(code)}`, JSON.stringify({ uid: owner, clientId: client,
+      redirectUri: "http://localhost/callback", challenge: await sha256("disconnect-verifier"), scopes: ["quests:read"] }));
+    const response = await tokenEndpoint(formRequest("/oauth/token", { grant_type: "authorization_code", code,
+      client_id: client, redirect_uri: "http://localhost/callback", code_verifier: "disconnect-verifier" }), env);
+    assert.equal(response.status, 200);
+    return response.json() as Promise<{ access_token: string; refresh_token: string }>;
+  };
+  const identity = (token: string) => authenticateRequest(new Request("http://worker.test/mcp", { headers: { authorization: `Bearer ${token}` } }), env);
+  const refresh = (token: string) => tokenEndpoint(formRequest("/oauth/token", { grant_type: "refresh_token", refresh_token: token }), env);
+  try {
+    const a = await exchange();
+    assert.ok(await identity(a.access_token));
+    const b = await exchange();
+    assert.ok(await identity(b.access_token));
+    const otherOwner = await exchange("other-owner");
+    const otherClient = await exchange(uid, "other-client");
+    assert.ok((await revokeAuthorizedClient(env, uid, clientId))?.revokedAt);
+    assert.equal(await identity(a.access_token), null, "P0: superseded access must fail after Web Disconnect, even with no Agent relation");
+    assert.equal(await identity(b.access_token), null);
+    assert.equal((await refresh(a.refresh_token)).status, 400);
+    assert.equal((await refresh(b.refresh_token)).status, 400);
+    await deleteAuthorizedClient(env, uid, clientId);
+    assert.equal(await store.get(`user-client:${uid}:${clientId}`), null);
+    assert.equal(await identity(a.access_token), null, "permanent deletion must not restore legacy fallback");
+    assert.equal((await refresh(a.refresh_token)).status, 400, "refresh must honor the durable owner/client boundary too");
+    assert.equal(await store.get(`user-client:${uid}:${clientId}`), null, "a refused old refresh must leave the deleted index absent before fresh consent");
+    const c = await exchange();
+    assert.ok(await identity(c.access_token));
+    assert.equal((await refresh(c.refresh_token)).status, 200);
+    assert.equal(await identity(a.access_token), null);
+    assert.equal(await identity(b.access_token), null);
+    await revokeAuthorizedClient(env, uid, clientId);
+    await deleteAuthorizedClient(env, uid, clientId);
+    for (const tokens of [a, b, c]) {
+      assert.equal(await identity(tokens.access_token), null);
+      assert.equal((await refresh(tokens.refresh_token)).status, 400);
+    }
+    for (const tokens of [otherOwner, otherClient]) {
+      assert.ok(await identity(tokens.access_token));
+      assert.equal((await refresh(tokens.refresh_token)).status, 200);
+    }
+    assert.equal((db.raw.prepare("SELECT COUNT(*) AS n FROM agent_registry_connections WHERE uid = ? AND client_id = ?")
+      .get(uid, clientId) as { n: number }).n, 0, "the P0 reproduction has no Agent relation providing a separate revocation guard");
   } finally {
     db.close();
   }

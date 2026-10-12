@@ -20,7 +20,7 @@ import type {
 } from "../types/questforge.ts";
 import { isQuestKind } from "../types/questforge.ts";
 import type { QuestRequester } from "../types/questforge.ts";
-import { normalizeHumanRequest, normalizeRequester } from "../shared/relay.ts";
+import { nextQuestTimestamp, normalizeHumanRequest, normalizeRequester } from "../shared/relay.ts";
 
 export interface DomainRecord {
   quest?: Quest;
@@ -342,7 +342,7 @@ function customAgentId(rawId: unknown, label: unknown): string {
 function normalizeHandoff(value: unknown): HandoffDetails {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as DomainRecord : {};
   return {
-    note: String(input.note || "").trim().slice(0, 500),
+    note: Array.from(String(input.note || "").trim()).slice(0, 500).join(""),
     blockedReason: String(input.blockedReason || "").trim().slice(0, 500),
     artifactUrl: String(input.artifactUrl || "").trim().slice(0, 500),
     startedAt: String(input.startedAt || "").trim().slice(0, 40),
@@ -416,7 +416,7 @@ function normalizeQuest(task: RawQuest, index: number, previousVersion: number, 
     togglActualMinutes: nonNegativeInteger(task.togglActualMinutes),
     actualMinutes: nonNegativeInteger(task.actualMinutes),
     completionCriteria: String(task.completionCriteria || "").slice(0, 300),
-    nextAction: String(task.nextAction || "").slice(0, 180),
+    nextAction: Array.from(String(task.nextAction || "")).slice(0, 180).join(""),
     impact: setFromSet<Impact>(IMPACTS, task.impact, "medium"),
     isBlockingOthers: Boolean(task.isBlockingOthers),
     rolloverCount: nonNegativeInteger(task.rolloverCount),
@@ -592,7 +592,8 @@ function appendEvent(state: QuestForgeState, type: string, task: Quest | null, d
 
 function validateString(input: DomainInput, key: string, maxLength: number): string | undefined {
   if (!Object.hasOwn(input, key)) return undefined;
-  return String(input[key] || "").trim().slice(0, maxLength);
+  const value = String(input[key] || "").trim();
+  return key === "nextAction" ? Array.from(value).slice(0, maxLength).join("") : value.slice(0, maxLength);
 }
 
 function validateQuestInput(input: unknown, partial = false): ValidatedQuestInput {
@@ -694,6 +695,14 @@ function validateHandoffPatch(currentQuest: Quest, nextAssignee: QuestAssignee):
   if (!HANDOFF_TRANSITIONS.get(currentState)?.has(nextState)) {
     throw new DomainError(409, "invalid_handoff_transition", `Cannot move handoff from ${currentState} to ${nextState}.`);
   }
+}
+
+function assertQuestVersion(quest: Quest, expectedUpdatedAt: unknown): void {
+  if (expectedUpdatedAt === undefined) return;
+  if (typeof expectedUpdatedAt !== "string" || !expectedUpdatedAt.trim() || expectedUpdatedAt.length > 40 || !Number.isFinite(Date.parse(expectedUpdatedAt))) {
+    throw new DomainError(400, "invalid_expected_updated_at", "expectedUpdatedAt must be the timestamp returned by get_quest.");
+  }
+  if (expectedUpdatedAt !== quest.updatedAt) throw new DomainError(409, "quest_conflict", "The Quest changed. Read it again before retrying.");
 }
 
 function validateDependencies(state: QuestForgeState, questId: string, dependencyIds: string[]): void {
@@ -824,7 +833,7 @@ export function transitionQuestHandoff(state: QuestForgeState, questId: string, 
   }
   const artifactUrl = String(input.artifactUrl || quest.handoff?.artifactUrl || "").trim();
   if (artifactUrl && !artifactUrl.startsWith("https://")) throw new DomainError(400, "invalid_artifact_url", "artifactUrl must use HTTPS.");
-  const now = new Date().toISOString();
+  const now = nextQuestTimestamp(quest.updatedAt);
   quest.assignee.handoffState = nextState;
   quest.handoff = normalizeHandoff({ ...quest.handoff, ...input, artifactUrl });
   if (nextState === "working") quest.handoff.startedAt ||= now;
@@ -972,6 +981,7 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
   const quest = state.tasks.find((item) => item.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
   const clean = validateQuestInput(input, true);
+  assertQuestVersion(quest, (input as DomainInput).expectedUpdatedAt);
   if (quest.humanRequest) {
     throw new DomainError(409, "human_request_managed", "Use the human request response action to change this confirmation Quest.");
   }
@@ -1019,7 +1029,7 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
       }
     }
   }
-  quest.updatedAt = new Date().toISOString();
+  quest.updatedAt = nextQuestTimestamp(quest.updatedAt);
   refreshActualMinutes(quest);
   const event = appendEvent(state, "quest.updated", quest, { fields: Object.keys(clean) }, context.source || "api");
   const events = [event];
@@ -1089,7 +1099,7 @@ export function archiveQuests(state: QuestForgeState, input: DomainInput = {}, c
     task.lifecycleState = "archived";
     task.completedAt ||= now;
     task.archivedAt = now;
-    task.updatedAt = now;
+    task.updatedAt = nextQuestTimestamp(task.updatedAt);
     events.push(appendEvent(state, "quest.archived", task, {}, context.source || "api"));
   }
   touch(state);
@@ -1110,7 +1120,7 @@ export function linkExternalRecord(state: QuestForgeState, questId: string, inpu
   if (index >= 0) quest.externalLinks[index] = link;
   else quest.externalLinks = [...quest.externalLinks, link].slice(-30);
   refreshActualMinutes(quest);
-  quest.updatedAt = new Date().toISOString();
+  quest.updatedAt = nextQuestTimestamp(quest.updatedAt);
   const event = appendEvent(state, "quest.external_linked", quest, { service: link.service, externalId: link.externalId, type: link.type }, context.source || "api");
   touch(state);
   return { quest: questOutput(quest), link, event };
@@ -1124,7 +1134,7 @@ export function removeManagedFocusEntry(state: QuestForgeState, questId: string,
   quest.externalLinks = quest.externalLinks.filter((link) => !(link.service === "toggl-focus" && link.externalId === String(entryId) && (link.type === "time_entry" || link.sourceType === "focus.time_entry")));
   if (quest.externalLinks.length === before) return { quest: questOutput(quest), removed: false, event: null };
   refreshActualMinutes(quest);
-  quest.updatedAt = new Date().toISOString();
+  quest.updatedAt = nextQuestTimestamp(quest.updatedAt);
   const event = appendEvent(state, "quest.external_unlinked", quest, { service: "toggl-focus", externalId: String(entryId), type: "time_entry" }, context.source || "api");
   touch(state);
   return { quest: questOutput(quest), removed: true, event };
@@ -1136,11 +1146,10 @@ export function purgeManagedFocusLinks(state: QuestForgeState, input: DomainInpu
   const affected = state.tasks.filter((task) => task.externalLinks.some((link) => link.service === "toggl-focus"));
   if (dryRun) return { dryRun: true, count: affected.length, quests: affected.map((task) => questOutput(task)) };
   const events = [];
-  const now = new Date().toISOString();
   for (const task of affected) {
     task.externalLinks = task.externalLinks.filter((link) => link.service !== "toggl-focus");
     refreshActualMinutes(task);
-    task.updatedAt = now;
+    task.updatedAt = nextQuestTimestamp(task.updatedAt);
     events.push(appendEvent(state, "quest.external_purged", task, { service: "toggl-focus" }, context.source || "api"));
   }
   if (affected.length) touch(state);
@@ -1166,13 +1175,14 @@ export function scoreQuest(state: QuestForgeState, questId: string, direction: "
   const quest = state.tasks.find((item) => item.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
   if (quest.humanRequest && !context.allowHumanResponse) throw new DomainError(409, "human_response_required", "Respond to this human request before completing it.");
+  assertQuestVersion(quest, context.expectedUpdatedAt);
   if (quest.kind === "reward") return buyReward(state, questId, context) as unknown as ScoreResult;
   const positive = direction === "up";
   const scale = difficultyScale(quest.difficulty);
   let reward = { gems: 0, xp: 0, mp: 0 };
   let rewardGranted = false;
   let eventType = "quest.scored";
-  const now = new Date().toISOString();
+  const now = nextQuestTimestamp(quest.updatedAt);
   if (quest.kind === "daily" || quest.kind === "todo") {
     if (!positive) {
       quest.done = false;

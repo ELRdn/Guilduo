@@ -195,8 +195,8 @@ test("generated contracts expose Agent Registry, social, Quest Tree, battle, and
   }
 });
 
-test("QuestForge workflow skill covers safe reviews, social actions, battles, and Toggl Focus", () => {
-  const skill = fs.readFileSync(path.join(root, "skills/questforge-workflows/SKILL.md"), "utf8");
+test("Guilduo workflow skill covers safe reviews, social actions, battles, and Toggl Focus", () => {
+  const skill = fs.readFileSync(path.join(root, "skills/guilduo-workflows/SKILL.md"), "utf8");
   assert.match(skill, /dryRun/);
   assert.match(skill, /Weekly Review/);
   assert.match(skill, /exact `@handle`/);

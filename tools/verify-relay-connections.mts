@@ -88,6 +88,7 @@ try {
       const page = await context.newPage();
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(`${base}/tests/browser/production-relay.html?api=${encodeURIComponent(fixture.baseUrl)}&uid=${fixture.uid}&lang=ja`);
+      if (!await page.getByRole("button", { name:"Connections", exact:true }).isVisible()) await page.locator(".rf-nav-more").click();
       await page.getByRole("button", { name:"Connections", exact:true }).click();
       await page.locator('.rf-c-row[data-connection-id="google-tasks"]').click();
       await page.evaluate('window.dispatchEvent(new CustomEvent("test:connection-preview-failure", { detail:true }))');
@@ -156,6 +157,7 @@ try {
       assert.ok(cursors.includes("200"));
       results.push("HTTP Worker: sync imports real task, failed refresh holds writes across selection, read retry applies data without repeating mutation");
       results.push("HTTP Worker: read recovery follows real pagination beyond 200 Quests and preserves later records");
+      if (!await page.getByRole("button", { name:"Connections", exact:true }).isVisible()) await page.locator(".rf-nav-more").click();
       await page.getByRole("button", { name:"Connections", exact:true }).click();
       await page.locator('.rf-c-row[data-connection-id="google-tasks"]').click();
       await page.locator('[data-connection-action="disconnect"]').click();

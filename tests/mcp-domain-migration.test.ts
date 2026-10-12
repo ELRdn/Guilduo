@@ -40,7 +40,7 @@ test("MCP origin allowlist emits request-origin metadata for both old and new do
     assert.equal(resource.resource, `${origin}/mcp`);
     assert.deepEqual(resource.authorization_servers, [origin]);
 
-    const unauthorized = await worker.fetch(new Request(`${origin}/mcp`, { method: "POST", body: "{}" }), env, context());
+    const unauthorized = await worker.fetch(new Request(`${origin}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), env, context());
     assert.equal(unauthorized.status, 401, origin);
     assert.match(unauthorized.headers.get("www-authenticate") || "", new RegExp(`${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/\\.well-known/oauth-protected-resource/mcp`));
   }

@@ -228,7 +228,7 @@ Questタイトルは画面内で最も強い文字階層とする。Attention Sh
 
 ### 6.2 Responsibility Relay
 
-添付画像の`Hironao → Forge Runner → Warden`を、Human → Agent → Human Reviewの代表fixtureとして使う。
+添付画像の`admin → Forge Runner → Warden`を、Human → Agent → Human Reviewの代表fixtureとして使う。
 
 各Actor nodeは次を持つ。
 

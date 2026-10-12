@@ -31,6 +31,7 @@ import { el } from "./primitives/dom.ts";
 import { externalCheck } from "./primitives/external-check.ts";
 import { questContext } from "./primitives/quest-context.ts";
 import { relayText } from "./relay-copy.ts";
+import { workText } from "./productivity-copy.ts";
 import { questActionLabel, type QuestActionId, type QuestActionState } from "./quest-actions.ts";
 import { t } from "../../i18n.ts";
 import { countLabel, elapsedLabel } from "./screens/screen-state.ts";
@@ -102,7 +103,7 @@ function mobileHeader(state: MobileState, callbacks: MobileCallbacks): HTMLEleme
   return el(
     "header",
     { class: "rf-m-header" },
-    el("h1", { class: "rf-m-title" }, "Command"),
+    el("h1", { class: "rf-m-title" }, workText("home")),
     inbox,
     el(
       "div",

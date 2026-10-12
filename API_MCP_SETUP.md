@@ -122,7 +122,7 @@ Claude、OpenClaw、Hermesは、同じRemote HTTP MCPとOAuth metadataを使い�
 5. 認可済みMCPクライアントをAgentへ紐付ける
 6. Quest担当へ割り当て、`ready → working → review_required → accepted`を確認する
 
-Agent作成、編集、権限変更、MCPクライアント紐付けはAppwriteログインしたWeb UIだけが行います。AgentはPartyで管理し、接続済みClientはConnectionsでリンクします。MCPクライアントは自分の権限を拡張できません。Skillの正規版は[`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)、OpenAI Plugin/MCP App準備パッケージは[`plugins/questforge/`](plugins/questforge/)です。これらのtechnical IDは互換性のため維持します。
+Agent作成、編集、権限変更、MCPクライアント紐付けはAppwriteログインしたWeb UIだけが行います。AgentはPartyで管理し、接続済みClientはConnectionsでリンクします。MCPクライアントは自分の権限を拡張できません。Skillの正規版は[`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)、OpenAI Plugin/MCP App準備パッケージは[`plugins/questforge/`](plugins/questforge/)です。Skill名は `guilduo-workflows` へ移行し、MCP・package・plugin・保存データのtechnical IDは維持します。[移行手順](docs/guilduo-workflows-migration.md)。
 
 ## 6. CLI
 

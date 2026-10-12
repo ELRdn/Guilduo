@@ -81,6 +81,7 @@ try {
       assert.equal(await page.evaluate("document.documentElement.scrollWidth <= innerWidth"), true, `${locale}/${width}: horizontal overflow`);
       await page.screenshot({ path: `.qa-artifacts/relay-accessibility/${locale}-${width}${built ? "-built" : ""}.png` });
       results.push(`${locale}/${width}: locale and viewport fit`);
+      if (!await page.getByRole('button', { name:'Network', exact:true }).isVisible()) await page.locator('.rf-nav-more').click();
       await page.getByRole('button', { name:'Network', exact:true }).click();
       assert.equal(await page.locator('.rf-screen-question').textContent(), relayText('networkQuestion', locale));
       if (width === 1440) {
@@ -312,6 +313,7 @@ try {
       const networkPage = await browser.newPage({ viewport:{ width:1440, height:900 }, reducedMotion:'reduce' });
       networkPage.on('pageerror', error => errors.push(error.message));
       await networkPage.goto(`${base}/tests/browser/production-relay.html?api=${encodeURIComponent(fixture.baseUrl)}&uid=${fixture.uid}&lang=ja`);
+      await networkPage.locator('.rf-nav-more').click();
       await networkPage.getByRole('button', { name:'Network', exact:true }).click();
       await networkPage.locator('.rf-n-world').waitFor({ state:'visible' });
       assert.equal(await networkPage.locator('.rf-metric-value').nth(1).textContent(), '1');

@@ -22,6 +22,7 @@ import { t } from "../../i18n.ts";
 type JsonRecord = Record<string, unknown>;
 
 export interface RelayForgeRuntime {
+  readonly productivityPort?: Pick<QuestForgeRepository, "productivity">;
   readonly mode: "production";
   readonly loadDeferred?: () => Promise<RelayForgeRuntime>;
   readonly refreshWorkspace?: () => Promise<RelayForgeRuntime>;
@@ -39,6 +40,9 @@ export interface RelayForgeRuntime {
   readonly questPort: Pick<QuestForgeRepository, "createQuest" | "updateQuest" | "scoreQuest" | "getBattleSession">;
   readonly humanRequestPort?: Pick<QuestForgeRepository, "getQuest" | "listHumanRequests" | "respondHumanReview" | "requestHumanReview">;
   readonly agentPort: Pick<QuestForgeRepository, "createAgent" | "updateAgent">;
+  /** Lazy, owner-only billing/Jev operations; never part of the workspace poll. */
+  readonly billingPort?: Pick<QuestForgeRepository, "getBilling" | "getBillingCredits" | "createCheckout" | "createBillingPortal" | "selectBillingAgents" | "estimateDecision" | "createDecision" | "getDecision" | "applyDecision">;
+  readonly analyticsPort?: Pick<QuestForgeRepository, "getAnalyticsConsent" | "setAnalyticsConsent">;
   readonly handoffPort: HandoffPort;
   readonly battlePort: BattlePort;
   readonly battleSession: BattleSession | null;
@@ -110,6 +114,7 @@ function normalizeAgentConnections(value: unknown): SettingsMcpConnectionRow[] {
       firstConnectedAt: text(connection.firstConnectedAt) || previous?.firstConnectedAt || "",
       lastUsedAt: text(connection.lastUsedAt) || previous?.lastUsedAt || "",
       linkedAgentId: text(connection.agentId) || previous?.linkedAgentId || null,
+      allowedAgentIds: [...new Set([text(connection.agentId), ...strings(connection.allowedAgentIds)])].filter(Boolean),
       linkRevokedAt: text(connection.revokedAt) || null,
       authorized: previous?.authorized ?? false,
       revokedAt: previous?.revokedAt ?? null,
@@ -185,6 +190,8 @@ export function normalizeAgentRecord(item: unknown): AgentRecord | null {
       role: text(agent.role),
       instructions: text(agent.instructions),
       status: text(agent.status),
+      ...(typeof agent.planAllowed === "boolean" ? { planAllowed: agent.planAllowed } : {}),
+      ...(typeof agent.restrictionReason === "string" ? { restrictionReason: agent.restrictionReason } : {}),
       allowedScopes: strings(agent.allowedScopes),
       reviewRequired: agent.reviewRequired === true,
       dryRunDefault: agent.dryRunDefault !== false,
@@ -272,6 +279,10 @@ function runtimeFromSnapshot(snapshot: Awaited<ReturnType<QuestForgeRepository["
     questPort: repository,
     humanRequestPort: repository,
     agentPort: repository,
+    productivityPort: repository,
+    billingPort: repository,
+    // Consent withdrawal must remain available when collection is switched off.
+    analyticsPort: repository,
     handoffPort: repository,
     battlePort: new RepositoryBattlePort(repository),
     battleSession,

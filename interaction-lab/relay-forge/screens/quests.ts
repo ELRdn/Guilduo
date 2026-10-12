@@ -21,6 +21,8 @@
 import type { Actor } from "../model.ts";
 import { formatDate, t } from "../../../i18n.ts";
 import { relayText } from "../relay-copy.ts";
+import { workText } from "../productivity-copy.ts";
+import { addDays, localDate } from "../../../shared/productivity.ts";
 import { actorAvatar } from "../primitives/avatar.ts";
 import { el } from "../primitives/dom.ts";
 import type { Impact } from "../../../types/questforge.ts";
@@ -59,6 +61,9 @@ export * from "./quests-model.ts";
  * ------------------------------------------------------------------ */
 
 export interface QuestsState {
+  view?: "board" | "list" | "gantt";
+  ganttStart?: string;
+  ganttDays?: number;
   segment: PortfolioBucket | "all";
   query: string;
   sort: "priority" | "due" | "updated" | "impact";
@@ -87,7 +92,7 @@ const BUCKET_WEIGHT: Readonly<Record<PortfolioBucket, number>> = {
   done: 4,
 };
 
-function visibleRows(model: QuestsModel, state: QuestsState): readonly QuestRow[] {
+export function visibleRows(model: QuestsModel, state: QuestsState): readonly QuestRow[] {
   const query = state.query.trim().toLowerCase();
   const filtered = model.rows.filter((row) => {
     if (!state.showArchived && row.archived) return false;
@@ -115,6 +120,44 @@ function visibleRows(model: QuestsModel, state: QuestsState): readonly QuestRow[
     return right.relay.heldForMinutes - left.relay.heldForMinutes;
   });
   return sorted;
+}
+
+function viewControl(state: QuestsState, context: ScreenContext): HTMLElement {
+  return segmentControl(workText("view"), ["board", "list", "gantt"].map(id => ({ id, label: workText(id as "board" | "list" | "gantt") })), state.view ?? "list", id => {
+    state.view = id as QuestsState["view"]; state.mobileDetailOpen = false;
+    try { localStorage.setItem("qf-quest-view", id); } catch { /* View selection remains usable without storage. */ }
+    context.rerender();
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>('.rf-q-view .rf-segment[data-selected="true"]')?.focus({ preventScroll: true }));
+  });
+}
+
+function alternatePortfolio(rows: readonly QuestRow[], state: QuestsState, context: ScreenContext, selectedId: string | null): HTMLElement {
+  const select = (row: QuestRow) => { state.mobileDetailOpen = context.isMobile; context.onSelectQuest(row.id); };
+  const card = (row: QuestRow) => {
+    const button = el("button", { type: "button", class: "rf-work-card", "data-quest-id": row.id, "aria-pressed": String(selectedId === row.id) }, bucketChip(row.bucket), el("b", {}, row.title), el("small", {}, `${row.ref} · ${actorFor(context, row.ownerActorId)?.name ?? row.ownerActorId}`), el("small", {}, `${workText("schedule")}: ${row.scheduledDate || "—"} · ${workText("deadline")}: ${row.dueDate || "—"}`));
+    button.addEventListener("click", () => select(row)); return button;
+  };
+  if (state.view === "board") return el("div", { class: "rf-work-board" }, ...(["scheduled", "working", "review", "blocked", "done"] as PortfolioBucket[]).map(bucket => el("section", { class: "rf-work-column", "aria-label": BUCKET_LABEL[bucket] }, el("h2", {}, `${BUCKET_LABEL[bucket]} (${rows.filter(r => r.bucket === bucket).length})`), ...rows.filter(r => r.bucket === bucket).map(card))));
+  const start = state.ganttStart ?? addDays(localDate(), -3), days = state.ganttDays ?? 30;
+  const startField = el("input", { type: "date", value: start, "aria-label": workText("from") }); startField.addEventListener("change", () => { if (startField.value) { state.ganttStart = startField.value; context.rerender(); } });
+  const period = el("select", { "aria-label": workText("days") }, ...[...new Set([14, 30, 90, 365, days])].sort((a, b) => a - b).map(n => el("option", { value: String(n), selected: n === days }, String(n))));
+  period.addEventListener("change", () => { state.ganttDays = Number(period.value); context.rerender(); });
+  const today = el("button", { type: "button" }, workText("today")); today.addEventListener("click", () => { state.ganttStart = addDays(localDate(), -3); context.rerender(); });
+  const fit = el("button", { type: "button" }, workText("fit")); fit.addEventListener("click", () => { const dates = rows.flatMap(r => [r.scheduledDate, r.dueDate]).filter(Boolean).sort(); state.ganttStart = dates[0] ?? localDate(); state.ganttDays = dates.length ? Math.max(14, Math.ceil((Date.parse(dates.at(-1)!) - Date.parse(dates[0]!)) / 86400000) + 1) : 30; context.rerender(); });
+  const step = Math.max(1, Math.ceil(days / 90)), columns = Math.ceil(days / step);
+  const grid = el("div", { class: "rf-work-gantt-grid", style: `--work-days:${columns}` }, el("div", { class: "rf-work-gantt-head" }, el("span", {}, "Quest"), ...Array.from({ length: columns }, (_, i) => el("span", { title: addDays(start, i * step) }, addDays(start, i * step).slice(5)))));
+  for (const row of rows) {
+    const date = row.scheduledDate || row.dueDate;
+    if (!date) continue;
+    const from = Math.floor((Date.parse(date) - Date.parse(start)) / 86400000);
+    const until = row.planningMode === "until_due" && row.scheduledDate && row.dueDate ? Math.max(from, Math.floor((Date.parse(row.dueDate) - Date.parse(start)) / 86400000)) : from;
+    const label = el("button", { type: "button", class: "rf-work-gantt-label", "data-quest-id": row.id }, row.title); label.addEventListener("click", () => select(row));
+    const lane = el("div", { class: "rf-work-gantt-lane" });
+    if (until >= 0 && from < days) { const bar = el("button", { type: "button", class: "rf-work-gantt-bar", style: `left:${Math.max(0, from) / days * 100}%;width:${(Math.min(days - 1, until) - Math.max(0, from) + 1) / days * 100}%`, "aria-label": `${row.title}: ${date} — ${row.dueDate || date}`, "aria-pressed": String(selectedId === row.id) }, row.title); bar.addEventListener("click", () => select(row)); lane.append(bar); }
+    grid.append(el("div", { class: "rf-work-gantt-row" }, label, lane));
+    if (row.dependencyIds.length) grid.append(el("small", { class: "rf-work-dependency" }, `${workText("dependencies")}: ${row.ref} ← ${row.dependencyIds.join(", ")}`));
+  }
+  return el("div", {}, el("div", { class: "rf-work-toolbar" }, startField, period, today, fit), el("div", { class: "rf-work-gantt", role: "region", tabindex: 0, "aria-label": workText("gantt") }, grid), el("h2", {}, workText("unscheduled")), ...rows.filter(r => !r.scheduledDate && !r.dueDate).map(card));
 }
 
 function bucketCount(model: QuestsModel, bucket: PortfolioBucket): number {
@@ -220,6 +263,8 @@ function evidenceCell(row: QuestRow): HTMLElement {
  * ------------------------------------------------------------------ */
 
 export interface QuestsCallbacks {
+  readonly relatedNotes?: (questId: string) => HTMLElement;
+  readonly workTime?: (questId: string) => string;
   /** Assign the Quest to a different actor. Backed by `updateQuest`. */
   readonly onAssign?: (questId: string, actorId: string) => void;
   /** Edit title, due date, estimate, next action, or assignee. */
@@ -304,6 +349,8 @@ function detailRail(
       row.overdue ? stateChip({ tone: "danger", label: t("task.summary.overdue"), mark: "!!" }) : null,
     ),
     el("h3", { class: "rf-q-detail-title" }, row.title),
+    el("p", {}, `${workText("time")}: ${callbacks.workTime?.(row.id) ?? row.actualMinutes} · ${relayText("minutesEstimate")}: ${row.estimatedMinutes}`),
+    callbacks.relatedNotes?.(row.id) ?? null,
     row.nextAction === "" ? null : el("p", { class: "rf-q-detail-next" }, el("b", { class: "rf-inline-label" }, `${t("ui.nextAction")} `), row.nextAction),
     el("h4", { class: "rf-q-detail-label" }, relayText("handoff")),
     relayLine(context, row),
@@ -436,6 +483,7 @@ function portfolioRow(
       "span",
       { class: "rf-q-cell rf-q-cell-title", role: "cell" },
       el("span", { class: "rf-srow-title rf-q-title", title: row.title }, row.title),
+      el("small", { class: "rf-q-times" }, `${relayText("minutesEstimate")}: ${row.estimatedMinutes} · ${workText("time")}: ${row.workTime ?? row.actualMinutes}`),
       el(
         "span",
         {
@@ -586,11 +634,12 @@ export function renderQuestsDesktop(
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     metricRow(portfolioMetrics(model, state, context)),
+    el("div", { class: "rf-q-view" }, viewControl(state, context)),
     filterBar(model, state, context),
     el(
       "div",
       { class: "rf-q-workspace" },
-      screenRegion("Quest portfolio", { scroll: true, variant: "portfolio" }, table),
+      screenRegion("Quest portfolio", { scroll: true, variant: "portfolio" }, state.view && state.view !== "list" ? alternatePortfolio(rows, state, context, visibleSelectedId) : table),
       detailRail(model, state, context, callbacks, visibleSelectedId),
     ),
   );
@@ -678,6 +727,7 @@ export function renderQuestsMobile(
     };
   }
 
+  if (state.view && state.view !== "list") return { main: el("div", { class: "rf-screen rf-screen--quests" }, screenHeader({ title: "Quests", question: relayText("questsQuestion") }), el("div", { class: "rf-q-view" }, viewControl(state, context)), filterBar(model, state, context), alternatePortfolio(rows, state, context, selectedId)) };
   const create = el("button", { type: "button", class: "rf-primary-button" }, relayText("createQuest"));
   if (callbacks.onCreate !== undefined) create.addEventListener("click", () => callbacks.onCreate?.());
 
@@ -693,6 +743,7 @@ export function renderQuestsMobile(
       ],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
+    el("div", { class: "rf-q-view" }, viewControl(state, context)),
     segmentControl(
       relayText("filterStatus"),
       [

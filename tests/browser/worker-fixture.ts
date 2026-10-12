@@ -11,11 +11,11 @@ import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 import { FakeR2Bucket } from "../test-helpers.ts";
 
 /** A real Worker HTTP bridge using isolated in-memory stores and test credentials. */
-export async function startRelayWorkerFixture(origin: string) {
+export async function startRelayWorkerFixture(origin: string, overrides: Partial<WorkerEnv> = {}) {
   const uid = `relay-browser-${crypto.randomUUID()}`;
   const humanToken = "local-relay-human-test-token";
   const agentToken = `local-relay-agent-test-token:${uid}`;
-  const env: WorkerEnv = { DEV_BEARER_TOKEN: humanToken, DEV_USER_ID: uid, ALLOWED_ORIGINS: origin, AGENT_AVATARS: new FakeR2Bucket() };
+  const env: WorkerEnv = { DEV_BEARER_TOKEN: humanToken, DEV_USER_ID: uid, ALLOWED_ORIGINS: origin, AGENT_AVATARS: new FakeR2Bucket(), ...overrides };
   const context = { waitUntil(promise: Promise<unknown>) { promise.catch(() => {}); } };
   const state = migrateState({ schemaVersion: 7 } as QuestForgeState);
   const previous = await readState(env, uid);
