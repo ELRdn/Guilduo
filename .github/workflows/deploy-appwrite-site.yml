@@ -41,6 +41,7 @@ jobs:
           WEB_APP_URL: ${{ vars.WEB_APP_URL }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://guilduo.com' }}
           SOURCE_URL: ${{ vars.SOURCE_URL }}
+          GA4_MEASUREMENT_ID: ${{ vars.GA4_MEASUREMENT_ID }}
           EXTERNAL_OAUTH_ENABLED: ${{ vars.EXTERNAL_OAUTH_ENABLED || 'false' }}
           JOIN_GUILD_URL: ${{ vars.JOIN_GUILD_URL || 'https://app.guilduo.com/' }}
           D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}

@@ -3,6 +3,7 @@ import "../lpv2/site";
 import "../lpv2-1/motion";
 import "./motion";
 import "./experience";
+import "../public-measurement";
 import { createIcons, ArrowDown, ArrowLeftRight, ArrowRight, ArrowUpRight, Bot, Check, Inbox, Languages, RotateCcw, User } from "lucide";
 import contract from "../api/mcp-tools.json";
 

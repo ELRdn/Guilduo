@@ -68,8 +68,9 @@ try {
     page.on("pageerror", e => errors.push(e.message));
     await page.goto(base.origin + item.path, { waitUntil: "networkidle" });
     await page.locator('header a[hreflang="' + (item.locale === "ja" ? "en" : "ja") + '"]').click();
+    await page.waitForLoadState("networkidle");
     assert.equal(new URL(page.url()).pathname, solutionPath(item.locale === "ja" ? "en" : "ja", item.slug));
-    assert.equal(await page.evaluate("document.documentElement.scrollWidth > innerWidth + 1"), false);
+    assert.equal(await page.evaluate("document.documentElement.scrollWidth > innerWidth + 1"), false, "language navigation overflow " + item.path);
     assert.deepEqual(errors, []);
     results.push({ test: "language", path: item.path, javaScript: true, pass: true });
     await page.close();

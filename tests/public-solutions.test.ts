@@ -34,11 +34,12 @@ test("static solutions have unique metadata, reciprocal languages and sourced na
     assert.ok(blocks.length > 0, "parseable JSON-LD");
     assert.ok(JSON.stringify(blocks).includes("BreadcrumbList"));
     assert.ok(JSON.stringify(blocks).includes(origin + path));
-    assert.doesNotMatch(html, /<script(?![^>]*type="application\/ld\+json")/);
+    assert.equal((html.match(/<script[^>]*type="module"/g) ?? []).length, 1);
+    assert.ok(html.includes('src="/public-measurement.ts"'));
     assert.doesNotMatch(html, /noindex|workers\.dev|docs\.guilduo\.com/);
     assert.ok(html.includes('href="https://app.guilduo.com/"'));
     assert.ok(html.includes('/docs/' + (locale === "en" ? 'en/' : '')));
-    assert.ok(html.includes('/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/'));
+    assert.ok(html.includes('/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/'));
     for (const m of html.matchAll(/href="([^"#]+)"/g)) {
       const url = new URL(m[1], origin + path);
       if (url.origin !== origin || ["/", "/sitemap.xml"].includes(url.pathname)) continue;
@@ -47,7 +48,7 @@ test("static solutions have unique metadata, reciprocal languages and sourced na
     }
     const entry = [...sitemap.matchAll(/<url>([\s\S]*?)<\/url>/g)].find(m => m[1].includes('<loc>' + origin + path + '</loc>'))?.[1];
     assert.ok(entry);
-    assert.ok(entry.includes("<lastmod>2026-10-06</lastmod>"));
+    assert.ok(entry.includes("<lastmod>2026-10-12</lastmod>"));
     assert.equal((entry.match(/<xhtml:link/g) ?? []).length, 3);
     assert.ok(read(locale === "ja" ? "lp/index.html" : "lp/en/index.html").includes('href="' + path + '"'));
     assert.ok(read(locale === "ja" ? "README.jp.md" : "README.md").includes(origin + path));

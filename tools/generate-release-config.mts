@@ -50,6 +50,7 @@ const appwrite = {
   projectId: process.env.APPWRITE_PROJECT_ID,
 };
 const runtime = {
+  ga4MeasurementId: String(process.env.GA4_MEASUREMENT_ID || "").trim(),
   gatewayUrl: mcpBaseUrl,
   webApiBaseUrl: webApiBrowser === "true" ? `${webAppUrl}/api` : "",
   sourceUrl: process.env.SOURCE_URL || "",
@@ -59,6 +60,7 @@ const runtime = {
   appwriteProjectId: process.env.APPWRITE_PROJECT_ID,
   joinGuildUrl: process.env.JOIN_GUILD_URL || `${webAppUrl}/`,
 };
+if (runtime.ga4MeasurementId && !/^G-[A-Z0-9]{6,16}$/.test(runtime.ga4MeasurementId)) throw new Error("Invalid GA4_MEASUREMENT_ID.");
 const wrangler = {
   $schema: "node_modules/wrangler/config-schema.json",
   name: "questforge-gateway",

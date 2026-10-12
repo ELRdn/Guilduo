@@ -191,6 +191,10 @@ local
 
 ### 5.2 保存してはいけない情報
 
+公開LP・Docs・Solutionsの同意済み匿名計測は既存POST /telemetry（schemaVersion 1）へpublic_page_view / app_cta_clickを追加する。page（kind）、source、language（status）とsurfaceは有限allowlistで検証し、URL・任意UTM・検索語・account IDを送らない。既存D1と90日保存を使い、登録・活性化と結合しない。JST日次集計は運営者の既存D1権限によるCLIで取得し、人数・実ユーザー数として扱わない。拒否・撤回時は待機中イベントと端末内の流入分類を破棄する。
+
+ユーザー承認により公開ページへ専用GA4も追加する。GA4_MEASUREMENT_IDは公開設定としてrelease configへ注入し、同意後だけGoogle tagを読み込む。canonical URLのみを送りquery/hash/任意UTMを除去し、同じ有限流入区分を使う。広告同意・Google Signals・拡張自動計測・account ID連携は無効。Cookieは公開ホストに限定し最長90日、GA4のuser/event保存は2か月。撤回でga-disableを立て待機イベントとCookieを破棄する。Web App・認証・登録・Quest操作にはGA4を追加しない。
+
 - Appwrite JWT、OAuthトークン、Appwrite API Key、Provider Secret
 - モデルAPIキー、パスワード、外部実行URL
 - Quest本文・メモ・UIDを匿名計測へ送信すること

@@ -194,4 +194,4 @@ Golden Referenceはこの構造、情報密度、比率、視覚リズムを検�
 
 ## Public Solutions (2026-10-06)
 
-`/solutions/`配下の2テーマ×日英。headerは公式LP、Docs、相互言語への通常リンク。mainはH1・概要・開始CTA、課題、作業の流れ、説明用の例、用途と制約、Docsへの始め方、公開資料の出典の順。footerで関連テーマと法的文書へ移動できる。Mobileは単一カラム、長いURLは折り返し、table/codeの横スクロールは領域内だけ。例やfixtureは実績と混同しない。
+`/solutions/`配下の2テーマ×日英。headerは公式LP、Docs、相互言語への通常リンク。mainはH1・概要・開始CTA、課題、必要環境、fixture画面と日付付き検証記録、短い試用手順、制限、技術詳細、出典の順。footerで関連テーマ・法的文書・任意の匿名計測設定へ移動できる。Mobileは単一カラム、長いURLは折り返し、table/codeの横スクロールは領域内だけ。例やfixtureは実績と混同しない。

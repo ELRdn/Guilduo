@@ -22,7 +22,7 @@
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Guilduo brand mark">
-  <meta property="article:modified_time" content="2026-10-06">
+  <meta property="article:modified_time" content="2026-10-12">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="MCP Task Management for Humans and AI Agents | Guilduo">
   <meta name="twitter:description" content="Connect goals, assignments and review through shared Quests. Practical MCP task management with Codex and Claude.">
@@ -46,14 +46,15 @@
         "headline": "MCP Task Management for Humans and AI Agents",
         "description": "A practical MCP task management guide covering shared Quests, Agent permissions, assignment previews, session recovery and human review.",
         "inLanguage": "en",
-        "dateModified": "2026-10-06",
+        "dateModified": "2026-10-12",
         "url": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/",
         "mainEntityOfPage": "__GUILDUO_PUBLIC_ORIGIN__/solutions/en/mcp-task-management/",
         "image": "__GUILDUO_PUBLIC_ORIGIN__/assets/brand/og-guilduo.png",
         "publisher": { "@type": "Organization", "name": "Guilduo", "url": "__GUILDUO_PUBLIC_ORIGIN__/" },
         "citation": [
-          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json",
-          "https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json"
+          "https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/public-docs/content.json",
+          "https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/api/mcp-tools.json",
+          "https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/docs/acceptance/guilduo-next-hosts-publication.md"
         ]
       }
     ]
@@ -77,7 +78,7 @@
       <p class="solution-lead">Share work with Codex or Claude as a Quest with a clear goal, completion criteria and assignee. Read saved task state when a chat restarts, and hand work back when human judgment is needed. This guide follows a small UI fix from connection to review.</p>
       <div class="solution-actions">
         <a class="button gold" href="/docs/en/mcp-connection/">Connect with MCP</a>
-        <a class="button quiet" href="#example">Read the task example</a>
+        <a class="button quiet" href="#proof">See the screen and recorded evidence</a>
       </div>
     </div>
 
@@ -86,6 +87,36 @@
       <p>A new chat can mean explaining the goal again: what changed, what remains and who should review it. Separate human task lists and AI conversations make it harder to distinguish implementation from acceptance.</p>
       <p>Guilduo stores work as Quests that external AI clients can read and update through MCP. Humans inspect the same Quests in Guilduo / Relay Forge. Goals, completion criteria, next actions, assignments and Handoff states give the next session something concrete to read.</p>
       <p>Model history, IDE files and running processes stay in the external environment. Registering an Agent does not start a model. A scheduled Quest or a <code>ready</code> Handoff does not automatically launch an Agent.</p>
+    </section>
+
+    <section id="prerequisites" class="solution-section" aria-labelledby="prerequisites-title">
+      <h2 id="prerequisites-title">What you need to try it</h2>
+      <p>You need access to the Guilduo / Relay Forge public beta, a Google account for sign-in and one Quest with a goal and completion criteria. AI integration requires an external client such as Codex or Claude supporting Remote HTTP MCP and OAuth.</p>
+      <p>External AI accounts, subscriptions and API charges are separate. Guilduo does not host a model or start it when an Agent is registered. Setup depends on connection and permission state; no setup-time or time-saving guarantee is implied.</p>
+    </section>
+
+    <section id="proof" class="solution-section" aria-labelledby="proof-title">
+      <h2 id="proof-title">Screen example and October 10, 2026 developer acceptance</h2>
+      <figure class="solution-figure"><img src="/assets/lp/command-dark.webp" width="2160" height="1350" loading="lazy" alt="Example Guilduo / Relay Forge Command screen showing assigned Quests and human review requests."><figcaption>Illustrative fixture screen, not a screenshot of the actual acceptance Quest or a customer result.</figcaption></figure>
+      <p>The developer acceptance record dated October 10, 2026 reports Codex making a limited Quest update through process-only direct OAuth and reading it back. It also records the owner saving a text answer to a Human request in Web and the same Agent session reading that answer and resuming.</p>
+      <ol class="solution-flow"><li>The Agent reads the latest Quest and permissions, saves an authorized change and reads it back.</li><li>The Human reads the request in Web App and saves an actual text response.</li><li>The same Agent session retrieves the saved response and resumes its next step.</li></ol>
+      <p>The exact model ID was <code>openai/gpt-6-astra</code>, with the canonical Skill explicitly selected. The record also covers no-op behavior and rejection of stale writes. This is historical developer acceptance, not a new run, customer case, verified Codex-to-Claude transfer or time-savings measurement. Desktop trusted-hook execution, refresh, revocation and reconnection remain unaccepted.</p>
+      <p><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/docs/acceptance/guilduo-next-hosts-publication.md">Read the dated public acceptance record</a> · <a href="/lp/en/#experience">Try the interaction demo without saving data or connecting an AI</a></p>
+    </section>
+
+    <section id="try-it" class="solution-section" aria-labelledby="try-it-title">
+      <h2 id="try-it-title">Try one small Quest first</h2>
+      <ol class="solution-flow"><li><a href="https://app.guilduo.com/">Open Guilduo</a>. Sign in with Google and create a Quest with a goal and completion criteria.</li>
+      <li>Follow the <a href="/docs/en/codex/">Codex setup guide</a> or the <a href="/docs/en/mcp-connection/">MCP connection guide</a> to connect your client, then check that it can read the same Quest.</li>
+      <li>For writes, link an authorized Agent in Connections and specify its scope. Start with: “Read this Quest and explain the next step. Do not change it yet.”</li>
+      <li>When human input is needed, use the <a href="/docs/en/human-relay/">Human Relay</a> guide to save a request and answer. Agent readback, Handoff acceptance and completion of the original Quest remain separate checks.</li></ol>
+    </section>
+
+    <section id="limits" class="solution-section" aria-labelledby="limits-title">
+      <h2 id="limits-title">Where this fits, and what you still need</h2>
+      <p>This fits UI fixes, copy review and research review with explicit goals and criteria. It helps when a human must respond to AI work or multiple sessions need to inspect saved progress.</p>
+      <p>Model hosting, IDE operation, test execution and scheduled Agent launches sit outside this Quest workflow. Native synchronization with external To Do services is not a prerequisite you can assume. Prepare the external runtime and its permissions separately.</p>
+      <p>Read access does not establish write access. Check required <code>quests:read</code> or <code>quests:write</code> permissions on both the OAuth and Agent sides. Record only necessary task information, keep credentials out of Quests, and check artifact link access separately.</p>
     </section>
 
     <section id="flow" class="solution-section" aria-labelledby="flow-title">
@@ -122,13 +153,6 @@
       <p><strong>The human review response, Handoff approval and original Quest completion are separate operations.</strong> Answering the confirmation Quest does not complete the fix. Handoff records the transfer between assignees; even <code>accepted</code> leaves the original completion criteria to verify. See <a href="/solutions/en/ai-agent-handoff/">AI agent handoff</a> for that workflow.</p>
     </section>
 
-    <section id="limits" class="solution-section" aria-labelledby="limits-title">
-      <h2 id="limits-title">Where this fits, and what you still need</h2>
-      <p>This fits UI fixes, copy review and research review with explicit goals and criteria. It helps when a human must respond to AI work or multiple sessions need to inspect saved progress.</p>
-      <p>Model hosting, IDE operation, test execution and scheduled Agent launches sit outside this Quest workflow. Native synchronization with external To Do services is not a prerequisite you can assume. Prepare the external runtime and its permissions separately.</p>
-      <p>Read access does not establish write access. Check required <code>quests:read</code> or <code>quests:write</code> permissions on both the OAuth and Agent sides. Record only necessary task information, keep credentials out of Quests, and check artifact link access separately.</p>
-    </section>
-
     <section id="get-started" class="solution-section" aria-labelledby="get-started-title">
       <h2 id="get-started-title">Start with one Quest and a read check</h2>
       <p>Sign in to <a href="https://app.guilduo.com/">Guilduo / Relay Forge</a>. Use the <a href="/docs/en/quests/">Quest guide</a> to define a small task, then follow <a href="/docs/en/mcp-connection/">MCP connection</a>. See the client instructions for <a href="/docs/en/codex/">Codex</a> or <a href="/docs/en/claude/">Claude</a>.</p>
@@ -137,10 +161,11 @@
 
     <section id="sources" class="solution-section" aria-labelledby="sources-title">
       <h2 id="sources-title">Published sources and review date</h2>
-      <p>Reviewed <time datetime="2026-10-06">October 6, 2026</time>. Based on publicly published source revision <code>42caab0fa1f396f15e4e1277f6e36dda1ac9bd04</code>.</p>
+      <p>Reviewed <time datetime="2026-10-12">October 12, 2026</time>. Based on publicly published source revision <code>479b21113d5cd9590c552fed5f0b1de2631be2ed</code>.</p>
       <ul>
-        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/public-docs/content.json">public-docs/content.json</a>: quests, mcp-connection, codex, claude, agents, permissions, human-relay and faq articles; workflow and runtime boundaries.</li>
-        <li><a href="https://github.com/ELRdn/Guilduo/blob/42caab0fa1f396f15e4e1277f6e36dda1ac9bd04/api/mcp-tools.json">api/mcp-tools.json</a>: published contracts for Quest reads and writes, Agent context, assignment, Handoff transitions and human review requests.</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/public-docs/content.json">public-docs/content.json</a>: quests, mcp-connection, codex, claude, agents, permissions, human-relay and faq articles; workflow and runtime boundaries.</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/api/mcp-tools.json">api/mcp-tools.json</a>: published contracts for Quest reads and writes, Agent context, assignment, Handoff transitions and human review requests.</li>
+        <li><a href="https://github.com/ELRdn/Guilduo/blob/479b21113d5cd9590c552fed5f0b1de2631be2ed/docs/acceptance/guilduo-next-hosts-publication.md">October 10, 2026 developer acceptance record</a>: recorded Codex scope and remaining acceptance gates; the content review date above does not indicate a new test run.</li>
       </ul>
       <p>Consult <a href="/docs/en/">Guilduo Docs</a> for detailed operations and check your client's Remote MCP and OAuth support.</p>
     </section>
@@ -154,5 +179,6 @@
       <a href="/terms/">Terms</a>
     </nav>
   </footer>
+<script type="module" src="/public-measurement.ts"></script>
 </body>
 </html>

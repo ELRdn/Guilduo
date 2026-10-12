@@ -76,4 +76,8 @@ default -> hover -> active -> focus-visible
 
 ## Public Solutions components (2026-10-06)
 
-LPのbrand、button、font/tokenを再利用。用途ページのリンクは本文で下線、主要操作は44px以上。標準見出しと順序付きリストで流れを示し、表に列見出しを付ける。説明用の例は可視の注記を添える。JavaScriptを必要とする検索・デモ・保存操作を持たせない。
+LPのbrand、button、font/tokenを再利用。用途ページのリンクは本文で下線、主要操作は44px以上。標準見出しと順序付きリストで流れを示し、表に列見出しを付ける。説明用の例は可視の注記を添える。本文・導線はJavaScriptなしで利用できる。任意の匿名計測だけ小さな共通clientを使う。
+
+### Public measurement controls (2026-10-12)
+
+公開LP・Docs・Solutionsのfooter内の標準detailsに同意・拒否/撤回button、可視status、Privacyリンクを置く。背景・文字色はSurfaceから継承し、focus-visibleと44px以上の操作領域を持つ。画面を覆うdialogやスクロール阻害を使わない。JavaScriptなしでも本文・アプリ導線を保持する。

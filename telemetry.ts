@@ -9,6 +9,8 @@ const ALLOWED_EVENTS = new Set([
   "first_quest_complete",
   "mcp_connection_success",
   "agent_assignment_success",
+  "public_page_view",
+  "app_cta_click",
 ]);
 
 type TelemetryData = Record<string, unknown>;
@@ -72,6 +74,7 @@ export function getTelemetryConsent() {
 export function setTelemetryConsent(value: string): string {
   const normalized = ALLOWED_CONSENTS.has(value) ? value : "unknown";
   storageSet(CONSENT_KEY, normalized);
+  if (normalized !== "granted") stopTelemetry();
   runtimeGlobal.dispatchEvent?.(new CustomEvent("questforge:telemetry-consent-changed", { detail: { consent: normalized } }));
   if (normalized === "granted") initializeTelemetry({ surface: telemetryState.surface });
   return normalized;
@@ -95,11 +98,13 @@ function sendBatch() {
     return;
   }
   const body = JSON.stringify({ schemaVersion: 1, events: telemetryState.queue.splice(0, 20) });
-  try {
-    const blob = new Blob([body], { type: "application/json" });
-    if (runtimeGlobal.navigator?.sendBeacon?.(endpoint, blob)) return;
-  } catch { /* Fall through to keepalive fetch. */ }
-  globalThis.fetch?.(endpoint, { method: "POST", body, headers: { "content-type": "application/json" }, keepalive: true, credentials: "omit" }).catch(() => {});
+  // sendBeacon includes cookies; anonymous collection must omit credentials and referrers.
+  try { globalThis.fetch?.(endpoint, { method: "POST", body, headers: { "content-type": "application/json" }, keepalive: true, credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => {}); } catch { /* Navigation must still work. */ }
+}
+
+export function flushTelemetry(): void {
+  if (telemetryState.flushTimer) globalThis.clearTimeout(telemetryState.flushTimer);
+  sendBatch();
 }
 
 function queueEvent(name: string, data: TelemetryData = {}): void {
@@ -160,7 +165,7 @@ export function initializeTelemetry({ surface = "unknown" }: { surface?: string 
   telemetryState.vitalTimer = globalThis.setTimeout(flushVitals, 5000);
 }
 
-export function resetTelemetryForTests() {
+export function stopTelemetry() {
   for (const observer of telemetryState.observers) observer.disconnect?.();
   for (const [name, listener] of telemetryState.listeners) runtimeGlobal.removeEventListener?.(name, listener);
   if (telemetryState.flushTimer) globalThis.clearTimeout(telemetryState.flushTimer);
@@ -171,7 +176,12 @@ export function resetTelemetryForTests() {
   telemetryState.queue = [];
   telemetryState.flushTimer = 0;
   telemetryState.vitalTimer = 0;
+  telemetryState.lcp = 0;
+  telemetryState.cls = 0;
+  telemetryState.inp = 0;
 }
+
+export const resetTelemetryForTests = stopTelemetry;
 
 runtimeGlobal.QuestForgeTelemetry = Object.freeze({
   getConsent: getTelemetryConsent,
