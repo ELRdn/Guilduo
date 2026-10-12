@@ -1,5 +1,7 @@
 # Guilduo 公開βロードマップ
 
+2026-10-12現在: beta.8はSource Releaseとして公開済み。次の本体版はbeta.9。以下の過去計画で「beta.8公開前」とした実機・Human往復・有料販売の受入は引き続き別ゲートで、Source Releaseや無料β配備の完了とは区別する。
+
 ## 2026-10-10 3プラグインのブラッシュアップ・公式Docs
 
 - [x] 本人依頼で3プラグインをブラッシュアップ段階へ移行。通常導入にはnpm `latest`を採用し、DSHはbeta.17へ昇格、OpenCode／OpenClawはbeta.16を確認。版番号と公開済みarchiveは維持。以前のbeta-only条件は撤回。
@@ -169,12 +171,40 @@ OpenAI beta.9の以前のローカル導入・公開ZIP記録はあるが、新�
 
 追加修正はローカル候補で検証済み。本番にある以前の改善と区別し、LP-R07の実Google認証／物理Pixel 9同期／Codex・OpenClaw往復／読み上げ／性能、公開運用の残存ゲートは維持する。
 
+最終更新: 2026-10-08
+
+## 次の主軸: 実アカウント受入からbeta.8リリースへ（2026-10-08決定）
+
+LP・Docs・用途ページで説明は揃ったが、本体の実アカウント・実クライアント受入が未完了のまま残っている。新機能や外部投稿より先に、次の順で受入を通す。
+
+1. 実GoogleアカウントでPC Chrome⇄Pixel 9の復元・同期・編集反映を確認する（下記「P0: ユーザーによる実機受入」）
+2. 実Codex／OpenClawでHuman ⇄ Agentの依頼→確認→テキストFB→再開→独立した完了を通す（LP-R07）
+3. 実アカウントで全画面の表示・通知、スクリーンリーダー、実利用性能を確認する
+4. ポリシー運用・削除依頼の受付処理・法的確認を済ませる
+5. 全受入後に`v0.6.0-beta.8`タグとGitHub Releaseを作成し、その後に準備済み原稿の投稿へ進む
+
+Search Consoleの基準値出力と比較（2026-10-13、11-03）は計測だけなので並行して行う。
+
+## 2026-10-05〜10-07: 公開面（LP・Docs・Solutions）の拡充
+
+本体の機能変更はなく、公式サイトの説明・検索導線を拡充した。いずれもCI・Site配備成功後に本番URLで検証済み。実アカウント受入・実機受入・外部投稿は含まない。
+
+- [x] LPv3を公式LPへ採用（PR #47）。体験デモを実際のAgent Handoff（調査→修正案の選択→実機確認依頼）へ再構成（PR #48）。比較用`/lpv3/`はnoindexで維持
+- [x] 体験デモをHero直後へ移し、スクロール連動で再生。Reduced Motion・「自分で選ぶ」はクリック操作へ戻す。Remote MCP対応クライアント一覧と4ステップの始め方を追加（PR #52、`90769a3`を2026-10-07に配備）
+- [x] 日英の公開Docsを`https://guilduo.com/docs/`・`/docs/en/`へ静的生成で公開（PR #49）。存在しないpathのsoft 404を実404へ修正（PR #50）。本番Chrome111／HTTP39条件成功。[公開記録](public-docs/PUBLICATION.md)
+- [x] 日英の用途ページ（MCPタスク管理／AI Agent引き継ぎと人のレビュー）を`/solutions/`へ公開しsitemapを32 URLへ（PR #51）。本番74／SEO4条件成功。[公開記録](docs/growth/PUBLICATION.md)
+- [x] Zenn・DEV原稿、X・Show HN・Product Hunt・Reddit素材を準備（[実施パック](docs/growth/README.md)）。投稿・予約は未実施
+- [ ] Search Consoleでsitemap送信・重要14 URLの検査を行い、公開前28日（2026-09-08〜10-05）の基準値を出力する（本人操作待ち）。比較予定日は2026-10-13と2026-11-03
+- [ ] 原稿を本人レビューし、媒体ごとの規則を確認して投稿する（beta.8リリース後）
+
 ## 2026-10-02: ローンチ候補の磨き込み
 
 - [x] Settingsの実効権限を接続ごとのQuest操作可否に整理し、技術スコープ・接続IDを折りたたみ。無効MCPの再接続なし削除を既存APIへ接続。1440px/390px・9言語・キーボード・取消・旧リンク削除・再取得失敗・Agent/Quest保持・再読込を隔離Workerと実Chromeで確認。検査をCIへ追加。085f747を本番Siteへ配備（run 36990716820成功）、配信されたコードの操作と新旧画面の起動・旧asset74件の保持を確認。キャッシュルール復帰確認は待機中。
 - [x] 別GoogleアカウントのWorkspace初回読込が409になる不具合を再現・修正。Appwrite認証済みの本人に空の状態を保存し、再読込・同時作成競合・既存/移行データ保持・保存失敗・MCP拒否を隔離APIで確認。402f4e3を本番Workerへ配備（version 2c686f88-61b6-4a24-a0bf-0798f5ed1843）。全441テスト・型検査・ビルド・契約差分なし、CI/Worker配備成功。別Googleアカウントで本番Workspaceが開けたとのユーザー確認を受領。端末間同期とHuman/Agent往復は別途未受入。
 
 実画面の確認→修正→再検証を実行した。今回の改善は**統合版を検証し、2026-10-03に本番反映・公開確認済み**。詳細と再実行手順は[ローンチ確認記録](docs/launch-readiness.md)。
+
+実画面の確認→修正→再検証を実行した。以下の改善はPR #46（main `5df20a9`、Site配備run 36967433844）と`085f747`（run 36990716820）で本番へ反映済み。詳細と再実行手順は[ローンチ確認記録](docs/launch-readiness.md)。
 
 - [x] 上部検索とCtrl／⌘KをQuest検索へ接続。連続入力、カーソル位置、日本語IME変換中の入力を保持
 - [x] Quest編集で予定日・計画状態・担当者の作業状態・見積0分を保持
@@ -204,6 +234,9 @@ OpenAI beta.9の以前のローカル導入・公開ZIP記録はあるが、新�
 - [x] Battleを9言語化。通信中の取消・二重実行、古いプレビューの実行、不完全な成功応答を拒否。応答喪失後は読取回復まで書込みを保留し、勝敗・スマホMP導線・操作フォーカスを実Chrome／Workerで確認
 - [x] CI・手動Site配備・タグ付きリリースに既存ローンチ検査を接続。ローカル公開用previewで40条件成功、HTTP 200のポリシーfallbackで失敗することを実ブラウザで確認。公開前検査の失敗を配備へ進めない（リモートworkflow未実行）
 - [ ] 本候補をレビュー・配備し、公開URLで追加修正を再確認する（Privacy／Terms本文の公開は上記の再確認で成功）
+
+- [x] 本候補をレビュー・配備し、公開URLで修正とPrivacy／Terms本文を再確認する（PR #46・`085f747`で配備。4つのPrivacy／Terms公開URLとJavaScriptなしのmailtoを確認）
+- [ ] 配備時に停止した公開HTMLの両キャッシュルールを復帰し、最終配信を確認する（2026-10-02に復帰を依頼、回答待ち）
 - [ ] 実GoogleアカウントのPC⇄Pixel 9同期、実Codex／OpenClawの依頼→確認→FB→再開を受け入れる
 - [x] Command PC・キャッシュ済みモデル・Shell通知の9言語追従を確認。保存結果の不可視、棚の位置復元競合、IME確定後の検索フォーカス、長い棚見出しを修正。Command131／公開用96、ローンチ55／公開用40、画面70成功
 - [x] 通常Questも30秒間隔・画面復帰・オンライン復帰・手動操作で再取得。全ページ読込、同期／失敗／オフライン中の共有書込み保留、選択・draft・カーソル・既存プロフィール／Agentの保持を実WorkerとChrome2クライアントで確認。同期12シナリオ、9言語×2スマホ幅、200件超の初回表示と再取得を検証。`sync:verify`とCIへ追加（リモートCI・実機は未確認）
@@ -217,6 +250,8 @@ OpenAI beta.9の以前のローカル導入・公開ZIP記録はあるが、新�
 全444テスト、型検査、デザイン検査、ビルド、契約ファイル差分なしを確認。実アプリ入口は開発版／公開用各12シナリオ、最新のCommand157／公開用122が成功。Workspace同期12、Human Relay32、画面70の直前の成功記録も保持。ローンチ55／公開用40、操作404／公開用343の成功記録も保持。実入口の認証応答は合成データで、実Google OAuth・本番Appwrite保存の受入とは扱わない。Battle画面36条件＋隔離HTTP6シナリオ／公開用36条件、Human Relay32、Connections42／公開用36、遅延/競合10、日英LP118チェックの記録も保持。Provider応答と許可画面は隔離テストで差し替えた。実OAuthや物理Pixel 9の受入は未完了。遅延検証は状態の正しさを確かめるもので、本番GUIの安定1秒を証明するものではない。
 
 公開環境の最新の未認証確認では、LP・Web App・OAuth metadataへ到達し、MCP healthは2.7.0／Schema 7／56ツールを返した。`www`はDNS未解決。Privacy／Termsは同日後半の再確認で本文・運営者・窓口・canonicalを配布していることを確認した。過去のfallbackや「新機能は全部未配備」という記録を現在の全機能へ適用せず、本追加修正と実クライアント受入の未完了を管理する。
+
+公開環境の未認証確認では、LP・Web App・OAuth metadataへ到達し、MCP healthは2.7.0／Schema 7／56ツールを返した。`www`はDNS未解決。Privacy／Termsは配備後に静的本文の配信を確認した（2026-10-02、配備前はアプリへのfallbackだった）。残る未完了は実アカウント・実機・実クライアントの受入である。
 
 ## 設計書の正本
 
@@ -244,8 +279,11 @@ OpenAI beta.9の以前のローカル導入・公開ZIP記録はあるが、新�
 | Web App / Guilduo / Relay Forge | `https://app.guilduo.com/` | READY |
 | MCP | `https://mcp.guilduo.com/mcp` | READY |
 | Appwrite API | `https://api.guilduo.com/v1` | READY |
+| Documentation | `https://guilduo.com/docs/` · `https://guilduo.com/docs/en/` | READY / PUBLISHED |
+| 用途ページ | `https://guilduo.com/solutions/` 配下（日英各2本） | READY / PUBLISHED |
+| Privacy / Terms | `https://guilduo.com/privacy/` · `https://guilduo.com/terms/` | READY / PUBLISHED |
 | `www` redirect | `https://www.guilduo.com/` → apex | WAITING FOR DNS |
-| Documentation | `https://docs.guilduo.com/` | Reserved / Future |
+| Documentation subdomain | `https://docs.guilduo.com/` | Reserved / Future |
 
 URLの詳しい役割分担は[`docs/public-urls.md`](docs/public-urls.md)、host-based rewriteは[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)を参照する。
 
@@ -267,7 +305,7 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 
 ### 実装済み
 
-- Human確認Quest、依頼主、外部確認とテキストFB、受信箱、Agent初回接続案内、成功時の反応を一括実装（2026-09-07、ローカル検証済み・本番未配備）。既存Agentリンク修正も統合し、Skillsを56ツール/9カテゴリに整理。[実装・受入記録](docs/human-relay-acceptance.md)
+- Human確認Quest、依頼主、外部確認とテキストFB、受信箱、Agent初回接続案内、成功時の反応を一括実装（2026-09-07、PR #22。現在の本番に含まれ、MCPは`request_human_review`を公開。実クライアントでの往復受入はLP-R07に残す）。既存Agentリンク修正も統合し、Skillsを56ツール/9カテゴリに整理。[実装・受入記録](docs/human-relay-acceptance.md)
 
 - LPv2.1のプチ体験とモーションを日英の公式LPへ反映（2026-09-06、`aa884c1`、PR #21）。LPv2/LPv2.1の比較ルートは維持。本体の協働機能の受入とは別に管理
 - 公式サイト`guilduo.com/`、正式Web App`app.guilduo.com/`、英語LPを同じAppwrite Sites成果物へビルドし、rootをhost-based rewriteで分離
@@ -349,7 +387,7 @@ Guilduoは、**HumanとAI Agentが同じworkspaceで仕事をRelayするHuman ×
 ### 残存ゲート
 
 - [ ] `www.guilduo.com`のDNSとapex redirectを有効化する（WAITING FOR DNS）
-- [ ] `docs.guilduo.com`をDocumentation公開時に構築する（Reserved / Future）
+- [x] Documentationを`guilduo.com/docs/`で公開（2026-10-05）。`docs.guilduo.com`は将来の移行・redirect用に予約のまま
 - [ ] OpenClaw等でGoogleログインからOAuth approve、localhost callback、Agent contextまで実地確認する
 - [ ] OpenAI MCP Appの技術App ID、レビュー申請、公開導線を運用者が判断する
 - [ ] GitHub Social Previewや外部表示の追加確認を行う
@@ -420,4 +458,4 @@ Guilduoは依頼・進捗・FBをテキストでつなぐ。成果物の閲覧�
 「OpenClawの半分程度のバズ」は保証条件ではなく、90日間の成長目標として扱う。
 
 
-- [x] Pixel 9で報告されたCommand下部ナビのスクロール追従をローカル修正。固定nav・自然な本文高さ・実測末尾余白とタッチChrome3サイズを検証。実機再確認は回答待ち。
+- [x] Pixel 9で報告されたCommand下部ナビのスクロール追従をローカル修正。固定nav・自然な本文高さ・実測末尾余白とタッチChrome3サイズを検証。実機で修正を確認したとのユーザー回答を受領（2026-10-08）。
