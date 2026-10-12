@@ -157,6 +157,7 @@ try {
     assert.equal(completed.lifecycleState, "archived");
     assert.ok(after.session.battle.mp > before.session.battle.mp, "Completion grants MP");
     assert.ok(Number(after.session.character.gems) > Number(before.session.character.gems), "Completion grants gems");
+    if (!await page.getByRole("button", { name: "Battle", exact: true }).isVisible()) await page.locator(".rf-nav-more").click();
     await page.getByRole("button", { name: "Battle", exact: true }).click();
     assert.match(await page.locator('.rf-b-meter[data-tone="mp"] .rf-b-meter-value').textContent() || "", new RegExp(`^${after.session.battle.mp}`));
     await page.screenshot({ path: join(output, "earned-mp.png") });

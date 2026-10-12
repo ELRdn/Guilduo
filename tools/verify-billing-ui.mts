@@ -291,8 +291,8 @@ try {
       for (const path of ["/lp/", "/lp/en/"]) {
         const page = await browser.newPage({ viewport: { width: 320, height: 900 }, javaScriptEnabled: false });
         await page.goto(base + path);
-        assert.equal(await page.locator('[data-pricing-availability="pending"]').count(), 1);
-        assert.ok(!/\$\s*(10|96)\b/.test(await page.locator('[data-pricing-availability="pending"]').innerText()));
+        assert.equal(await page.locator('[data-billing-action="monthly"], [data-billing-action="yearly"], a[href*="checkout.stripe.com"], a[href*="billing.stripe.com"]').count(), 0);
+        assert.ok(!/\$\s*(10|96)\b/.test(await page.locator("body").innerText()), "Published free-beta LP does not advertise unactivated sale prices");
         await page.close();
       }
     } finally { await fixture.close(); }

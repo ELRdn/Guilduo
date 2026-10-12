@@ -61,11 +61,14 @@
   .rf-shell[data-domain]:not([data-domain="command"]) { grid-template-rows: var(--qf-operation-bar-height) minmax(0,1fr) auto; grid-template-areas: "rail bar" "rail screen" "rail timer"; }
   .rf-nav-more-panel { list-style: none; padding: var(--qf-space-2); background: var(--qf-color-surface); border: 1px solid var(--qf-color-border-default); }
 }
+@media (min-width:901px) and (max-width:1599px) {
+  .rf-shell[data-domain="command"] { grid-template-areas: "rail bar" "rail band" "rail shelf" "rail field" "rail chron" "rail timer"; }
+}
 @media (max-width:900px) {
   .rf-work-timer-host { position: fixed; left: 0; right: 0; bottom: calc(var(--qf-control-comfortable) + var(--qf-space-6) + var(--qf-border-width) + env(safe-area-inset-bottom,0px)); }
   .rf-work-timer { gap: var(--qf-space-1); padding: var(--qf-space-2); }
   .rf-work-timer select { width: 45%; }
-  .rf-work-timer button { min-height: 36px; }
+  .rf-work-timer button { min-height: var(--qf-control-comfortable); }
   .rf-work-timer .rf-work-status { max-height: 48px; overflow: auto; }
   .rf-work-screen { height: auto; overflow: visible; }
   .rf-work-calendar { grid-template-columns: minmax(0,1fr); }

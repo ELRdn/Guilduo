@@ -38,17 +38,6 @@ const chromePath = process.env.QF_CHROME_PATH
 type Mode = "dark" | "light";
 type Domain = "quests" | "network" | "party" | "battle" | "connections" | "skills";
 
-const NAV_INDEX: Readonly<Record<Domain, number>> = {
-  quests: 1,
-  network: 2,
-  party: 3,
-  battle: 4,
-  connections: 5,
-  skills: 6,
-};
-
-/** Destinations that sit behind `More` on the mobile bottom navigation. */
-const MOBILE_OVERFLOW: readonly Domain[] = ["battle", "connections", "skills"];
 
 /** Anchor selector proving the destination actually rendered. */
 const READY: Readonly<Record<Domain, string>> = {
@@ -405,12 +394,9 @@ async function captureFrame(browser: Browser, frame: Frame): Promise<FrameReport
   /* On mobile the bar carries four destinations plus More; Battle and
    * Connections live behind More, so they are reached the way a user reaches
    * them rather than by a direct index. */
-  if (frame.width <= 900 && MOBILE_OVERFLOW.includes(frame.domain)) {
-    await page.locator(".rf-nav-more").click();
-    await page.locator(`.rf-nav-more-panel .rf-nav-item`).nth(MOBILE_OVERFLOW.indexOf(frame.domain)).click();
-  } else {
-    await page.locator(".rf-rail .rf-nav-item").nth(NAV_INDEX[frame.domain]).click();
-  }
+  const destination = page.locator(`.rf-nav-item:has(.rf-nav-glyph[data-domain="${frame.domain}"])`);
+  if (!await destination.isVisible()) await page.locator(".rf-nav-more").click();
+  await destination.click();
   await page.waitForSelector(READY[frame.domain]);
   if (frame.interaction !== undefined) {
     await frame.interaction(page);

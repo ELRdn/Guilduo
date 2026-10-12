@@ -139,6 +139,7 @@ try {
     assert.match(await connection.textContent() || "", /quests:write/);
     assert.doesNotMatch(await connection.textContent() || "", /agents:write/);
     await onboarding.screenshot({ path: join(output, "integrated-onboarding.png") });
+    if (!await page.getByRole("button", { name: "Skills", exact: true }).isVisible()) await page.locator(".rf-nav-more").click();
     await page.getByRole("button", { name: "Skills", exact: true }).first().click();
     await page.getByRole("searchbox", { name: "Skillsを検索" }).fill("request_human_review");
     await page.locator(".rf-skills-tool-name").filter({ hasText: "request_human_review" }).waitFor();
