@@ -24,7 +24,7 @@ try {
       await page.goto(`${base}${built ? "/next/relay-forge/" : "/interaction-lab/relay-forge/"}?fixture=1&theme=dark`);
       await page.locator(".rf-rail .rf-nav-item").first().waitFor();
       await page.keyboard.press("Escape");
-      if (width < 901) await page.locator(".rf-nav-more").click();
+      if (!await page.locator('.rf-nav-item:has(.rf-nav-glyph[data-domain="battle"])').isVisible()) await page.locator(".rf-nav-more").click();
       await page.locator('.rf-nav-item:has(.rf-nav-glyph[data-domain="battle"])').click();
       assert.equal(await page.locator(".rf-screen-question").textContent(), relayText("battleQuestion", locale));
       await page.locator('[data-command="attack"]').click();
@@ -63,6 +63,7 @@ try {
       await writeState(fixture.env, fixture.uid, { state:fixtureBattleState(original.payload.state!.tasks), schemaVersion:7, clientUpdatedAt:new Date().toISOString() }, original.etag);
       page.on("pageerror", error => { errors.push(error.message); console.error(error.message); });
       await page.goto(`${base}/tests/browser/production-relay.html?api=${encodeURIComponent(fixture.baseUrl)}&uid=${fixture.uid}&lang=ja`);
+      if (!await page.getByRole("button", { name:"Battle", exact:true }).isVisible()) await page.locator(".rf-nav-more").click();
       await page.getByRole("button", { name:"Battle", exact:true }).click();
       await page.locator('[data-command="attack"]').waitFor();
       const commandsUrl = `${fixture.baseUrl}/v1/battle/commands`;
@@ -147,6 +148,7 @@ try {
       await page.locator('.rf-b-phase-value').filter({ hasText:"10" }).waitFor();
       assert.equal(await page.locator('[data-command="attack"]').isEnabled(), true);
       await page.reload();
+      if (!await page.getByRole("button", { name:"Battle", exact:true }).isVisible()) await page.locator(".rf-nav-more").click();
       await page.getByRole("button", { name:"Battle", exact:true }).click();
       await page.locator('.rf-b-phase-value').filter({ hasText:"10" }).waitFor();
       results.push("HTTP Worker: malformed preview rejected; lost response after real execution holds writes, read recovers and reload preserves exactly one turn");
@@ -164,7 +166,8 @@ try {
       await page.route(sessionUrl, route => route.fulfill({ status:200, contentType:"application/json", body:JSON.stringify({ session:{ schemaVersion:1, boss:{} } }) }));
       for (const locale of ["ja", "en", "ru"] as const) {
         await page.goto(`${base}/tests/browser/production-relay.html?api=${encodeURIComponent(fixture.baseUrl)}&uid=${fixture.uid}&lang=${locale}`);
-        await page.getByRole("button", { name:"Battle", exact:true }).click();
+        if (!await page.getByRole("button", { name:"Battle", exact:true }).isVisible()) await page.locator(".rf-nav-more").click();
+      await page.getByRole("button", { name:"Battle", exact:true }).click();
         await page.locator('.rf-deferred-panel [role="alert"]').waitFor();
         assert.equal(await page.locator('.rf-deferred-panel [role="alert"]').textContent(), relayText("connectionInvalidResponse", locale));
         assert.equal(await page.locator('[data-command]').count(), 0);

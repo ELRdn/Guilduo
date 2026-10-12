@@ -19,3 +19,10 @@ Production's migration ledger contains 0001–0011, including shared MCP Agents.
 TypeScript, design, generated contracts and the build are checked on this integrated checkout. Root/browser/CI results and publication receipts are recorded below only after execution. The Worker manual workflow must finish before the Site workflow. Site cache guards and 48-hour hashed-asset retention are preserved. `v0.6.0-beta.9` publishes source only; host extension versions are unchanged.
 
 Physical touch/Pixel 9, cross-device Google authentication, real external Agent/Human round trips and extended observation remain separate acceptance. Paid-launch signing, Live billing and Jev are not activated by this task.
+
+## Integration verification before merge
+
+- Windows root suite: 780 passed, zero failed, one platform skip (781 discovered). TypeScript, design check, API idempotence and build passed.
+- CI confirmed 45 LP, 147 Docs, 84 Solutions, 40 launch, 343 accessibility and 12 built-entry scenarios before exposing a missing optional LP measurement mount. The latest LPv3 entry now mounts that existing module only under its disabled-by-default runtime flag; the independent built measurement check passed 31 scenarios across nine languages and 320/1440 widths with zero provider calls.
+- In the in-app browser against isolated Worker/SQLite D1: mouse selection 10:00–11:00 saved a 60-minute record; a note title/body saved; an active timer restored after reload and stopped from Quests. 390px showed no horizontal overflow, the five primary destinations and all More entries; board selection was retained. Physical touch was not checked.
+- Actual production D1 export was downloaded into private ignored storage, SHA-256 `c7709f48eb95d24268efcbf89b68d6f4f9a51efaaba467c6bd4b22284646ee7e`. Local isolated restoration passed SQLite integrity and preserved all 11 migration records. This does not claim timed production disaster recovery or RPO/RTO acceptance.
