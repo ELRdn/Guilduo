@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertSiteArchiveSafe } from "../tools/check-site-archive.mts";
-import { ASSET_RETENTION_MS, previousShellProbe } from "../tools/retain-site-assets.mts";
+import { ASSET_RETENTION_MS, previousShellProbe, normalizePublicShell } from "../tools/retain-site-assets.mts";
 
 const now = Date.UTC(2026, 8, 21);
 const origin = "https://app.example.test";
@@ -59,6 +59,24 @@ const check = (path: string, fetcher = server()) => assertSiteArchiveSafe({ arch
 
 test("actual tar retains both the previous entry and its lazy imports", async t => {
   await check(await archive(t, members()));
+});
+
+test("v2 accepts only changing Cloudflare JSD request metadata while preserving all HTML and script checks", async t => {
+  const jsd = (ray: string, time: string) => `<script>var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'${ray}',t:'${time}'};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";</script>`;
+  const captured = shell(oldName).replace("</body>", jsd("a4942470f8500900", "MTc5MTc4NzUzMg==") + "</body>");
+  const active = captured.replace("a4942470f8500900", "a49426f59e37cb83").replace("MTc5MTc4NzUzMg==", "MTc5MTc4NzYzNg==");
+  const probe = previousShellProbe(captured, new URL(origin));
+  const entries = members().map(item => item.name.endsWith("previous-shell.html") ? { ...item, text:probe }
+    : item.name.endsWith("previous-shell.json") ? { ...item, text:JSON.stringify({version:2,capturedAt:now,sourcePath:"/next/relay-forge/",sourceSha256:sha(normalizePublicShell(captured)),probeSha256:sha(probe)}) } : item);
+  const tar = await archive(t, entries);
+  const serve = (html: string): typeof fetch => async (input, options) => String(input).endsWith("retained-releases.json") ? server()(input, options)
+    : new Response(html, {headers:{"content-type":"text/html"}});
+  await check(tar, serve(active));
+  for (const altered of [active.replace("jsd/main.js", "jsd/altered.js"), active.replace("</head>", "<script>malicious()</script></head>"), active.replace(oldName, newName), active.replace("MTc5MTc4NzYzNg==", "YWxlcnQoMSk=")]) {
+    await assert.rejects(check(tar, serve(altered)), /Previous-shell/);
+  }
+  const legacy = entries.map(item => item.name.endsWith("previous-shell.json") ? {...item,text:JSON.stringify({version:1,capturedAt:now,sourcePath:"/next/relay-forge/",sourceSha256:sha(captured),probeSha256:sha(probe)})}:item);
+  await assert.rejects(check(await archive(t,legacy),serve(active)), /Previous-shell/);
 });
 
 test("missing, altered or falsely attributed previous HTML cannot pass archive verification", async t => {

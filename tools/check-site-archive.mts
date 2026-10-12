@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ASSET_RETENTION_MS, RETAINED_ASSET_MANIFEST, PREVIOUS_SHELL_PATH, PREVIOUS_SHELL_META_PATH, previousShellProbe, boundedBody, parseManifest } from "./retain-site-assets.mts";
+import { ASSET_RETENTION_MS, RETAINED_ASSET_MANIFEST, PREVIOUS_SHELL_PATH, PREVIOUS_SHELL_META_PATH, previousShellProbe, normalizePublicShell, boundedBody, parseManifest } from "./retain-site-assets.mts";
 
 type ArchivedFile = { size: number; sha256: string; text?: string };
 
@@ -66,9 +66,10 @@ export async function assertSiteArchiveSafe(options: {
   const probeMeta = JSON.parse(files[PREVIOUS_SHELL_META_PATH.slice(1)]?.text || "null") as {
     version: number; capturedAt: number; sourcePath: string; sourceSha256: string; probeSha256: string;
   } | null;
-  if (!probe?.text || !probeMeta || probeMeta.version !== 1 || probeMeta.capturedAt !== manifest.generatedAt
+  if (!probe?.text || !probeMeta || ![1, 2].includes(probeMeta.version) || probeMeta.capturedAt !== manifest.generatedAt
     || probeMeta.sourcePath !== "/next/relay-forge/" || probe.sha256 !== probeMeta.probeSha256) throw new Error("Archive has no verified previous-shell probe.");
   checkShell(probe.text);
+  const comparable = probeMeta.version === 2 ? normalizePublicShell : (html: string) => html;
   for (const path of ["/", "/next/relay-forge/"]) {
     const shell = await request(path);
     if (!shell.ok || !(shell.headers.get("content-type") ?? "").includes("text/html")) {
@@ -77,8 +78,8 @@ export async function assertSiteArchiveSafe(options: {
     }
     const activeHtml = (await boundedBody(shell, 2 * 1024 * 1024)).toString("utf8");
     checkShell(activeHtml);
-    if (path === probeMeta.sourcePath && (createHash("sha256").update(activeHtml).digest("hex") !== probeMeta.sourceSha256
-      || previousShellProbe(activeHtml, origin) !== probe.text)) throw new Error("Previous-shell probe differs from the active release.");
+    if (path === probeMeta.sourcePath && (createHash("sha256").update(comparable(activeHtml)).digest("hex") !== probeMeta.sourceSha256
+      || comparable(previousShellProbe(activeHtml, origin)) !== comparable(probe.text))) throw new Error("Previous-shell probe differs from the active release.");
   }
 }
 

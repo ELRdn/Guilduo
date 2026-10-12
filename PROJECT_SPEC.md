@@ -279,6 +279,7 @@ Windows native acceptance, public OAuth, guarded writes, Human answer/resumption
 - UIの見た目、コンポーネント、レイアウト、モーションを変更する場合は[`DESIGN.md`](DESIGN.md)を先に更新する。
 - `/next/`のUI実験は[`interaction-lab/DESIGN.md`](interaction-lab/DESIGN.md)へ記録し、現行版へ自動昇格しない。
 - 本番リリースは型チェック、テスト、ビルド、契約差分、Worker health、Appwrite Auth/TablesDB/Sites smoke testを通過してから行う。
+- Siteのprevious-shell receipt v2はCloudflare JSDの既知のrequest Ray IDと10桁timestampだけを比較時に正規化する。保存probeの実bytes、その他のHTML/script、全asset hashと48時間retentionは維持し、v1は従来の完全一致で読み続ける。未知のscript形状や不正timestampは拒否する。
 - Unity、外部OAuth、Agent自動実行は、この文書の更新なしに公開βへ戻さない。
 
 ## 8. 参照先
