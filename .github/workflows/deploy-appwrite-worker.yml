@@ -105,4 +105,4 @@ jobs:
           metadata="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-authorization-server")"
           resource="$(curl --fail --retry 5 --retry-delay 3 "$mcp_base/.well-known/oauth-protected-resource/mcp")"
           node -e 'const [metadata, resource, base] = process.argv.slice(1).map((value, index) => index < 2 ? JSON.parse(value) : value); if (metadata.issuer !== base || metadata.authorization_endpoint !== `${base}/oauth/authorize` || metadata.token_endpoint !== `${base}/oauth/token` || resource.resource !== `${base}/mcp` || !Array.isArray(resource.authorization_servers) || !resource.authorization_servers.includes(base)) process.exit(1)' "$metadata" "$resource" "$mcp_base"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 3 -X POST "$mcp_base/mcp")" = "401"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 3 -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' --data '{"jsonrpc":"2.0","id":"release-probe","method":"ping"}' "$mcp_base/mcp")" = "401"
