@@ -1,12 +1,12 @@
 # Guilduo tagged release setup
 
-`main`へのpushではCIだけが動きます。公開デプロイは`v*`タグをpushした場合だけ実行されます。次のブランド導入候補は`v0.6.0-beta.8`ですが、[`docs/brand-rollout.md`](docs/brand-rollout.md)の権利・外部表示ゲート完了後に限ります。
+`main`へのpushではCIだけが動きます。`v*`タグは、版番号・main上の履歴・版別ノートを照合して検証後にGitHubのソースReleaseを公開します。本番配備は既存の手動Site／Worker workflowへ分離しました。2026-10-12、ひろなおの依頼で本体`v0.6.0-beta.8`のRelease更新を進めます。公開βのままで、実機・外部連携の全受入完了を意味しません。
 
 公開URLの役割は[`docs/public-urls.md`](docs/public-urls.md)を正本の案内として参照します。正式Web Appは`https://app.guilduo.com/`、正式MCP endpointは`https://mcp.guilduo.com/mcp`、Appwrite API endpointは`https://api.guilduo.com/v1`です。
 
 ## GitHub Environment
 
-Repository Settingsで`production` Environmentを作成し、Required reviewersを設定します。
+手動本番配備にはRepository Settingsの`production` Environmentを使用し、Required reviewersを設定します。タグ用workflowは隔離example設定で検証し、production Environmentや配備Secretsを使いません。
 
 ### Secrets
 
@@ -32,18 +32,20 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 - `EXTERNAL_OAUTH_ENABLED`: 公開βでは`false`
 - `AGENT_AVATAR_CLEANUP_EXECUTE`（任意、Workerの`vars`へ手動追加）: 孤立したAgent Avatar R2オブジェクトの自動削除を有効にする。未設定または`"true"`以外は常にレポートのみ（15分ごとのscheduled実行でログ出力）。Release生成には含まれないため、明示的に設定しない限り本番は常にdry-run
 - `SOURCE_URL`: リポジトリURL
+- `GA4_MEASUREMENT_ID`（任意、Site配備）: 同意後に公開LP／Docs／活用ページから送信するGA4測定ID
 
 公開識別子はVariablesへ置き、Appwrite API KeyとCloudflare API TokenはSecretsへ保存します。ブラウザ向け設定へAPI Keyを混ぜてはいけません。
 
 ## Release order
 
-1. API契約差分、型、テスト、ビルド、LPを検証
-2. D1の追加migrationを適用
-3. `APPWRITE_SITE_ENDPOINT`でAppwrite Sitesを公開し、Deploymentの実URLをリクエストログから取得。`guilduo.com/`、`guilduo.com/lp/en/`、`app.guilduo.com/`、`/next/relay-forge/`のcompatibility pathを確認
-4. Appwrite Web Platformへ`app.guilduo.com`を登録し、Workerの`WEB_APP_URL`と`ALLOWED_ORIGINS`を正式originへ再生成。公式LPのoriginは`PUBLIC_SITE_URL`として許可する
-5. Worker Secretを設定してWorkerを公開
-6. `/health`、OAuth metadata、MCP認証拒否、`https://mcp.guilduo.com/mcp`、Appwrite API Custom Domain、公開ルートのGuilduo表記を確認
-7. Google OAuthとMCPの実クライアント受入を行い、最後にGitHub Releaseを作成
+1. 変更をPRで検証し、mainへ統合。`package.json`と`package-lock.json`の版番号を揃え、`docs/releases/v<version>.md`に実装・検証・限界を記載する
+2. 同じmainコミットに`v<version>`タグを作成してpushする。workflowはmain履歴、版番号、ノートの照合失敗で公開を停止する
+3. API契約差分、デザイン、型、テスト、ビルド、隔離preview上のLP／Docs／Solutions／launchを検証する
+4. ノート付きGitHub Source ReleaseとGitHub生成のソースZIP／tar.gzを公開する。Latestは最新の本体β版を指し、正式GAの判定には使わない。host拡張の独立版番号は変更しない
+
+タグ公開でD1 migration、Site／Worker配備、Secrets更新は行わない。本番配備は`.github/workflows/deploy-appwrite-site.yml`と`deploy-appwrite-worker.yml`の手動実行で管理し、既存のproduction保護・キャッシュ停止・旧asset保持・配備後の起動確認を維持する。実Google OAuth・外部クライアント・実機の受入は別に記録する。
+
+**2026-10-12のWorker配備注意:** 本番にはmainへ未統合の既存runtime修正がある。今回のSEO計測は稼働moduleに限定patchして配備済みで、タグのソースが本番Workerと完全一致するとは主張しない。汎用Worker workflowを実行する前にこの差分を統合・検証すること。詳細は[`docs/growth/seo-aeo-2026-10-12.md`](docs/growth/seo-aeo-2026-10-12.md)。
 
 ## Custom Domainの現在状態
 
@@ -56,4 +58,4 @@ Repository Settingsで`production` Environmentを作成し、Required reviewers�
 
 host-based routingの詳細と、生成物・assetsを壊さない制約は[`docs/appwrite-site-routing.md`](docs/appwrite-site-routing.md)を参照する。
 
-どのゲートでも失敗した場合はタグ公開を進めません。詳細は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)を参照してください。
+ソースReleaseの検証に失敗した場合はGitHub公開を停止します。本番切替・migrationの検証失敗も個別の手動配備を停止します。詳細は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)を参照してください。

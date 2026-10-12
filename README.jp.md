@@ -21,7 +21,7 @@ Guilduo（ギルデュオ）は、人間とAI Agentが同じworkspaceで仕事�
 | 公式LP | [Guilduo Landing Page](https://guilduo.com/) | Guilduoの思想、機能、使い方を知る |
 | 正式Web App | [Guilduo / Relay Forge](https://app.guilduo.com/) | 公開βのCommand・Quest運用画面を開く |
 
-`/next/relay-forge/`はAppwrite Site内のデプロイpathであり、正式Web App URLではありません。Appwrite Sitesのgenerated Deployment URLと旧`workers.dev` URLは、検証・互換・rollback用に保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。公開デプロイ済みの候補版は`0.6.0-beta.8`で、タグ付きリリースとは別に管理します。
+`/next/relay-forge/`はAppwrite Site内のデプロイpathであり、正式Web App URLではありません。Appwrite Sitesのgenerated Deployment URLと旧`workers.dev` URLは、検証・互換・rollback用に保持します。新規ユーザー向けの正本導線は上記のGuilduoドメインです。公開デプロイ済みの版`0.6.0-beta.8`とGitHubソースタグ`v0.6.0-beta.8`は別に管理し、ソースReleaseの公開は本番配備を意味しません。
 
 ### 公開URLの役割
 
@@ -285,7 +285,7 @@ npm run worker:dev
 
 TypeScriptの開発時は、Wrangler設定からWorkerの実行環境型を自動生成します。`npm run typecheck`は型生成、生成結果の整合性確認、明示的な`any`と`@ts-nocheck`の検査、ブラウザ・Worker・Node・バトル原型のstrict型チェックをまとめて実行します。Viteの変換と型チェックは分離し、API/MCPの契約は別テストで維持します。
 
-公開デプロイは `v*` タグ専用GitHub Actionsです。D1 migration、Worker deploy、health確認の順にゲートし、Appwrite Sitesの公開先をスモークテストします。Firebaseからの移行は[`APPWRITE_MIGRATION.md`](APPWRITE_MIGRATION.md)の検証と切替手順に従います。
+`v*`タグworkflowはpackage version、タグのcommitが`main`の祖先であること、リリースノートを照合し、CI・型チェック・テスト・ビルド・previewのゲート通過後にGitHubのソースReleaseをpublishします。配備用secretは使用せず、本番migrationやSite・Workerの自動配備は行いません。本番配備は既存の手動workflow `.github/workflows/deploy-appwrite-site.yml` / `.github/workflows/deploy-appwrite-worker.yml`で別途行い、`production`環境の保護と保持キャッシュのゲートを継続します。本番Worker runtimeには公開ソースへ未統合の直接配備修正が残っているため、汎用Worker配備を先に行わないでください。本体ソースReleaseの`v0.6.0-beta.8`とhost extensionsの`beta.12`は別版として管理し、Guilduoは公開βを維持します。詳細は[`RELEASE_SETUP.md`](RELEASE_SETUP.md)を参照してください。
 
 ## ドキュメント
 
