@@ -1,4 +1,8 @@
 import { humanInbox } from "./human-inbox.ts";
+import { createBillingUi } from "./screens/billing.ts";
+import { createAnalyticsUi } from "./screens/analytics.ts";
+import { mountPullToRefresh } from "./pull-to-refresh.ts";
+import { QuestForgeApiError } from "../repository.ts";
 import { reportGuiTiming } from "./gui-timing.ts";
 import { relayText } from "./relay-copy.ts";
 import { relaySuccess } from "./relay-motion.ts";
@@ -44,6 +48,8 @@ import {
 import { FixtureHandoffPort } from "./fixture-port.ts";
 import { actorAvatar } from "./primitives/avatar.ts";
 import { fixtureRawQuests } from "./fixtures.ts";
+import { productivityWorkspace } from "./screens/productivity.ts";
+import { workText } from "./productivity-copy.ts";
 import { mobileCommand, mobileDecisionBar } from "./mobile.ts";
 import { capacityBand } from "./primitives/capacity.ts";
 import { chronicleStrip, executionChronicle } from "./primitives/chronicle.ts";
@@ -148,10 +154,12 @@ import { effectiveTheme, nextQuickToggleTheme, parseThemePreference, THEME_KEY, 
  * and nothing else. Each owns its own composition and scroll ownership.
  */
 const DOMAINS = [
-  { id: "command", label: "Command", migrated: true, primaryOnMobile: true },
+  { id: "command", get label() { return workText("home"); }, migrated: true, primaryOnMobile: true },
   { id: "quests", label: "Quests", migrated: true, primaryOnMobile: true },
-  { id: "network", label: "Network", migrated: true, primaryOnMobile: true },
-  { id: "party", label: "Party", migrated: true, primaryOnMobile: true },
+  { id: "calendar", get label() { return workText("calendar"); }, migrated: true, primaryOnMobile: true },
+  { id: "notes", get label() { return workText("notes"); }, migrated: true, primaryOnMobile: true },
+  { id: "network", label: "Network", migrated: true, primaryOnMobile: false },
+  { id: "party", label: "Party", migrated: true, primaryOnMobile: false },
   { id: "battle", label: "Battle", migrated: true, primaryOnMobile: false },
   { id: "connections", label: "Connections", migrated: true, primaryOnMobile: false },
   { id: "skills", label: "Skills", migrated: true, primaryOnMobile: false },
@@ -383,7 +391,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           avatarBlobUrls.set(key, url);
           sharedAgents = sharedAgents.map((entry) => entry.agentId === agent.agentId ? { ...entry, avatarUrl: url } : entry);
           state.model = { ...state.model, actors: resolveActors(sharedProfile, sharedAgents, [...state.model.actors.values()]) };
-          render();
+          render(true);
         })
         .catch(() => {
           avatarFetchInFlight.delete(key);
@@ -419,7 +427,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         }
         sharedProfile = { ...current, avatarUrl: url };
         syncProfileActors();
-        render();
+        render(true);
       })
       .catch(() => {
         profileAvatarFetchInFlight.delete(key);
@@ -562,21 +570,26 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const screenPartyName = () => sharedPartyName ?? fixturePartyNameFor(state.variant);
   const screenNotices = (label: string, retry: () => void) => production ? [] : noticesFor(state.variant, label, retry);
   // ponytail: serialize UI writes; use per-resource locks only if parallel writes are needed.
-  const mutationBusy = () => connectionWriteHeld() || humanResponseBusy || state.taskSubmitting || state.decision.phase === "submitting" || state.screens.battle.phase === "submitting" || state.screens.battle.phase === "refreshing" || state.screens.settings.profileSaving || state.screens.settings.avatarSaving || state.screens.settings.connectionBusyId !== null || createSubmit.disabled || agentSubmit.disabled;
+  const mutationBusy = () => connectionWriteHeld() || humanResponseBusy || state.taskSubmitting || state.decision.phase === "submitting" || state.screens.battle.phase === "submitting" || state.screens.battle.phase === "refreshing" || state.screens.settings.profileSaving || state.screens.settings.avatarSaving || state.screens.settings.connectionBusyId !== null || createSaving || agentSubmit.disabled;
   const workspaceWriteHeld = () => workspaceRefreshing || workspaceOffline || (production && state.model.syncState === "error");
-  const screenWriteHeld = () => mutationBusy() || workspaceWriteHeld() || state.screens.battle.needsRefresh || Boolean(battleLoadError) || state.stale || (!production && writeHeldFor(state.variant));
+  let workBusy = () => false;
+  let workDirty = () => false;
+  const baseScreenWriteHeld = () => mutationBusy() || workspaceWriteHeld() || state.screens.battle.needsRefresh || Boolean(battleLoadError) || state.stale || (!production && writeHeldFor(state.variant));
+  const screenWriteHeld = () => baseScreenWriteHeld() || workBusy();
+  const canRefreshWorkspace = () => !lifecycle.disposed && !workspaceRefreshing && !mutationBusy() && !workBusy() && !workDirty() && !deferredLoading && !createDialog.open && !agentDialog.open && !inputComposing && Object.keys(state.screens.settings.connectionDrafts).length === 0;
 
   async function refreshWorkspace(): Promise<void> {
-    if (!runtime?.refreshWorkspace || lifecycle.disposed || workspaceRefreshing || mutationBusy() || deferredLoading || createDialog.open || agentDialog.open || inputComposing) return;
+    if (!runtime?.refreshWorkspace || !canRefreshWorkspace()) return;
     if (navigator.onLine === false) { markWorkspaceOffline(); return; }
     const origin = document.activeElement;
+    const refreshFromMenu = origin instanceof HTMLElement && origin.matches(".rf-nav-more");
     const field = origin instanceof HTMLInputElement || origin instanceof HTMLTextAreaElement ? origin : null;
     const focus = field ? { domain:state.domain, questId:state.selectedQuestId, selector:field.id ? `#${CSS.escape(field.id)}` : field.name ? `[name="${CSS.escape(field.name)}"]` : field.matches(".rf-revision-input") ? ".rf-revision-input" : ".rf-search-input", start:field.selectionStart, end:field.selectionEnd, direction:field.selectionDirection } : null;
     const refreshControl = origin instanceof HTMLElement && origin.matches('.rf-screen-notice button, .rf-m-sync, [data-slot="health"]') ? state.domain : null;
     workspaceRefreshing = true;
     workspaceOffline = false;
     state.model = { ...state.model, syncState:"syncing" };
-    render();
+    render(true);
     try {
       const next = await runtime.refreshWorkspace();
       if (lifecycle.disposed) return;
@@ -613,10 +626,12 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       workspaceRefreshing = false;
       if (!lifecycle.disposed) {
         const restoreFocus = document.activeElement === document.body || document.activeElement === origin || Boolean(focus && document.activeElement instanceof HTMLElement && document.activeElement.matches(focus.selector));
-        render();
+        render(true);
         if (restoreFocus && focus && focus.domain === state.domain && focus.questId === state.selectedQuestId) {
           const restored = [...shell.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(focus.selector)].find(element => element.getClientRects().length > 0);
           if (restored && !restored.disabled) { restored.focus({ preventScroll:true }); if (focus.start !== null && focus.end !== null) restored.setSelectionRange(focus.start, focus.end, focus.direction ?? undefined); }
+        } else if (restoreFocus && refreshFromMenu) {
+          shell.querySelector<HTMLElement>(".rf-nav-more")?.focus({ preventScroll:true });
         } else if (restoreFocus && refreshControl === state.domain) {
           const restored = (state.domain === "command" ? shell.querySelector<HTMLElement>(isMobile() ? ".rf-m-sync" : '[data-slot="health"]') : screenHost.querySelector<HTMLElement>(".rf-screen-notice button, h1, h2"));
           if (restored) { if (restored.matches("h1, h2")) restored.tabIndex = -1; restored.focus({ preventScroll:true }); }
@@ -629,7 +644,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     if (!runtime?.refreshWorkspace || lifecycle.disposed) return;
     workspaceOffline = true;
     state.model = { ...state.model, syncState:"error" };
-    render();
+    render(true);
   }
 
   function workspaceNotice(): HTMLElement | null {
@@ -650,6 +665,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   function openQuestSearch(): void {
     if (shell.querySelector("dialog[open]") || state.questFlowOpen) return;
+    if (workDirty()) { workUi.guard(openQuestSearch); return; }
     state.domain = "quests";
     state.lensState = "closed";
     state.screens.quests.segment = "all";
@@ -712,7 +728,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     class: "rf-create-input",
     name: "title",
     type: "text",
-    maxlength: "160",
+    maxlength: "80",
     autocomplete: "off",
     required: true,
     placeholder: relayText("questTitlePlaceholder"),
@@ -726,12 +742,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     placeholder: relayText("nextActionPlaceholder"),
   });
   const createDue = el("input", { class: "rf-create-input", name: "dueDate", type: "date" });
+  const createScheduled = el("input", { class: "rf-create-input", name: "scheduledDate", type: "date" });
+  const createTime = el("input", { class: "rf-create-input", name: "scheduledTime", type: "time" });
+  const createMode = el("select", { class: "rf-create-input", name: "planningMode" }, el("option", { value: "on_date" }, workText("onDate")), el("option", { value: "until_due" }, workText("untilDue")));
   const createEstimate = el("input", {
     class: "rf-create-input",
     name: "estimatedMinutes",
     type: "number",
     min: "0",
-    max: "1440",
+    max: "100000",
     step: "1",
     value: "30",
     inputmode: "numeric",
@@ -766,6 +785,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       { class: "rf-create-body" },
       createField(() => t("task.title"), createTitle),
       createField(() => relayText("nextOperation"), createNextAction, () => relayText("optionalActionHint")),
+      el("div", { class: "rf-create-pair" }, createField(() => workText("schedule"), createScheduled), createField(() => workText("atTime"), createTime)),
+      createField(() => workText("view"), createMode),
       el(
         "div",
         { class: "rf-create-pair" },
@@ -784,26 +805,34 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   );
 
   let editingQuestId: string | null = null;
+  let editingQuestVersion: string | undefined;
+  // ponytail: preserve drafts for copying; add a merge view if simultaneous editing needs it.
+  let createRecovery: "conflict" | "uncertain" | null = null;
+  let createSaving = false;
 
   function refreshQuestEditorCopy(): void {
+    createMode.options[0]!.textContent = workText("onDate");
+    createMode.options[1]!.textContent = workText("untilDue");
     createTitle.placeholder = relayText("questTitlePlaceholder");
     createNextAction.placeholder = relayText("nextActionPlaceholder");
     createKicker.textContent = relayText(editingQuestId === null ? "newQuest" : "editQuest");
     createHeading.textContent = relayText(editingQuestId === null ? "createQuest" : "editQuest");
-    createSubmit.textContent = relayText(createSubmit.disabled ? "saving" : editingQuestId === null ? "createQuest" : "saveChanges");
+    createSubmit.textContent = relayText(createSaving ? "saving" : editingQuestId === null ? "createQuest" : "saveChanges");
+    if (createRecovery) createError.textContent = relayText(createRecovery === "conflict" ? "questEditConflict" : "questSaveUncertain");
     createCancel.textContent = relayText("dialogCancel");
     createClose.title = relayText("close");
     createClose.querySelector('.rf-visually-hidden')!.textContent = relayText("close");
   }
 
   function closeCreate(): void {
-    if (createSubmit.disabled) return;
+    if (createSaving) return;
     if (createDialog.open) createDialog.close();
   }
 
   function openCreate(): void {
     if (screenWriteHeld()) return;
     editingQuestId = null;
+    createScheduled.value = ""; createTime.value = ""; createMode.value = "on_date";
     syncAgentAssigneeOptions();
     refreshQuestEditorCopy();
     createError.hidden = true;
@@ -816,10 +845,14 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     if (screenWriteHeld()) return;
     if (quest.humanRequest) { inbox.open(undefined, quest.id); return; }
     editingQuestId = quest.id;
+    editingQuestVersion = quest.updatedAt;
     refreshQuestEditorCopy();
     createTitle.value = quest.title;
     createNextAction.value = quest.nextAction;
     createDue.value = quest.dueDate;
+    createScheduled.value = quest.scheduledDate;
+    createTime.value = quest.scheduledTime;
+    createMode.value = quest.planningMode;
     createEstimate.value = String(quest.estimatedMinutes);
     syncAgentAssigneeOptions();
     createAssignee.value = quest.assignee.type === "self" ? "self" : quest.assignee.type === "human" ? ":current"
@@ -837,10 +870,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     closeCreate();
   });
   createDialog.addEventListener("close", () => {
+    const refresh = createRecovery !== null;
     createForm.reset();
     createEstimate.value = "30";
     editingQuestId = null;
+    editingQuestVersion = undefined;
+    createRecovery = null;
+    createSubmit.disabled = false;
     createError.hidden = true;
+    if (refresh) void refreshWorkspace();
     queueMicrotask(() => shell.querySelector<HTMLElement>(".rf-create")?.focus());
   });
   createForm.addEventListener("submit", (event) => {
@@ -849,7 +887,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   });
 
   async function submitCreate(): Promise<void> {
-    if (screenWriteHeld() || lifecycle.disposed) return;
+    if (screenWriteHeld() || createRecovery || lifecycle.disposed || !createForm.reportValidity()) return;
     const title = createTitle.value.trim();
     if (title === "") {
       createError.textContent = relayText("questTitleRequired");
@@ -864,7 +902,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
 
     const dueDate = createDue.value;
-    const estimatedMinutes = Math.max(0, Math.min(1440, Number(createEstimate.value) || 0));
+    const estimatedMinutes = Number(createEstimate.value) || 0;
     const selectedAgent = sharedAgents.find((agent) => agent.agentId === createAssignee.value);
     const editing = editingQuestId !== null;
     const editedQuest = editingQuestId === null ? null : sharedQuests.find((quest) => quest.id === editingQuestId) ?? null;
@@ -885,6 +923,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         handoffState: selectedAgent.defaultHandoffState || "ready",
       };
     const saveStarted = performance.now();
+    createSaving = true;
     createSubmit.disabled = true;
     createCancel.disabled = true;
     createClose.disabled = true;
@@ -893,16 +932,15 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     createError.hidden = true;
 
     try {
+      const scheduleChanged = !editedQuest || createScheduled.value !== editedQuest.scheduledDate || createTime.value !== editedQuest.scheduledTime || createMode.value !== editedQuest.planningMode;
+      const scheduledDate = !editing && !createScheduled.value ? dueDate : createScheduled.value;
       const payload = {
         title,
         nextAction: createNextAction.value.trim(),
         estimatedMinutes,
         dueDate,
-        ...(editing ? {} : {
-          scheduledDate: dueDate,
-          planningMode: dueDate === "" ? "on_date" : "until_due",
-          planningState: dueDate === "" ? "backlog" : "scheduled",
-        }),
+        ...(editing ? { expectedUpdatedAt: editingQuestVersion } : {}),
+        ...(scheduleChanged ? { scheduledDate, scheduledTime: createTime.value, planningMode: !editing && !createScheduled.value && dueDate ? "until_due" : createMode.value, planningState: scheduledDate ? "scheduled" : "backlog" } : {}),
         ...(assigneePatch === null ? {} : { assignee: assigneePatch }),
       };
       const response = editingQuestId === null
@@ -937,17 +975,21 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       state.selectedQuestId = created.id;
       shelfAlignedTo = null;
       createSubmit.disabled = false;
+      createSaving = false;
       closeCreate();
       render();
       announce(relayText(editing ? "questUpdated" : "questCreated"));
       reportGuiTiming(editing ? "edit" : "create", saveStarted, () => shell.isConnected);
     } catch (error) {
       if (lifecycle.disposed) return;
-      createError.textContent = profileErrorMessage(error, relayText("questSaveFailed"));
+      createRecovery = error instanceof QuestForgeApiError && error.code === "quest_conflict" ? "conflict"
+        : error instanceof QuestForgeApiError && error.status >= 400 && error.status < 500 ? null : "uncertain";
+      createError.textContent = createRecovery ? relayText(createRecovery === "conflict" ? "questEditConflict" : "questSaveUncertain") : profileErrorMessage(error, relayText("questSaveFailed"));
       createError.hidden = false;
     } finally {
       if (lifecycle.disposed) return;
-      createSubmit.disabled = false;
+      createSaving = false;
+      createSubmit.disabled = createRecovery !== null;
       createCancel.disabled = false;
       createClose.disabled = false;
       for (const input of createForm.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select")) input.disabled = false;
@@ -1391,7 +1433,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     }
   }
   /* ---------------------------------------------------------------- *
-   * Account menu (Phase 2) — replaces the fixed "Hironao" / "HN" span.
+   * Account menu (Phase 2) — replaces the fixed "admin" / "AD" span.
    * ---------------------------------------------------------------- */
 
   /* A plain disclosure (APG "Disclosure (Show/Hide)" pattern), not a menu
@@ -1529,6 +1571,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     agentDialog,
     liveRegion,
   );
+  const timerHost = el("div", { class: "rf-work-timer-host" });
+  shell.append(timerHost);
   replaceChildren(root, shell);
   let checkedReview: string | null = null;
   let decisionQuestId: string | null = null;
@@ -1667,8 +1711,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     render();
     try {
       const response = action === "complete"
-        ? await runtime.questPort.scoreQuest(quest.id)
-        : await runtime.questPort.updateQuest(quest.id, patch);
+        ? await runtime.questPort.scoreQuest(quest.id, "up", quest.updatedAt)
+        : await runtime.questPort.updateQuest(quest.id, { ...patch, expectedUpdatedAt: quest.updatedAt });
       if (lifecycle.disposed) return;
       const value = response.quest;
       if (value === null || typeof value !== "object" || Array.isArray(value) || (value as Quest).id !== quest.id) throw { code: "save_unverified" };
@@ -1684,6 +1728,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       }
     } catch (error) {
       if (lifecycle.disposed) return;
+      if (error instanceof QuestForgeApiError && error.code === "quest_conflict") state.model = { ...state.model, syncState:"error" };
       state.taskTone = "error";
       state.taskMessage = () => profileErrorMessage(error, relayText("questSaveFailed"));
       announce(state.taskMessage());
@@ -1943,12 +1988,55 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
    * Settings — Account, Appearance, MCP Connection (Phase 1/2)
    * ---------------------------------------------------------------- */
 
+  const billingUi = createBillingUi({
+    port: runtime?.billingPort ?? null,
+    agents: () => screenAgents().map(agent => ({
+      agentId: agent.agentId, displayName: agent.displayName, status: agent.status ?? "active",
+      role: agent.role ?? "", provider: agent.provider ?? "", allowedScopes: agent.allowedScopes,
+      ...("planAllowed" in agent && typeof agent.planAllowed === "boolean" ? { planAllowed: agent.planAllowed } : {}),
+    })),
+    quests: screenQuests,
+    render,
+    alive: () => !lifecycle.disposed,
+    writeLocked: screenWriteHeld,
+    refreshWorkspace,
+  });
+  const analyticsUi = createAnalyticsUi({ port: runtime?.analyticsPort ?? null, render, alive: () => !lifecycle.disposed });
+  const workUi = productivityWorkspace({
+    port: runtime?.productivityPort, quests: screenQuests, held: baseScreenWriteHeld,
+    refresh: () => render(true),
+    schedule: (id, date, time, minutes) => {
+      const quest = screenQuests().find(q => q.id === id);
+      if (!quest) return;
+      openEdit(quest);
+      if (quest.humanRequest) return;
+      createScheduled.value = date; createTime.value = time; createEstimate.value = String(minutes); createMode.value = "on_date";
+    },
+    navigate: (screen, id) => {
+      state.domain = screen;
+      if (id) { state.selectedQuestId = id; state.screens.quests.mobileDetailOpen = isMobile(); }
+      render();
+      window.requestAnimationFrame(() => screenHost.querySelector<HTMLElement>("h1")?.focus());
+    },
+  });
+  workBusy = workUi.busy;
+  workDirty = workUi.dirty;
+  workUi.attachTimer(timerHost);
+  try { const saved = localStorage.getItem("qf-quest-view"); if (["list", "board", "gantt"].includes(saved ?? "")) state.screens.quests.view = saved as QuestsState["view"]; } catch { /* List remains the initial view. */ }
+  const guardWorkNavigation = (event: MouseEvent) => {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>('.rf-nav-item, .rf-rail-utility:has(.rf-nav-glyph[data-domain="settings"]), .rf-account-menu-item') : null;
+    if (target && workUi.dirty() && !target.classList.contains("rf-nav-more")) { event.preventDefault(); event.stopImmediatePropagation(); workUi.guard(() => target.click()); }
+  };
+  shell.addEventListener("click", guardWorkNavigation, true);
+
   function openSettings(section: SettingsSection): void {
     state.domain = "settings";
     state.settingsFocusSection = section;
     state.moreOpen = false;
     state.accountMenuOpen = false;
     render();
+    billingUi.enter();
+    analyticsUi.enter();
   }
 
   function selectTheme(next: ThemePreference): void {
@@ -1980,6 +2068,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     if (apiError.code === "handle_cooldown") return relayText("handleCooldown");
     if (apiError.code === "handle_taken") return relayText("handleTaken");
     if (apiError.code === "save_unverified") return relayText("saveUnverified");
+    if (apiError.code === "quest_conflict") return relayText("questConflict");
     if (error instanceof AvatarImageError) return error.message;
     return fallback;
   }
@@ -2272,7 +2361,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   function openAgentPicker(clientId: string): void {
     const row = sharedAgentConnections.find((connection) => connection.clientId === clientId);
-    state.screens.settings.connectionDrafts[clientId] = row?.linkedAgentId ?? "";
+    state.screens.settings.connectionDrafts[clientId] = [...(row?.allowedAgentIds ?? (row?.linkedAgentId ? [row.linkedAgentId] : []))].filter(id => sharedAgents.some(agent => agent.agentId === id && agent.status === "active"));
     state.screens.settings.connectionMessage = () => "";
     state.screens.settings.connectionTone = null;
     render();
@@ -2293,7 +2382,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
 
   function selectConnectionAgent(clientId: string, agentId: string): void {
     if (state.screens.settings.connectionBusyId === clientId) return;
-    state.screens.settings.connectionDrafts[clientId] = agentId;
+    const selected = state.screens.settings.connectionDrafts[clientId] ?? [];
+    state.screens.settings.connectionDrafts[clientId] = selected.includes(agentId) ? selected.filter(id => id !== agentId) : [...selected, agentId];
     render();
     const card = connectionCard(clientId);
     card?.querySelector<HTMLButtonElement>(`button[data-agent-id="${CSS.escape(agentId)}"]`)?.focus({ preventScroll: true });
@@ -2307,7 +2397,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     settings.connectionTone = null;
     render();
     try {
-      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.linkAgentConnection(agentId, clientId));
+      await runLifecycleStep(lifecycle, () => runtime!.agentConnectionPort.linkAgentConnection(agentId, clientId, settings.connectionDrafts[clientId]));
       await refreshAgentConnections();
       delete settings.connectionDrafts[clientId];
       settings.connectionTone = "success";
@@ -2394,6 +2484,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
    * ---------------------------------------------------------------- */
 
   function renderRail(): void {
+    const overflowDomains = isMobile() ? MOBILE_OVERFLOW : DOMAINS.filter(domain => ["network", "battle", "skills"].includes(domain.id));
     replaceChildren(
       rail,
       el(
@@ -2415,7 +2506,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       el(
         "ul",
         { class: "rf-rail-domains" },
-        ...DOMAINS.filter((domain) => !isMobile() || domain.primaryOnMobile).map((domain) => {
+        ...DOMAINS.filter((domain) => isMobile() ? domain.primaryOnMobile : !["network", "battle", "skills"].includes(domain.id)).map((domain) => {
           const selected = state.domain === domain.id;
           const button = el(
             "button",
@@ -2442,7 +2533,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
           }
           return el("li", null, button);
         }),
-        isMobile()
+        true
           ? el(
             "li",
             null,
@@ -2452,8 +2543,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
                * `aria-current` and the selected treatment — otherwise the bar
                * would announce no current page at all on Battle and
                * Connections. */
-              const overflowActive = state.domain === "settings"
-                || MOBILE_OVERFLOW.some((domain) => domain.id === state.domain);
+              const overflowActive = overflowDomains.some((domain) => domain.id === state.domain);
               const more = el(
                 "button",
                 {
@@ -2462,25 +2552,25 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
                   "aria-expanded": state.moreOpen ? "true" : "false",
                   "aria-current": overflowActive ? "page" : null,
                   "data-selected": overflowActive ? "true" : "false",
-                  title: MOBILE_OVERFLOW.map((domain) => domain.label).join(" / "),
+                  title: overflowDomains.map((domain) => domain.label).join(" / "),
                 },
                 el("span", { class: "rf-nav-glyph", "data-domain": "more", "aria-hidden": "true" }),
                 el("span", { class: "rf-nav-label" }, "More"),
               );
               more.addEventListener("click", () => {
                 state.moreOpen = !state.moreOpen;
-                render();
+                render(true);
               });
               return more;
             })(),
           )
           : null,
       ),
-      isMobile() && state.moreOpen
+      state.moreOpen
         ? el(
           "ul",
           { class: "rf-nav-more-panel", "aria-label": "More destinations" },
-          ...MOBILE_OVERFLOW.map((domain) => {
+          ...overflowDomains.map((domain) => {
             const selected = state.domain === domain.id;
             const button = el(
               "button",
@@ -2524,6 +2614,16 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
             signOut.addEventListener("click", () => { void handleSignOut(); });
             return el("li", null, signOut);
           })(),
+          runtime?.refreshWorkspace ? (() => {
+            const refresh = el("button", { type:"button", class:"rf-nav-item", "data-workspace-refresh":"true", disabled:!canRefreshWorkspace() }, relayText("refresh"));
+            refresh.addEventListener("click", () => {
+              state.moreOpen = false;
+              render(true);
+              shell.querySelector<HTMLElement>(".rf-nav-more")?.focus({ preventScroll:true });
+              void refreshWorkspace();
+            });
+            return el("li", null, refresh);
+          })() : null,
         )
         : null,
       el(
@@ -2952,6 +3052,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   function renderScreen(): ScreenRender | null {
+    if (state.domain === "calendar" || state.domain === "notes") return workUi.screen(state.domain);
     if (state.domain === "battle" && battleLoadError) {
       const retry = el("button", { type: "button", class:"rf-secondary-button", "data-battle-action":"refresh", disabled:battleBusy(state.screens.battle) }, relayText("retry"));
       retry.addEventListener("click", () => { void refreshBattle(state.screens.battle, { port:battlePort, onSession:() => {}, onRefresh:refreshBattleSession, isDisposed:() => lifecycle.disposed }, render); });
@@ -2976,14 +3077,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     if (state.domain === "quests") {
       const model = normalizeQuestsModel({
         quests: screenQuests(),
-        selfUid: runtime?.selfUid ?? "hironao",
+        selfUid: runtime?.selfUid ?? "admin",
         notices: screenNotices("Quest", retry),
         writeHeld: screenWriteHeld(),
         now: screenNow(),
         today: screenToday(),
       });
+      const timedModel = { ...model, rows: model.rows.map(row => { const quest = screenQuests().find(q => q.id === row.id); return { ...row, workTime: quest ? workUi.totals(quest) : "—" }; }) };
       const callbacks = {
         onCreate: openCreate,
+        relatedNotes: workUi.relatedNotes,
+        workTime: (id: string) => { const quest = screenQuests().find(q => q.id === id); return quest ? workUi.totals(quest) : "—"; },
         onEdit: (questId: string) => {
           const quest = sharedQuests.find((entry) => entry.id === questId);
           if (quest !== undefined) openEdit(quest);
@@ -2995,8 +3099,8 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onInspectNetwork: (questId: string) => context.onNavigate("network", questId),
       };
       return isMobile()
-        ? renderQuestsMobile(model, state.screens.quests, context, callbacks, state.selectedQuestId)
-        : renderQuestsDesktop(model, state.screens.quests, context, callbacks, state.selectedQuestId);
+        ? renderQuestsMobile(timedModel, state.screens.quests, context, callbacks, state.selectedQuestId)
+        : renderQuestsDesktop(timedModel, state.screens.quests, context, callbacks, state.selectedQuestId);
     }
     if (state.domain === "network") {
       const networkQuests = screenQuests();
@@ -3027,7 +3131,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         actors: state.model.actors,
         members: screenMembers(),
         agents: screenAgents(),
-        selfUid: runtime?.selfUid ?? "hironao",
+        selfUid: runtime?.selfUid ?? "admin",
         partyName: screenPartyName(),
         notices: screenNotices(relayText("agentsTitle"), retry),
         unavailable: [{
@@ -3140,6 +3244,9 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         mcpConnectionLoadError: agentConnectionsLoadError,
       });
       const callbacks = {
+        billingRegion: billingUi.render,
+        analyticsRegion: analyticsUi.render,
+        workRegion: workUi.settings,
         onThemeSelect: selectTheme,
         onAvatarFileSelected: (file: File) => { void saveProfileAvatar(file); },
         onRemoveAvatar: () => { void removeProfileAvatar(); },
@@ -3168,17 +3275,26 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     return null;
   }
 
-  /* A destination change starts at the top; re-renders within one keep their scroll. */
-  let renderedDomain: NavId | null = null;
-  function resetScrollOnDomainChange(): void {
-    if (renderedDomain !== null && renderedDomain !== state.domain) {
-      screenHost.scrollTop = 0;
-      window.scrollTo(0, 0);
+  function render(preserveRegions: boolean | Event = false): void {
+    if (lifecycle.disposed || inputComposing) return;
+    const sameScreen = shell.dataset.domain === state.domain;
+    const page = sameScreen ? { left:window.scrollX, top:window.scrollY } : null;
+    const selectors = ['.rf-screen-region[data-scroll="true"]', '.rf-set-screen', '.rf-skills-screen', '.rf-screen-host', '.rf-workfield'];
+    const positions = preserveRegions === true && sameScreen ? selectors.flatMap(selector => [...shell.querySelectorAll<HTMLElement>(selector)].map((element, index) => ({ selector, index, top:element.scrollTop, left:element.scrollLeft }))) : [];
+    const disclosures = preserveRegions === true && sameScreen ? [...shell.querySelectorAll("details")].map(element => element.open) : [];
+    const restoreWorkFocus = workUi.preserveFocus();
+    workUi.clearCalendar();
+    try { renderContent(); workUi.renderTimer(); }
+    finally {
+      shell.querySelectorAll("details").forEach((element, index) => { if (disclosures[index] !== undefined) element.open = disclosures[index]!; });
+      for (const saved of positions) shell.querySelectorAll<HTMLElement>(saved.selector)[saved.index]?.scrollTo({ top:saved.top, left:saved.left, behavior:"instant" });
+      if (page) window.scrollTo({ ...page, behavior:"instant" });
+      else { window.scrollTo({ top:0, left:0, behavior:"instant" }); for (const selector of selectors) shell.querySelectorAll<HTMLElement>(selector).forEach(element => element.scrollTo({ top:0, left:0, behavior:"instant" })); }
+      restoreWorkFocus();
     }
-    renderedDomain = state.domain;
   }
 
-  function render(): void {
+  function renderContent(): void {
     if (lifecycle.disposed || inputComposing) return;
     if (revisionSelection !== state.selectedQuestId) {
       revisionSelection = state.selectedQuestId;
@@ -3247,7 +3363,6 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       if (focusedQuest?.id && focusedQuest.selector) shell.querySelector<HTMLElement>(`.${focusedQuest.selector}[data-quest-id="${CSS.escape(focusedQuest.id)}"]`)?.focus({ preventScroll:true });
       if (commandToggle) shell.querySelector<HTMLElement>(`#${commandToggle}`)?.focus({ preventScroll:true });
       if (commandControl) shell.querySelector<HTMLElement>(`[data-command-control="${CSS.escape(commandControl)}"]`)?.focus({ preventScroll:true });
-      resetScrollOnDomainChange();
       return;
     }
     /* A non-Command destination owns the whole workfield. Every Command region
@@ -3289,7 +3404,6 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       input?.focus({ preventScroll:true });
       if (searchInput.start !== null && searchInput.end !== null) input?.setSelectionRange(searchInput.start, searchInput.end, searchInput.direction ?? undefined);
     } else if (skillsGroup) screenHost.querySelector<HTMLElement>(`[data-group-toggle="${CSS.escape(skillsGroup)}"]`)?.focus({ preventScroll:true });
-    resetScrollOnDomainChange();
   }
 
   function handleLensAsSheetChange(event: MediaQueryListEvent): void {
@@ -3319,13 +3433,17 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const handleRevisionComposition = (event: CompositionEvent) => {
     if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) || !event.target.matches(".rf-revision-input, .rf-search-input")) return;
     inputComposing = event.type === "compositionstart";
-    if (!inputComposing) window.requestAnimationFrame(render);
+    if (!inputComposing) window.requestAnimationFrame(() => render());
   };
   shell.addEventListener("compositionstart", handleRevisionComposition);
   shell.addEventListener("compositionend", handleRevisionComposition);
   window.addEventListener("questforge:locale-changed", render);
   const onWorkspaceResume = () => { if (document.visibilityState !== "hidden") void refreshWorkspace(); };
   const workspaceInterval = runtime?.refreshWorkspace ? window.setInterval(onWorkspaceResume, 30000) : null;
+  const disposePullRefresh = runtime?.refreshWorkspace ? mountPullToRefresh(shell, {
+    canRefresh:() => isMobile() && canRefreshWorkspace() && !shell.querySelector("dialog[open]"),
+    refresh:refreshWorkspace,
+  }) : () => {};
   if (runtime?.refreshWorkspace) {
     window.addEventListener("focus", onWorkspaceResume);
     window.addEventListener("online", onWorkspaceResume);
@@ -3334,12 +3452,16 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   }
 
   render();
+  void workUi.load();
   refreshAgentAvatars();
   refreshProfileAvatar();
   void loadDeferredPanels();
   void inbox.refresh();
 
   return function unmountRelayForge(): void {
+    workUi.dispose();
+    shell.removeEventListener("click", guardWorkNavigation, true);
+    disposePullRefresh();
     // First, so every in-flight avatar fetch's continuation (however many
     // microtask hops away it still is) observes disposal before it can
     // create a Blob URL, mutate shared state, or render.

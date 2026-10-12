@@ -11,7 +11,7 @@ Guilduo E2エンブレムは、ユーザー提供のAI生成カラー探索シ�
 
 OGとGitHub画像は、ひろなお承認済みの無文字・アイコン主体版である。公開ワードマークやコピーを実装担当者が独断で追加しない。
 
-現在の判定は、コードとローカル公開前検証に加えて、Appwrite Site、Cloudflare Worker、Appwrite API Custom Domainのproduction反映と主要URL smoke testまで完了した状態である。正式なタグ付きリリース、`www` redirectのDNS、Documentation公開、認証を含む実クライアントE2Eは別ゲートとして残している。
+現在の判定は、コードとローカル公開前検証に加えて、Appwrite Site、Cloudflare Worker、Appwrite API Custom Domainのproduction反映と主要URL smoke testまで完了した状態である。正式なタグ付きリリース、`www` redirectのDNS、README/公開資料によるDocumentation受入、認証を含む実クライアントE2Eは別ゲートとして残している。
 
 公開Web Appの正式入口は`https://app.guilduo.com/`（Guilduo / Relay Forge）、公式サイトは`https://guilduo.com/`、MCPは`https://mcp.guilduo.com/mcp`、Appwrite APIは`https://api.guilduo.com/v1`である。`/next/relay-forge/`、generated domain、旧workers.dev URLは互換・検証・rollback用に限定する。
 
@@ -88,4 +88,10 @@ Node 26のローカル環境で`uv_os_get_passwd returned ENOMEM`が発生する
 5. [x] マークを16／24／32／48／64／180／192／512pxで通常色、グレースケール、明暗背景に表示して確認している。
 6. [x] 既存Golden captureを直接上書きせず、`.qa-artifacts/`へ候補を出力した。
 
-`www` DNS、Documentation、GitHub表示、OG確認、認証E2Eのいずれかが未完了の場合、公開タグを作成せず、`0.6.0-beta.8`候補として保留する。既存の`QuestForge` technical identifier、API、MCP、schema、認証、storage key、CLIはこのロールアウトで変更しない。
+`www` DNS、README/公開GitHub資料のDocumentation受入、GitHub表示、OG確認、認証E2Eのいずれかが未完了の場合、公開タグを作成せず、`0.6.0-beta.8`候補として保留する。既存の`QuestForge` technical identifier、API、MCP、schema、認証、storage key、CLIはこのロールアウトで変更しない。
+
+## Documentation gate clarification (2026-10-03)
+
+Documentationの必須ゲートは既存の英語`README.md`・日本語`README.jp.md`と公開GitHub上の接続/FAQ/既知制限を正式URL・ブランド・受入範囲に揃え、LA-07で初見の利用を確認すること。`docs.guilduo.com`は**Reserved / Future**を維持し、このローンチのための別サイト新設やDNS公開を要求しない。公開資料の受入は未確認なので、この明文化だけでチェックを閉じない。
+
+過去のlocal/production PASSは記録日時の候補に限る。新しい正式Releaseは[署名付き候補ゲート](launch-operations.md)で先行LA/BMと対象SHAを照合する。

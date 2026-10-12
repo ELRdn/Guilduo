@@ -198,7 +198,7 @@ As gravações retornam apenas um dry-run ou plano de execução quando `--execu
 
 ## Skill / OpenAI Plugin / MCP App
 
-- Skill oficial: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Skill oficial: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - Pacote de preparação do OpenAI Plugin: [`plugins/questforge/`](plugins/questforge/)
 - Template de registro do MCP App: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Checklist de envio: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

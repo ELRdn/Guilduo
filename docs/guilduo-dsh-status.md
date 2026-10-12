@@ -4,6 +4,12 @@
 
 Updated October 10, 2026. Windows / DSH **0.2.0-rc.2**. **Recommended release: @guilduo/dsh-oauth-poc@0.6.0-beta.17**. npm `latest` and `beta` both point to beta.17 after the user-authorized latest promotion. All three plugins now enter the polish phase. `latest` is the normal installation tag; it does not change the prerelease version or acceptance limits. [Official guide](https://guilduo.com/docs/en/dsh/).
 
+## Beta.17 user acceptance — October 11, 2026
+
+The user reports stable operation with beta.17 in their DSH environment. Reconnecting Guilduo requires pressing **New Chat** to start a new conversation; the user considers this an acceptable usability limitation. Document this step when reconnecting, rather than promising reconnection within an existing conversation.
+
+This is user-reported acceptance, not an independently rerun host test. The exact reconnection trigger and cause are unverified; this report does not establish Human answer/resumption, Handoff, refresh/revocation or guarded-update acceptance.
+
 ## Beta.17 maintenance
 
 The user authorized necessary fixes after the independent review. Published beta.16 stays immutable; these changes are limited to the plugin and its tests/documentation.
@@ -52,7 +58,7 @@ The assistant did not inspect real credentials, alter the user's profile or repe
 
 ## Interpretation
 
-**Beta.17 addresses the three scoped review findings; full workflow acceptance remains open.** Beta.16 public OAuth, basic MCP read/write and Desktop saved authentication reuse have user acceptance. They are historical evidence rather than fresh beta.17 public acceptance. Full acceptance of settings-free use across all eligible conversations and the Human/Handoff workflows remains open; this is not a declaration of stable-release completion.
+**Beta.17 addresses the three scoped review findings and now has user-reported stable operation with the New Chat reconnection step; full workflow acceptance remains open.** Beta.16 public OAuth, basic MCP read/write and Desktop saved authentication reuse remain historical evidence. Full acceptance of settings-free use across all eligible conversations and the Human/Handoff workflows remains open; this is not a declaration of stable-release completion.
 
 Beta.14's historical grant-loss cause is unproven. Beta.16 fixed unsafe lifecycle deletion and premature Connected state; beta.17 is the limited maintenance update above. Compatibility identifiers, permissions and the Free limit of **2 registered Agents** are unchanged. Windows DPAPI protects storage for the Windows user; it does not isolate credentials from code running with that same user's privileges.
 

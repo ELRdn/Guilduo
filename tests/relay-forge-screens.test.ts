@@ -84,7 +84,7 @@ test("Quests: buckets come from the domain's own handoff and lifecycle fields", 
       quest({ id: "q-4", title: "done", done: true, lifecycleState: "completed" }),
       quest({ id: "q-5", title: "backlog", planningState: "backlog", assignee: { type: "self", id: "me", label: "Me", handoffState: "none" } }),
     ],
-    selfUid: "hironao",
+    selfUid: "admin",
     now: NOW,
     today: TODAY,
   });
@@ -104,7 +104,7 @@ test("Quests: an unmet dependency blocks the dependant, a completed one does not
       quest({ id: "q-waits-open", title: "waits on open", dependencyIds: ["q-root"] }),
       quest({ id: "q-waits-done", title: "waits on done", dependencyIds: ["q-done"] }),
     ],
-    selfUid: "hironao",
+    selfUid: "admin",
     now: NOW,
     today: TODAY,
   });
@@ -127,7 +127,7 @@ test("Quests: downstream cost counts the whole chain, and survives a dependency 
       quest({ id: "q-x", title: "x", dependencyIds: ["q-y"] }),
       quest({ id: "q-y", title: "y", dependencyIds: ["q-x"] }),
     ],
-    selfUid: "hironao",
+    selfUid: "admin",
     now: NOW,
     today: TODAY,
   });
@@ -146,7 +146,7 @@ test("Quests: overdue is measured against today and never applies to a completed
       quest({ id: "q-none", title: "none", dueDate: "" }),
       quest({ id: "q-late-done", title: "late but finished", dueDate: "2026-08-20", done: true, lifecycleState: "completed" }),
     ],
-    selfUid: "hironao",
+    selfUid: "admin",
     now: NOW,
     today: TODAY,
   });
@@ -164,14 +164,14 @@ test("Quests: owner ids match the ids the identity map is keyed by", () => {
       quest({ id: "q-2", title: "human", assignee: { type: "human", id: "mika", label: "Mika", handoffState: "working" } }),
       quest({ id: "q-3", title: "self", assignee: { type: "self", id: "me", label: "Me", handoffState: "none" } }),
     ],
-    selfUid: "hironao",
+    selfUid: "admin",
     now: NOW,
     today: TODAY,
   });
   const owner = (id: string): string => model.rows.find((row) => row.id === id)?.ownerActorId ?? "";
   assert.equal(owner("q-1"), "a-forge");
   assert.equal(owner("q-2"), "u-mika");
-  assert.equal(owner("q-3"), "u-hironao", "a self-assigned Quest belongs to the signed-in profile");
+  assert.equal(owner("q-3"), "u-admin", "a self-assigned Quest belongs to the signed-in profile");
   for (const id of ["q-1", "q-2", "q-3"]) {
     assert.ok(fixtureActors.has(owner(id)), `${owner(id)} resolves in the shared identity map`);
   }
@@ -197,7 +197,7 @@ test("Network: every edge is backed by a domain field, and each kind is distingu
     ],
     actors: fixtureActors,
     connections: [{ id: "notion", name: "Notion", status: "reconnect_required", questIds: ["q-child"] }],
-    selfUid: "hironao",
+    selfUid: "admin",
   });
   const kinds = new Set(model.edges.map((edge) => edge.kind));
   assert.ok(kinds.has("dependency"));
@@ -218,7 +218,7 @@ test("Network: containment never blocks, an unmet dependency always does", () =>
     ],
     actors: fixtureActors,
     connections: [],
-    selfUid: "hironao",
+    selfUid: "admin",
   });
   const contains = model.edges.find((edge) => edge.kind === "contains");
   const dependency = model.edges.find((edge) => edge.kind === "dependency");
@@ -239,7 +239,7 @@ test("Network: a blocked chain names its root cause and everything waiting behin
     ],
     actors: fixtureActors,
     connections: [],
-    selfUid: "hironao",
+    selfUid: "admin",
   });
   assert.equal(model.chains.length, 1, "only the root cause is a chain, not every blocked Quest");
   assert.equal(model.chains[0]?.rootId, "q-root");
@@ -252,7 +252,7 @@ test("Network: an actor with no Quests is not drawn", () => {
     quests: [quest({ id: "q-1", title: "one" })],
     actors: fixtureActors,
     connections: [{ id: "notion", name: "Notion", status: "connected", questIds: [] }],
-    selfUid: "hironao",
+    selfUid: "admin",
   });
   const kinds = [...model.nodes.values()].map((node) => node.kind);
   assert.equal(kinds.filter((kind) => kind === "actor").length, 1, "only the one actor that holds something");
@@ -350,7 +350,7 @@ test("Party: workload counts are real Quests and no capacity ceiling is invented
     actors: fixtureActors,
     members: [{ uid: "mika", displayName: "Mika", handle: "mika", role: "member", joinedAt: "2026-06-14T10:30:00.000Z", level: 17 }],
     agents: [{ agentId: "a-forge", displayName: "Forge Runner", provider: "generic", role: "builder", status: "active", allowedScopes: ["quests:read"], reviewRequired: true, dryRunDefault: true }],
-    selfUid: "hironao",
+    selfUid: "admin",
     partyName: "Relay Forge",
     now: NOW,
   });
@@ -371,13 +371,13 @@ test("Party: Humans lead the roster and Agent capability comes from the registry
   const model = normalizePartyModel({
     quests: [],
     actors: fixtureActors,
-    members: [{ uid: "hironao", displayName: "Hironao", handle: "hironao", role: "owner", joinedAt: "2026-05-02T08:00:00.000Z", level: 24 }],
+    members: [{ uid: "admin", displayName: "admin", handle: "admin", role: "owner", joinedAt: "2026-05-02T08:00:00.000Z", level: 24 }],
     agents: [{
       agentId: "a-warden", displayName: "Warden", provider: "generic", role: "Contract checker",
       status: "active", allowedScopes: ["quests:read", "handoff:write"], reviewRequired: true, dryRunDefault: false,
       defaultHandoffState: "review_required",
     }],
-    selfUid: "hironao",
+    selfUid: "admin",
     partyName: "Relay Forge",
     now: NOW,
   });
@@ -396,7 +396,7 @@ test("Party: an agent with no granted scopes says so instead of showing nothing"
     actors: fixtureActors,
     members: [],
     agents: [{ agentId: "a-scribe", displayName: "Scribe", allowedScopes: [] }],
-    selfUid: "hironao",
+    selfUid: "admin",
     partyName: "",
     now: NOW,
   });

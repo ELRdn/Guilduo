@@ -291,7 +291,7 @@ export interface Segment {
   readonly id: string;
   readonly label: string;
   /** Shown after the label. Always the real count, including zero. */
-  readonly count: number;
+  readonly count?: number;
 }
 
 /** Single tab stop and arrow selection for the existing ARIA radio buttons. */
@@ -344,7 +344,7 @@ export function segmentControl(
           "data-selected": segment.id === selected ? "true" : "false",
         },
         el("span", { class: "rf-segment-label" }, segment.label),
-        el("span", { class: "rf-segment-count" }, String(segment.count)),
+        segment.count === undefined ? null : el("span", { class: "rf-segment-count" }, String(segment.count)),
       );
       button.addEventListener("click", () => onSelect(segment.id));
       return button;

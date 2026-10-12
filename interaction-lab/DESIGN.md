@@ -91,6 +91,7 @@ components:
 - 人は「修正あり」「修正なし」「あとで確認」を選ぶ。修正ありにはテキストFBを必須にし、保留は再開できる。回答済みの履歴は書き換えず、再確認は新しい依頼として表示する。
 - 人への確認Quest完了、Handoff承認、元Quest完了を別々に表示する。受け渡し線も承認だけで完了表示にしない。
 - 設定のMCP接続は、自分のAgent登録、OAuth接続、Agentリンクと実効権限、最初のタスク受け渡しの順に案内する。ユーザーのAgentを自動起動しない。
+- 同じMCP接続で使うAgentは複数選択できる。選択状態を押下状態と文字で示し、0件では保存を止める。複数時は全員の名前を折り返して表示し、権限は呼び出しで指定したAgentごとに適用することを案内する。Agentの自動判別や接続全体の毎回切替を前提にしない。
 - 実効権限は各接続内でQuestの閲覧・更新可否を短く示す。スコープ技術名と接続ID、初回操作のMCP手順はnative detailsへ折りたたむ。無効な接続は再接続せず削除でき、確認後に既存の接続解除・履歴削除APIを順に使う。Agent本体とQuestは保持し、取得失敗後は書込みを繰り返さず一覧再取得を案内する。
 - 確定済みの受け渡し・回答に限り180ms程度の短い境界線/不透明度変化と読み上げ通知を使う。失敗・保留・再試行を成功演出にしない。既存色と正式アイコンを維持し、reduced motionではアニメーションを止める。
 - 新しい操作は9言語、キーボード、390px幅に対応する。Pixel 9実機とデスクトップブラウザの検証記録を混同しない。
@@ -119,6 +120,15 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 - AI生成画像を起点にした暫定トレース版だが、権利・第三者類似性確認とひろなおの公開β採用承認を2026-08-29に記録済みである。公開Web Appへの反映後も、正式リリースタグや外部表示の追加判断は別ゲートで行う。承認は商標登録や法務意見を意味しない。
 
 `/interaction-lab/`はローカル開発・キャプチャ用のソースルートで、Viteのビルド後に同じSurfaceが`/next/relay-forge/`へ出力される。データモデル、認証、API、MCPはrootの[`PROJECT_SPEC.md`](../PROJECT_SPEC.md)から差分を作らない。正式URL・互換pathの対応は[`docs/public-urls.md`](../docs/public-urls.md)を参照する。
+
+## Productivity workspace (2026-10-12)
+
+- Desktop rail: Home (`command`), Quests, Calendar, Notes, Party, Connections, More, Settings. Mobile: Home/Quests/Calendar/Notes + More. Existing auxiliary destinations stay reachable through More.
+- Quests preserves filter, selection and detail state across Board/List/Gantt. List is the initial view. Gantt scroll is contained inside its labelled region; mobile does not acquire page-wide horizontal overflow.
+- Calendar starts in month mode, offers week mode, independent filters, date navigation and common Quest detail. Notes uses list/editor on desktop and list-to-editor navigation on mobile, with explicit save/discard/cancel for dirty navigation.
+- A shell-owned native timer is visible across destinations. Mobile reserves space for the timer, existing sticky actions and bottom navigation. Drafts and focus survive timer ticks; ticks update elapsed text only.
+- Settings includes private work-time source, export/restore and confirmed deletion. Loading/error/stale data stays explicit; a missing backend never pretends to save a demo.
+- Calendar additionally offers Day view. Day/Week time axes support mouse press-and-drag and touch long-press selection on empty space, snapping to 15 minutes and showing a range preview. Ordinary touch swipes scroll. Escape/pointer cancellation cancels selection; arrows/Shift+arrows and Enter provide a keyboard path. Selection opens an explicit choice between recording work and scheduling a Quest, never saving automatically. Existing event dragging/resizing remains outside this change.
 
 ## 3. 画面マップ
 
@@ -158,6 +168,8 @@ stateDiagram-v2
 - 同期中の完了、編集、保管、Agent変更はロックする。
 - 失敗したパネルだけにエラーと再試行を表示し、正常なQuest一覧を捨てない。
 - UIDが変わった場合は前ユーザーのスナップショットを再利用しない。
+- Relay ForgeのQuest編集・開始・停止・保管・完了は表示時の更新日時で競合を検知する。競合時は入力を保持し、編集を閉じて最新状態を取得する案内を9言語で表示する。完了済みQuestを古い画面から再完了して再開させない。
+- Quest作成・編集で応答が失われた場合も、入力をコピーできる状態で再送を止める。編集を閉じて一覧を読み直し、実際の保存状態を確認する。保存失敗と断定して重複作成を促さない。
 
 ## 5. Todayのレイアウト差分
 
@@ -356,6 +368,9 @@ Next版は、次の条件をすべて満たした場合だけ人間の承認で`
 ### 2026-10-02: Workspaceの再取得と復旧
 
 - 別端末・MCPの変更を、表示中30秒間隔と画面復帰・接続復旧・明示的な再取得で取り込む。同期中も表示を残し、変更操作を止める。入力中の編集は保留して守る。
+- 再取得前後でページと画面内一覧のスクロール、開いた補足説明を保持する。通信待ちの間にユーザーが動かした位置を古い位置へ戻さない。
+- スマホは最上部から1本指で下へ引き、離すとデータだけを再取得する。短い引き・横スワイプ・複数指・取消・入力・モーダルを除外し、連続取得はまとめる。既存の更新ボタンを残し、既存色の短い状態表示を使う。ページ再読込と書込みの再送は行わない。
+- Moreにもキーボードで操作できる更新ボタンを置き、実行後はMoreへフォーカスを戻す。タッチ操作を必須にしない。
 - Commandは既存の同期表示と再取得操作、他画面は既存の状態通知と再試行を使う。初期データの取得時刻と同期状態を区別し、エラーに内部応答を表示しない。
 - 選択・検索・修正draft・フォーカス・画像参照を保持する。取得失敗は前回データと再試行を残し、途中の成功や未取得パネルを同期済みと見せない。
 - 設定のAgent一覧は通信中も保持し、登録・編集だけを無効化する。再試行後は元の同期操作または画面見出しへフォーカスを戻す。選択Questが外部更新された場合、以前の明示確認を破棄して修正draftとカーソルを保持する。

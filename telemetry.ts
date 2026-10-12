@@ -1,3 +1,4 @@
+import { WebVitalAccumulator } from "./shared/web-vitals.ts";
 const CONSENT_KEY = "questforge-telemetry-consent";
 const FIRST_QUEST_KEY = "questforge-telemetry-first-quest-sent";
 const ALLOWED_CONSENTS = new Set(["unknown", "granted", "denied"]);
@@ -16,7 +17,7 @@ const ALLOWED_EVENTS = new Set([
 type TelemetryData = Record<string, unknown>;
 type TelemetryEvent = TelemetryData & { name: string; surface: string; at: string };
 type TelemetryListener = [string, TelemetryEventListener];
-type MetricEntry = PerformanceEntry & { hadRecentInput?: boolean; value?: number };
+type MetricEntry = PerformanceEntry & { hadRecentInput?: boolean; value?: number; interactionId?: number };
 type TelemetryEventListener = (...args: unknown[]) => void;
 type ExtendedObserverInit = { type?: string; buffered?: boolean; durationThreshold?: number };
 type TelemetryGlobal = {
@@ -46,6 +47,7 @@ const telemetryState = {
   vitalTimer: 0 as ReturnType<typeof setTimeout> | 0,
   observers: [] as PerformanceObserver[],
   listeners: [] as TelemetryListener[],
+  vitals: new WebVitalAccumulator(),
 };
 
 function storageGet(key: string): string {
@@ -74,7 +76,7 @@ export function getTelemetryConsent() {
 export function setTelemetryConsent(value: string): string {
   const normalized = ALLOWED_CONSENTS.has(value) ? value : "unknown";
   storageSet(CONSENT_KEY, normalized);
-  if (normalized !== "granted") stopTelemetry();
+  if(normalized!=="granted") resetTelemetryForTests();
   runtimeGlobal.dispatchEvent?.(new CustomEvent("questforge:telemetry-consent-changed", { detail: { consent: normalized } }));
   if (normalized === "granted") initializeTelemetry({ surface: telemetryState.surface });
   return normalized;
@@ -83,7 +85,7 @@ export function setTelemetryConsent(value: string): string {
 function safePayload(name: string, data: TelemetryData = {}): TelemetryData & { name: string; surface: string } {
   const payload: TelemetryData & { name: string; surface: string } = { name, surface: telemetryState.surface };
   for (const [key, value] of Object.entries(data || {})) {
-    if (["lcp", "cls", "inp", "duration", "count"].includes(key) && Number.isFinite(Number(value))) payload[key] = Math.round(Number(value) * 100) / 100;
+    if (["lcp", "cls", "inp", "duration", "count"].includes(key) && Number.isFinite(Number(value))) { const scale=key==="cls"?10000:100;payload[key] = Math.round(Number(value) * scale) / scale; }
     if (["kind", "source", "status"].includes(key) && typeof value === "string" && value.length <= 40) payload[key] = value;
   }
   return payload;
@@ -114,14 +116,17 @@ function queueEvent(name: string, data: TelemetryData = {}): void {
 }
 
 export function trackTelemetry(name: string, data: TelemetryData = {}): void {
+  if(getTelemetryConsent()!=="granted")return;
   if (name === "first_quest_complete" && storageGet(FIRST_QUEST_KEY) === "1") return;
   if (name === "first_quest_complete") storageSet(FIRST_QUEST_KEY, "1");
   queueEvent(name, data);
 }
 
 function flushVitals() {
-  if (!telemetryState.lcp && !telemetryState.cls && !telemetryState.inp) return;
-  queueEvent("web_vitals", { lcp: telemetryState.lcp, cls: telemetryState.cls, inp: telemetryState.inp });
+  const count=(globalThis.performance as Performance & {interactionCount?:number})?.interactionCount;
+  const metrics=telemetryState.vitals.metrics(count);
+  if (!metrics.lcp && !metrics.cls && metrics.inp===undefined) return;
+  queueEvent("web_vitals", metrics);
 }
 
 function observePerformance() {
@@ -131,21 +136,21 @@ function observePerformance() {
     const lcp = new Observer((list) => {
       const entries = list.getEntries();
       const last = entries[entries.length - 1];
-      if (last) telemetryState.lcp = Number(last.startTime || 0);
+      if (last) telemetryState.vitals.addLcp(Number(last.startTime || 0));
     });
     lcp.observe({ type: "largest-contentful-paint", buffered: true } as unknown as Parameters<PerformanceObserver["observe"]>[0]);
     telemetryState.observers.push(lcp);
   } catch { /* Browser does not expose LCP. */ }
   try {
     const cls = new Observer((list) => {
-      for (const entry of list.getEntries() as MetricEntry[]) if (!entry.hadRecentInput) telemetryState.cls += Number(entry.value || 0);
+      for (const entry of list.getEntries() as MetricEntry[]) telemetryState.vitals.addLayoutShift({startTime:entry.startTime,value:Number(entry.value||0),hadRecentInput:entry.hadRecentInput});
     });
     cls.observe({ type: "layout-shift", buffered: true } as unknown as Parameters<PerformanceObserver["observe"]>[0]);
     telemetryState.observers.push(cls);
   } catch { /* Browser does not expose layout shift. */ }
   try {
     const inp = new Observer((list) => {
-      for (const entry of list.getEntries() as MetricEntry[]) telemetryState.inp = Math.max(telemetryState.inp, Number(entry.duration || 0));
+      for (const entry of list.getEntries() as MetricEntry[]) telemetryState.vitals.addInteraction({interactionId:entry.interactionId,duration:Number(entry.duration||0)});
     });
     inp.observe({ type: "event", buffered: true, durationThreshold: 40 } as unknown as Parameters<PerformanceObserver["observe"]>[0]);
     telemetryState.observers.push(inp);
@@ -162,6 +167,13 @@ export function initializeTelemetry({ surface = "unknown" }: { surface?: string 
   runtimeGlobal.addEventListener?.("error", errorListener);
   runtimeGlobal.addEventListener?.("unhandledrejection", rejectionListener);
   telemetryState.listeners.push(["error", errorListener], ["unhandledrejection", rejectionListener]);
+  const hiddenListener = () => {
+    const doc=(globalThis as unknown as {document?:{visibilityState:string}}).document;
+    if(doc?.visibilityState==="hidden"){telemetryState.vitals.hide(globalThis.performance?.now()||0);flushVitals();sendBatch();}
+  };
+  runtimeGlobal.addEventListener?.("visibilitychange",hiddenListener);
+  runtimeGlobal.addEventListener?.("pagehide",hiddenListener);
+  telemetryState.listeners.push(["visibilitychange",hiddenListener],["pagehide",hiddenListener]);
   telemetryState.vitalTimer = globalThis.setTimeout(flushVitals, 5000);
 }
 
@@ -176,9 +188,7 @@ export function stopTelemetry() {
   telemetryState.queue = [];
   telemetryState.flushTimer = 0;
   telemetryState.vitalTimer = 0;
-  telemetryState.lcp = 0;
-  telemetryState.cls = 0;
-  telemetryState.inp = 0;
+  telemetryState.vitals = new WebVitalAccumulator();
 }
 
 export const resetTelemetryForTests = stopTelemetry;

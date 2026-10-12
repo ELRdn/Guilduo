@@ -14,7 +14,7 @@ const results: string[] = [];
 const errors: string[] = [];
 let release: (() => void) | undefined;
 try {
-  const task = (await fixture.web("/v1/quests", "POST", { kind:"todo", title:"Shared real task" })).quest;
+  const task = (await fixture.web("/v1/quests", "POST", { kind:"todo", title:"Shared real task", estimatedMinutes:2000 })).quest;
   const working = (await fixture.web("/v1/quests", "POST", { kind:"todo", title:"Review draft task", assignee:{ type:"agent", id:"review-agent", label:"My Review Agent", handoffState:"working" } })).quest;
   const review = (await fixture.web(`/v1/quests/${working.id}/handoff`, "POST", { state:"review_required", expectedState:"working", dryRun:false })).quest;
   const pages: Page[] = [];
@@ -58,6 +58,40 @@ try {
   await assert.doesNotReject(() => desktop.waitForFunction("document.querySelector('.rf-selected-title')?.textContent === 'Changed outside this tab'"));
   results.push("Automatic reads defer while an editor is open and keep its draft, then resume after close");
 
+  await resume(mobile);
+  await synced(mobile);
+  for (const page of [desktop, mobile]) await page.locator('[data-quest-action="edit"]:visible').click();
+  await desktop.locator('dialog[open] input[name="title"]').fill("Desktop draft must survive conflict");
+  await mobile.locator('dialog[open] input[name="title"]').fill("Saved on the other device");
+  assert.equal(await mobile.locator('dialog[open] input[name="title"]').getAttribute("maxlength"), "80");
+  await mobile.locator('dialog[open] .rf-create-submit').click();
+  await mobile.locator('dialog[open]').waitFor({ state:"hidden" });
+  const conflictingSave = desktop.waitForResponse(response => response.url() === `${fixture.baseUrl}/v1/quests/${task.id}` && response.request().method() === "PATCH");
+  await desktop.locator('dialog[open] .rf-create-submit').click();
+  assert.equal((await conflictingSave).status(), 409, "Stale editing must not overwrite another device's saved title");
+  assert.equal(await desktop.locator('dialog[open] input[name="title"]').inputValue(), "Desktop draft must survive conflict");
+  assert.equal((await fixture.web(`/v1/quests/${task.id}`)).quest.title, "Saved on the other device");
+  assert.equal((await fixture.web(`/v1/quests/${task.id}`)).quest.estimatedMinutes, 2000, "Editing must preserve valid estimates above one day");
+  await desktop.locator('dialog[open] .rf-create-error').getByText(relayText("questEditConflict", "ja"), { exact:true }).waitFor();
+  assert.equal(await desktop.locator('dialog[open] .rf-create-submit').isDisabled(), true);
+  for (const width of [320, 412, 1440]) for (const locale of SUPPORTED_LOCALES) {
+    await desktop.setViewportSize({ width, height:1000 });
+    await desktop.evaluate(`window.dispatchEvent(new CustomEvent('test:locale', { detail:${JSON.stringify(locale)} }))`);
+    assert.equal(await desktop.locator('dialog[open] .rf-create-error').textContent(), relayText("questEditConflict", locale));
+    assert.equal(await desktop.locator('dialog[open] input[name="title"]').inputValue(), "Desktop draft must survive conflict");
+    assert.equal(await desktop.evaluate("document.documentElement.scrollWidth <= innerWidth && document.querySelector('dialog[open]').scrollWidth <= document.querySelector('dialog[open]').clientWidth"), true, `${locale}/${width}: conflict overflow`);
+    if (locale === "de" && width === 320) await desktop.screenshot({ path:".qa-artifacts/workspace-sync/edit-conflict-de-320.png" });
+  }
+  await desktop.evaluate("window.dispatchEvent(new CustomEvent('test:locale', { detail:'ja' }))");
+  await desktop.screenshot({ path:".qa-artifacts/workspace-sync/edit-conflict.png" });
+  await desktop.keyboard.press("Escape");
+  await desktop.waitForFunction("document.querySelector('.rf-selected-title')?.textContent === 'Saved on the other device'");
+  await synced(desktop);
+  await fixture.web(`/v1/quests/${task.id}`, "PATCH", { title:"Changed outside this tab" });
+  await resume(desktop);
+  await synced(desktop);
+  results.push("Two real browser editors reject stale saves without losing the draft or overwriting the winning device");
+
   let reads = 0;
   let writes = 0;
   await desktop.route(`${fixture.baseUrl}/v1/quests/${task.id}`, async route => { if (route.request().method() === "PATCH") writes++; await route.continue(); });
@@ -87,7 +121,7 @@ try {
   await mobile.evaluate("window.dispatchEvent(new Event('offline'))");
   await mobile.locator('.rf-shell[data-sync-state="error"]').waitFor();
   assert.equal(await mobile.locator('[data-quest-action="start"]:visible').isDisabled(), true);
-  assert.equal(await title(mobile).textContent(), task.title);
+  assert.equal(await title(mobile).textContent(), "Saved on the other device");
   for (const width of [320, 412]) {
     await mobile.setViewportSize({ width, height:1000 });
     for (const locale of SUPPORTED_LOCALES) {
@@ -179,6 +213,60 @@ try {
   results.push("Failed optional identity panels retain previous profile and Agents; offline Agent actions hold, and recovery returns focus to the screen heading");
 
   await navigate("command");
+  const completion = (await fixture.web("/v1/quests", "POST", { kind:"todo", title:"Complete once across devices" })).quest;
+  for (const page of [desktop, mobile]) {
+    await resume(page);
+    await synced(page);
+    if (page === mobile) await page.locator(".rf-m-questflow").click();
+    await page.locator(`${page === mobile ? ".rf-sheet-panel " : ""}.rf-spine-row[data-quest-id="${completion.id}"]`).click();
+    if (page === desktop) await page.keyboard.press("Escape");
+  }
+  const firstCompletion = desktop.waitForResponse(response => response.url() === `${fixture.baseUrl}/v1/quests/${completion.id}/score` && response.request().method() === "POST");
+  await desktop.locator('[data-quest-action="complete"]:visible').first().click();
+  assert.equal((await firstCompletion).status(), 200);
+  const repeatedCompletion = mobile.waitForResponse(response => response.url() === `${fixture.baseUrl}/v1/quests/${completion.id}/score` && response.request().method() === "POST");
+  await mobile.locator('[data-quest-action="complete"]:visible').click();
+  assert.equal((await repeatedCompletion).status(), 409);
+  await mobile.locator('.rf-shell[data-sync-state="error"]').waitFor();
+  assert.equal((await fixture.web(`/v1/quests/${completion.id}`)).quest.done, true);
+  assert.equal(await mobile.locator('[data-quest-action="complete"]:visible').isDisabled(), true);
+  await mobile.locator(".rf-screen-notice").getByRole("button", { name:relayText("retry", "ja"), exact:true }).click();
+  await synced(mobile);
+  assert.equal(await mobile.locator('[data-quest-action="complete"]:visible').count(), 0);
+  assert.equal((await fixture.web(`/v1/quests/${completion.id}`)).quest.done, true);
+  results.push("Stale mobile completion cannot reopen desktop-completed work; read-only recovery preserves completion");
+
+  let createRequests = 0;
+  await desktop.route(`${fixture.baseUrl}/v1/quests`, async route => {
+    if (route.request().method() === "POST") {
+      createRequests++;
+      await route.fetch(); // Commit, then lose only the response reaching the browser.
+      await route.abort("failed");
+    } else await route.continue();
+  });
+  await desktop.locator(".rf-create").click();
+  await desktop.locator('dialog[open] input[name="title"]').fill("Saved despite a lost response");
+  await desktop.locator('dialog[open] .rf-create-submit').click();
+  await desktop.locator('dialog[open] .rf-create-error').waitFor();
+  assert.equal(await desktop.locator('dialog[open] .rf-create-submit').isDisabled(), true, "Uncertain creation must not offer another POST");
+  await desktop.locator('dialog[open] form').dispatchEvent("submit");
+  assert.equal(createRequests, 1);
+  assert.equal(await desktop.locator('dialog[open] input[name="title"]').inputValue(), "Saved despite a lost response");
+  for (const width of [320, 412, 1440]) for (const locale of SUPPORTED_LOCALES) {
+    await desktop.setViewportSize({ width, height:1000 });
+    await desktop.evaluate(`window.dispatchEvent(new CustomEvent('test:locale', { detail:${JSON.stringify(locale)} }))`);
+    assert.equal(await desktop.locator('dialog[open] .rf-create-error').textContent(), relayText("questSaveUncertain", locale));
+    assert.equal(await desktop.evaluate("document.documentElement.scrollWidth <= innerWidth && document.querySelector('dialog[open]').scrollWidth <= document.querySelector('dialog[open]').clientWidth"), true, `${locale}/${width}: uncertain save overflow`);
+    if (locale === "ja" && width === 412) await desktop.screenshot({ path:".qa-artifacts/workspace-sync/save-uncertain-ja-412.png" });
+  }
+  await desktop.evaluate("window.dispatchEvent(new CustomEvent('test:locale', { detail:'ja' }))");
+  await desktop.keyboard.press("Escape");
+  await desktop.locator(".rf-spine-row").filter({ hasText:"Saved despite a lost response" }).waitFor();
+  await desktop.unroute(`${fixture.baseUrl}/v1/quests`);
+  const savedOnce = await fixture.web("/v1/quests?view=all") as unknown as { quests:Array<{ title:string }> };
+  assert.equal(savedOnce.quests.filter(quest => quest.title === "Saved despite a lost response").length, 1);
+  results.push("A committed create with a lost response retains its draft, blocks duplicate POSTs and recovers through reads");
+
   for (let index = 0; index < 205; index++) await fixture.web("/v1/quests", "POST", { kind:"todo", title:`Pagination task ${index}` });
   const firstPage = await fixture.web("/v1/quests?view=all&limit=200") as unknown as { quests:Array<{ id:string; title:string }>; nextCursor:string };
   assert.equal(firstPage.quests.length, 200);

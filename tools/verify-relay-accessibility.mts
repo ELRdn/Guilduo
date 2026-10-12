@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { chromium, type Locator } from "playwright-core";
+import { chromium, type Locator, type Page } from "playwright-core";
 import { SUPPORTED_LOCALES } from "../i18n.ts";
 import { relayText } from "../interaction-lab/relay-forge/relay-copy.ts";
 import { startRelayWorkerFixture } from "../tests/browser/worker-fixture.ts";
@@ -12,6 +12,11 @@ const results: string[] = [];
 const errors: string[] = [];
 await mkdir(".qa-artifacts/relay-accessibility", { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.QF_CHROME_PATH || (process.platform === "win32" ? "C:/Program Files/Google/Chrome/Application/chrome.exe" : "/usr/bin/google-chrome"), headless: true });
+async function destination(page: Page, name: string): Promise<void> {
+  const button = page.getByRole("button", { name, exact: true });
+  if (!await button.isVisible()) await page.locator(".rf-nav-more").click();
+  await button.click();
+}
 async function selected(group: Locator, index: number): Promise<void> {
   await group.getByRole("radio").nth(index).waitFor();
   assert.equal(await group.getByRole("radio").nth(index).getAttribute("aria-checked"), "true");
@@ -81,7 +86,8 @@ try {
       assert.equal(await page.evaluate("document.documentElement.scrollWidth <= innerWidth"), true, `${locale}/${width}: horizontal overflow`);
       await page.screenshot({ path: `.qa-artifacts/relay-accessibility/${locale}-${width}${built ? "-built" : ""}.png` });
       results.push(`${locale}/${width}: locale and viewport fit`);
-      await page.getByRole('button', { name:'Network', exact:true }).click();
+      if (!await page.getByRole('button', { name:'Network', exact:true }).isVisible()) await page.locator('.rf-nav-more').click();
+      await destination(page, "Network");
       assert.equal(await page.locator('.rf-screen-question').textContent(), relayText('networkQuestion', locale));
       if (width === 1440) {
         const modes = page.getByRole('radiogroup', { name:relayText('networkView', locale), exact:true });
@@ -137,7 +143,7 @@ try {
       await page.screenshot({ path:`.qa-artifacts/relay-accessibility/network-${locale}-${width}${built ? '-built' : ''}.png` });
       results.push(`${locale}/${width}: Network translated copy and viewport fit`);
       if (width < 900) await page.locator('.rf-nav-more').click();
-      await page.getByRole('button', { name:'Skills', exact:true }).click();
+      await destination(page, "Skills");
       assert.equal(await page.locator('.rf-screen-question').textContent(), relayText('skillsQuestion', locale));
       const skillsInput = page.locator('.rf-skills-search-input');
       assert.equal(await skillsInput.getAttribute('aria-label'), relayText('skillsSearch', locale));
@@ -183,7 +189,7 @@ try {
       assert.equal(await page.locator('.rf-skills-screen').evaluate(element => [...element.querySelectorAll('.rf-skills-group-title, .rf-skills-count, .rf-skills-tool-name')].every(label => label.scrollWidth <= label.clientWidth + 1)), true, `${locale}: Skills labels clipped`);
       await page.screenshot({ path:`.qa-artifacts/relay-accessibility/skills-${locale}-${width}${built ? '-built' : ''}.png` });
       results.push(`${locale}/${width}: Skills long labels, protocol names and viewport fit`);
-      await page.getByRole('button', { name:'Party', exact:true }).click();
+      await destination(page, "Party");
       assert.equal(await page.locator('.rf-screen-question').textContent(), relayText('partyQuestion', locale));
       const partyFilter = page.getByRole('radiogroup', { name:relayText('partyFilter', locale), exact:true });
       await partyFilter.getByRole('radio').first().focus();
@@ -237,7 +243,7 @@ try {
       if (width === 1440) await page.locator('.rf-rail-utility').last().click();
       else {
         await page.locator('.rf-nav-more').click();
-        await page.locator('.rf-nav-more-panel .rf-nav-item').nth(3).click();
+        await page.locator('.rf-nav-more-panel').getByRole('button', { name:'Settings', exact:true }).click();
       }
       await page.locator('.rf-set-screen').waitFor();
       assert.equal(await page.locator('.rf-screen-question').textContent(), relayText("settingsQuestion", locale));
@@ -259,7 +265,7 @@ try {
       assert.equal(await page.locator('.rf-screen-question').textContent(), relayText("settingsQuestion", nextLocale));
       assert.equal(await page.locator('.rf-set-theme-select').evaluate(el => el.ownerDocument.activeElement === el), true);
       results.push(`${locale}/${width}: Settings locale changes live without losing native select focus`);
-      await page.getByRole('button', { name:'Party', exact:true }).click();
+      await destination(page, "Party");
       assert.equal(await page.locator('.rf-screen-question').textContent(), relayText('partyQuestion', nextLocale));
       if (width === 1440) {
         assert.equal(await page.locator('.rf-p-detail-name').textContent(), 'Scribe');
@@ -312,7 +318,8 @@ try {
       const networkPage = await browser.newPage({ viewport:{ width:1440, height:900 }, reducedMotion:'reduce' });
       networkPage.on('pageerror', error => errors.push(error.message));
       await networkPage.goto(`${base}/tests/browser/production-relay.html?api=${encodeURIComponent(fixture.baseUrl)}&uid=${fixture.uid}&lang=ja`);
-      await networkPage.getByRole('button', { name:'Network', exact:true }).click();
+      await networkPage.locator('.rf-nav-more').click();
+      await destination(networkPage, "Network");
       await networkPage.locator('.rf-n-world').waitFor({ state:'visible' });
       assert.equal(await networkPage.locator('.rf-metric-value').nth(1).textContent(), '1');
       results.push('HTTP Worker Network counts a shared downstream Quest once across two root causes');
@@ -332,7 +339,7 @@ try {
       await networkPage.locator('.rf-n-open').click();
       assert.equal(await networkPage.locator('.rf-p-row[data-selected="true"]').getAttribute('data-actor-id'), actorId);
       results.push('HTTP Worker Network Actor opens the corresponding Party identity');
-      await networkPage.getByRole('button', { name:'Skills', exact:true }).click();
+      await destination(networkPage, "Skills");
       const liveSkillsInput = networkPage.locator('.rf-skills-search-input');
       await liveSkillsInput.fill('link_agent');
       await networkPage.evaluate('document.querySelector(".rf-skills-search-input").setSelectionRange(2, 7)');
@@ -411,7 +418,7 @@ try {
           assert.equal(await editor.locator('select[name="status"]').isDisabled(), false);
           await page.keyboard.press('Escape');
           assert.equal(await agentRow.getByRole('button').evaluate(el => el.ownerDocument.activeElement === el), true);
-          await page.getByRole('button', { name:'Party', exact:true }).click();
+          await destination(page, "Party");
           await page.locator('.rf-agent-create').click();
           assert.equal(await editor.locator('h2').textContent(), relayText('agentRegister', nextLocale));
           await page.keyboard.press('Escape');

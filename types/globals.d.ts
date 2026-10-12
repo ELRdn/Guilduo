@@ -93,6 +93,8 @@ declare global {
     externalOAuthEnabled?: boolean;
     telemetryEndpoint?: string;
     ga4MeasurementId?: string;
+    analyticsEnabled?: boolean;
+    analyticsCampaigns?: {id:string;source:string;medium:string;campaign:string}[];
     appwriteEndpoint?: string;
     appwriteProjectId?: string;
   }

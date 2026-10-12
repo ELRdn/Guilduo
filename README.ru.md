@@ -198,7 +198,7 @@ npm run cli -- mcp-config --json
 
 ## Skill / OpenAI Plugin / MCP App
 
-- Официальный Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Официальный Skill: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - Подготовительный пакет OpenAI Plugin: [`plugins/questforge/`](plugins/questforge/)
 - Шаблон регистрации MCP App: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Checklist отправки: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

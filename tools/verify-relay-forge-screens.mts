@@ -21,11 +21,6 @@ const chromePath = process.env.QF_CHROME_PATH
     ? "C:/Program Files/Google/Chrome/Application/chrome.exe"
     : "/usr/bin/google-chrome");
 
-const NAV_INDEX: Readonly<Record<string, number>> = {
-  command: 0, quests: 1, network: 2, party: 3, battle: 4, connections: 5, skills: 6,
-};
-const MOBILE_OVERFLOW = ["battle", "connections", "skills"];
-
 let passed = 0;
 let failed = 0;
 
@@ -50,12 +45,9 @@ async function navigate(page: Page, domain: string, mobile = false): Promise<voi
   // user dismisses it with Escape first, so the tool does the same.
   await page.keyboard.press("Escape");
   await page.waitForTimeout(50);
-  if (mobile && MOBILE_OVERFLOW.includes(domain)) {
-    await page.locator(".rf-nav-more").click();
-    await page.locator(".rf-nav-more-panel .rf-nav-item").nth(MOBILE_OVERFLOW.indexOf(domain)).click();
-  } else {
-    await page.locator(".rf-rail .rf-nav-item").nth(NAV_INDEX[domain] ?? 0).click();
-  }
+  const item = page.locator(`.rf-nav-item:has(.rf-nav-glyph[data-domain="${domain}"])`);
+  if (!await item.isVisible()) await page.locator(".rf-nav-more").click();
+  await item.click();
   await page.waitForTimeout(120);
 }
 
@@ -90,9 +82,9 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
     };
   })()`) as { count: number; labels: string[]; enabled: boolean };
   check(
-    "the Forge Rail carries all seven destinations and every one is reachable",
+    "the Forge Rail carries six primary destinations and More",
     rail.count === 7 && rail.enabled
-      && rail.labels.join(",") === "Command,Quests,Network,Party,Battle,Connections,Skills",
+      && rail.labels.slice(1).join(",") === "Quests,カレンダー,ノート,Party,Connections,More",
     JSON.stringify(rail),
   );
 

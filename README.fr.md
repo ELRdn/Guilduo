@@ -198,7 +198,7 @@ Les écritures renvoient uniquement un dry-run ou un plan d'exécution si `--exe
 
 ## Skill / OpenAI Plugin / MCP App
 
-- Skill officiel : [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Skill officiel : [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - Package de préparation OpenAI Plugin : [`plugins/questforge/`](plugins/questforge/)
 - Modèle d'enregistrement MCP App : [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Checklist de soumission : [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

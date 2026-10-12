@@ -22,6 +22,32 @@ function findQuest(state: QuestForgeState, id: string): Quest {
   return required(state.tasks.find((task) => task.id === id), `Quest ${id}`);
 }
 
+test("Quest version guards preserve edits, completion and rewards, including consecutive clock ticks", async () => {
+  const { createQuest, patchQuest, scoreQuest } = await import("../server/questforge-domain.ts");
+  const state = legacyState();
+  const created = createQuest(state, { kind:"todo", title:"Concurrent work" });
+  // A future previous timestamp also covers a stationary or backwards clock.
+  findQuest(state, created.id).updatedAt = "2999-01-01T00:00:00.000Z";
+  const version = findQuest(state, created.id).updatedAt;
+  const edited = patchQuest(state, created.id, { title:"Saved first", expectedUpdatedAt:version });
+  assert.ok(edited.updatedAt > version);
+  assert.equal("expectedUpdatedAt" in edited, false);
+  const saved = structuredClone(state);
+  assert.throws(() => patchQuest(state, created.id, { title:"Lost update", expectedUpdatedAt:version }), (error: unknown) => hasErrorCode(error, "quest_conflict"));
+  for (const invalid of [null, "", " ", 1, {}, "invalid-date"]) {
+    assert.throws(() => patchQuest(state, created.id, { title:"Invalid guard", expectedUpdatedAt:invalid }), (error: unknown) => hasErrorCode(error, "invalid_expected_updated_at"));
+    assert.throws(() => scoreQuest(state, created.id, "up", { expectedUpdatedAt:invalid }), (error: unknown) => hasErrorCode(error, "invalid_expected_updated_at"));
+  }
+  assert.deepEqual(state, saved);
+  const scored = scoreQuest(state, created.id, "up", { expectedUpdatedAt:edited.updatedAt });
+  assert.equal(scored.quest.done, true);
+  assert.ok(scored.quest.updatedAt > edited.updatedAt);
+  const completed = structuredClone(state);
+  assert.throws(() => scoreQuest(state, created.id, "up", { expectedUpdatedAt:edited.updatedAt }), (error: unknown) => hasErrorCode(error, "quest_conflict"));
+  assert.deepEqual(state, completed);
+  assert.equal(scoreQuest(state, created.id, "up").quest.done, false, "Legacy clients can still intentionally reopen");
+});
+
 test("schema v3 migration preserves history and separates planning from lifecycle", async () => {
   const { migrateState } = await import("../server/questforge-domain.ts");
   const state = legacyState([

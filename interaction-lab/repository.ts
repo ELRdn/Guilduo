@@ -1,3 +1,6 @@
+import type { BillingStatus, CreditLedgerPage } from "../worker/src/billing-store.ts";
+import type { AnalyticsPort } from "../server/launch-analytics.ts";
+
 const defaultGatewayUrl = "https://mcp.guilduo.com";
 
 type JsonRecord = Record<string, unknown>;
@@ -205,6 +208,9 @@ export class QuestForgeApiError extends Error {
 }
 
 export class QuestForgeRepository {
+  productivity<T = JsonRecord>(path: string, input?: JsonRecord, method = input ? "POST" : "GET"): Promise<T> {
+    return this.request<T>(`/v1/productivity${path}`, { method, ...(input ? { body: JSON.stringify(input) } : {}) });
+  }
   baseUrl: string;
   getToken: TokenProvider;
 
@@ -215,6 +221,13 @@ export class QuestForgeRepository {
 
   setBaseUrl(value: unknown): void {
     this.baseUrl = cleanUrl(value);
+  }
+
+  async getAnalyticsConsent(): ReturnType<AnalyticsPort["getAnalyticsConsent"]> {
+    return this.request("/v1/analytics/consent");
+  }
+  async setAnalyticsConsent(input: Parameters<AnalyticsPort["setAnalyticsConsent"]>[0]): ReturnType<AnalyticsPort["setAnalyticsConsent"]> {
+    return this.request("/v1/analytics/consent", { method: "PUT", body: JSON.stringify(input) });
   }
 
   async request<T = JsonRecord>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -414,8 +427,8 @@ export class QuestForgeRepository {
     return this.request(`/v1/quests/${encodeURIComponent(questId)}`, { method: "PATCH", body: JSON.stringify(patch) });
   }
 
-  async scoreQuest(questId: string, direction: "up" | "down" = "up"): Promise<JsonRecord> {
-    return this.request(`/v1/quests/${encodeURIComponent(questId)}/score`, { method: "POST", body: JSON.stringify({ direction, source: "interaction-lab" }) });
+  async scoreQuest(questId: string, direction: "up" | "down" = "up", expectedUpdatedAt?: string): Promise<JsonRecord> {
+    return this.request(`/v1/quests/${encodeURIComponent(questId)}/score`, { method: "POST", body: JSON.stringify({ direction, source: "interaction-lab", expectedUpdatedAt }) });
   }
 
   async getBattleSession(): Promise<JsonRecord> {
@@ -492,6 +505,33 @@ export class QuestForgeRepository {
 
   async listAgents(includeArchived = true): Promise<JsonRecord> {
     return this.request(`/v1/agents?includeArchived=${includeArchived}`);
+  }
+
+  getBilling(): Promise<BillingStatus> { return this.request("/v1/billing"); }
+  getBillingCredits(options: { cursor?: string; limit?: number } = {}): Promise<CreditLedgerPage> {
+    const query = new URLSearchParams();
+    if (options.cursor) query.set("cursor", options.cursor);
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    return this.request(`/v1/billing/credits${query.size ? `?${query}` : ""}`);
+  }
+  createCheckout(input: { interval: "monthly" | "annual"; referralCode?: string; requestId?: string }): Promise<JsonRecord> {
+    return this.request("/v1/billing/checkout", { method: "POST", body: JSON.stringify(input) });
+  }
+  createBillingPortal(): Promise<JsonRecord> {
+    return this.request("/v1/billing/portal", { method: "POST", body: "{}" });
+  }
+  selectBillingAgents(agentIds: string[]): Promise<BillingStatus> {
+    return this.request("/v1/billing/agents", { method: "PUT", body: JSON.stringify({ agentIds }) });
+  }
+  estimateDecision(input: { questId: string; expectedUpdatedAt: string; agentIds: string[]; consent: true }): Promise<JsonRecord> {
+    return this.request("/v1/decisions/estimate", { method: "POST", body: JSON.stringify(input), readOnly: true });
+  }
+  createDecision(input: { questId: string; expectedUpdatedAt: string; agentIds: string[]; consent: true; requestId: string }): Promise<JsonRecord> {
+    return this.request("/v1/decisions", { method: "POST", body: JSON.stringify(input) });
+  }
+  getDecision(id: string): Promise<JsonRecord> { return this.request(`/v1/decisions/${encodeURIComponent(id)}`); }
+  applyDecision(id: string, expectedUpdatedAt: string): Promise<JsonRecord> {
+    return this.request(`/v1/decisions/${encodeURIComponent(id)}/apply`, { method: "POST", body: JSON.stringify({ expectedUpdatedAt }) });
   }
 
   async createAgent(input: JsonRecord): Promise<JsonRecord> {
@@ -670,8 +710,8 @@ export class QuestForgeRepository {
     return response.blob();
   }
 
-  async linkAgentConnection(agentId: string, clientId: string): Promise<JsonRecord> {
-    return this.request(`/v1/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(clientId)}`, { method: "PUT" });
+  async linkAgentConnection(agentId: string, clientId: string, allowedAgentIds?: readonly string[]): Promise<JsonRecord> {
+    return this.request(`/v1/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(clientId)}`, { method: "PUT", ...(allowedAgentIds ? { body:JSON.stringify({ allowedAgentIds }) } : {}) });
   }
 
   async unlinkAgentConnection(agentId: string, clientId: string): Promise<JsonRecord> {

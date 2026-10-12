@@ -27,6 +27,7 @@ export function humanInbox(options: Options) {
   let loading = false;
   let needsRender = false;
   let disposed = false;
+  let mutationVersion = 0;
   let trigger: HTMLElement | null = null;
   const drafts = new Map<string, Draft>();
   const expanded = new Set<string>();
@@ -129,12 +130,14 @@ export function humanInbox(options: Options) {
     const draft = draftFor(quest);
     if ((action === "approve" || action === "revise") && (!draft.checked || (action === "revise" && !draft.text.trim()))) return;
     busy = true;
+    mutationVersion++;
     options.onBusy?.(true);
     notice.textContent = t("sending");
     const input = { action, response: draft.text, confirmed: draft.checked, expectedUpdatedAt: quest.updatedAt };
     render();
     try {
       await options.port.respondHumanReview(quest.id, { ...input, dryRun: true });
+      if (disposed) return;
       const response = await options.port.respondHumanReview(quest.id, { ...input, dryRun: false });
       const saved = responseQuest(response.quest, quest.id);
       if (disposed) return;
@@ -157,11 +160,12 @@ export function humanInbox(options: Options) {
 
   async function refresh(explicit = false) {
     if (!options.port || busy || loading || disposed || document.hidden) return;
+    const version = mutationVersion;
     loading = true;
     refreshButton.disabled = true;
     try {
       const result = await options.port.listHumanRequests("all");
-      if (disposed) return;
+      if (disposed || version !== mutationVersion) return;
       if (!Array.isArray(result.quests)) throw new Error("Invalid request list");
       const next = result.quests.map((quest) => responseQuest(quest));
       const previous = new Set(requests.map((quest) => quest.id));
@@ -176,7 +180,7 @@ export function humanInbox(options: Options) {
       const interacting = dialog.open && (list.contains(document.activeElement) || filters.contains(document.activeElement));
       if (explicit || (needsRender && !interacting)) { render(); needsRender = false; }
     } catch {
-      if (!disposed && explicit) notice.textContent = t("failed");
+      if (!disposed && explicit && version === mutationVersion) notice.textContent = t("failed");
     } finally { loading = false; if (!disposed) refreshButton.disabled = busy || !options.port; }
   }
 

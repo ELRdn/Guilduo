@@ -25,3 +25,11 @@ Google, Appwrite, Cloudflare, Notion, Toggl Focus, and other connected services 
 The software is provided without warranty under the GNU AGPL. It may contain bugs, lose availability, or change data formats. Keep backups before experimental sync, plugin, webhook, or AI operations. Guilduo is not medical, legal, financial, or emergency advice.
 
 An instance operator may suspend abusive access and should publish any additional local terms required for that deployment.
+
+## Conditional Paid Features
+
+Public paid sale is unavailable until approved pricing, seller disclosures, provider eligibility and real payment acceptance. Free allows two registered nonarchived Agents (active and disabled both count); Pro has no registration total limit, while request/connection safety limits still apply. Downgrade preserves records and asks the owner to choose two usable Agents.
+
+Ordinary MCP CRUD, Quest and Handoff do not consume AI Credits. Only approved Guilduo intelligence/compute does; automatic additional charges and top-up sales are not enabled by default. Credit grants/expiry, annual cadence, discounts, referral amounts and tax/refund/cancellation terms await product approval and must be shown before purchase. An earlier proposed amount is not a published offer.
+
+Official TypeSafe Jev finite-choice suggestions require human review and do not constitute task execution or completion. Stripe registration/Live use depend on its age/guardian/identity and regional requirements; they must not be bypassed. This is candidate product disclosure, not legal or payment-provider approval.

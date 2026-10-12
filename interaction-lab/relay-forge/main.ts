@@ -21,22 +21,26 @@ import "./screens/battle.css";
 import "./screens/connections.css";
 import "./screens/settings.css";
 import "./screens/skills.css";
+import "./screens/productivity.css";
 import { requireElement } from "./primitives/dom.ts";
-import { mountRelayForge } from "./shell.ts";
+import type { mountRelayForge } from "./shell.ts";
 import { dismissOAuthFailure, observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
 import { QuestForgeApiError, QuestForgeRepository } from "../repository.ts";
-import { createProductionRuntime } from "./production.ts";
 import { reportGuiTiming } from "./gui-timing.ts";
 import { prepareWorkspaceReads, type PreparedWorkspace } from "./bootstrap-preparation.ts";
 import { relayText, type RelayCopyKey } from "./relay-copy.ts";
 import { getLocale, LOCALE_METADATA, setLocale, SUPPORTED_LOCALES } from "../../i18n.ts";
+import { captureAcquisitionHandoff, clearAcquisitionHandoff } from "../../launch-analytics-client.ts";
 
 const root = requireElement<HTMLElement>(document, "#relay-forge-root");
 const params = new URLSearchParams(window.location.search);
 const fixtureMode = params.has("state") || params.has("fixture") || params.has("variant");
+if (!fixtureMode && globalThis.QuestForgeConfig?.analyticsEnabled === true) captureAcquisitionHandoff();
 let demoRequested = fixtureMode;
 let loadSequence = 0;
+let authSequence = 0;
 let initialProductionLoad = true;
+let stopAuth: (() => void) | undefined;
 
 /**
  * Tears down whatever mounted UI currently owns `root` — the Shell's own
@@ -57,9 +61,9 @@ function disposeActiveMount(): void {
   unmount?.();
 }
 
-function mount(runtime?: Parameters<typeof mountRelayForge>[1]): void {
+function mount(mountShell: typeof mountRelayForge, runtime?: Parameters<typeof mountRelayForge>[1]): void {
   disposeActiveMount();
-  activeUnmount = mountRelayForge(root, runtime ?? null);
+  activeUnmount = mountShell(root, runtime ?? null);
 }
 
 function bootstrap(
@@ -136,6 +140,11 @@ async function mountProduction(uid: string, email: string, prepared?: PreparedWo
   const sequence = ++loadSequence;
   bootstrap("workspaceLoading", "workspaceLoadingHint");
   try {
+    const [{ createProductionRuntime }, { mountRelayForge }] = await Promise.all([
+      import("./production.ts"),
+      import("./shell.ts"),
+    ]);
+    if (sequence !== loadSequence || demoRequested) return;
     const repository = prepared?.repository ?? new QuestForgeRepository({ getToken: (forceRefresh) => getIdToken(forceRefresh) });
     const runtime = await createProductionRuntime(repository, uid, email, prepared?.snapshot);
     if (sequence !== loadSequence || demoRequested) return;
@@ -144,9 +153,10 @@ async function mountProduction(uid: string, email: string, prepared?: PreparedWo
     // `checkAuth()` re-observes state after sign-out so the existing
     // signed-out bootstrap screen replaces this mount — the shell itself
     // never has to know how to tear itself down.
-    mount({
+    mount(mountRelayForge, {
       ...runtime,
       signOut: async () => {
+        clearAcquisitionHandoff();
         await signOutUser();
         checkAuth();
       },
@@ -163,13 +173,7 @@ async function mountProduction(uid: string, email: string, prepared?: PreparedWo
       "workspaceFailedHint",
       [
         { label: "retry", primary: true, run: () => mountProduction(uid, email) },
-        {
-          label: "demoButton",
-          run: () => {
-            demoRequested = true;
-            mount();
-          },
-        },
+        { label: "demoButton", run: showDemo },
       ],
       "error",
       diagnostic,
@@ -177,14 +181,29 @@ async function mountProduction(uid: string, email: string, prepared?: PreparedWo
   }
 }
 
-function showDemo(): void {
+async function showDemo(): Promise<void> {
+  stopAuth?.();
   demoRequested = true;
-  mount();
+  const sequence = ++loadSequence;
+  try {
+    const { mountRelayForge } = await import("./shell.ts");
+    if (sequence !== loadSequence) return;
+    mount(mountRelayForge);
+  } catch {
+    if (sequence !== loadSequence) return;
+    bootstrap("workspaceFailed", "workspaceFailedHint", [
+      { label: "retry", primary: true, run: showDemo },
+    ], "error");
+  }
 }
 
 function beginSignIn(): void {
+  stopAuth?.();
+  demoRequested = false;
+  const sequence = ++loadSequence;
   bootstrap("authSigning", "authSigningHint");
   void signIn().catch(() => {
+    if (sequence !== loadSequence || demoRequested) return;
     bootstrap("oauthFailed", "oauthFailedHint", [
       { label: "retry", primary: true, run: beginSignIn },
       { label: "demoButton", run: showDemo },
@@ -205,15 +224,19 @@ function showSignedOut(): void {
 }
 
 function checkAuth(): void {
+  stopAuth?.();
+  const sequence = ++authSequence;
+  ++loadSequence;
   const preparation = prepareWorkspaceReads(force => getIdToken(force));
-  observeAuthState((state) => {
-    if (demoRequested) { preparation.finish(); return; }
-    if (state.status === "checking") {
-      bootstrap("authChecking", "authCheckingHint");
-      return;
-    }
+  const unsubscribe = observeAuthState((state) => {
+    if (sequence !== authSequence || demoRequested) { preparation.finish(); return; }
     if (state.status === "authenticated") {
       void mountProduction(state.user.uid, state.user.email, preparation.finish(state.user.uid));
+      return;
+    }
+    ++loadSequence;
+    if (state.status === "checking") {
+      bootstrap("authChecking", "authCheckingHint");
       return;
     }
     preparation.finish();
@@ -234,9 +257,14 @@ function checkAuth(): void {
       { label: "demoButton", run: showDemo },
     ], "error");
   }, (token, subject) => {
-    if (!demoRequested) preparation.onSessionToken(token, subject);
+    if (sequence === authSequence && !demoRequested) preparation.onSessionToken(token, subject);
   });
+  stopAuth = () => {
+    if (sequence === authSequence) ++authSequence;
+    unsubscribe();
+    preparation.finish();
+  };
 }
 
-if (fixtureMode) mount();
+if (fixtureMode) void showDemo();
 else checkAuth();

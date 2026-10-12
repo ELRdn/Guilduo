@@ -1,5 +1,9 @@
 # Guilduo Component Specification
 
+## Public Docs components (2026-10-05)
+
+`/docs/`だけに適用する。分類別ナビは現在の記事に`aria-current="page"`を付け、Mobileでは標準`details`で開閉する。検索inputには可視label、結果一覧には通常のリンク、件数・失敗には`role="status"`を提供する。記事内のcodeは横スクロールをcode領域内に閉じ、コピー成功・失敗を読み上げる。本文と出典のリンクは下線を付け、44px相当の主要操作・明確なfocus-visible・8px以下の角丸を維持する。検索・コピー以外はJavaScriptを前提にしない。
+
 > **English summary:** This document describes the reusable Guilduo components below the visual constitution. Each component has a stable information order, responsive rule, accessible name, and forbidden decoration. Shared color and motion values come from `../DESIGN.md` and `TOKENS.json`.
 
 最終更新: 2026-08-18  
@@ -43,6 +47,10 @@
 | `checkbox` | Shift複数選択、一括操作 | `input[type=checkbox] + label` | タップ領域44px以上 | `aria-label`を具体化。選択件数を通知 |
 | `tooltip` | 不明なアイコンの補足 | `trigger + tooltip` | Mobileは長押しまたは詳細へ | 主要操作をTooltipだけにしない。Escapeで閉じる |
 | `toast` | 成功、警告、失敗の短い通知 | `status > icon > message > optional action` | 画面端からはみ出さない | `role="status"`または`alert`。自動消去前に読み上げ可能 |
+
+## Productivity components (2026-10-12)
+
+View selector reuses the existing keyboard segment control. Board cards and Gantt markers open the existing Quest detail. Calendar entries have schedule/deadline/recorded labels. Notes editor uses labelled native fields and explicit save. The shell timer has a labelled Quest selector, start/stop/history actions, live status for operation results and a non-live elapsed label. All controls retain visible focus and existing disabled/error rules.
 
 ## 状態マトリクス
 

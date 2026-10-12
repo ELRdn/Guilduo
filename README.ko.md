@@ -198,7 +198,7 @@ npm run cli -- mcp-config --json
 
 ## Skill / OpenAI Plugin / MCP App
 
-- 공식 Skill: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- 공식 Skill: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - OpenAI Plugin 준비 패키지: [`plugins/questforge/`](plugins/questforge/)
 - MCP App 등록 template: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - 제출 checklist: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

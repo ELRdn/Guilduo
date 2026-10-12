@@ -933,7 +933,7 @@ async function verifyMobileNavScroll(browser: Browser): Promise<void> {
       await assertNav();
       await page.locator('.rf-nav-item').filter({ has: page.locator('.rf-nav-label', { hasText: /^Quests$/ }) }).tap();
       await page.locator('.rf-shell[data-domain="quests"]').waitFor();
-      await page.locator('.rf-nav-item').filter({ has: page.locator('.rf-nav-label', { hasText: /^Command$/ }) }).tap();
+      await page.locator('.rf-nav-item').filter({ has: page.locator('.rf-nav-glyph[data-domain="command"]') }).tap();
       await page.locator('.rf-m-page').waitFor();
       await page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
       await assertNav();

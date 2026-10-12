@@ -25,3 +25,11 @@ Do not include real OAuth tokens, Appwrite JWTs or API keys, legacy Firebase tok
 - Battle execution uses `expectedTurn` and an idempotent `commandId`.
 
 Rotate affected credentials immediately after any suspected disclosure.
+
+## Launch, payment and recovery controls
+
+Production publication requires named operator approval, a trusted Ed25519 signed source/evidence manifest and one shared Site/Worker/release lock. Evidence includes target commit/tree, hashes, timestamps and acceptance kinds; local tests cannot replace real OAuth/device/MCP/payment or elapsed observation. Keep the private signing key out of CI and restrict Environment trust-key/variable changes. Signed records do not prove human testimony truthful.
+
+Billing/Jev default disabled, Stripe mode defaults test. Stripe API/signature, TypeSafe and billing-admin secrets never enter browser config/logs. Raw Stripe signature verification, deduplication, re-query, Test/Live separation and an idempotent ledger are required before sale. GitHub and Stripe webhooks use independent secrets. No Stripe age/guardian/identity requirement may be bypassed.
+
+Deletion requires verified account control, an approved scoped inventory and retention decisions. Registered-email contact alone is not proof. [Launch operations](docs/launch-operations.md) supplies backup/isolated restore and rollback procedures; dry runs do not establish production recovery. Reapply deletion tombstones on restore, preserve unrelated data and mandatory financial records, and stop on uncertain target/environment identity.

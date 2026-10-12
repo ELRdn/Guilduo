@@ -278,7 +278,7 @@
 .rf-set-connection-link { display: flex; align-items: center; gap: var(--qf-space-3); min-width: 0; }
 .rf-set-connection-label { flex: 0 0 auto; color: var(--qf-color-fg-muted); font: var(--qf-text-label); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
 .rf-set-connection-agent-copy { display: flex; flex-direction: column; gap: var(--qf-space-1); min-width: 0; flex: 1 1 auto; }
-.rf-set-connection-agent-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--qf-color-fg-default); font: var(--qf-text-component); font-size: 13px; }
+.rf-set-connection-agent-copy strong { overflow-wrap: anywhere; color: var(--qf-color-fg-default); font: var(--qf-text-component); font-size: 13px; }
 .rf-set-connection-agent-copy span { color: var(--qf-color-fg-muted); font: var(--qf-text-metadata); font-size: 12px; overflow-wrap: anywhere; }
 .rf-set-connection-agent-placeholder { display: inline-flex; align-items: center; justify-content: center; width: var(--qf-space-8); height: var(--qf-space-8); flex: 0 0 auto; border: var(--qf-border-width) dashed var(--qf-color-border-default); border-radius: var(--qf-radius-pill); color: var(--qf-color-fg-muted); font: var(--qf-font-mono); }
 .rf-set-connection-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--qf-space-2); flex: 0 0 auto; flex-wrap: wrap; }
@@ -328,6 +328,26 @@
 .rf-set-agent-meta { font: var(--qf-text-metadata); font-size: 13px; color: var(--qf-color-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .rf-set-agent-empty { font: var(--qf-text-compact); font-size: 13px; color: var(--qf-color-fg-muted); margin: 0; }
+
+/* Billing reuses Settings fields, region and buttons; native controls keep keyboard support. */
+.rf-billing, .rf-billing-jev { display: grid; gap: var(--qf-space-3); min-width: 0; }
+.rf-billing p, .rf-billing li, .rf-billing legend, .rf-billing label { overflow-wrap: anywhere; }
+.rf-billing p { margin: 0; }
+.rf-billing-pricing, .rf-billing-discount { display: grid; gap: var(--qf-space-3); min-width: 0; }
+.rf-billing-terms > p, .rf-billing-terms > .rf-billing-discount { margin-top: var(--qf-space-3); }
+.rf-billing > * { min-width: 0; max-width: 100%; }
+.rf-billing .rf-metric { max-width: 100%; box-sizing: border-box; }
+.rf-billing .rf-metric-label { overflow-wrap: anywhere; }
+.rf-billing-jev { border-top: var(--qf-border-width) solid var(--qf-color-border-subtle); padding-top: var(--qf-space-4); }
+.rf-billing-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
+.rf-billing-check { display: flex; align-items: center; gap: var(--qf-space-3); min-height: 44px; cursor: pointer; }
+.rf-billing-check input { flex: 0 0 auto; }
+.rf-billing-check span { min-width: 0; }
+.rf-billing .rf-set-input { min-height: 44px; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.rf-billing button, .rf-billing summary { min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+.rf-billing summary { display: list-item; align-content: center; cursor: pointer; }
+.rf-billing :is(input, select, button, summary):focus-visible { outline: var(--qf-focus-width) solid var(--qf-color-focus); outline-offset: var(--qf-focus-offset); }
+.rf-billing [role="alert"] { color: var(--qf-color-danger); }
 
 /* ---------------- mobile ---------------- */
 

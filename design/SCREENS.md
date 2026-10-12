@@ -1,5 +1,9 @@
 # Guilduo Screen Blueprints
 
+## Public Documentation (2026-10-05)
+
+`/docs/`と`/docs/en/`は公開静的Docs。Desktopは240px程度の分類ナビ、中央本文、ページ内目次。1280px未満では目次を本文前へ移し、900px以下ではナビをdetailsへ畳む。ヘッダーはブランド・言語切替・テーマ・正式Web Appへの導線を持つ。記事はパンくず、分類、タイトル、要旨、手順、出典、関連記事の順。Overviewは最初のQuest、MCP接続、人への依頼へ導く。検索結果は本文を隠さず表示し、無効・該当なし・失敗でも分類ナビから読める。
+
 > **English summary:** These blueprints define screen composition, information order, scroll ownership, responsive behavior, and non-data-specific states. Golden References validate rhythm and proportions; this document defines the structure that must survive different content and languages.
 
 最終更新: 2026-08-18  
@@ -29,6 +33,12 @@ Mobile
 │ bottom navigation                                         │
 └───────────────────────────────────────────────────────────┘
 ```
+
+## Productivity workspace (2026-10-12)
+
+Quests: heading, Board/List/Gantt selector, common search/status filters, primary workspace and shared detail rail. Calendar: heading, month/week/day selector, period/today controls, independent search, calendar and undated list. Notes: heading, note list, title/body/Quest editor, save/archive/restore. Mobile recomposes calendar and notes without page-wide horizontal scrolling. The shell owns the shared timer and reserves its height above mobile navigation and screen actions. Unsaved Notes navigation opens a native modal save/discard/cancel guard.
+
+Calendar Day/Week presents a shared hourly axis, separate all-day items, today marker and quarter-hour range preview. Empty-axis mouse drag or touch long press opens a range form; record uses native TimeEntry save, schedule uses the common Quest editor prefilled with planned date/time and estimate. Keyboard selection is equivalent. Common Quest editing exposes planned date/time and on-date/until-due mode independently of deadline.
 
 ## Today / 今日の作戦
 

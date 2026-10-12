@@ -17,6 +17,7 @@
 
 import { t } from "../../../i18n.ts";
 import { relayText } from "../relay-copy.ts";
+import { billingText } from "../billing-copy.ts";
 import { actorAvatar } from "../primitives/avatar.ts";
 import { el } from "../primitives/dom.ts";
 import { relayOnboarding, relayPreferences } from "./relay-onboarding.ts";
@@ -44,6 +45,12 @@ import {
 } from "./runtime.ts";
 
 export * from "./settings-model.ts";
+
+export interface SettingsRenderCallbacks extends SettingsCallbacks {
+  readonly workRegion?: () => HTMLElement;
+  readonly billingRegion?: () => HTMLElement;
+  readonly analyticsRegion?: () => HTMLElement | null;
+}
 
 /* ------------------------------------------------------------------ *
  * Account
@@ -317,9 +324,10 @@ function connectionAgentSummary(
   context: ScreenContext,
 ): { readonly agent: SettingsAgentRow | null; readonly stale: boolean } {
   void context;
-  const agent = row.linkedAgentId === null
+  const primary = row.linkedAgentId === null
     ? null
     : model.agents.find((candidate) => candidate.agentId === row.linkedAgentId) ?? null;
+  const agent = primary?.status === "active" ? primary : model.agents.find(candidate => row.allowedAgentIds?.includes(candidate.agentId) && candidate.status === "active") ?? primary;
   return {
     agent,
     stale: row.linkedAgentId !== null && (!row.authorized || row.linkRevokedAt !== null || agent === null || agent.status !== "active"),
@@ -336,7 +344,9 @@ function connectionRow(
   const summary = connectionAgentSummary(row, model, context);
   const activeLink = summary.agent !== null && !summary.stale && row.linkRevokedAt === null;
   const pickerOpen = Object.prototype.hasOwnProperty.call(state.connectionDrafts, row.clientId);
-  const selectedAgentId = state.connectionDrafts[row.clientId] ?? (activeLink ? row.linkedAgentId ?? "" : "");
+  const allowedAgentIds = row.allowedAgentIds ?? (row.linkedAgentId ? [row.linkedAgentId] : []);
+  const selectedAgentIds = state.connectionDrafts[row.clientId] ?? (activeLink ? allowedAgentIds : []);
+  const shared = allowedAgentIds.length > 1;
   const activeAgents = model.agents.filter((agent) => agent.status === "active");
   const busy = state.connectionBusyId === row.clientId || context.writeLocked;
   const canLink = row.authorized && callbacks.canManageAgents && !busy;
@@ -369,14 +379,15 @@ function connectionRow(
   const picker = pickerOpen
     ? el(
       "div",
-      { class: "rf-set-agent-picker", role: "group", "aria-label": `${relayText("linkedAgent")}: ${row.clientName}` },
+      { class: "rf-set-agent-picker", role: "group", "aria-label": `${relayText("selectSharedAgents")}: ${row.clientName}` },
+      el("p", {}, relayText("selectSharedAgents")),
       activeAgents.length === 0
         ? el("p", { class: "rf-set-agent-picker-empty" }, relayText("noActiveAgents"))
-        : activeAgents.map((agent) => agentOption(agent, selectedAgentId === agent.agentId, context, row.clientId, callbacks, busy)),
+        : activeAgents.map((agent) => agentOption(agent, selectedAgentIds.includes(agent.agentId), context, row.clientId, callbacks, busy)),
       el(
         "div",
         { class: "rf-set-agent-picker-actions" },
-        el("button", { type: "button", class: "rf-primary-button", disabled: !canLink || selectedAgentId === "" ? true : null }, busy ? relayText("saving") : activeLink ? relayText("saveChanges") : relayText("link")),
+        el("button", { type: "button", class: "rf-primary-button", disabled: !canLink || selectedAgentIds.length === 0 ? true : null }, busy ? relayText("saving") : activeLink ? relayText("saveChanges") : relayText("link")),
         el("button", { type: "button", class: "rf-secondary-button", disabled: busy ? true : null }, relayText("dialogCancel")),
       ),
     )
@@ -385,7 +396,7 @@ function connectionRow(
   if (picker !== null && pickerButtons !== undefined && pickerButtons.length > 0) {
     const actionButtons = [...pickerButtons].slice(-2);
     actionButtons[0]?.addEventListener("click", () => {
-      if (selectedAgentId !== "") callbacks.onLinkAgent(row.clientId, selectedAgentId);
+      if (selectedAgentIds[0]) callbacks.onLinkAgent(row.clientId, selectedAgentIds[0]);
     });
     actionButtons[1]?.addEventListener("click", () => callbacks.onCancelAgentPicker(row.clientId));
   }
@@ -407,22 +418,25 @@ function connectionRow(
     el(
       "div",
       { class: "rf-set-connection-link" },
-      el("span", { class: "rf-set-connection-label" }, relayText("linkedAgent")),
+      el("span", { class: "rf-set-connection-label" }, relayText(shared ? "sharedAgents" : "linkedAgent")),
       avatar,
       el(
         "div",
         { class: "rf-set-connection-agent-copy" },
-        el("strong", {}, activeLink ? summary.agent!.displayName : row.linkedAgentId !== null && summary.stale ? relayText("agentUnavailable") : relayText("noAgentLinked")),
-        el("span", {}, !row.authorized ? t("integration.status.reconnect_required") : activeLink ? relayText("linkedAgentHint") : row.linkedAgentId !== null && summary.stale ? relayText("staleAgentHint") : relayText("noAgentHint")),
+        el("strong", {}, activeLink ? (shared ? allowedAgentIds.map(id => model.agents.find(agent => agent.agentId === id)?.displayName ?? id).join(" · ") : summary.agent!.displayName) : row.linkedAgentId !== null && summary.stale ? relayText("agentUnavailable") : relayText("noAgentLinked")),
+        el("span", {}, !row.authorized ? t("integration.status.reconnect_required") : activeLink ? relayText(shared ? "sharedAgentHint" : "linkedAgentHint") : row.linkedAgentId !== null && summary.stale ? relayText("staleAgentHint") : relayText("noAgentHint")),
       ),
       el("div", { class: "rf-set-connection-actions" }, openPicker, unlink, revoke, remove),
     ),
-    el("p", { class: "rf-set-connection-permissions" }, relayText(scopes.includes("quests:write") ? (scopes.includes("quests:read") ? "mcpQuestReadWrite" : "mcpQuestWrite") : scopes.includes("quests:read") ? "mcpQuestRead" : "mcpNoQuestAccess")),
+    el("p", { class: "rf-set-connection-permissions" }, relayText(shared ? "sharedAgentScopes" : scopes.includes("quests:write") ? (scopes.includes("quests:read") ? "mcpQuestReadWrite" : "mcpQuestWrite") : scopes.includes("quests:read") ? "mcpQuestRead" : "mcpNoQuestAccess")),
     el("details", { class: "rf-set-connection-details" },
       el("summary", {}, relayText("mcpDetails")),
       el("p", {}, el("span", { class: "rf-set-connection-id" }, row.clientId)),
       el("p", {}, relayText("effectiveScopes")),
-      scopes.length === 0 ? el("p", {}, relayText("noScopes")) : el("ul", {}, ...scopes.map(scope => el("li", {}, el("code", {}, scope)))),
+      shared ? el("ul", {}, ...allowedAgentIds.map(id => el("li", {},
+        el("strong", {}, model.agents.find(agent => agent.agentId === id)?.displayName ?? id),
+        el("code", {}, `: ${effectiveConnectionScopes(model, { ...row, linkedAgentId:id }).join(", ") || relayText("noScopes")}`),
+      ))) : scopes.length === 0 ? el("p", {}, relayText("noScopes")) : el("ul", {}, ...scopes.map(scope => el("li", {}, el("code", {}, scope)))),
     ),
     picker,
     state.connectionMessage() === "" || state.connectionBusyId !== row.clientId
@@ -534,13 +548,14 @@ const SECTION_LABEL: Readonly<Record<SettingsSection, string>> = {
   get appearance() { return relayText("appearanceTitle"); },
   get mcp() { return relayText("mcpConnectionTitle"); },
   get agents() { return relayText("agentsTitle"); },
+  get billing() { return billingText("title"); },
 };
 
 function settingsMain(
   model: SettingsModel,
   state: SettingsState,
   context: ScreenContext,
-  callbacks: SettingsCallbacks,
+  callbacks: SettingsRenderCallbacks,
 ): HTMLElement {
   const main = el(
     "div",
@@ -548,6 +563,9 @@ function settingsMain(
     screenHeader({ title: "Settings", question: relayText("settingsQuestion") }),
     accountRegion(model, state, context, callbacks),
     appearanceRegion(model, callbacks),
+    callbacks.workRegion?.(),
+    callbacks.billingRegion?.(),
+    callbacks.analyticsRegion?.(),
     mcpRegion(model, state, context, callbacks),
     agentsRegion(model, context, callbacks),
   );
@@ -574,7 +592,7 @@ export function renderSettingsDesktop(
   model: SettingsModel,
   state: SettingsState,
   context: ScreenContext,
-  callbacks: SettingsCallbacks,
+  callbacks: SettingsRenderCallbacks,
   focusSection: SettingsSection | null,
 ): ScreenRender {
   const main = settingsMain(model, state, context, callbacks);
@@ -586,7 +604,7 @@ export function renderSettingsMobile(
   model: SettingsModel,
   state: SettingsState,
   context: ScreenContext,
-  callbacks: SettingsCallbacks,
+  callbacks: SettingsRenderCallbacks,
   focusSection: SettingsSection | null,
 ): ScreenRender {
   const main = settingsMain(model, state, context, callbacks);

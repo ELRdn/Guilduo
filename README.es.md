@@ -198,7 +198,7 @@ Las escrituras solo devuelven un dry-run o un plan de ejecución si no se propor
 
 ## Skill / OpenAI Plugin / MCP App
 
-- Skill oficial: [`skills/questforge-workflows/SKILL.md`](skills/questforge-workflows/SKILL.md)
+- Skill oficial: [`skills/guilduo-workflows/SKILL.md`](skills/guilduo-workflows/SKILL.md)
 - Paquete de preparación del OpenAI Plugin: [`plugins/questforge/`](plugins/questforge/)
 - Plantilla de registro de MCP App: [`plugins/questforge/.app.json.example`](plugins/questforge/.app.json.example)
 - Lista de comprobación de envío: [`plugins/questforge/openai-submission.json`](plugins/questforge/openai-submission.json)

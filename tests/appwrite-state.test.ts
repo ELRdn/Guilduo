@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { createQuest } from "../server/questforge-domain.ts";
-import { writeState } from "../worker/src/appwrite-store.ts";
+import { mutateState, prepareStateTransaction, writeState } from "../worker/src/appwrite-store.ts";
 import type { QuestForgeState } from "../types/questforge.ts";
 import { asQuestForgeState, json, required, type TestContext } from "./test-helpers.ts";
 import type { WorkerEnv } from "../worker/src/worker-types.ts";
@@ -393,6 +393,94 @@ class AtomicRevisionApi extends FakeAppwriteStateApi {
   }
 }
 const batchEnv: WorkerEnv = { ...env, APPWRITE_REVISION_BATCH: "true" };
+
+test("preparing a transaction writes no user data and a save still reads current state and commits exact revision", async () => {
+  const enabled = { ...batchEnv, APPWRITE_PREPARED_TRANSACTIONS: "true" };
+  const api = new AtomicRevisionApi(initialState());
+  await withFakeAppwrite(api, async () => {
+    const before = structuredClone(api.row);
+    await prepareStateTransaction(enabled);
+    assert.deepEqual(api.row, before);
+    assert.equal(api.requests.length, 1);
+    assert.deepEqual(JSON.parse(api.requests[0].body), { ttl: 60 });
+    // A different writer changed data AFTER preparation. Nothing was prefetched.
+    const other = await api.persistedState();
+    other.tasks[0].notes = "other writer remains";
+    api.row.stateJson = JSON.stringify(other); api.row.revision = 5;
+    const result = await mutateState(enabled, "owner-1", state => { state.tasks[0].nextAction = "prepared save"; return "saved"; }, true);
+    assert.equal(result.result, "saved");
+    assert.equal(api.requests.filter(r => r.url.endsWith("/transactions") && r.method === "POST").length, 1);
+    assert.equal(api.requests.filter(r => r.method === "GET" && r.url.includes("/rows/")).length, 1);
+    assert.equal(api.requests.filter(r => r.method === "PATCH" && r.url.includes("/transactions/")).length, 1);
+    const saved = await api.persistedState();
+    assert.equal(saved.tasks[0].notes, "other writer remains");
+    assert.equal(saved.tasks[0].nextAction, "prepared save");
+    assert.equal(api.row.revision, 6);
+  });
+});
+
+test("prepared IDs stay isolated by environment and are not reused after domain failure", async () => {
+  const enabled = { ...batchEnv, APPWRITE_PREPARED_TRANSACTIONS: "true" };
+  const api = new AtomicRevisionApi(initialState());
+  await withFakeAppwrite(api, async () => {
+    await prepareStateTransaction(enabled);
+    await mutateState({ ...enabled }, "owner-1", () => null, true);
+    assert.equal(api.requests.filter(r => r.url.endsWith("/transactions") && r.method === "POST").length, 2);
+    await assert.rejects(mutateState(enabled, "owner-1", () => { throw new Error("invalid edit"); }, true), /invalid edit/);
+    assert.equal(api.requests.filter(r => r.method === "DELETE").length, 1);
+    await mutateState(enabled, "owner-1", () => null, true);
+    assert.equal(api.requests.filter(r => r.url.endsWith("/transactions") && r.method === "POST").length, 3);
+  });
+});
+
+test("prepared saves retain conflict retry and never retry uncertain commits", async () => {
+  for (const uncertain of [false, true]) {
+    const enabled = { ...batchEnv, APPWRITE_PREPARED_TRANSACTIONS: "true" };
+    const api = new AtomicRevisionApi(initialState());
+    api.beforeStage = async () => { api.beforeStage = undefined; api.row.revision = 5; };
+    if (uncertain) { api.beforeStage = undefined; api.failCommit = true; }
+    await withFakeAppwrite(api, async () => {
+      await prepareStateTransaction(enabled);
+      const saving = mutateState(enabled, "owner-1", state => { state.tasks[0].nextAction = "change"; }, true);
+      if (uncertain) await assert.rejects(saving);
+      else await saving;
+      assert.equal(api.requests.filter(r => r.url.endsWith("/transactions") && r.method === "POST").length, uncertain ? 1 : 2);
+      assert.equal(api.row.revision, uncertain ? 4 : 6);
+    });
+  }
+});
+
+test("preparation is off by default and requires revision batching", async () => {
+  const api = new AtomicRevisionApi(initialState());
+  await withFakeAppwrite(api, async () => {
+    await prepareStateTransaction(batchEnv);
+    await prepareStateTransaction({ ...env, APPWRITE_PREPARED_TRANSACTIONS: "true" });
+    assert.equal(api.requests.length, 0);
+  });
+});
+
+test("authenticated bootstrap prepares an empty slot and Web PATCH consumes it without waiting for replenishment", async () => {
+  const enabled = { ...batchEnv, APPWRITE_PREPARED_TRANSACTIONS: "true" };
+  const api = new AtomicRevisionApi(initialState());
+  await withFakeAppwrite(api, async () => {
+    const worker = (await import("../worker/src/index.ts")).default;
+    const pending: Promise<unknown>[] = [];
+    const headers = { authorization: "Bearer state-test-token", origin: "http://localhost:5173", "content-type": "application/json" };
+    const boot = await worker.fetch(new Request("http://worker.test/v1/workspace/bootstrap", { headers }), enabled, context(pending));
+    assert.equal(boot.status, 200);
+    await Promise.allSettled(pending);
+    assert.equal(api.row.revision, 4);
+    assert.equal(api.requests.filter(r => r.method === "POST" && r.url.endsWith("/transactions")).length, 1);
+    const id = (await api.persistedState()).tasks[0].id;
+    const saved = await worker.fetch(new Request(`http://worker.test/v1/quests/${id}`, { method: "PATCH", headers, body: JSON.stringify({ nextAction: "prepared via bootstrap" }) }), enabled, context(pending));
+    assert.equal(saved.status, 200);
+    assert.match(saved.headers.get("server-timing"), /tx_prepared;dur=/);
+    assert.doesNotMatch(saved.headers.get("server-timing"), /tx_begin;dur=/);
+    await Promise.allSettled(pending);
+    assert.equal((await api.persistedState()).tasks[0].nextAction, "prepared via bootstrap");
+    assert.equal(api.row.revision, 5);
+  });
+});
 
 test("opt-in batch commits full state with no transactional snapshot re-download", async () => {
   const state = largeState();

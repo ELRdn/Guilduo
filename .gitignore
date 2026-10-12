@@ -17,6 +17,8 @@ screenshots/
 backups/
 private/
 .qa-artifacts/
+# Plugin packages keep source/tests; native-host captures and npm caches stay local.
+/plugins/*/artifacts/
 .hallmark/
 新しいフォルダー/
 *.tsbuildinfo

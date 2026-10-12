@@ -122,7 +122,7 @@ test("locale preference is device-local and PWA fallback manifests are available
 
 test("release metadata, license, public docs, and CI are present", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.6.0-beta.8");
+  assert.equal(packageJson.version, "0.6.0-beta.9");
   assert.equal(packageJson.license, "AGPL-3.0-only");
   assert.match(fs.readFileSync(path.join(root, "LICENSE"), "utf8"), /GNU AFFERO GENERAL PUBLIC LICENSE/);
   for (const file of ["README.md", "ASSETS.md", "CONTRIBUTING.md", "SECURITY.md", "PRIVACY.md", "TERMS.md", "RELEASE_SETUP.md", ".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
@@ -195,8 +195,8 @@ test("generated contracts expose Agent Registry, social, Quest Tree, battle, and
   }
 });
 
-test("QuestForge workflow skill covers safe reviews, social actions, battles, and Toggl Focus", () => {
-  const skill = fs.readFileSync(path.join(root, "skills/questforge-workflows/SKILL.md"), "utf8");
+test("Guilduo workflow skill covers safe reviews, social actions, battles, and Toggl Focus", () => {
+  const skill = fs.readFileSync(path.join(root, "skills/guilduo-workflows/SKILL.md"), "utf8");
   assert.match(skill, /dryRun/);
   assert.match(skill, /Weekly Review/);
   assert.match(skill, /exact `@handle`/);
