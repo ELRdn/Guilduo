@@ -1,6 +1,6 @@
 import { Client, auth } from '@modelcontextprotocol/client';
 import type { OAuthClientProvider, Tool, Transport } from '@modelcontextprotocol/client';
-import type { GrantStore, Protection } from './persistence.js';
+import type { GrantStore, Protection } from './persistence.ts';
 export declare const MCP_URL = "https://mcp.guilduo.com/mcp";
 export declare const SDK_VERSION = "2.0.0";
 type McpClient = Pick<Client, 'connect' | 'listTools' | 'callTool' | 'close'>;

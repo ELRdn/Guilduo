@@ -2,14 +2,14 @@
 
 [日本語How-to](https://github.com/ELRdn/Guilduo/blob/main/docs/guilduo-dsh-howto.jp.md) · [English How-to](https://github.com/ELRdn/Guilduo/blob/main/docs/guilduo-dsh-howto.md) · [npm](https://www.npmjs.com/package/@guilduo/dsh-oauth-poc)
 
-**Maintenance beta: 0.6.0-beta.17.** Use the exact version below; see the release status for verified registry tags. This Windows plugin adds **Settings → Guilduo**, OAuth-backed MCP tools and the **guilduo-workflows** Skill. Target: DSH **0.2.0-rc.2**, Cordis **4.0.4**, MCP client **2.0.0**. License: **AGPL-3.0-only**.
+**Maintenance beta: 0.6.0-beta.18.** Use the exact version below; see the release status for verified registry tags. This Windows plugin adds **Settings → Guilduo**, OAuth-backed MCP tools and the **guilduo-workflows** Skill. Target: DSH **0.2.0-rc.2**, Cordis **4.0.4**, MCP client **2.0.0**. License: **AGPL-3.0-only**.
 
 ## Install with the standard DSH command
 
 Stop old Web/Desktop hosts sharing the same DSH storage before installing or updating. For an existing Web profile named `web`:
 
 ```powershell
-dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.17 --ignore-scripts
+dsh plugin --profile web add @guilduo/dsh-oauth-poc@0.6.0-beta.18 --ignore-scripts
 ```
 
 Replace `web` with your profile name. Restart the host and reload the browser. **Desktop uses its native plugin manager** with the same package/version; the CLI refuses the reserved `desktop` profile. Update every participating profile. Use standard bundle activation without adding a second manual Cordis overlay. Consumer installation requires no build, tokens or source checkout.
@@ -41,6 +41,8 @@ Desktop removal uses its native plugin manager. For updates, stop participating 
 Public OAuth, real MCP reads/writes and Desktop saved authentication reuse after restart are **user-confirmed**. The user opened Settings roughly 1–2 minutes after restarting and observed Connected without reauthorization; this does not establish restoration before Settings opened. Settings-free first model input/new-session/fork use, guarded readback/conflicts, Registry Agent Handoff and Human answer → resume remain pending. Agent linking is not yet done.
 
 Beta.17 local checks: 90 package tests, 2 root tests, build/type checks; native synthetic lifecycle/shared authentication, browser/Settings and isolated CLI checks. Beta.17 fixes incomplete legacy credential erasure reporting, preserves tokens refreshed before a restore timeout under the original credential lock, and rejects linked staging outputs. Feature expansion remains paused; independent AI completion review is separate from external human auditing. See [current status and evidence limits](https://github.com/ELRdn/Guilduo/blob/main/docs/guilduo-dsh-status.md).
+
+Beta.18 changes packaging metadata only, for DSH STORE fixed-source review: relative source imports name their `.ts` files (emitted `lib/*.js` still imports `.js`), and the manifest license uses `AGPL-3.0`, the SPDX identifier GitHub reports for this repository and equivalent to AGPL-3.0-only. Runtime behavior is unchanged from beta.17.
 
 Beta.16 remains immutable. Beta.17 is a maintenance update, not full real-environment workflow acceptance. If Disconnect fails, saved credential removal is unconfirmed: retry from the original conversation after protection/storage recovers. A local disconnect and server revocation are separate. Historical beta.14 grant loss remains unproven.
 

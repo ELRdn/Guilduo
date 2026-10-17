@@ -6,7 +6,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent';
 import type {} from '@deepseek-ai/dsh-api-session-controller';
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection';
 import { SessionId } from '@deepseek-ai/dsh-session/types';
-import type { HostControl } from './index.js';
+import type { HostControl } from './index.ts';
 
 export const LOGIN_TIMEOUT_MS = 5 * 60_000;
 type State = 'disconnected' | 'connecting' | 'connected' | 'failed';

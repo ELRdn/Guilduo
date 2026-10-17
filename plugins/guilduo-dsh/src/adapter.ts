@@ -5,7 +5,7 @@ import type {
   OAuthClientProvider, OAuthDiscoveryState, StoredOAuthClientInformation, StoredOAuthTokens,
   Tool, Transport,
 } from '@modelcontextprotocol/client';
-import type { Grant, GrantStore, Protection } from './persistence.js';
+import type { Grant, GrantStore, Protection } from './persistence.ts';
 
 export const MCP_URL = 'https://mcp.guilduo.com/mcp';
 export const SDK_VERSION = '2.0.0';
@@ -18,7 +18,7 @@ export type Dependencies = {
 };
 const sdk: Dependencies = {
   authorize: auth,
-  client: () => new Client({ name: 'guilduo-dsh-oauth-poc', version: '0.6.0-beta.17' }),
+  client: () => new Client({ name: 'guilduo-dsh-oauth-poc', version: '0.6.0-beta.18' }),
   transport: (authProvider, signal) => new StreamableHTTPClientTransport(new URL(MCP_URL), {
     authProvider, onInsufficientScope: 'throw', requestInit: { signal },
   }),

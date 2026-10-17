@@ -1,6 +1,6 @@
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { Context } from '@deepseek-ai/cordis';
-import type { Dependencies, GuilduoSession } from './adapter.js';
+import type { Dependencies, GuilduoSession } from './adapter.ts';
 export declare const name = "guilduo-dsh-oauth-poc";
 export declare const inject: string[];
 export declare const DSH_VERSION = "0.2.0-rc.2";

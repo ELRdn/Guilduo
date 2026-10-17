@@ -10,8 +10,8 @@ const hash = (value: Uint8Array) => createHash('sha256').update(value).digest('h
 test('DSH PoC manifest isolates fixed dependencies and excludes runtime tests/credentials from tarball', async () => {
   const manifest = JSON.parse(await readFile(new URL('package.json', plugin), 'utf8'));
   assert.equal(manifest.private, undefined);
-  assert.equal(manifest.version, '0.6.0-beta.17');
-  assert.equal(manifest.license, 'AGPL-3.0-only');
+  assert.equal(manifest.version, '0.6.0-beta.18');
+  assert.equal(manifest.license, 'AGPL-3.0');
   assert.equal(manifest.dependencies['@modelcontextprotocol/client'], '2.0.0');
   assert.equal(manifest.dependencies['@deepseek-ai/dsh-mcp-client'], '0.2.0-rc.2');
   assert.equal(manifest.peerDependencies['@deepseek-ai/cordis'], '4.0.4');
