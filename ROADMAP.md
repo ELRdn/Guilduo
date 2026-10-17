@@ -2,6 +2,10 @@
 
 2026-10-12現在: beta.8はSource Releaseとして公開済み。次の本体版はbeta.9。以下の過去計画で「beta.8公開前」とした実機・Human往復・有料販売の受入は引き続き別ゲートで、Source Releaseや無料β配備の完了とは区別する。
 
+## 2026-10-17 DSH STORE掲載修正
+
+- [x] [DSH STORE issue AI-Scarlett/DSH-Store#1371](https://github.com/AI-Scarlett/DSH-Store/issues/1371) の作者側ブロック理由に対応するDSH beta.18候補を作成。manifest `license` をGitHub判定と同じ `AGPL-3.0` に揃え、`src/*.ts` の相対importを `.ts` 指定へ変更（`lib/*.js` は `.js` のまま）。runtime変更なし。90 package tests・2 root DSH tests・型／build、storeのsource surface検査のローカル再現で指摘0件を確認。依存のsupply-chain reviewはstore側の審査記録が必要。npm公開・store再審査は未実施。[現行status](docs/guilduo-dsh-status.md)
+
 ## 2026-10-10 3プラグインのブラッシュアップ・公式Docs
 
 - [x] 本人依頼で3プラグインをブラッシュアップ段階へ移行。通常導入にはnpm `latest`を採用し、DSHはbeta.17へ昇格、OpenCode／OpenClawはbeta.16を確認。版番号と公開済みarchiveは維持。以前のbeta-only条件は撤回。

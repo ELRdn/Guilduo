@@ -4,6 +4,19 @@
 
 Updated October 10, 2026. Windows / DSH **0.2.0-rc.2**. **Recommended release: @guilduo/dsh-oauth-poc@0.6.0-beta.17**. npm `latest` and `beta` both point to beta.17 after the user-authorized latest promotion. All three plugins now enter the polish phase. `latest` is the normal installation tag; it does not change the prerelease version or acceptance limits. [Official guide](https://guilduo.com/docs/en/dsh/).
 
+## Beta.18 DSH STORE packaging candidate — October 17, 2026
+
+[DSH STORE issue AI-Scarlett/DSH-Store#1371](https://github.com/AI-Scarlett/DSH-Store/issues/1371) blocked the catalog entry at `2f2ad42`. Beta.18 addresses the author-side reasons without runtime changes; beta.17 remains the recommended release until beta.18 is published and verified.
+
+| Store reason | Cause | Beta.18 change |
+| --- | --- | --- |
+| Manifest and GitHub license metadata differ | The store compares strings; GitHub reports `AGPL-3.0`, the manifest said `AGPL-3.0-only` | Manifest `license` is `AGPL-3.0` (same license; LICENSE text unchanged) |
+| Local modules missing from the distributable surface | `src/*.ts` imported `./x.js`; the store does not map `.js` to `.ts` | Source imports name `./x.ts`; `rewriteRelativeImportExtensions` keeps `lib/*.js` on `.js` |
+| Dependencies need supply-chain review | Any `dependencies` entry triggers it | None from the author side; requires a store review record |
+| NOTICE unsupported | Not reproduced by the current store scanner | None |
+
+Local results: 90 package tests (89 pass, 1 Windows-only skip, same as beta.17), 2 root DSH tests, types and build passed. A local run of the store's source-surface and local-module checks against the candidate reports no findings. Consumer type resolution of the emitted declarations passed with NodeNext and Bundler. Packed archive: 32 files, same member list as beta.17. Native host, Desktop and real OAuth checks were not rerun for this metadata-only change.
+
 ## Beta.17 user acceptance — October 11, 2026
 
 The user reports stable operation with beta.17 in their DSH environment. Reconnecting Guilduo requires pressing **New Chat** to start a new conversation; the user considers this an acceptable usability limitation. Document this step when reconnecting, rather than promising reconnection within an existing conversation.

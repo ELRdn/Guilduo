@@ -2,8 +2,8 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import type {} from '@deepseek-ai/dsh-api-gateway';
-import type { HostControl } from './index.js';
-import { createSettingsBridge } from './settings.js';
+import type { HostControl } from './index.ts';
+import { createSettingsBridge } from './settings.ts';
 
 /** Existing Gateway owns /api; bridge admission requires the real Connection operator on every host. */
 export function installSettingsGateway(ctx: Context, control: HostControl) {

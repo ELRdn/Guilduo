@@ -12,11 +12,11 @@ import type {} from '@deepseek-ai/dsh-session-persistence';
 import { SessionId } from '@deepseek-ai/dsh-session/types';
 import { createMcpToolDefinition } from '@deepseek-ai/dsh-mcp-client';
 import type { Tool } from '@modelcontextprotocol/client';
-import { createSession } from './adapter.js';
-import { installSettingsGateway } from './settings-gateway.js';
-import type { Dependencies, GuilduoSession } from './adapter.js';
-import { createGrantStore, createSharedConnections, SHARED_KEY } from './persistence.js';
-import type { GrantStore, SharedConnection } from './persistence.js';
+import { createSession } from './adapter.ts';
+import { installSettingsGateway } from './settings-gateway.ts';
+import type { Dependencies, GuilduoSession } from './adapter.ts';
+import { createGrantStore, createSharedConnections, SHARED_KEY } from './persistence.ts';
+import type { GrantStore, SharedConnection } from './persistence.ts';
 
 export const name = 'guilduo-dsh-oauth-poc';
 export const inject = ['tools', 'skills', 'credentials', 'agents', 'sessions', 'sessionController'];
