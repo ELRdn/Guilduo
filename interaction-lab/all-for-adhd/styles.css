@@ -1,0 +1,375 @@
+/* All for ADHD: Relay Forge tokens and palette, calmer layout.
+ * One reading column, large focus text, 44px targets, no decorative motion. */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--qf-color-canvas);
+  color: var(--qf-color-fg-default);
+  font: 400 16px/1.6 var(--qf-font-sans);
+}
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: var(--qf-focus-width) solid var(--qf-color-focus); outline-offset: var(--qf-focus-offset); }
+[hidden] { display: none !important; }
+
+.a4-skip { position: absolute; left: -9999px; }
+.a4-skip:focus { left: var(--qf-space-6); top: var(--qf-space-6); z-index: var(--qf-z-tooltip); padding: var(--qf-space-4); background: var(--qf-color-raised); }
+
+.a4-app { min-height: 100vh; display: flex; flex-direction: column; }
+.a4-demo { margin: 0; padding: var(--qf-space-4) var(--qf-space-6); background: var(--qf-color-selected); color: var(--qf-color-fg-strong); font-size: 14px; text-align: center; }
+.a4-demo a { color: inherit; }
+
+/* Header: brand, capture, tabs. */
+.a4-top {
+  position: sticky; top: 0; z-index: var(--qf-z-sticky);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--qf-space-6);
+  padding: var(--qf-space-5) var(--qf-space-8);
+  background: var(--qf-color-canvas);
+  border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+.a4-brand { color: var(--qf-color-fg-strong); font-weight: 600; text-decoration: none; }
+.a4-capture { display: flex; gap: var(--qf-space-4); max-width: 640px; width: 100%; justify-self: center; }
+.a4-capture-input, .a4-input {
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 var(--qf-space-5);
+  background: var(--qf-color-field); border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-md);
+}
+.a4-capture-input::placeholder, .a4-input::placeholder { color: var(--qf-color-fg-muted); }
+
+.a4-tabs { display: flex; gap: var(--qf-space-2); }
+.a4-tab {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 var(--qf-space-6);
+  border-radius: var(--qf-radius-md); color: var(--qf-color-fg-muted); text-decoration: none; font-weight: 600;
+}
+.a4-tab:hover { color: var(--qf-color-fg-strong); }
+.a4-tab[aria-current="page"] { background: var(--qf-color-selected); color: var(--qf-color-fg-strong); }
+
+/* Content column. */
+.a4-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: var(--qf-space-9) var(--qf-space-8) var(--qf-space-12); outline: none; }
+.a4-view { display: flex; flex-direction: column; gap: var(--qf-space-8); }
+.a4-title { margin: 0; font: var(--qf-text-display); color: var(--qf-color-fg-strong); outline: none; }
+.a4-lead { margin: 0; font-size: 17px; }
+.a4-subtitle { margin: 0 0 var(--qf-space-4); font: var(--qf-text-section); color: var(--qf-color-fg-strong); }
+.a4-muted { margin: 0; color: var(--qf-color-fg-muted); font-size: 14px; }
+.a4-meta { color: var(--qf-color-fg-muted); font-size: 13px; }
+
+/* Buttons and chips. */
+.a4-button {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 var(--qf-space-7);
+  background: var(--qf-color-surface); color: var(--qf-color-fg-strong);
+  border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-md); cursor: pointer; font-weight: 600;
+}
+.a4-button:hover:not(:disabled) { border-color: var(--qf-color-border-strong); }
+.a4-primary { background: var(--qf-color-accent); color: var(--qf-color-fg-on-accent); border-color: var(--qf-color-accent); min-height: 52px; padding: 0 var(--qf-space-9); font-size: 17px; }
+.a4-primary:hover:not(:disabled) { background: var(--qf-color-accent-hover); }
+.a4-button:disabled, .a4-chip:disabled, .a4-check:disabled { opacity: 0.55; cursor: default; }
+.a4-link { min-height: 44px; padding: 0 var(--qf-space-2); background: none; border: 0; color: var(--qf-color-accent); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; }
+.a4-chips { display: flex; flex-wrap: wrap; gap: var(--qf-space-4); }
+.a4-chip {
+  min-height: 44px; min-width: 64px; padding: 0 var(--qf-space-6);
+  background: transparent; color: var(--qf-color-fg-default);
+  border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-pill); cursor: pointer;
+}
+.a4-chip[aria-pressed="true"] { background: var(--qf-color-selected); color: var(--qf-color-fg-strong); border-color: var(--qf-color-border-strong); font-weight: 600; }
+
+/* Now: one focus card. */
+.a4-notice {
+  display: block; padding: var(--qf-space-5) var(--qf-space-6); border-radius: var(--qf-radius-md);
+  border: var(--qf-border-width) solid var(--qf-color-review); color: var(--qf-color-fg-strong); text-decoration: none; font-weight: 600;
+}
+.a4-focus {
+  display: flex; flex-direction: column; gap: var(--qf-space-7);
+  padding: var(--qf-space-9); border-radius: var(--qf-radius-lg);
+  background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+}
+.a4-focus[data-running="true"] { border-color: var(--qf-color-human); }
+.a4-eyebrow { margin: 0; color: var(--qf-color-fg-muted); font-weight: 600; letter-spacing: 0.04em; }
+.a4-focus-title { margin: 0; font: 600 28px/1.35 var(--qf-font-sans); color: var(--qf-color-fg-strong); outline: none; overflow-wrap: anywhere; }
+.a4-step { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--qf-space-4); font-size: 17px; }
+.a4-step-label { color: var(--qf-color-fg-muted); font-size: 13px; font-weight: 600; }
+.a4-estimate { display: flex; flex-direction: column; gap: var(--qf-space-4); }
+.a4-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--qf-space-5); }
+.a4-step-form { display: flex; gap: var(--qf-space-4); }
+
+.a4-ring { position: relative; width: 168px; height: 168px; align-self: center; }
+.a4-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.a4-ring-track, .a4-ring-value { fill: none; stroke-width: 8; }
+.a4-ring-track { stroke: var(--qf-color-inset); }
+.a4-ring-value { stroke: var(--qf-color-human); stroke-linecap: round; transition: stroke-dasharray var(--qf-motion-standard) linear; }
+.a4-ring-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.a4-ring-label { font: 600 32px/1 var(--qf-font-mono); color: var(--qf-color-fg-strong); font-variant-numeric: tabular-nums; }
+.a4-ring-text small { color: var(--qf-color-fg-muted); }
+
+/* Lists. */
+.a4-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--qf-space-4); }
+.a4-pick {
+  width: 100%; min-height: 52px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--qf-space-1);
+  padding: var(--qf-space-4) var(--qf-space-6); text-align: left; cursor: pointer;
+  background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-md);
+}
+.a4-pick:hover { border-color: var(--qf-color-border-strong); }
+.a4-after summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.a4-group { display: flex; flex-direction: column; gap: var(--qf-space-4); }
+.a4-row { background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-md); }
+.a4-row-main { display: flex; align-items: center; gap: var(--qf-space-5); padding: var(--qf-space-3) var(--qf-space-5); }
+.a4-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.a4-row-title { min-height: 44px; padding: 0; background: none; border: 0; text-align: left; cursor: pointer; color: var(--qf-color-fg-strong); font-weight: 600; overflow-wrap: anywhere; }
+.a4-check {
+  flex: none; width: 28px; height: 28px; margin: 8px; border-radius: var(--qf-radius-pill); cursor: pointer;
+  background: transparent; border: 2px solid var(--qf-color-border-strong);
+}
+.a4-check-space { flex: none; width: 44px; }
+.a4-check:hover:not(:disabled) { border-color: var(--qf-color-success); background: var(--qf-color-selected); }
+
+/* Settings. */
+.a4-option { display: flex; align-items: center; gap: var(--qf-space-4); min-height: 44px; }
+.a4-option input { width: 20px; height: 20px; }
+.a4-field { border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-md); padding: var(--qf-space-5) var(--qf-space-6); margin: 0; }
+
+/* Toast: bottom center, never covers the primary action column for long. */
+.a4-toast {
+  position: fixed; left: 50%; bottom: var(--qf-space-8); transform: translateX(-50%); z-index: var(--qf-z-toast);
+  display: flex; align-items: center; gap: var(--qf-space-6); max-width: calc(100vw - 32px);
+  padding: var(--qf-space-4) var(--qf-space-4) var(--qf-space-4) var(--qf-space-7);
+  background: var(--qf-color-raised); color: var(--qf-color-fg-strong); border: var(--qf-border-width) solid var(--qf-color-border-default);
+  border-radius: var(--qf-radius-md); box-shadow: var(--qf-shadow-overlay);
+}
+
+.a4-boot { max-width: 520px; margin: 15vh auto; padding: 0 var(--qf-space-8); display: flex; flex-direction: column; gap: var(--qf-space-6); }
+.a4-boot h1 { margin: 0; font: var(--qf-text-page); color: var(--qf-color-fg-strong); outline: none; }
+.a4-boot p { margin: 0; }
+
+.a4-app[data-busy="true"] .a4-main { cursor: progress; }
+
+/* Done state shared by checks and titles. */
+.a4-check[data-done="true"] { display: inline-flex; align-items: center; justify-content: center; background: var(--qf-color-success); border-color: var(--qf-color-success); cursor: default; }
+.a4-check[data-done="true"]::after { content: ""; width: 10px; height: 6px; margin-top: -3px; border: solid var(--qf-color-canvas); border-width: 0 0 2px 2px; transform: rotate(-45deg); }
+.a4-row-title[data-done="true"], .a4-steps [data-done="true"] { color: var(--qf-color-fg-muted); text-decoration: line-through; font-weight: 400; }
+.a4-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.a4-steps li { display: flex; align-items: center; gap: var(--qf-space-3); min-height: 44px; }
+.a4-steps .a4-check { margin: 8px; width: 24px; height: 24px; }
+
+/* Plan: week strip, day timeline, and the undated inbox beside it. */
+.a4-main[data-view="plan"] { max-width: 1120px; }
+.a4-plan { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--qf-space-9); }
+.a4-plan-main { display: flex; flex-direction: column; gap: var(--qf-space-7); min-width: 0; }
+.a4-plan-side { display: flex; flex-direction: column; gap: var(--qf-space-4); }
+.a4-plan-side .a4-group { margin-top: var(--qf-space-6); }
+.a4-plan-head { display: flex; align-items: center; justify-content: space-between; gap: var(--qf-space-5); flex-wrap: wrap; }
+.a4-plan-nav { display: flex; align-items: center; gap: var(--qf-space-3); }
+.a4-plan-nav .a4-button { min-width: 44px; padding: 0; font-size: 20px; }
+@media (min-width: 1100px) {
+  .a4-plan:not([data-mode="week"]) { grid-template-columns: 320px minmax(0, 1fr); }
+  .a4-plan[data-mode="week"] .a4-plan-side { order: 0; position: static; max-height: none; }
+  .a4-plan[data-mode="week"] .a4-plan-side .a4-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .a4-plan-side { order: -1; position: sticky; top: 96px; align-self: start; max-height: calc(100vh - 120px); overflow: auto; padding-right: var(--qf-space-2); }
+}
+
+.a4-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--qf-space-2); }
+.a4-day {
+  display: flex; flex-direction: column; align-items: center; gap: var(--qf-space-1); min-height: 76px; padding: var(--qf-space-3) 0;
+  background: none; border: 0; border-radius: var(--qf-radius-md); cursor: pointer; color: var(--qf-color-fg-default);
+}
+.a4-day:hover { background: var(--qf-color-surface); }
+.a4-day-name { font-size: 12px; color: var(--qf-color-fg-muted); }
+.a4-day-num { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--qf-radius-pill); font-weight: 600; font-variant-numeric: tabular-nums; }
+.a4-day[data-today="true"] .a4-day-num { color: var(--qf-color-accent); }
+.a4-day[aria-pressed="true"] .a4-day-num { background: var(--qf-color-accent); color: var(--qf-color-fg-on-accent); }
+.a4-dots { display: flex; gap: 3px; min-height: 6px; }
+.a4-dots i { width: 6px; height: 6px; border-radius: var(--qf-radius-pill); background: var(--a4-tone); }
+
+[data-tone] { --a4-tone: var(--qf-color-human); }
+[data-tone="agent"] { --a4-tone: var(--qf-color-agent); }
+[data-tone="decision"] { --a4-tone: var(--qf-color-review); }
+[data-tone="done"] { --a4-tone: var(--qf-color-border-strong); }
+
+.a4-timeline { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.a4-timeline::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: calc(52px + var(--qf-space-4) + 17px); width: 2px; background: var(--qf-color-border-subtle); }
+.a4-slot, .a4-gap, .a4-now-line { position: relative; display: grid; grid-template-columns: 52px 36px minmax(0, 1fr) 44px; column-gap: var(--qf-space-4); align-items: start; }
+.a4-slot { min-height: max(64px, calc(var(--a4-len) * 1.1px)); padding: var(--qf-space-2) 0; }
+.a4-slot-time { display: flex; flex-direction: column; font: 600 13px/1.4 var(--qf-font-mono); color: var(--qf-color-fg-default); font-variant-numeric: tabular-nums; padding-top: var(--qf-space-3); }
+.a4-slot-time small { color: var(--qf-color-fg-muted); font-weight: 400; }
+.a4-slot-pill { position: relative; align-self: stretch; min-height: 44px; border-radius: var(--qf-radius-pill); background: var(--a4-tone); }
+.a4-slot[data-tone="self"] .a4-slot-pill { background: var(--qf-color-surface); border: 2px solid var(--a4-tone); }
+.a4-slot[data-tone="done"] .a4-slot-pill { background: var(--qf-color-border-subtle); }
+.a4-slot .a4-row-text { padding-top: var(--qf-space-1); }
+.a4-gap { min-height: 44px; align-items: center; }
+.a4-gap .a4-muted { grid-column: 3 / 5; }
+.a4-now-line { min-height: 28px; align-items: center; }
+.a4-now-line::after { content: ""; grid-column: 2 / 5; grid-row: 1; height: 2px; background: var(--qf-color-accent); }
+.a4-now-line .a4-slot-time { color: var(--qf-color-accent); padding: 0; }
+.a4-now-label { grid-column: 3; grid-row: 1; justify-self: start; padding: 0 var(--qf-space-3); background: var(--qf-color-canvas); color: var(--qf-color-accent); font-size: 12px; font-weight: 600; z-index: 1; }
+.a4-add {
+  flex: none; width: 44px; height: 44px; border-radius: var(--qf-radius-pill); cursor: pointer; font-size: 20px;
+  background: transparent; color: var(--qf-color-accent); border: var(--qf-border-width) solid var(--qf-color-border-default);
+}
+.a4-add:hover:not(:disabled) { background: var(--qf-color-selected); }
+
+/* Week grid (Tiimo-style): weekday header, an "anytime" row, an hourly axis. */
+.a4-seg { display: inline-flex; padding: 2px; border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-pill); }
+.a4-seg-button { min-height: 40px; min-width: 52px; padding: 0 var(--qf-space-5); background: none; border: 0; border-radius: var(--qf-radius-pill); cursor: pointer; color: var(--qf-color-fg-muted); font-weight: 600; }
+.a4-seg-button[aria-pressed="true"] { background: var(--qf-color-selected); color: var(--qf-color-fg-strong); }
+.a4-wk-scroll { overflow-x: auto; margin: 0 calc(var(--qf-space-2) * -1); padding: 0 var(--qf-space-2); }
+.a4-wk {
+  display: grid; grid-template-columns: 48px repeat(7, minmax(104px, 1fr)); grid-template-rows: auto auto var(--a4-wk-height);
+  min-width: 780px; column-gap: 4px;
+}
+.a4-wk-day { display: flex; flex-direction: column; align-items: center; gap: var(--qf-space-1); padding: var(--qf-space-2) 0 var(--qf-space-4); background: none; border: 0; cursor: pointer; color: var(--qf-color-fg-default); }
+.a4-wk-day .a4-day-name { letter-spacing: 0.06em; }
+.a4-wk-day[data-today="true"] .a4-day-num { color: var(--qf-color-accent); }
+.a4-wk-day[aria-pressed="true"] .a4-day-num { background: var(--qf-color-accent); color: var(--qf-color-fg-on-accent); }
+.a4-wk-label { align-self: start; padding-top: var(--qf-space-3); font-size: 11px; color: var(--qf-color-fg-muted); }
+.a4-wk-allday { display: flex; flex-direction: column; gap: 4px; padding: var(--qf-space-2) 0 var(--qf-space-4); border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle); min-height: 48px; }
+.a4-wk-hours { position: relative; }
+.a4-wk-hours span { position: absolute; right: var(--qf-space-3); transform: translateY(-50%); font: 400 11px/1 var(--qf-font-mono); color: var(--qf-color-fg-muted); }
+.a4-wk-col {
+  position: relative; border-left: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  background: repeating-linear-gradient(to bottom, var(--qf-color-border-subtle) 0 1px, transparent 1px var(--a4-wk-hour));
+}
+.a4-wk-col[data-selected="true"], .a4-wk-allday[data-selected="true"] { background-color: color-mix(in srgb, var(--qf-color-selected) 35%, transparent); }
+.a4-wk-item {
+  display: flex; align-items: flex-start; gap: var(--qf-space-2); padding: var(--qf-space-2) var(--qf-space-2) var(--qf-space-2) var(--qf-space-3); overflow: hidden;
+  border-radius: var(--qf-radius-md); background: color-mix(in srgb, var(--a4-tone) 20%, var(--qf-color-surface));
+}
+.a4-wk-col .a4-wk-item { position: absolute; box-shadow: 0 0 0 1px var(--qf-color-canvas); }
+.a4-wk-item[data-tone="done"] { background: color-mix(in srgb, var(--qf-color-fg-muted) 12%, var(--qf-color-surface)); }
+.a4-wk-item[data-short="true"] .a4-meta { display: none; }
+.a4-wk-item[data-narrow="true"] { flex-direction: column-reverse; justify-content: flex-end; gap: 0; padding: var(--qf-space-2); }
+.a4-wk-item[data-narrow="true"] .a4-row-title { overflow-wrap: anywhere; font-size: 12px; }
+.a4-wk-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.a4-wk-item .a4-row-title { min-height: 24px; font-size: 13px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.a4-wk-item[data-short="true"] .a4-row-title { -webkit-line-clamp: 1; }
+.a4-wk-item .a4-meta { font-size: 11px; }
+.a4-wk-item .a4-check { flex: none; width: 20px; height: 20px; margin: 2px; border-width: 2px; }
+.a4-wk-item .a4-check-space { width: 0; }
+.a4-wk-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--qf-color-accent); z-index: 1; }
+.a4-wk-now::before { content: ""; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: var(--qf-radius-pill); background: var(--qf-color-accent); }
+
+/* Detail sheet: centered on desktop, bottom sheet on phones. */
+.a4-sheet {
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: var(--qf-space-8); overflow: auto;
+  background: var(--qf-color-raised); color: var(--qf-color-fg-default);
+  border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-lg); box-shadow: var(--qf-shadow-modal);
+}
+.a4-sheet[open] { display: flex; flex-direction: column; gap: var(--qf-space-7); }
+.a4-sheet::backdrop { background: var(--qf-color-scrim); }
+.a4-sheet-head { display: flex; align-items: center; justify-content: space-between; }
+.a4-sheet-head .a4-subtitle, .a4-sheet h3 { margin: 0; }
+.a4-sheet-form { display: flex; flex-direction: column; gap: var(--qf-space-6); }
+.a4-field-row { display: flex; flex-direction: column; gap: var(--qf-space-2); }
+.a4-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--qf-space-5); }
+.a4-textarea { padding: var(--qf-space-4) var(--qf-space-5); resize: vertical; line-height: 1.5; }
+
+/* Running task dock. */
+.a4-dock {
+  position: fixed; left: 50%; bottom: var(--qf-space-8); transform: translateX(-50%); z-index: var(--qf-z-sticky);
+  display: flex; align-items: center; gap: var(--qf-space-5); width: min(560px, calc(100vw - 32px));
+  padding: var(--qf-space-4) var(--qf-space-5); background: var(--qf-color-raised);
+  border: var(--qf-border-width) solid var(--qf-color-human); border-radius: var(--qf-radius-lg); box-shadow: var(--qf-shadow-overlay);
+}
+.a4-ring-sm { width: 52px; height: 52px; flex: none; }
+.a4-ring-sm .a4-ring-track, .a4-ring-sm .a4-ring-value { stroke-width: 12; }
+.a4-ring-sm .a4-ring-label { font-size: 12px; }
+.a4-dock-host:not(:empty) ~ .a4-toast { bottom: calc(var(--qf-space-8) + 88px); }
+.a4-app:has(.a4-dock) .a4-main { padding-bottom: calc(var(--qf-space-12) + 88px); }
+
+/* Mobile: capture stays on top, tabs move to the bottom. */
+@media (max-width: 760px) {
+  .a4-top { grid-template-columns: minmax(0, 1fr); padding: var(--qf-space-4) var(--qf-space-6); gap: var(--qf-space-4); }
+  .a4-brand { display: none; }
+  .a4-capture-input { min-height: 44px; }
+  .a4-tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--qf-z-sticky);
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+    padding: var(--qf-space-2) var(--qf-space-2) calc(var(--qf-space-2) + env(safe-area-inset-bottom, 0px));
+    background: var(--qf-color-canvas); border-top: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  }
+  .a4-tab { padding: 0; min-height: 48px; }
+  .a4-main { padding: var(--qf-space-7) var(--qf-space-6) calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .a4-title { font: var(--qf-text-page); }
+  .a4-focus { padding: var(--qf-space-7) var(--qf-space-6); }
+  .a4-focus-title { font-size: 24px; }
+  .a4-actions > .a4-primary { flex: 1 1 100%; }
+  .a4-toast { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  .a4-sheet { width: 100vw; max-width: none; max-height: 88vh; margin: auto 0 0; padding: var(--qf-space-7) var(--qf-space-6) calc(var(--qf-space-7) + env(safe-area-inset-bottom, 0px)); border-radius: var(--qf-radius-lg) var(--qf-radius-lg) 0 0; }
+  .a4-dock { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); gap: var(--qf-space-3); }
+  .a4-dock .a4-button { padding: 0 var(--qf-space-5); }
+  .a4-dock-host:not(:empty) ~ .a4-toast { bottom: calc(156px + env(safe-area-inset-bottom, 0px)); }
+  .a4-app:has(.a4-dock) .a4-main { padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px)); }
+  .a4-slot, .a4-gap, .a4-now-line { grid-template-columns: 44px 28px minmax(0, 1fr) 44px; column-gap: var(--qf-space-3); }
+  .a4-timeline::before { left: calc(44px + var(--qf-space-3) + 13px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a4-ring-value { transition: none; }
+}
+
+/* Bloom palette (owner choice 2026-10-18): light has a warm wash, about 7:3
+ * orange-gold to sage with no red; dark is flat neutral charcoal (a glow read as
+ * "AI") with solid task-colour pills, after Structured's dark mode.
+ * Per-task colour slots in both. Brand core stays (Forge Teal accent, Antique Gold, Ivory,
+ * Night Surface); no purple/blue AI gradients, no glass. `data-a4-palette="bloom"`
+ * is the default; removing it falls back to the plain Relay Forge tokens. */
+:root[data-a4-palette="bloom"] {
+  --qf-color-canvas: #fdf8f1; --qf-color-field: #f9f1e7; --qf-color-surface: #ffffff; --qf-color-raised: #ffffff;
+  --qf-color-inset: #efe4d4; --qf-color-selected: #f5e3c9;
+  --qf-color-border-subtle: #ece0cf; --qf-color-border-default: #d6c6ae;
+  --a4-wash:
+    radial-gradient(140% 70% at 0% 0%, #f7d6a4 0%, rgba(247, 214, 164, 0) 66%),
+    radial-gradient(80% 45% at 100% 0%, #dfece1 0%, rgba(223, 236, 225, 0) 60%),
+    radial-gradient(120% 45% at 50% 115%, #e2ede3 0%, rgba(226, 237, 227, 0) 58%),
+    #fdf8f1;
+  --a4-card-shadow: 0 1px 2px rgba(80, 52, 20, 0.05), 0 4px 16px rgba(80, 52, 20, 0.06);
+  --a4-pill-fill: 30%;
+  --a4-hue-0: #c9914a; --a4-hue-1: #d4893a; --a4-hue-2: #b8963e; --a4-hue-3: #6f9f7c; --a4-hue-4: #5c9784;
+}
+:root[data-a4-palette="bloom"][data-theme="dark"] {
+  --qf-color-canvas: #121213; --qf-color-field: #1d1d1f; --qf-color-surface: #1d1d1f; --qf-color-raised: #252527;
+  --qf-color-inset: #0b0b0c; --qf-color-selected: #352c20;
+  --qf-color-border-subtle: #2b2b2e; --qf-color-border-default: #3d3d41;
+  --a4-wash: var(--qf-color-canvas);
+  --a4-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
+  --a4-pill-fill: 100%;
+  --a4-hue-0: #ddb072; --a4-hue-1: #e6a35e; --a4-hue-2: #cfb06a; --a4-hue-3: #86c19c; --a4-hue-4: #78b39f;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-a4-palette="bloom"]:not([data-theme="light"]) {
+    --qf-color-canvas: #121213; --qf-color-field: #1d1d1f; --qf-color-surface: #1d1d1f; --qf-color-raised: #252527;
+    --qf-color-inset: #0b0b0c; --qf-color-selected: #352c20;
+    --qf-color-border-subtle: #2b2b2e; --qf-color-border-default: #3d3d41;
+    --a4-wash: var(--qf-color-canvas);
+    --a4-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
+    --a4-pill-fill: 100%;
+    --a4-hue-0: #ddb072; --a4-hue-1: #e6a35e; --a4-hue-2: #cfb06a; --a4-hue-3: #86c19c; --a4-hue-4: #78b39f;
+  }
+}
+/* The wash is fixed to the viewport, so sticky bars painted with it line up seamlessly. */
+body, .a4-top { background: var(--a4-wash, var(--qf-color-canvas)) fixed; }
+.a4-row, .a4-focus, .a4-pick, .a4-dock { box-shadow: var(--a4-card-shadow, none); }
+.a4-slot[data-tone="self"] .a4-slot-pill { background: color-mix(in srgb, var(--a4-tone) var(--a4-pill-fill, 0%), var(--qf-color-surface)); }
+/* Open checks take the task's colour so each row reads as one coloured thing. */
+:root[data-a4-palette] [data-tone] > .a4-check:not([data-done]), :root[data-a4-palette] [data-tone] .a4-row-main > .a4-check:not([data-done]) { border-color: var(--a4-tone); }
+:is([data-tone="self"], [data-tone="working"])[data-hue="0"] { --a4-tone: var(--a4-hue-0, var(--qf-color-human)); }
+:is([data-tone="self"], [data-tone="working"])[data-hue="1"] { --a4-tone: var(--a4-hue-1, var(--qf-color-human)); }
+:is([data-tone="self"], [data-tone="working"])[data-hue="2"] { --a4-tone: var(--a4-hue-2, var(--qf-color-human)); }
+:is([data-tone="self"], [data-tone="working"])[data-hue="3"] { --a4-tone: var(--a4-hue-3, var(--qf-color-human)); }
+:is([data-tone="self"], [data-tone="working"])[data-hue="4"] { --a4-tone: var(--a4-hue-4, var(--qf-color-human)); }
+@media (max-width: 760px) {
+  .a4-tabs { background: var(--a4-wash, var(--qf-color-canvas)) fixed; }
+}
+
+/* Running task: the bar fills downward as time passes, with a soft leading edge. */
+@property --a4-progress { syntax: "<percentage>"; inherits: true; initial-value: 0%; }
+[data-run-start] { transition: --a4-progress 1s linear; }
+.a4-slot[data-run-start] .a4-slot-pill {
+  background: linear-gradient(to bottom, var(--a4-tone) 0 var(--a4-progress), color-mix(in srgb, var(--a4-tone) 22%, var(--qf-color-surface)) calc(var(--a4-progress) + 14%));
+}
+.a4-wk-item[data-run-start] {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--a4-tone) 48%, var(--qf-color-surface)) 0 var(--a4-progress), color-mix(in srgb, var(--a4-tone) 14%, var(--qf-color-surface)) calc(var(--a4-progress) + 14%));
+}
+.a4-wk-more {
+  position: absolute; display: flex; align-items: flex-start; justify-content: center; padding-top: var(--qf-space-3); cursor: pointer;
+  border: var(--qf-border-width) dashed var(--qf-color-border-default); border-radius: var(--qf-radius-md);
+  background: color-mix(in srgb, var(--qf-color-surface) 70%, transparent); color: var(--qf-color-fg-strong); font-size: 13px; font-weight: 600;
+}
+.a4-wk-more:hover { border-color: var(--qf-color-border-strong); }
+@media (prefers-reduced-motion: reduce) { [data-run-start] { transition: none; } }

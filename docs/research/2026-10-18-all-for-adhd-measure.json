@@ -1,0 +1,79 @@
+{
+  "baseUrl": "http://127.0.0.1:5191",
+  "path": "/interaction-lab/all-for-adhd/",
+  "measuredAt": "2026-10-18T06:26:14.767Z",
+  "rows": [
+    {
+      "viewport": "desktop",
+      "screen": "今",
+      "controlsAboveFold": 17,
+      "controlsTotal": 18,
+      "primaryActions": 1,
+      "jargonHits": 0,
+      "textChars": 139,
+      "fixedAreaRatio": 0.08
+    },
+    {
+      "viewport": "desktop",
+      "screen": "予定",
+      "controlsAboveFold": 32,
+      "controlsTotal": 35,
+      "primaryActions": 0,
+      "jargonHits": 0,
+      "textChars": 384,
+      "fixedAreaRatio": 0.19
+    },
+    {
+      "viewport": "desktop",
+      "screen": "やること",
+      "controlsAboveFold": 21,
+      "controlsTotal": 43,
+      "primaryActions": 0,
+      "jargonHits": 4,
+      "textChars": 702,
+      "fixedAreaRatio": 0.08
+    },
+    {
+      "viewport": "mobile",
+      "screen": "今",
+      "controlsAboveFold": 17,
+      "controlsTotal": 18,
+      "primaryActions": 1,
+      "jargonHits": 0,
+      "textChars": 132,
+      "fixedAreaRatio": 0.14
+    },
+    {
+      "viewport": "mobile",
+      "screen": "予定",
+      "controlsAboveFold": 24,
+      "controlsTotal": 35,
+      "primaryActions": 0,
+      "jargonHits": 0,
+      "textChars": 377,
+      "fixedAreaRatio": 0.14
+    },
+    {
+      "viewport": "mobile",
+      "screen": "やること",
+      "controlsAboveFold": 18,
+      "controlsTotal": 43,
+      "primaryActions": 0,
+      "jargonHits": 4,
+      "textChars": 695,
+      "fixedAreaRatio": 0.14
+    }
+  ],
+  "create": {
+    "desktop": {
+      "fields": 1,
+      "requiredFields": 1,
+      "stepsToSave": 2
+    },
+    "mobile": {
+      "fields": 1,
+      "requiredFields": 1,
+      "stepsToSave": 2
+    }
+  }
+}
