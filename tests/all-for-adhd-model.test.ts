@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Quest } from "../types/questforge.ts";
-import { bucketOf, groups, minutesLabel, nextCandidates, plannedMinutes } from "../interaction-lab/all-for-adhd/model.ts";
+import { blockers, bucketOf, dayPlan, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes } from "../interaction-lab/all-for-adhd/model.ts";
 
 const TODAY = "2026-10-18";
 function quest(id: string, patch: Partial<Quest> & { owner?: "self" | "agent"; state?: string } = {}): Quest {
@@ -66,4 +66,25 @@ test("answered or deferred review requests leave the task lists", async () => {
   const all = groups([pending, answered, deferred], TODAY);
   assert.deepEqual(all.decision.map(q => q.id), ["p"]);
   assert.equal(Object.values(all).flat().length, 1);
+});
+
+test("dailies return every day and a finished task never counts as running", () => {
+  const daily = quest("daily", { kind: "daily", scheduledDate: "2026-08-02", dueDate: "2026-08-16", planningMode: "until_due", lastCompletedDate: "2026-10-17" } as Partial<Quest>);
+  assert.equal(bucketOf(daily, TODAY), "today");
+  assert.equal(dayPlan([daily], TODAY).anytime.length, 1);
+  assert.equal(dayPlan([daily], "2026-10-17").anytime[0]?.done, true);
+  assert.equal(dayPlan([daily], TODAY).anytime[0]?.done, false);
+  assert.equal(isWorking(quest("ran", { state: "working" })), true);
+  assert.equal(isWorking(quest("finished", { state: "working", done: true })), false);
+});
+
+test("steps run in order: waiting steps and their parent are not offered as next", () => {
+  const parent = quest("parent");
+  const first = quest("first", { parentQuestId: "parent", createdAt: "2026-10-01" } as Partial<Quest>);
+  const second = quest("second", { parentQuestId: "parent", createdAt: "2026-10-02", dependencyIds: ["first"] } as Partial<Quest>);
+  const list = [parent, second, first];
+  assert.deepEqual(blockers(second, list).map(q => q.id), ["first"]);
+  assert.deepEqual(stepsOf(parent, list).map(q => q.id), ["first", "second"]);
+  assert.deepEqual(nextCandidates(list, TODAY).map(q => q.id), ["first"]);
+  assert.deepEqual(blockers(second, [parent, second, { ...first, done: true } as Quest]), []);
 });

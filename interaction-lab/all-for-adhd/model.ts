@@ -23,13 +23,30 @@ export const AGENT_STATE: Readonly<Record<string, string>> = {
 };
 export const AGENT_STATE_ORDER = ["blocked", "working", "ready", "accepted", "none"] as const;
 
+/** Completing a task does not reset its handoff state, so a finished task must not count as running. */
 export function isWorking(quest: Quest): boolean {
-  return quest.assignee.type === "self" && quest.assignee.handoffState === "working";
+  return isOpen(quest) && quest.assignee.type === "self" && quest.assignee.handoffState === "working";
+}
+
+/** Dailies come back every day; their dates only mark when they began. */
+const isDaily = (quest: Quest) => quest.kind === "daily";
+
+/** Open tasks this one waits for ("先にやるタスク"). */
+export function blockers(quest: Quest, quests: readonly Quest[]): Quest[] {
+  const ids = new Set(quest.dependencyIds ?? []);
+  return ids.size === 0 ? [] : quests.filter(q => ids.has(q.id) && isOpen(q));
+}
+
+/** A parent's open steps in working order: ready ones first, each group by creation. */
+export function stepsOf(parent: Quest, quests: readonly Quest[]): Quest[] {
+  return quests.filter(q => q.parentQuestId === parent.id && isOpen(q))
+    .sort((a, b) => Number(blockers(a, quests).length > 0) - Number(blockers(b, quests).length > 0) || (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.title.localeCompare(b.title));
 }
 
 export function bucketOf(quest: Quest, today: string): Bucket {
   if (needsDecision(quest)) return "decision";
   if (quest.assignee.type !== "self") return "agent";
+  if (isDaily(quest)) return "today";
   const start = quest.scheduledDate || quest.dueDate;
   if (!start) return "inbox";
   // "until due" work stays on today from its start until the due date.
@@ -48,7 +65,10 @@ const byRecent = (a: Quest, b: Quest) => b.updatedAt.localeCompare(a.updatedAt);
  * Only the person's own open tasks are offered; Agent work is never "next".
  */
 export function nextCandidates(quests: readonly Quest[], today: string): Quest[] {
-  const mine = quests.filter(q => isOpen(q) && !needsDecision(q) && !isSettledRequest(q) && q.assignee.type === "self");
+  // A parent with open steps is a container: its steps are offered instead. Waiting steps are not offered yet.
+  const containers = new Set(quests.filter(q => q.parentQuestId && isOpen(q)).map(q => q.parentQuestId));
+  const mine = quests.filter(q => isOpen(q) && !needsDecision(q) && !isSettledRequest(q) && q.assignee.type === "self"
+    && !containers.has(q.id) && blockers(q, quests).length === 0);
   const of = (bucket: Bucket) => mine.filter(q => !isWorking(q) && bucketOf(q, today) === bucket);
   return [
     ...mine.filter(isWorking),
@@ -92,6 +112,7 @@ export function addDays(date: string, days: number): string {
 
 /** Whether a Quest sits on a calendar day: its planned day, or every day of an "until due" span. */
 export function onDay(quest: Quest, date: string): boolean {
+  if (isDaily(quest)) return !quest.scheduledDate || quest.scheduledDate <= date;
   const start = quest.scheduledDate || quest.dueDate;
   if (!start) return false;
   if (quest.planningMode === "until_due" && quest.dueDate && start <= date && date <= quest.dueDate) return true;
@@ -119,7 +140,8 @@ export interface DayPlan {
 
 /** One day of the timeline. Completed Quests stay visible (ticked) on the day they were planned for. */
 export function dayPlan(quests: readonly Quest[], date: string): DayPlan {
-  const visible = quests.filter(q => q.kind !== "reward" && q.lifecycleState !== "archived" && (isOpen(q) || q.done) && onDay(q, date));
+  const visible = quests.filter(q => q.kind !== "reward" && q.lifecycleState !== "archived" && (isOpen(q) || q.done) && onDay(q, date))
+    .map(q => isDaily(q) ? { ...q, done: q.lastCompletedDate === date } as Quest : q);
   const timed = visible.filter(q => q.scheduledTime && q.scheduledDate === date);
   return {
     anytime: visible.filter(q => !timed.includes(q)).sort((a, b) => Number(a.done) - Number(b.done)),

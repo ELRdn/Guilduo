@@ -10,7 +10,7 @@
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { el, replaceChildren, svg } from "../relay-forge/primitives/dom.ts";
 import { celebrate } from "./celebrate.ts";
-import { addDays, AGENT_STATE, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
+import { addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
 
 export interface AllForAgent {
   readonly id: string;
@@ -27,6 +27,11 @@ export type RequestAnswer = "approve" | "revise" | "defer" | "resume";
 export interface RelayLeg { readonly agentId: string; readonly ask: string; readonly check: boolean }
 export interface Relay { readonly legs: readonly RelayLeg[]; readonly at: number }
 
+/** A Guilduo activity event (`/v1/events`); `source` is "mcp" when an Agent acted. */
+export interface AllForActivity { readonly id: string; readonly at: string; readonly type: string; readonly questId: string; readonly source: string; readonly details: Record<string, unknown> }
+export interface AllForConnection { readonly clientId: string; readonly clientName: string; readonly lastUsedAt: string; readonly authorized: boolean; readonly agentIds: readonly string[] }
+export interface AgentDraft { readonly agentId: string; readonly displayName: string; readonly role: string; readonly instructions: string; readonly allowedScopes: readonly string[]; readonly reviewRequired: boolean }
+
 export interface AllForPort {
   readonly demo: boolean;
   readonly self: () => { readonly id: string; readonly label: string };
@@ -40,6 +45,16 @@ export interface AllForPort {
   readonly relay?: { get(id: string): Relay | null; set(quest: Quest, legs: readonly RelayLeg[]): Promise<Quest> };
   /** Data changed outside this UI (the demo's simulated Agents). */
   subscribe?(listener: () => void): () => void;
+  activity(): Promise<readonly AllForActivity[]>;
+  registerAgent(input: AgentDraft): Promise<AllForAgent>;
+  /** Archives an Agent (Relay Forge's delete); its tasks keep their history. */
+  removeAgent(agentId: string): Promise<void>;
+  readonly mcp: {
+    readonly url: string;
+    connections(): Promise<readonly AllForConnection[]>;
+    /** Sets which Agents a client acts as; an empty list unlinks it. */
+    link(connection: AllForConnection, agentIds: readonly string[]): Promise<void>;
+  };
   readonly today: () => string;
   readonly quests: () => readonly Quest[];
   create(input: Record<string, unknown>): Promise<Quest>;
@@ -82,6 +97,14 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let decisionId: string | null = null;
   let reviseFor: string | null = null;
   const confirmed = new Set<string>();
+  let activity: readonly AllForActivity[] | null = null;
+  let activityLoading = false, activityError = false;
+  let connections: readonly AllForConnection[] | null = null;
+  let connectionsLoading = false, connectionsError = false;
+  const linkDrafts = new Map<string, string[]>();
+  let removingAgent: string | null = null;
+  // Folded step lists stay open across rerenders.
+  const openFolds = new Set<string>();
   const replies = new Map<string, string>();
   let planMode: "day" | "week" = store.get("a4-plan-mode") === "week" ? "week" : "day";
   let sheet: HTMLDialogElement | null = null;
@@ -232,7 +255,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   function stepEditor(quest: Quest): HTMLElement {
-    const input = el("input", { class: "a4-input", type: "text", value: quest.nextAction, "aria-label": "次の一歩", placeholder: "例：ファイルを開くだけ", maxlength: 200 });
+    const input = el("input", { class: "a4-input", type: "text", value: quest.nextAction, "aria-label": "次の一歩", placeholder: "例：ファイルを開くだけ", maxlength: 180 });
     const form = el("form", { class: "a4-step-form" }, input, el("button", { type: "submit", class: "a4-button", disabled: busy }, "保存"));
     form.addEventListener("submit", event => { event.preventDefault(); stepDraftFor = null; update(quest, { nextAction: input.value.trim(), expectedUpdatedAt: quest.updatedAt }, "次の一歩を保存しました"); });
     queueMicrotask(() => input.focus());
@@ -322,13 +345,35 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const quick = bucket === "inbox" || bucket === "review" || bucket === "later"
       ? button("今日やる", () => update(quest, { ...plan(port.today()), expectedUpdatedAt: quest.updatedAt }, "今日に入れました", previousPlan(quest)), "link")
       : bucket === "decision" ? button("確認する", () => { decisionId = quest.id; go("guild"); }, "link") : null;
-    return el("li", { class: "a4-row", "data-bucket": bucket }, el("div", { class: "a4-row-main" }, checkButton(quest), rowText(quest), quick));
+    const steps = openSteps(quest);
+    const next = steps.find(step => blockers(step, port.quests()).length === 0);
+    return el("li", { class: "a4-row", "data-bucket": bucket }, el("div", { class: "a4-row-main" }, checkButton(quest), rowText(quest), quick),
+      steps.length === 0 ? null : (() => {
+        const fold = el("details", { class: "a4-row-steps", open: openFolds.has(quest.id) },
+          el("summary", {}, `ステップ（残り ${steps.length}）${next ? `· 次は「${shortTitle(next.title)}」` : ""}`),
+          stepList(quest, false));
+        fold.addEventListener("toggle", () => { if (fold.open) openFolds.add(quest.id); else openFolds.delete(quest.id); });
+        return fold;
+      })());
   }
 
-  function stepList(quest: Quest): HTMLElement | null {
-    const steps = children(quest);
-    return steps.length === 0 ? null : el("ul", { class: "a4-steps", "aria-label": "小さなステップ" },
-      ...steps.map(step => el("li", {}, checkButton(step), el("span", { "data-done": String(isDone(step)) }, step.title))));
+  const openSteps = (quest: Quest) => stepsOf(quest, port.quests()).filter(step => !pending.has(step.id));
+  /** "[LA-01] …" reads as LA-01; other titles are cut short. */
+  const shortTitle = (title: string) => title.match(/^\[([^\]]{1,12})\]/)?.[1] ?? (title.length > 14 ? `${title.slice(0, 14)}…` : title);
+
+  /** A parent's steps in order: the next one marked, waiting ones say what they wait for. Titles open the step's own sheet. */
+  function stepList(quest: Quest, withDone = true): HTMLElement | null {
+    const open = openSteps(quest);
+    const done = withDone ? children(quest).filter(isDone) : [];
+    if (open.length + done.length === 0) return null;
+    const next = open.find(step => blockers(step, port.quests()).length === 0);
+    return el("ul", { class: "a4-steps", "aria-label": "小さなステップ" },
+      ...[...open, ...done].map(step => {
+        const waits = isDone(step) ? [] : blockers(step, port.quests());
+        return el("li", { "data-waiting": String(waits.length > 0) }, checkButton(step), titleButton(step),
+          step === next ? el("span", { class: "a4-step-tag", "data-kind": "next" }, "次はこれ")
+            : waits.length > 0 ? el("span", { class: "a4-step-tag" }, `待ち（${waits.slice(0, 2).map(item => shortTitle(item.title)).join("・")}${waits.length > 2 ? ` ほか${waits.length - 2}件` : ""} のあと）`) : null);
+      }));
   }
 
   /* ------------------------------ detail sheet ------------------------------ */
@@ -506,12 +551,25 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function openSheet(quest: Quest): void {
     sheet?.close();
     const today = port.today();
-    const title = el("input", { class: "a4-sheet-title", name: "title", value: quest.title, required: true, maxlength: 200, "aria-label": "やること" });
-    const step = el("input", { class: "a4-sheet-next", name: "nextAction", value: quest.nextAction, placeholder: "次の一歩：最初の1分でできること", "aria-label": "次の一歩", maxlength: 200 });
+    // Single-line values that wrap so long titles stay readable; Enter never adds a line break.
+    const line = (attrs: Record<string, string | number | boolean>, value: string) => {
+      const node = el("textarea", { ...attrs, rows: 1 });
+      node.value = value;
+      node.addEventListener("keydown", event => { if (event.key === "Enter" && !event.isComposing) event.preventDefault(); });
+      // Browsers without CSS field-sizing still grow the box.
+      const fit = () => { node.style.height = "auto"; node.style.height = `${node.scrollHeight}px`; };
+      node.addEventListener("input", () => { node.value = node.value.replace(/\n/g, " "); fit(); });
+      requestAnimationFrame(fit);
+      return node;
+    };
+    const title = line({ class: "a4-sheet-title", name: "title", required: true, maxlength: 200, "aria-label": "やること" }, quest.title);
+    const step = line({ class: "a4-sheet-next", name: "nextAction", placeholder: "次の一歩：最初の1分でできること", "aria-label": "次の一歩", maxlength: 180 }, quest.nextAction);
     const date = el("input", { class: "a4-input", type: "date", name: "scheduledDate", value: quest.scheduledDate, "aria-label": "日付" });
     const time = el("input", { class: "a4-input", type: "time", name: "scheduledTime", value: quest.scheduledTime, step: 300, "aria-label": "時刻" });
     const due = el("input", { class: "a4-input", type: "date", name: "dueDate", value: quest.dueDate, "aria-label": "締め切り" });
-    const notes = el("textarea", { class: "a4-input a4-textarea", name: "notes", rows: 4, maxlength: 4000, "aria-label": "メモ", placeholder: "メモ" });
+    const notes = el("textarea", { class: "a4-input a4-textarea", name: "notes", rows: 4, maxlength: 180, "aria-label": "メモ", placeholder: "メモ" });
+    const criteria = el("textarea", { class: "a4-input a4-textarea", name: "completionCriteria", rows: 3, maxlength: 300, "aria-label": "完了の条件", placeholder: "例：対象SHAで、ログインから同期まで確認できたら完了" });
+    criteria.value = quest.completionCriteria ?? "";
     notes.value = quest.notes;
     let estimate = quest.estimatedMinutes;
 
@@ -583,10 +641,19 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     };
     type Pane = keyof typeof panes;
     let open: Pane | null = null;
-    const memo = el("div", { class: "a4-field-row", hidden: !quest.notes }, notes);
+    const memo = el("div", { class: "a4-field-row", hidden: !quest.notes }, el("span", { class: "a4-step-label" }, "メモ"), notes);
     const memoChip = el("button", { type: "button", class: "a4-chip" }, "＋メモ");
     memoChip.addEventListener("click", () => { memo.hidden = false; memoChip.hidden = true; notes.focus(); });
     memoChip.hidden = !memo.hidden;
+    const done = el("div", { class: "a4-field-row", hidden: !quest.completionCriteria }, el("span", { class: "a4-step-label" }, "完了の条件"), criteria);
+    const doneChip = el("button", { type: "button", class: "a4-chip" }, "＋完了の条件");
+    doneChip.hidden = !done.hidden;
+    doneChip.addEventListener("click", () => { done.hidden = false; doneChip.hidden = true; criteria.focus(); });
+    // What has to finish first; each opens its own sheet.
+    const deps = (quest.dependencyIds ?? []).map(id => byId(id)).filter((item): item is Quest => item !== null);
+    const depList = deps.length === 0 ? null : el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "先にやること"),
+      el("ul", { class: "a4-steps" }, ...deps.map(dep => el("li", {}, checkButton(dep), titleButton(dep)))));
+    const parent = quest.parentQuestId ? byId(quest.parentQuestId) : null;
     const chipFor = (key: Pane) => {
       const chip = el("button", { type: "button", class: "a4-chip", "aria-expanded": "false" });
       chip.addEventListener("click", () => {
@@ -620,8 +687,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const relay = relayEditor(quest);
     const form = el("form", { class: "a4-sheet-form", id: "a4-sheet-form" },
       title, step,
-      el("div", { class: "a4-chips a4-sheet-chips" }, chips.date, chips.time, chips.estimate, chips.due, memoChip),
-      ...Object.values(panes), memo);
+      el("div", { class: "a4-chips a4-sheet-chips" }, chips.date, chips.time, chips.estimate, chips.due, doneChip, memoChip),
+      ...Object.values(panes), done, memo);
 
     const mine = quest.assignee.type === "self" && !isDone(quest);
     const steps = el("div", { class: "a4-sheet-steps" });
@@ -644,9 +711,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     };
 
     const close = el("button", { type: "button", class: "a4-button" }, "閉じる");
-    const dialog = el("dialog", { class: "a4-sheet", "aria-labelledby": "a4-sheet-title" },
-      el("div", { class: "a4-sheet-head" }, el("h2", { id: "a4-sheet-title", class: "a4-eyebrow" }, "詳しく"), close),
+    const dialog = el("dialog", { class: "a4-sheet", "aria-label": `詳しく：${quest.title}` },
+      el("div", { class: "a4-sheet-head" },
+        parent ? button(`← 「${shortTitle(parent.title)}」の一部`, () => openSheet(parent), "link") : el("h2", { id: "a4-sheet-title", class: "a4-eyebrow" }, "詳しく"), close),
       form,
+      depList,
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "担当"), relay.node),
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "小さなステップ"), steps, mine ? stepForm : null),
       el("div", { class: "a4-actions a4-sheet-foot" },
@@ -663,6 +732,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       set("title", title.value.trim() || current.title);
       set("nextAction", step.value.trim());
       set("notes", notes.value);
+      if ((current.completionCriteria ?? "") !== criteria.value.trim()) patch.completionCriteria = criteria.value.trim();
       set("estimatedMinutes", estimate);
       set("dueDate", due.value);
       const legs = relay.legs();
@@ -987,14 +1057,200 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         total > 1 && !revising ? button("次の判断へ", next, "link") : null));
   }
 
+  /* ------------------------------ guild: people, activity, registration ------------------------------ */
+
+  const timeLabel = (iso: string) => {
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return "";
+    const hm = at.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+    return at.toDateString() === new Date().toDateString() ? hm : `${at.getMonth() + 1}/${at.getDate()} ${hm}`;
+  };
+
+  function loadActivity(): void {
+    if (activityLoading) return;
+    activityLoading = true;
+    void port.activity().then(items => { activity = items; activityError = false; }, () => { activityError = true; })
+      .finally(() => { activityLoading = false; if (!disposed) render(); });
+  }
+
+  /** One sentence per event: who, what, which task. Agents act through MCP, you through the app. */
+  function activityLine(event: AllForActivity): HTMLElement {
+    const quest = byId(event.questId);
+    const title = quest ? `「${quest.title}」` : "タスク";
+    const agentName = quest?.assignee.type === "agent" ? quest.assignee.label || "Agent" : "Agent";
+    const who = event.source === "mcp" ? agentName : "あなた";
+    const assignee = (event.details.assignee as { label?: string } | undefined)?.label;
+    const to = String(event.details.to ?? "");
+    const what = event.type === "quest.created" ? `${title}を作りました`
+      : event.type === "quest.assignment.ready" ? `${title}を ${assignee || "Agent"} に渡しました`
+      : event.type === "quest.handoff.transitioned" ? `${title}を「${AGENT_STATE[to as keyof typeof AGENT_STATE] ?? to}」にしました`
+      : event.type === "quest.scored" ? `${title}を完了しました`
+      : event.type === "quest.reopened" ? `${title}を戻しました`
+      : event.type === "quest.archived" ? `${title}をしまいました`
+      : `${title}を更新しました`;
+    return el("li", { class: "a4-activity" },
+      el("span", { class: "a4-activity-time" }, timeLabel(event.at)),
+      el("span", { class: "a4-avatar a4-avatar-sm", "data-kind": event.source === "mcp" ? "agent" : "self", "aria-hidden": "true" }, who.slice(0, 1)),
+      el("span", {}, el("strong", {}, who), ` が${what}`));
+  }
+
+  /** A person or Agent and what they are on right now. */
+  function memberRow(kind: "self" | "human" | "agent", name: string, sub: string, doing: readonly Quest[], inactive = false, agentId = ""): HTMLElement {
+    const shown = doing.slice(0, 3);
+    const confirming = agentId !== "" && removingAgent === agentId;
+    const remove = agentId === "" ? null : confirming ? null : button("外す", () => { removingAgent = agentId; render(); }, "link");
+    return el("li", { class: "a4-row a4-member", "data-inactive": String(inactive) },
+      el("div", { class: "a4-row-main" },
+        el("span", { class: "a4-avatar", "data-kind": kind, "aria-hidden": "true" }, name.slice(0, 1)),
+        el("div", { class: "a4-row-text" }, el("strong", {}, name), sub ? el("span", { class: "a4-meta" }, sub) : null), remove),
+      confirming ? el("div", { class: "a4-conn-edit", role: "group", "aria-label": `${name}を外す` },
+        el("p", { class: "a4-muted" }, `${name} をギルドから外します。${doing.length > 0 ? `担当中の ${doing.length} 件はそのまま残るので、必要なら担当を変えてください。` : ""}外した Agent は担当に選べなくなり、MCP の紐付けも使えなくなります。`),
+        el("div", { class: "a4-actions" },
+          button("外す", () => {
+            void run(async () => { await port.removeAgent(agentId); removingAgent = null; say(`${name} を外しました`); }, "外せませんでした。もう一度試してください。");
+          }, "primary"),
+          button("やめる", () => { removingAgent = null; render(); }, "link"))) : null,
+      el("div", { class: "a4-doing" },
+        shown.length === 0 ? el("span", { class: "a4-meta" }, inactive ? "停止中" : kind === "human" ? "担当しているタスクはありません" : "いまは手が空いています")
+          : el("ul", { class: "a4-doing-list" }, ...shown.map(quest => el("li", {},
+            el("span", { class: "a4-state", "data-state": kind === "agent" ? quest.assignee.handoffState : "working" },
+              kind === "agent" ? AGENT_STATE[quest.assignee.handoffState] ?? quest.assignee.handoffState : "いまやっている"),
+            titleButton(quest)))),
+        doing.length > shown.length ? el("span", { class: "a4-meta" }, `ほか ${doing.length - shown.length} 件`) : null));
+  }
+
+  const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+
+  /** Register an Agent with plain choices; the raw scopes stay in Relay Forge. */
+  function openAgentForm(): void {
+    sheet?.close();
+    const name = el("input", { class: "a4-sheet-title", required: true, maxlength: 60, placeholder: "Agent の名前（例：Scribe）", "aria-label": "Agent の名前" });
+    const id = el("input", { class: "a4-input", required: true, maxlength: 80, pattern: "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", placeholder: "例：scribe", "aria-label": "Agent ID", autocapitalize: "off", spellcheck: false });
+    const role = el("input", { class: "a4-input", maxlength: 80, placeholder: "例：文書をまとめる", "aria-label": "何をする Agent か" });
+    const instructions = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, placeholder: "例：下書きは箇条書きで。数字は必ず出典を書く。", "aria-label": "お願いしておくこと" });
+    let idTouched = false;
+    name.addEventListener("input", () => { if (!idTouched) id.value = slug(name.value); });
+    id.addEventListener("input", () => { idTouched = true; });
+    const power = (value: string, label: string, hint: string, checked: boolean) =>
+      el("label", { class: "a4-option a4-choice" }, el("input", { type: "radio", name: "a4-agent-power", value, checked }), el("span", {}, el("strong", {}, label), el("small", { class: "a4-muted" }, hint)));
+    const review = el("input", { type: "checkbox", checked: true });
+    const error = el("p", { class: "a4-error", role: "alert", hidden: true });
+    const field = (label: string, control: HTMLElement, hint = "") => el("label", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, label), control, hint ? el("small", { class: "a4-muted" }, hint) : null);
+    const form = el("form", { class: "a4-sheet-form", id: "a4-agent-form", novalidate: true },
+      name,
+      field("何をする Agent ？", role),
+      field("Agent ID", id, "英小文字・数字・ハイフン。MCP で Agent を指すときに使います。あとから変えられません。"),
+      el("fieldset", { class: "a4-field" }, el("legend", { class: "a4-step-label" }, "やってよいこと"),
+        power("read", "見るだけ", "タスクを読むだけで、変えません", false),
+        power("write", "タスクを進める", "タスクを読み、状態や中身を書き換えます", true)),
+      el("label", { class: "a4-option" }, review, "終わったら、あなたの確認を待つ"),
+      field("お願いしておくこと（任意）", instructions),
+      error);
+    const close = el("button", { type: "button", class: "a4-button" }, "閉じる");
+    const dialog = el("dialog", { class: "a4-sheet", "aria-labelledby": "a4-agent-title" },
+      el("div", { class: "a4-sheet-head" }, el("h2", { id: "a4-agent-title", class: "a4-eyebrow" }, "Agent を登録"), close),
+      form,
+      el("div", { class: "a4-actions a4-sheet-foot" }, el("button", { type: "submit", class: "a4-button a4-primary", form: "a4-agent-form" }, "登録する")));
+    close.addEventListener("click", () => dialog.close());
+    const fail = (message: string, focus: HTMLElement) => { error.textContent = message; error.hidden = false; focus.focus(); };
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const agentId = id.value.trim().toLowerCase();
+      if (!name.value.trim()) return fail("名前を入れてください。", name);
+      if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(agentId)) return fail("Agent ID は英小文字・数字・ハイフンで入れてください。", id);
+      if (port.agents().some(agent => agent.id === agentId)) return fail("この Agent ID はもう使われています。", id);
+      const write = form.querySelector<HTMLInputElement>('input[name="a4-agent-power"]:checked')?.value === "write";
+      error.hidden = true;
+      void run(async () => {
+        const agent = await port.registerAgent({
+          agentId, displayName: name.value.trim(), role: role.value.trim(), instructions: instructions.value.trim(),
+          allowedScopes: write ? ["quests:read", "quests:write"] : ["quests:read"], reviewRequired: review.checked,
+        });
+        dialog.close();
+        say(`${agent.name} を登録しました。担当のリレーで選べます。`);
+      }, "登録できませんでした。もう一度試してください。");
+    });
+    dialog.addEventListener("close", () => { dialog.remove(); if (sheet === dialog) sheet = null; });
+    sheet = dialog;
+    document.body.append(dialog);
+    dialog.showModal();
+    name.focus();
+  }
+
+  /* ------------------------------ settings: MCP ------------------------------ */
+
+  function loadConnections(): void {
+    if (connectionsLoading) return;
+    connectionsLoading = true;
+    void port.mcp.connections().then(items => { connections = items; connectionsError = false; }, () => { connectionsError = true; })
+      .finally(() => { connectionsLoading = false; if (!disposed) render(); });
+  }
+
+  function mcpSection(): HTMLElement {
+    if (connections === null && !connectionsLoading && !connectionsError) loadConnections();
+    const url = el("input", { class: "a4-input a4-mono", readonly: true, value: port.mcp.url, "aria-label": "MCP の接続URL" });
+    url.addEventListener("focus", () => url.select());
+    const copy = button("コピー", () => {
+      void navigator.clipboard.writeText(port.mcp.url).then(() => say("接続URLをコピーしました"), () => { url.focus(); say("コピーできませんでした。URLを選んで手動でコピーしてください。"); });
+    });
+    const agents = port.agents().filter(agent => agent.active);
+    const nameOf = (agentId: string) => port.agents().find(agent => agent.id === agentId)?.name ?? agentId;
+    const card = (connection: AllForConnection) => {
+      const editing = linkDrafts.get(connection.clientId);
+      const head = el("div", { class: "a4-row-main" },
+        el("span", { class: "a4-avatar", "data-kind": "agent", "aria-hidden": "true" }, connection.clientName.slice(0, 1)),
+        el("div", { class: "a4-row-text" }, el("strong", {}, connection.clientName),
+          el("span", { class: "a4-meta" }, [connection.authorized ? "接続中" : "接続が切れています", connection.lastUsedAt ? `最後に使ったのは ${timeLabel(connection.lastUsedAt)}` : ""].filter(Boolean).join(" · "))),
+        editing ? null : button(connection.agentIds.length ? "変える" : "Agent を紐付ける", () => { linkDrafts.set(connection.clientId, [...connection.agentIds]); render(); }));
+      const linked = el("p", { class: "a4-muted a4-conn-line" }, connection.agentIds.length
+        ? `この接続は ${connection.agentIds.map(nameOf).join("・")} として動きます。`
+        : "まだ Agent に紐付いていません。紐付けると、この接続での作業がその Agent の担当として記録されます。");
+      if (!editing) return el("li", { class: "a4-row" }, head, linked);
+      const chips = el("div", { class: "a4-chips", role: "group", "aria-label": "紐付ける Agent" }, ...(agents.length === 0
+        ? [el("span", { class: "a4-muted" }, "先にギルドで Agent を登録してください。")]
+        : agents.map(agent => {
+          const chip = el("button", { type: "button", class: "a4-chip", "aria-pressed": String(editing.includes(agent.id)) }, agent.name);
+          chip.addEventListener("click", () => {
+            linkDrafts.set(connection.clientId, editing.includes(agent.id) ? editing.filter(item => item !== agent.id) : [...editing, agent.id]);
+            render();
+          });
+          return chip;
+        })));
+      return el("li", { class: "a4-row" }, head,
+        el("div", { class: "a4-conn-edit" },
+          el("p", { class: "a4-muted" }, "この接続で動かす Agent を選んでください。複数選ぶと、最初の Agent が既定になります。"),
+          chips,
+          el("div", { class: "a4-actions" },
+            button("保存", () => {
+              const next = linkDrafts.get(connection.clientId) ?? [];
+              void run(async () => {
+                await port.mcp.link(connection, next);
+                linkDrafts.delete(connection.clientId);
+                connections = await port.mcp.connections();
+                say(next.length ? `${next.map(nameOf).join("・")} に紐付けました` : "紐付けを外しました");
+              }, "保存できませんでした。もう一度試してください。");
+            }, "primary"),
+            button("やめる", () => { linkDrafts.delete(connection.clientId); render(); }, "link"))));
+    };
+    return el("section", { class: "a4-group" },
+      el("h2", { class: "a4-subtitle" }, "MCP 接続"),
+      el("p", { class: "a4-muted" }, "Claude や Codex などの MCP クライアントにこの URL を追加してサインインすると、下に接続が表示されます。"),
+      el("div", { class: "a4-step-form" }, url, copy),
+      connectionsLoading && connections === null ? el("p", { class: "a4-muted" }, "接続を読み込んでいます…")
+        : connectionsError ? el("p", { class: "a4-muted" }, "接続を読み込めませんでした。", button("もう一度", loadConnections, "link"))
+        : (connections ?? []).length === 0 ? el("p", { class: "a4-muted" }, "まだ接続はありません。")
+        : el("ul", { class: "a4-list" }, ...(connections ?? []).map(card)));
+  }
+
   function guildView(): HTMLElement {
     const list = quests().filter(needsDecision).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const index = Math.max(0, list.findIndex(q => q.id === decisionId));
     const current = list[index] ?? null;
-    const agentWork = quests().filter(q => isOpen(q) && q.assignee.type === "agent" && !needsDecision(q));
+    const agentWork = quests().filter(q => isOpen(q) && q.assignee.type === "agent");
+    const byAgent = (id: string) => (["review_required", ...AGENT_STATE_ORDER] as const).flatMap(state => agentWork.filter(q => q.assignee.id === id && q.assignee.handoffState === state));
+    if (activity === null && !activityLoading && !activityError) loadActivity();
     const later = quests().filter(q => q.humanRequest?.status === "deferred" && isOpen(q));
     const agents = port.agents();
-    const count = (id: string) => agentWork.filter(q => q.assignee.id === id).length;
     const others = port.members().filter(member => member.id !== port.self().id);
     return el("section", { class: "a4-view" },
       el("h1", { class: "a4-title", tabindex: -1 }, "ギルド"),
@@ -1003,25 +1259,20 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         el("h2", { class: "a4-subtitle" }, `あなたの判断待ち（${list.length}）`),
         current ? decisionCard(current, index, list.length, () => { decisionId = list[(index + 1) % list.length]!.id; reviseFor = null; render(); })
           : el("p", { class: "a4-muted" }, "いま、あなたの判断を待っているものはありません。")),
-      agentWork.length === 0 ? null : el("section", { class: "a4-group" },
-        el("h2", { class: "a4-subtitle" }, `Agentが進めていること（${agentWork.length}）`),
-        el("ul", { class: "a4-list" }, ...AGENT_STATE_ORDER.flatMap(state => agentWork.filter(q => q.assignee.handoffState === state)).map(q =>
-          el("li", { class: "a4-row", "data-tone": "agent" }, el("div", { class: "a4-row-main" },
-            el("span", { class: "a4-state", "data-state": q.assignee.handoffState }, AGENT_STATE[q.assignee.handoffState] ?? q.assignee.handoffState),
-            rowText(q)))))),
       later.length === 0 ? null : el("section", { class: "a4-group" },
         el("h2", { class: "a4-subtitle" }, `あとで見る（${later.length}）`),
         el("ul", { class: "a4-list" }, ...later.map(q => el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, rowText(q), button("判断待ちに戻す", () => answer(q, "resume"), "link")))))),
       el("section", { class: "a4-group" },
-        el("h2", { class: "a4-subtitle" }, "メンバー"),
+        el("div", { class: "a4-group-head" }, el("h2", { class: "a4-subtitle" }, "人と Agent"), button("＋ Agent を登録", openAgentForm)),
         el("ul", { class: "a4-list" },
-          el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, el("span", { class: "a4-avatar", "data-kind": "self" }, port.self().label.slice(0, 1)), el("div", { class: "a4-row-text" }, el("strong", {}, `${port.self().label}（あなた）`)))),
-          ...others.map(member => el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, el("span", { class: "a4-avatar", "data-kind": "human" }, member.name.slice(0, 1)),
-            el("div", { class: "a4-row-text" }, el("strong", {}, member.name), el("span", { class: "a4-meta" }, member.owner ? "オーナー" : "メンバー"))))),
-          ...agents.map(agent => el("li", { class: "a4-row", "data-inactive": String(!agent.active) }, el("div", { class: "a4-row-main" }, el("span", { class: "a4-avatar", "data-kind": "agent" }, agent.name.slice(0, 1)),
-            el("div", { class: "a4-row-text" }, el("strong", {}, `${agent.name} · Agent`),
-              el("span", { class: "a4-meta" }, [agent.role, agent.active ? (count(agent.id) > 0 ? `進行中 ${count(agent.id)} 件` : "手が空いています") : "停止中"].filter(Boolean).join(" · "))))))),
-        el("p", { class: "a4-muted" }, "Agentの登録や権限の設定は、いまは", el("a", { class: "a4-link", href: "../relay-forge/" }, "詳しい画面"), "で行います。")));
+          memberRow("self", `${port.self().label}（あなた）`, "", quests().filter(q => q.assignee.type === "self" && isWorking(q))),
+          ...others.map(member => memberRow("human", member.name, member.owner ? "オーナー" : "メンバー", quests().filter(q => isOpen(q) && q.assignee.type === "human" && q.assignee.id === member.id))),
+          ...agents.map(agent => memberRow("agent", agent.name, agent.role ? `Agent · ${agent.role}` : "Agent", byAgent(agent.id), !agent.active, agent.id)))),
+      el("section", { class: "a4-group" },
+        el("h2", { class: "a4-subtitle" }, "最近の活動"),
+        activity === null ? el("p", { class: "a4-muted" }, activityError ? "活動を読み込めませんでした。" : "読み込んでいます…", activityError ? button("もう一度", loadActivity, "link") : null)
+          : activity.length === 0 ? el("p", { class: "a4-muted" }, "まだ活動はありません。")
+          : el("ul", { class: "a4-activity-list" }, ...activity.slice(0, 10).map(activityLine))));
   }
 
   function settingsView(): HTMLElement {
@@ -1050,6 +1301,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("label", { class: "a4-option" }, gameToggle, "ゲーム要素（レベル・XP）を表示する"),
       themes,
       el("label", { class: "a4-option" }, bloom, "やわらかい色分け（背景のグラデーションとタスクごとの色）"),
+      mcpSection(),
       el("p", {}, el("a", { class: "a4-link", href: "../relay-forge/" }, "Relay Forge（詳しい画面）を開く")),
       port.signOut ? button("サインアウト", () => { void port.signOut?.(); }, "link") : null);
   }
@@ -1068,6 +1320,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   /* ------------------------------ shell ------------------------------ */
 
   function go(next: View): void {
+    if (next === "guild" && view !== "guild") { activity = null; activityError = false; }
+    if (next === "settings" && view !== "settings") { connections = null; connectionsError = false; }
     view = next;
     stepDraftFor = null;
     if (location.hash !== `#${next}`) history.pushState(null, "", `#${next}`);

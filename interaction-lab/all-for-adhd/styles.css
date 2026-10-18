@@ -137,9 +137,36 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 .a4-toast .a4-link { white-space: nowrap; }
 
-.a4-boot { max-width: 520px; margin: 15vh auto; padding: 0 var(--qf-space-8); display: flex; flex-direction: column; gap: var(--qf-space-6); }
-.a4-boot h1 { margin: 0; font: var(--qf-text-page); color: var(--qf-color-fg-strong); outline: none; }
+/* Boot screens (loading, sign-in, errors): centred column on the wash; padding, not margin, so the wash starts at the top. */
+.a4-boot {
+  min-height: 100vh; min-height: 100dvh; width: min(440px, 100%); margin: 0 auto; padding: var(--qf-space-10, 48px) var(--qf-space-8);
+  display: flex; flex-direction: column; justify-content: center; gap: var(--qf-space-6);
+}
 .a4-boot p { margin: 0; }
+.a4-boot-mark { display: inline-flex; align-items: center; gap: var(--qf-space-3); font-weight: 700; letter-spacing: 0.02em; color: var(--qf-color-fg-strong); }
+.a4-boot-mark::before { content: ""; width: 10px; height: 10px; border-radius: var(--qf-radius-pill); background: var(--a4-hue-1, var(--qf-color-human)); box-shadow: 14px 0 0 var(--a4-hue-3, var(--qf-color-agent)); margin-right: 14px; }
+.a4-boot h1 { margin: var(--qf-space-4) 0 0; font: 600 28px/1.35 var(--qf-font-sans); color: var(--qf-color-fg-strong); outline: none; text-wrap: balance; word-break: auto-phrase; }
+.a4-boot-lead { color: var(--qf-color-fg-default); }
+.a4-boot-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--qf-space-3); }
+.a4-boot-points li { display: flex; align-items: center; gap: var(--qf-space-4); color: var(--qf-color-fg-strong); }
+.a4-boot-points li::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: var(--qf-radius-pill); background: var(--a4-hue-1, var(--qf-color-human)); }
+.a4-boot-points li:nth-child(2)::before { background: var(--a4-hue-2, var(--qf-color-human)); }
+.a4-boot-points li:nth-child(3)::before { background: var(--a4-hue-3, var(--qf-color-agent)); }
+.a4-boot-actions { display: flex; flex-direction: column; gap: var(--qf-space-4); margin-top: var(--qf-space-4); }
+.a4-boot-actions .a4-button { width: 100%; }
+.a4-boot-ghost {
+  display: flex; flex-direction: column; gap: var(--qf-space-5); margin-top: var(--qf-space-4); padding: var(--qf-space-8);
+  background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-lg); box-shadow: var(--a4-card-shadow, none);
+}
+.a4-boot-ghost span, .a4-boot-ghost i { display: block; height: 12px; border-radius: var(--qf-radius-pill); background: var(--qf-color-inset); }
+.a4-boot-ghost span:nth-child(2) { height: 22px; }
+.a4-boot-ghost-chips { display: flex; gap: var(--qf-space-3); }
+.a4-boot-ghost-chips i { width: 56px; height: 32px; }
+/* The only motion is a slow breath on the placeholder, and only when motion is welcome. */
+@media (prefers-reduced-motion: no-preference) {
+  .a4-boot-ghost { animation: a4-breathe 1.8s ease-in-out infinite; }
+  @keyframes a4-breathe { 50% { opacity: 0.55; } }
+}
 
 .a4-app[data-busy="true"] .a4-main { cursor: progress; }
 
@@ -347,6 +374,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 /* The wash is fixed to the viewport, so sticky bars painted with it line up seamlessly. */
 body, .a4-top { background: var(--a4-wash, var(--qf-color-canvas)) fixed; }
+/* Where fixed backgrounds are ignored (embedded and mobile browsers) the wash must not tile on short pages. */
+html { min-height: 100%; background: var(--qf-color-canvas); }
+body { min-height: 100vh; background-repeat: no-repeat; background-color: var(--qf-color-canvas); }
 .a4-row, .a4-focus, .a4-pick, .a4-dock { box-shadow: var(--a4-card-shadow, none); }
 .a4-slot[data-tone="self"] .a4-slot-pill { background: color-mix(in srgb, var(--a4-tone) var(--a4-pill-fill, 0%), var(--qf-color-surface)); }
 /* Open checks take the task's colour so each row reads as one coloured thing. */
@@ -486,3 +516,40 @@ body, .a4-top { background: var(--a4-wash, var(--qf-color-canvas)) fixed; }
 .a4-slot-pick:hover { background: var(--qf-color-selected); }
 .a4-slot-pick[aria-selected="true"] { background: var(--qf-color-accent); color: var(--qf-color-fg-on-accent); }
 .a4-slot-pick[aria-selected="true"] .a4-meta { color: inherit; }
+
+/* Guild: people and Agents with what they are on, recent activity, Agent registration. */
+.a4-group-head { display: flex; align-items: center; justify-content: space-between; gap: var(--qf-space-4); flex-wrap: wrap; }
+.a4-group-head .a4-subtitle { margin: 0; }
+.a4-doing { display: flex; flex-direction: column; gap: var(--qf-space-1); padding: 0 var(--qf-space-5) var(--qf-space-4) calc(var(--qf-space-5) + 44px + var(--qf-space-5)); }
+.a4-doing-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.a4-doing-list li { display: flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
+.a4-doing-list .a4-row-title { font-weight: 400; color: var(--qf-color-fg-default); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a4-activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.a4-activity { display: grid; grid-template-columns: 76px 28px minmax(0, 1fr); align-items: center; gap: var(--qf-space-4); min-height: 44px; border-bottom: var(--qf-border-width) solid var(--qf-color-border-subtle); }
+.a4-activity:last-child { border-bottom: 0; }
+.a4-activity-time { font: 400 13px/1.3 var(--qf-font-mono); color: var(--qf-color-fg-muted); font-variant-numeric: tabular-nums; }
+.a4-activity strong { color: var(--qf-color-fg-strong); }
+.a4-avatar.a4-avatar-sm { width: 28px; height: 28px; margin: 0; font-size: 13px; }
+.a4-choice { align-items: flex-start; padding: var(--qf-space-2) 0; }
+.a4-choice > span { display: flex; flex-direction: column; }
+.a4-choice input { margin-top: 3px; }
+.a4-error { margin: 0; color: var(--qf-color-danger, var(--qf-color-warning)); font-weight: 600; }
+.a4-mono { font-family: var(--qf-font-mono); font-size: 14px; }
+.a4-conn-line { padding: 0 var(--qf-space-5) var(--qf-space-4) calc(var(--qf-space-5) + 44px + var(--qf-space-5)); }
+.a4-conn-edit { display: flex; flex-direction: column; gap: var(--qf-space-4); padding: 0 var(--qf-space-5) var(--qf-space-5); }
+@media (max-width: 760px) {
+  .a4-doing, .a4-conn-line { padding-left: var(--qf-space-5); }
+  .a4-activity { grid-template-columns: 60px 28px minmax(0, 1fr); gap: var(--qf-space-3); }
+}
+.a4-row-steps { padding: 0 var(--qf-space-5) var(--qf-space-3) calc(var(--qf-space-5) + 44px); }
+.a4-row-steps summary { min-height: 36px; display: flex; align-items: center; cursor: pointer; color: var(--qf-color-fg-muted); font-size: 14px; font-weight: 600; width: max-content; }
+.a4-row-steps .a4-row-title { min-height: 36px; font-weight: 400; }
+/* Step order: the next one is marked, waiting ones are quieter. */
+.a4-steps li { flex-wrap: wrap; }
+.a4-steps .a4-row-title { flex: 1 1 12em; min-width: 0; }
+.a4-steps li[data-waiting="true"] .a4-row-title { color: var(--qf-color-fg-muted); }
+.a4-step-tag { flex: none; padding: 1px var(--qf-space-3); border-radius: var(--qf-radius-pill); font-size: 12px; font-weight: 600; color: var(--qf-color-fg-muted); border: var(--qf-border-width) solid var(--qf-color-border-subtle); }
+.a4-step-tag[data-kind="next"] { color: var(--qf-color-fg-strong); border-color: var(--qf-color-accent); background: color-mix(in srgb, var(--qf-color-accent) 12%, transparent); }
+/* Sheet text grows with its content instead of scrolling inside a small box. */
+.a4-sheet-title, .a4-sheet-next { resize: none; overflow: hidden; field-sizing: content; font-family: inherit; }
+.a4-sheet .a4-textarea { field-sizing: content; min-height: 4.5em; max-height: 50vh; }
