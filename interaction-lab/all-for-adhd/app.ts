@@ -10,10 +10,28 @@
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { el, replaceChildren, svg } from "../relay-forge/primitives/dom.ts";
 import { celebrate } from "./celebrate.ts";
-import { addDays, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
+import { addDays, AGENT_STATE, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
+
+export interface AllForAgent {
+  readonly id: string;
+  readonly name: string;
+  readonly role: string;
+  readonly active: boolean;
+  /** Handoff state a Quest enters when given to this Agent. */
+  readonly startState: string;
+}
+
+export type RequestAnswer = "approve" | "revise" | "defer" | "resume";
 
 export interface AllForPort {
   readonly demo: boolean;
+  readonly self: () => { readonly id: string; readonly label: string };
+  readonly agents: () => readonly AllForAgent[];
+  readonly members: () => readonly { readonly id: string; readonly name: string; readonly owner: boolean }[];
+  /** Answers a review request; the server validates with a dry run before writing. */
+  answer(quest: Quest, action: RequestAnswer, response: string): Promise<Quest>;
+  /** Accepts an Agent's finished work, or sends it back with a note. Dry run first. */
+  review(quest: Quest, accept: boolean, note: string): Promise<Quest>;
   readonly today: () => string;
   readonly quests: () => readonly Quest[];
   create(input: Record<string, unknown>): Promise<Quest>;
@@ -23,11 +41,12 @@ export interface AllForPort {
   readonly signOut?: () => Promise<void>;
 }
 
-type View = "now" | "plan" | "all" | "settings";
+type View = "now" | "plan" | "all" | "guild" | "settings";
 const VIEWS: readonly { id: View; label: string }[] = [
   { id: "now", label: "今" },
   { id: "plan", label: "予定" },
   { id: "all", label: "やること" },
+  { id: "guild", label: "ギルド" },
   { id: "settings", label: "設定" },
 ];
 const UNDO_MS = 5000;
@@ -51,6 +70,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let focusId: string | null = null;
   const skipped = new Set<string>();
   let planDate = port.today();
+  // Guild: which decision is shown, whether "please fix" is open, and what was typed.
+  let decisionId: string | null = null;
+  let reviseFor: string | null = null;
+  const confirmed = new Set<string>();
+  const replies = new Map<string, string>();
   let planMode: "day" | "week" = store.get("a4-plan-mode") === "week" ? "week" : "day";
   let sheet: HTMLDialogElement | null = null;
   let repaintSheet: (() => void) | null = null;
@@ -238,7 +262,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   function decisionNotice(): HTMLElement | null {
     const count = quests().filter(needsDecision).length;
-    return count === 0 ? null : el("a", { class: "a4-notice", href: "../relay-forge/" }, `あなたの判断待ちが ${count} 件あります`, el("span", { "aria-hidden": "true" }, " →"));
+    if (count === 0) return null;
+    const link = el("a", { class: "a4-notice", href: "#guild" }, `あなたの判断待ちが ${count} 件あります`, el("span", { "aria-hidden": "true" }, " →"));
+    link.addEventListener("click", event => { event.preventDefault(); go("guild"); });
+    return link;
   }
 
   const isDone = (quest: Quest) => quest.done || pending.has(quest.id);
@@ -286,7 +313,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function row(quest: Quest, bucket: Bucket): HTMLElement {
     const quick = bucket === "inbox" || bucket === "review" || bucket === "later"
       ? button("今日やる", () => update(quest, { ...plan(port.today()), expectedUpdatedAt: quest.updatedAt }, "今日に入れました", previousPlan(quest)), "link")
-      : bucket === "decision" ? el("a", { class: "a4-link", href: "../relay-forge/" }, "確認する") : null;
+      : bucket === "decision" ? button("確認する", () => { decisionId = quest.id; go("guild"); }, "link") : null;
     return el("li", { class: "a4-row", "data-bucket": bucket }, el("div", { class: "a4-row-main" }, checkButton(quest), rowText(quest), quick));
   }
 
@@ -317,12 +344,32 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       });
       return chip;
     }));
+    // Handing work to an Agent is spelled out before saving; it is never automatic.
+    const assignable = !isDone(quest) && !quest.humanRequest && quest.assignee.type !== "human";
+    const agents = port.agents().filter(agent => agent.active);
+    const assignee = el("select", { class: "a4-input", name: "assignee", disabled: !assignable },
+      el("option", { value: "self" }, `自分（${port.self().label}）`),
+      ...agents.map(agent => el("option", { value: agent.id }, `${agent.name}${agent.role ? ` · ${agent.role}` : ""}`)),
+      quest.assignee.type === "agent" && !agents.some(agent => agent.id === quest.assignee.id) ? el("option", { value: quest.assignee.id }, quest.assignee.label || "Agent") : null);
+    assignee.value = quest.assignee.type === "agent" ? quest.assignee.id : "self";
+    const assignHint = el("small", { class: "a4-muted", "aria-live": "polite" });
+    const paintAssign = () => {
+      const target = agents.find(agent => agent.id === assignee.value);
+      const current = quest.assignee.type === "agent" ? quest.assignee.id : "self";
+      assignHint.textContent = assignee.value === current
+        ? quest.assignee.type === "agent" ? `いまは ${quest.assignee.label || "Agent"} が担当しています（${AGENT_STATE[quest.assignee.handoffState] ?? quest.assignee.handoffState}）。` : ""
+        : target ? `保存すると ${target.name} に渡します。${target.name} が受け取って進め、終わったらあなたに確認を頼みます。` : "保存すると自分の担当に戻します。";
+    };
+    assignee.addEventListener("change", paintAssign);
+    paintAssign();
+    const assignField = el("label", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, "担当"), assignee, assignHint);
     const form = el("form", { class: "a4-sheet-form", id: "a4-sheet-form" },
       field("やること", title),
       field("次の一歩", step, "小さくてOK。最初の1分でできること。"),
       el("div", { class: "a4-field-pair" }, field("日付", date), field("時刻", time)),
       el("div", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, "目安"), chips),
       field("締め切り", due),
+      assignField,
       field("メモ", notes));
 
     const mine = quest.assignee.type === "self" && !isDone(quest);
@@ -346,7 +393,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const close = el("button", { type: "button", class: "a4-button" }, "閉じる");
     const dialog = el("dialog", { class: "a4-sheet", "aria-labelledby": "a4-sheet-title" },
       el("div", { class: "a4-sheet-head" }, el("h2", { id: "a4-sheet-title", class: "a4-subtitle" }, "詳しく"), close),
-      quest.assignee.type !== "self" ? el("p", { class: "a4-muted" }, `担当：${quest.assignee.label || "Agent"}。担当の変更や受け渡しは詳しい画面で行います。`) : null,
+
       form,
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "小さなステップ"), steps, mine ? stepForm : null),
       el("div", { class: "a4-actions a4-sheet-foot" },
@@ -364,6 +411,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       set("notes", notes.value);
       set("estimatedMinutes", estimate);
       set("dueDate", due.value);
+      const owner = current.assignee.type === "agent" ? current.assignee.id : "self";
+      if (assignable && assignee.value !== owner) {
+        const agent = agents.find(item => item.id === assignee.value);
+        patch.assignee = agent
+          ? { type: "agent", id: agent.id, label: agent.name, handoffState: agent.startState || "ready" }
+          : { type: "self", id: port.self().id, label: port.self().label, handoffState: "none" };
+      }
       // A time without a day lands on the day being looked at.
       const day = date.value || (time.value ? planDate : "");
       const at = day ? time.value : "";
@@ -606,6 +660,98 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       section("agent", "Agentが担当"));
   }
 
+  /** Shows a request's link only when it is a plain web address. */
+  const safeUrl = (value: string | undefined) => { try { const url = new URL(value ?? ""); return url.protocol === "https:" || url.protocol === "http:" ? url.href : null; } catch { return null; } };
+
+  function answer(quest: Quest, action: RequestAnswer): void {
+    const text = (replies.get(quest.id) ?? "").trim();
+    void run(async () => {
+      await port.answer(quest, action, text);
+      replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
+      if (cheer && action === "approve") celebrate(innerWidth / 2, innerHeight * 0.55);
+      say(action === "approve" ? "OKを伝えました" : action === "revise" ? "直してほしい点を伝えました" : action === "defer" ? "あとで見るに移しました" : "判断待ちに戻しました");
+    }, "送れませんでした。内容が更新されていないか確認して、もう一度試してください。");
+  }
+
+  function review(quest: Quest, accept: boolean): void {
+    const note = (replies.get(quest.id) ?? "").trim();
+    void run(async () => {
+      await port.review(quest, accept, note);
+      replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
+      if (cheer && accept) celebrate(innerWidth / 2, innerHeight * 0.55);
+      say(accept ? "受け取りました" : "やり直しをお願いしました");
+    }, "送れませんでした。Agentの状態が変わっていないか確認して、もう一度試してください。");
+  }
+
+  /** One decision at a time, like the Now screen: what is asked, what to check, then a single clear answer. */
+  function decisionCard(quest: Quest, index: number, total: number, next: () => void): HTMLElement {
+    const request = quest.humanRequest ?? null;
+    const source = request?.sourceQuestId ? byId(request.sourceQuestId) : null;
+    const link = safeUrl(request?.artifactUrl || quest.handoff?.artifactUrl);
+    const detail = (label: string, value: string | undefined) => value ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, label), value) : null;
+    const check = el("input", { type: "checkbox", checked: confirmed.has(quest.id) });
+    const reply = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, "aria-label": "直してほしいこと", placeholder: "例：見出しをもう少し短く" });
+    reply.value = replies.get(quest.id) ?? "";
+    const ok = button(request ? "OK、これで良い" : "受け取る", () => request ? answer(quest, "approve") : review(quest, true), "primary", !confirmed.has(quest.id));
+    const send = button("送る", () => request ? answer(quest, "revise") : review(quest, false), "secondary", !confirmed.has(quest.id) || !reply.value.trim());
+    const sync = () => { ok.disabled = busy || !check.checked; send.disabled = busy || !check.checked || !reply.value.trim(); };
+    check.addEventListener("change", () => { if (check.checked) confirmed.add(quest.id); else confirmed.delete(quest.id); sync(); });
+    reply.addEventListener("input", () => { replies.set(quest.id, reply.value); sync(); });
+    const revising = reviseFor === quest.id;
+    return el("div", { class: "a4-focus a4-decision" },
+      el("p", { class: "a4-eyebrow" }, request ? `${quest.requester?.label || "Agent"} からの確認依頼` : `${quest.assignee.label || "Agent"} が「終わった」と報告しています`,
+        total > 1 ? el("span", { class: "a4-meta" }, `  ${index + 1} / ${total}`) : null),
+      el("h2", { class: "a4-focus-title" }, quest.title),
+      detail("理由", request?.reason), detail("確認すること", request?.checkTarget), detail("完了の条件", quest.completionCriteria), detail("報告", request ? undefined : quest.handoff?.note),
+      el("div", { class: "a4-actions" },
+        source ? button("元のタスクを見る", () => openSheet(source), "link") : null,
+        link ? el("a", { class: "a4-link", href: link, target: "_blank", rel: "noopener noreferrer" }, "成果物を開く ↗") : null),
+      el("label", { class: "a4-option" }, check, "中身を確認しました"),
+      revising ? el("div", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, request ? "直してほしいこと" : "やり直してほしいこと"), reply) : null,
+      el("div", { class: "a4-actions" },
+        revising ? send : ok,
+        revising ? button("やめる", () => { reviseFor = null; render(); }, "link") : button("直してほしい", () => { reviseFor = quest.id; render(); main.querySelector<HTMLElement>(".a4-decision textarea")?.focus(); }),
+        request && !revising ? button("あとで", () => answer(quest, "defer"), "link") : null,
+        total > 1 && !revising ? button("次の判断へ", next, "link") : null));
+  }
+
+  function guildView(): HTMLElement {
+    const list = quests().filter(needsDecision).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const index = Math.max(0, list.findIndex(q => q.id === decisionId));
+    const current = list[index] ?? null;
+    const agentWork = quests().filter(q => isOpen(q) && q.assignee.type === "agent" && !needsDecision(q));
+    const later = quests().filter(q => q.humanRequest?.status === "deferred" && isOpen(q));
+    const agents = port.agents();
+    const count = (id: string) => agentWork.filter(q => q.assignee.id === id).length;
+    const others = port.members().filter(member => member.id !== port.self().id);
+    return el("section", { class: "a4-view" },
+      el("h1", { class: "a4-title", tabindex: -1 }, "ギルド"),
+      el("p", { class: "a4-lead" }, "Agentや仲間と一緒に進めるための場所です。あなたが決めることだけ、ここに集まります。"),
+      el("section", { class: "a4-group" },
+        el("h2", { class: "a4-subtitle" }, `あなたの判断待ち（${list.length}）`),
+        current ? decisionCard(current, index, list.length, () => { decisionId = list[(index + 1) % list.length]!.id; reviseFor = null; render(); })
+          : el("p", { class: "a4-muted" }, "いま、あなたの判断を待っているものはありません。")),
+      agentWork.length === 0 ? null : el("section", { class: "a4-group" },
+        el("h2", { class: "a4-subtitle" }, `Agentが進めていること（${agentWork.length}）`),
+        el("ul", { class: "a4-list" }, ...AGENT_STATE_ORDER.flatMap(state => agentWork.filter(q => q.assignee.handoffState === state)).map(q =>
+          el("li", { class: "a4-row", "data-tone": "agent" }, el("div", { class: "a4-row-main" },
+            el("span", { class: "a4-state", "data-state": q.assignee.handoffState }, AGENT_STATE[q.assignee.handoffState] ?? q.assignee.handoffState),
+            rowText(q)))))),
+      later.length === 0 ? null : el("section", { class: "a4-group" },
+        el("h2", { class: "a4-subtitle" }, `あとで見る（${later.length}）`),
+        el("ul", { class: "a4-list" }, ...later.map(q => el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, rowText(q), button("判断待ちに戻す", () => answer(q, "resume"), "link")))))),
+      el("section", { class: "a4-group" },
+        el("h2", { class: "a4-subtitle" }, "メンバー"),
+        el("ul", { class: "a4-list" },
+          el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, el("span", { class: "a4-avatar", "data-kind": "self" }, port.self().label.slice(0, 1)), el("div", { class: "a4-row-text" }, el("strong", {}, `${port.self().label}（あなた）`)))),
+          ...others.map(member => el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, el("span", { class: "a4-avatar", "data-kind": "human" }, member.name.slice(0, 1)),
+            el("div", { class: "a4-row-text" }, el("strong", {}, member.name), el("span", { class: "a4-meta" }, member.owner ? "オーナー" : "メンバー"))))),
+          ...agents.map(agent => el("li", { class: "a4-row", "data-inactive": String(!agent.active) }, el("div", { class: "a4-row-main" }, el("span", { class: "a4-avatar", "data-kind": "agent" }, agent.name.slice(0, 1)),
+            el("div", { class: "a4-row-text" }, el("strong", {}, `${agent.name} · Agent`),
+              el("span", { class: "a4-meta" }, [agent.role, agent.active ? (count(agent.id) > 0 ? `進行中 ${count(agent.id)} 件` : "手が空いています") : "停止中"].filter(Boolean).join(" · "))))))),
+        el("p", { class: "a4-muted" }, "Agentの登録や権限の設定は、いまは", el("a", { class: "a4-link", href: "../relay-forge/" }, "詳しい画面"), "で行います。")));
+  }
+
   function settingsView(): HTMLElement {
     const cheerToggle = el("input", { type: "checkbox", checked: cheer });
     cheerToggle.addEventListener("change", () => { cheer = cheerToggle.checked; store.set("a4-cheer", cheer ? null : "off"); });
@@ -663,13 +809,15 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const active = document.activeElement;
     const keepFocus = active instanceof HTMLElement && main.contains(active) && active.matches("input") ? null : active instanceof HTMLElement && main.contains(active) ? active.textContent : null;
     replaceChildren(nav, ...VIEWS.map(item => {
-      const tab = el("a", { class: "a4-tab", href: `#${item.id}`, "aria-current": view === item.id ? "page" : null, "data-view": item.id }, item.label);
+      const waiting = item.id === "guild" ? quests().filter(needsDecision).length : 0;
+      const tab = el("a", { class: "a4-tab", href: `#${item.id}`, "aria-current": view === item.id ? "page" : null, "data-view": item.id }, item.label,
+        waiting > 0 ? el("span", { class: "a4-badge", "aria-label": `判断待ち ${waiting} 件` }, String(waiting)) : null);
       tab.addEventListener("click", event => { event.preventDefault(); go(item.id); });
       return tab;
     }));
     root.querySelector(".a4-app")?.setAttribute("data-busy", String(busy));
     main.setAttribute("data-view", view);
-    replaceChildren(main, view === "now" ? nowView() : view === "plan" ? planView() : view === "all" ? allView() : settingsView());
+    replaceChildren(main, view === "now" ? nowView() : view === "plan" ? planView() : view === "all" ? allView() : view === "guild" ? guildView() : settingsView());
     replaceChildren(dockHost, dock());
     repaintSheet?.();
     paintProgress();

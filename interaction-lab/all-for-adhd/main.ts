@@ -10,7 +10,7 @@ import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { requireElement } from "../relay-forge/primitives/dom.ts";
 import { observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
 import { QuestForgeRepository } from "../repository.ts";
-import { mountAllFor, type AllForPort } from "./app.ts";
+import { mountAllFor, type AllForAgent, type AllForPort } from "./app.ts";
 
 const root = requireElement<HTMLElement>(document, "#a4-root");
 let unmount: (() => void) | null = null;
@@ -44,7 +44,7 @@ function questOf(response: Record<string, unknown>, id?: string): Quest {
 
 async function showDemo(): Promise<void> {
   stopAuth?.();
-  const [{ fixtureRawQuests }, { FIXTURE_TODAY }] = await Promise.all([import("../relay-forge/fixtures.ts"), import("../relay-forge/screens/fixtures.ts")]);
+  const [{ fixtureRawQuests }, { FIXTURE_TODAY, fixtureAgentsFor, fixturePartyMembersFor }] = await Promise.all([import("../relay-forge/fixtures.ts"), import("../relay-forge/screens/fixtures.ts")]);
   const stamp = () => new Date().toISOString();
   // The Relay fixtures are Agent-heavy; a few personal tasks make the demo representative.
   const mine = (id: string, title: string, patch: Partial<Quest>): Quest => ({
@@ -61,6 +61,11 @@ async function showDemo(): Promise<void> {
     mine("demo-slide", "来週の発表スライドを作る", { scheduledDate: FIXTURE_TODAY, planningState: "scheduled", estimatedMinutes: 60 }),
     mine("demo-slide-1", "構成を3行で書く", { parentQuestId: "demo-slide" }),
     mine("demo-slide-2", "図を1枚つくる", { parentQuestId: "demo-slide" }),
+    mine("demo-review", "週報の下書きを確認する", {
+      requester: { type: "agent", id: "a-scribe", label: "Scribe" },
+      completionCriteria: "数字と日付が先週の記録と一致している",
+      humanRequest: { sourceQuestId: "demo-slide", requestKey: "demo-review", recipientId: "admin", reason: "来週の発表で使う週報の下書きができました。", checkTarget: "売上の数字と日付が合っているか", artifactUrl: "", status: "pending", seenAt: "", respondedAt: "", response: "", outcome: "" },
+    }),
     mine("demo-gym", "ジムに行く", { scheduledDate: day(1), scheduledTime: "19:00", planningState: "scheduled", estimatedMinutes: 60 }),
     mine("demo-tax", "確定申告の書類を集める", { dueDate: day(-3), planningState: "scheduled" }),
     mine("demo-dentist", "歯医者を予約する", {}),
@@ -69,8 +74,21 @@ async function showDemo(): Promise<void> {
     ...fixtureRawQuests.map(q => ({ ...q })),
   ];
   const replace = (next: Quest) => { quests = [next, ...quests.filter(q => q.id !== next.id)]; return next; };
+  const agents: AllForAgent[] = fixtureAgentsFor("default").map(agent => ({ id: agent.agentId, name: agent.displayName, role: agent.role, active: agent.status === "active", startState: agent.defaultHandoffState }));
+  const members = fixturePartyMembersFor("default").map(member => ({ id: member.uid, name: member.displayName, owner: member.role === "owner" }));
   const port: AllForPort = {
     demo: true,
+    self: () => ({ id: "admin", label: "admin" }),
+    agents: () => agents,
+    members: () => members,
+    answer: async (quest, action, response) => {
+      const request = quest.humanRequest!;
+      const answered = action === "approve" || action === "revise";
+      return replace({ ...quest, humanRequest: { ...request, status: answered ? "answered" : action === "defer" ? "deferred" : "pending",
+        response: answered ? response : request.response, outcome: action === "approve" ? "approved" : action === "revise" ? "changes_requested" : request.outcome,
+        respondedAt: answered ? stamp() : request.respondedAt }, updatedAt: stamp() });
+    },
+    review: async (quest, accept, note) => replace({ ...quest, assignee: { ...quest.assignee, handoffState: accept ? "accepted" : "working" }, handoff: { ...quest.handoff, note: note || quest.handoff.note }, updatedAt: stamp() }),
     today: () => FIXTURE_TODAY,
     quests: () => quests,
     create: async input => replace({ ...(fixtureRawQuests[0] as Quest), id: `demo-${Date.now()}`, assignee: { type: "self", id: "self", label: "", handoffState: "none" }, humanRequest: null, parentQuestId: "", ...input, createdAt: stamp(), updatedAt: stamp() } as Quest),
@@ -84,13 +102,29 @@ async function showDemo(): Promise<void> {
 async function showProduction(uid: string, email: string): Promise<void> {
   message("読み込んでいます", "やることを取得しています…");
   try {
-    const { createProductionRuntime } = await import("../relay-forge/production.ts");
+    const [{ createProductionRuntime }, { runHandoff }] = await Promise.all([import("../relay-forge/production.ts"), import("../relay-forge/adapter.ts")]);
     const repository = new QuestForgeRepository({ getToken: force => getIdToken(force) });
     let runtime = await createProductionRuntime(repository, uid, email);
     let quests: Quest[] = [...runtime.quests];
     const replace = (next: Quest) => { quests = [next, ...quests.filter(q => q.id !== next.id)]; return next; };
     const port: AllForPort = {
       demo: false,
+      self: () => ({ id: runtime.selfUid, label: runtime.profile?.displayName || "自分" }),
+      agents: () => runtime.agents.map(agent => ({ id: agent.agentId, name: agent.displayName, role: agent.role ?? "", active: (agent.status ?? "active") === "active", startState: agent.defaultHandoffState || "ready" })),
+      members: () => runtime.members.map(member => ({ id: member.uid, name: member.displayName, owner: member.role === "owner" })),
+      answer: async (quest, action, response) => {
+        const requests = runtime.humanRequestPort;
+        if (!requests) throw new Error("human_requests_unavailable");
+        // Same contract as Relay Forge's inbox: a dry run validates, then the real write.
+        const input = { action, response, confirmed: true, expectedUpdatedAt: quest.updatedAt };
+        await requests.respondHumanReview(quest.id, { ...input, dryRun: true });
+        return replace(questOf(await requests.respondHumanReview(quest.id, { ...input, dryRun: false }), quest.id));
+      },
+      review: async (quest, accept, note) => {
+        const outcome = await runHandoff(runtime.handoffPort, { questId: quest.id, state: accept ? "accepted" : "working", expectedState: quest.assignee.handoffState, note, dryRun: false });
+        if (!outcome.ok || !outcome.quest) throw new Error(outcome.code);
+        return replace(outcome.quest);
+      },
       today: localToday,
       quests: () => quests,
       create: async input => replace(questOf(await runtime.questPort.createQuest(input))),

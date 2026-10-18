@@ -8,7 +8,7 @@ body {
   color: var(--qf-color-fg-default);
   font: 400 16px/1.6 var(--qf-font-sans);
 }
-button, input, textarea { font: inherit; color: inherit; }
+button, input, textarea, select { font: inherit; color: inherit; }
 :focus-visible { outline: var(--qf-focus-width) solid var(--qf-color-focus); outline-offset: var(--qf-focus-offset); }
 [hidden] { display: none !important; }
 
@@ -281,7 +281,7 @@ button, input, textarea { font: inherit; color: inherit; }
   .a4-capture-input { min-height: 44px; }
   .a4-tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--qf-z-sticky);
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
     padding: var(--qf-space-2) var(--qf-space-2) calc(var(--qf-space-2) + env(safe-area-inset-bottom, 0px));
     background: var(--qf-color-canvas); border-top: var(--qf-border-width) solid var(--qf-color-border-subtle);
   }
@@ -379,3 +379,24 @@ body, .a4-top { background: var(--a4-wash, var(--qf-color-canvas)) fixed; }
 /* Completion confetti (see celebrate.ts): pointer-transparent, above everything, short-lived. */
 .a4-confetti { position: fixed; inset: 0; z-index: var(--qf-z-tooltip); pointer-events: none; overflow: hidden; }
 .a4-confetti span { position: absolute; display: block; will-change: transform, opacity; }
+
+/* Guild: decision card, Agent state chips, member avatars, tab badge. */
+.a4-tab { gap: var(--qf-space-2); }
+.a4-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--qf-radius-pill); background: var(--qf-color-review); color: var(--qf-color-canvas); font-size: 12px; font-weight: 700; }
+.a4-decision { border-color: var(--qf-color-review); }
+.a4-decision .a4-focus-title { font-size: 24px; }
+.a4-state {
+  flex: none; min-width: 7.5em; padding: 2px var(--qf-space-3); border-radius: var(--qf-radius-pill); text-align: center; font-size: 12px; font-weight: 600;
+  background: color-mix(in srgb, var(--qf-color-agent) 14%, var(--qf-color-surface)); color: var(--qf-color-fg-strong);
+}
+.a4-state[data-state="blocked"] { background: color-mix(in srgb, var(--qf-color-warning) 22%, var(--qf-color-surface)); }
+.a4-state[data-state="accepted"] { background: color-mix(in srgb, var(--qf-color-success) 18%, var(--qf-color-surface)); }
+.a4-avatar {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; margin: 4px;
+  border-radius: var(--qf-radius-pill); font-weight: 700; color: var(--qf-color-canvas); background: var(--qf-color-human);
+}
+.a4-avatar[data-kind="agent"] { background: var(--qf-color-agent); border-radius: var(--qf-radius-md); }
+.a4-avatar[data-kind="human"] { background: var(--qf-color-system); }
+.a4-row[data-inactive="true"] { opacity: 0.6; }
+.a4-row-text strong { color: var(--qf-color-fg-strong); }
+@media (max-width: 760px) { .a4-tab .a4-badge { position: absolute; transform: translate(20px, -12px); } .a4-tab { position: relative; } }

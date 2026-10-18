@@ -54,3 +54,16 @@ test("day plan splits timed and anytime work and finds free time", async () => {
   assert.equal(weekOf("2026-10-18")[0], "2026-10-12");
   assert.equal(clock(25 * 60 + 5), "01:05");
 });
+
+test("answered or deferred review requests leave the task lists", async () => {
+  const { groups, needsDecision } = await import("../interaction-lab/all-for-adhd/model.ts");
+  const request = (status: string) => ({ sourceQuestId: "s", requestKey: "k", recipientId: "self", reason: "", checkTarget: "", artifactUrl: "", status, seenAt: "", respondedAt: "", response: "", outcome: "" });
+  const pending = quest("p", { humanRequest: request("pending") } as Partial<Quest>);
+  const answered = quest("a", { humanRequest: request("answered") } as Partial<Quest>);
+  const deferred = quest("d", { humanRequest: request("deferred") } as Partial<Quest>);
+  assert.equal(needsDecision(pending), true);
+  assert.equal(needsDecision(answered), false);
+  const all = groups([pending, answered, deferred], TODAY);
+  assert.deepEqual(all.decision.map(q => q.id), ["p"]);
+  assert.equal(Object.values(all).flat().length, 1);
+});

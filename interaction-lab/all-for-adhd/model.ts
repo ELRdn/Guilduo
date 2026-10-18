@@ -9,10 +9,19 @@ export function isOpen(quest: Quest): boolean {
   return quest.lifecycleState === "active" && !quest.done && quest.kind !== "reward";
 }
 
-/** A human decision is owed: an Agent asked for review, or a person asked for a reply. */
+/** A human decision is owed: an Agent finished and wants review, or someone asked for a reply. */
 export function needsDecision(quest: Quest): boolean {
-  return isOpen(quest) && (quest.humanRequest != null || (quest.assignee.type === "agent" && quest.assignee.handoffState === "review_required"));
+  return isOpen(quest) && (quest.humanRequest ? quest.humanRequest.status === "pending" : quest.assignee.type === "agent" && quest.assignee.handoffState === "review_required");
 }
+
+/** Review requests are conversations, not tasks: once answered or put off they leave the task lists. */
+const isSettledRequest = (quest: Quest) => quest.humanRequest != null && quest.humanRequest.status !== "pending";
+
+/** Agent handoff states in plain words. */
+export const AGENT_STATE: Readonly<Record<string, string>> = {
+  none: "担当", ready: "受け取り待ち", working: "作業中", blocked: "止まっている", review_required: "確認してほしい", accepted: "受け取り済み",
+};
+export const AGENT_STATE_ORDER = ["blocked", "working", "ready", "accepted", "none"] as const;
 
 export function isWorking(quest: Quest): boolean {
   return quest.assignee.type === "self" && quest.assignee.handoffState === "working";
@@ -39,7 +48,7 @@ const byRecent = (a: Quest, b: Quest) => b.updatedAt.localeCompare(a.updatedAt);
  * Only the person's own open tasks are offered; Agent work is never "next".
  */
 export function nextCandidates(quests: readonly Quest[], today: string): Quest[] {
-  const mine = quests.filter(q => isOpen(q) && !needsDecision(q) && q.assignee.type === "self");
+  const mine = quests.filter(q => isOpen(q) && !needsDecision(q) && !isSettledRequest(q) && q.assignee.type === "self");
   const of = (bucket: Bucket) => mine.filter(q => !isWorking(q) && bucketOf(q, today) === bucket);
   return [
     ...mine.filter(isWorking),
@@ -55,7 +64,7 @@ export function groups(quests: readonly Quest[], today: string): Record<Bucket, 
   // Undated steps are shown under their open parent, not again in the inbox.
   const parents = new Set(quests.filter(isOpen).map(q => q.id));
   for (const quest of quests) {
-    if (!isOpen(quest) || (quest.parentQuestId && parents.has(quest.parentQuestId) && !quest.scheduledDate && !quest.dueDate)) continue;
+    if (!isOpen(quest) || isSettledRequest(quest) || (quest.parentQuestId && parents.has(quest.parentQuestId) && !quest.scheduledDate && !quest.dueDate)) continue;
     result[bucketOf(quest, today)].push(quest);
   }
   result.today.sort(byTime);
