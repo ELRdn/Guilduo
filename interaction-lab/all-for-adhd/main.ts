@@ -10,7 +10,7 @@ import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { requireElement } from "../relay-forge/primitives/dom.ts";
 import { observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
 import { QuestForgeRepository } from "../repository.ts";
-import { mountAllFor, type AllForAgent, type AllForPort } from "./app.ts";
+import { mountAllFor, type AllForAgent, type AllForPort, type Relay } from "./app.ts";
 
 const root = requireElement<HTMLElement>(document, "#a4-root");
 let unmount: (() => void) | null = null;
@@ -76,8 +76,52 @@ async function showDemo(): Promise<void> {
   const replace = (next: Quest) => { quests = [next, ...quests.filter(q => q.id !== next.id)]; return next; };
   const agents: AllForAgent[] = fixtureAgentsFor("default").map(agent => ({ id: agent.agentId, name: agent.displayName, role: agent.role, active: agent.status === "active", startState: agent.defaultHandoffState }));
   const members = fixturePartyMembersFor("default").map(member => ({ id: member.uid, name: member.displayName, owner: member.role === "owner" }));
+  const relays = new Map<string, Relay>();
+  const listeners = new Set<() => void>();
+  const notify = () => { for (const listener of listeners) listener(); };
+  const current = (id: string) => quests.find(q => q.id === id);
+  const handTo = (quest: Quest, agentId: string) => {
+    const agent = agents.find(item => item.id === agentId);
+    return replace({ ...quest, assignee: { type: "agent", id: agentId, label: agent?.name ?? "Agent", handoffState: "ready" }, updatedAt: stamp() } as Quest);
+  };
+  /** Pretends the Agent picks the work up, does it, and either passes it on or asks you. */
+  const simulate = (id: string, agentId: string) => {
+    window.setTimeout(() => {
+      const quest = current(id);
+      if (quest?.assignee.id !== agentId || quest.assignee.handoffState !== "ready") return;
+      replace({ ...quest, assignee: { ...quest.assignee, handoffState: "working" }, updatedAt: stamp() });
+      notify();
+    }, 2500);
+    window.setTimeout(() => {
+      const quest = current(id);
+      const relay = relays.get(id);
+      if (quest?.assignee.id !== agentId || quest.assignee.handoffState !== "working") return;
+      const leg = relay?.legs[relay.at];
+      const next = relay?.legs[relay.at + 1];
+      if (relay && leg && next && !leg.check) {
+        relays.set(id, { ...relay, at: relay.at + 1 });
+        handTo(quest, next.agentId);
+        simulate(id, next.agentId);
+      } else {
+        replace({ ...quest, assignee: { ...quest.assignee, handoffState: "review_required" }, handoff: { ...quest.handoff, note: `${leg?.ask || "作業"}が終わりました。確認をお願いします。` }, updatedAt: stamp() });
+      }
+      notify();
+    }, 9000);
+  };
   const port: AllForPort = {
     demo: true,
+    relay: {
+      get: id => relays.get(id) ?? null,
+      set: async (quest, legs) => {
+        const started = quest.assignee.type === "agent";
+        if (legs.length === 0) { relays.delete(quest.id); return replace({ ...quest, assignee: { type: "self", id: "self", label: "", handoffState: "none" }, updatedAt: stamp() } as Quest); }
+        relays.set(quest.id, { legs, at: started ? relays.get(quest.id)?.at ?? 0 : 0 });
+        if (started) return quest;
+        simulate(quest.id, legs[0]!.agentId);
+        return handTo(quest, legs[0]!.agentId);
+      },
+    },
+    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
     self: () => ({ id: "admin", label: "admin" }),
     agents: () => agents,
     members: () => members,
@@ -88,7 +132,17 @@ async function showDemo(): Promise<void> {
         response: answered ? response : request.response, outcome: action === "approve" ? "approved" : action === "revise" ? "changes_requested" : request.outcome,
         respondedAt: answered ? stamp() : request.respondedAt }, updatedAt: stamp() });
     },
-    review: async (quest, accept, note) => replace({ ...quest, assignee: { ...quest.assignee, handoffState: accept ? "accepted" : "working" }, handoff: { ...quest.handoff, note: note || quest.handoff.note }, updatedAt: stamp() }),
+    review: async (quest, accept, note) => {
+      const relay = relays.get(quest.id);
+      const next = relay?.legs[relay.at + 1];
+      if (accept && relay && next) {
+        relays.set(quest.id, { ...relay, at: relay.at + 1 });
+        simulate(quest.id, next.agentId);
+        return handTo(quest, next.agentId);
+      }
+      if (!accept) window.setTimeout(() => simulate(quest.id, quest.assignee.id), 0);
+      return replace({ ...quest, assignee: { ...quest.assignee, handoffState: accept ? "accepted" : "working" }, handoff: { ...quest.handoff, note: note || quest.handoff.note }, updatedAt: stamp() });
+    },
     today: () => FIXTURE_TODAY,
     quests: () => quests,
     create: async input => replace({ ...(fixtureRawQuests[0] as Quest), id: `demo-${Date.now()}`, assignee: { type: "self", id: "self", label: "", handoffState: "none" }, humanRequest: null, parentQuestId: "", ...input, createdAt: stamp(), updatedAt: stamp() } as Quest),

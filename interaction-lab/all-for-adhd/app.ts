@@ -23,6 +23,10 @@ export interface AllForAgent {
 
 export type RequestAnswer = "approve" | "revise" | "defer" | "resume";
 
+/** One Agent's turn in a relay; `check` puts your confirmation before the next turn. */
+export interface RelayLeg { readonly agentId: string; readonly ask: string; readonly check: boolean }
+export interface Relay { readonly legs: readonly RelayLeg[]; readonly at: number }
+
 export interface AllForPort {
   readonly demo: boolean;
   readonly self: () => { readonly id: string; readonly label: string };
@@ -32,6 +36,10 @@ export interface AllForPort {
   answer(quest: Quest, action: RequestAnswer, response: string): Promise<Quest>;
   /** Accepts an Agent's finished work, or sends it back with a note. Dry run first. */
   review(quest: Quest, accept: boolean, note: string): Promise<Quest>;
+  /** Multi-Agent relays. Demo-only until the storage is decided; absent means one Agent at most. */
+  readonly relay?: { get(id: string): Relay | null; set(quest: Quest, legs: readonly RelayLeg[]): Promise<Quest> };
+  /** Data changed outside this UI (the demo's simulated Agents). */
+  subscribe?(listener: () => void): () => void;
   readonly today: () => string;
   readonly quests: () => readonly Quest[];
   create(input: Record<string, unknown>): Promise<Quest>;
@@ -325,52 +333,295 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   /* ------------------------------ detail sheet ------------------------------ */
 
+  /**
+   * Who carries the task: a vertical relay of nodes from you, through Agents, back
+   * to you. Drag to reorder or to drop an Agent in (long-press on touch), tap
+   * "＋" to append, Alt+↑/↓ from the keyboard. Without `port.relay` (production
+   * for now) the chain holds at most one Agent, which maps onto the assignee.
+   */
+  function relayEditor(quest: Quest) {
+    const multi = Boolean(port.relay);
+    const editable = !isDone(quest) && !quest.humanRequest && quest.assignee.type !== "human";
+    const agents = port.agents().filter(agent => agent.active);
+    const nameOf = (id: string) => port.agents().find(agent => agent.id === id)?.name || (quest.assignee.id === id ? quest.assignee.label : "") || "Agent";
+    const stored = port.relay?.get(quest.id) ?? null;
+    const initial: RelayLeg[] = stored ? [...stored.legs] : quest.assignee.type === "agent" ? [{ agentId: quest.assignee.id, ask: "", check: true }] : [];
+    let legs = initial.map(leg => ({ ...leg }));
+    let palette = false;
+    let suppressClickUntil = 0;
+    const list = el("ol", { class: "a4-relay", "aria-label": "担当のリレー" });
+    const hint = el("small", { class: "a4-muted", "aria-live": "polite" });
+    const host = el("div", { class: "a4-relay-host" }, list, hint);
+    const position = () => {
+      const live = byId(quest.id) ?? quest;
+      const started = live.assignee.type === "agent";
+      return { started, at: started ? (port.relay?.get(quest.id)?.at ?? 0) : -1, state: live.assignee.handoffState };
+    };
+    // Legs already handed over stay put; only what comes after can change.
+    const firstFree = () => (multi ? position().at + 1 : 0);
+    const max = multi ? 6 : 1;
+
+    function indexAt(y: number, dragged: HTMLElement): number {
+      const free = firstFree();
+      for (const node of list.querySelectorAll<HTMLElement>(".a4-relay-node[data-index]")) {
+        const index = Number(node.dataset.index);
+        if (index < free || node === dragged) continue;
+        const rect = node.getBoundingClientRect();
+        if (y < rect.top + rect.height / 2) return index;
+      }
+      return legs.length;
+    }
+    function mark(index: number): void {
+      for (const node of list.querySelectorAll<HTMLElement>("[data-drop]")) node.removeAttribute("data-drop");
+      const target = index < legs.length ? list.querySelector<HTMLElement>(`.a4-relay-node[data-index="${index}"]`) : list.querySelector<HTMLElement>(".a4-relay-node[data-end]");
+      target?.setAttribute("data-drop", "true");
+    }
+    /** Mouse drags at once; touch waits for a long-press so the sheet still scrolls. */
+    function dragify(node: HTMLElement, drop: (index: number) => void): void {
+      let pointer = -1, startX = 0, startY = 0, active = false, timer = 0, target = -1;
+      const begin = () => { active = true; node.dataset.dragging = "true"; navigator.vibrate?.(10); };
+      const end = (commit: boolean) => {
+        window.clearTimeout(timer);
+        if (active && commit && target >= 0) { suppressClickUntil = Date.now() + 300; drop(target); }
+        active = false; pointer = -1; target = -1;
+        node.style.transform = ""; node.removeAttribute("data-dragging"); mark(-1);
+      };
+      node.addEventListener("pointerdown", event => {
+        const from = event.target as Element;
+        if (event.button !== 0 || (from !== node && from.closest("input, button"))) return;
+        pointer = event.pointerId; startX = event.clientX; startY = event.clientY;
+        node.setPointerCapture(pointer);
+        if (event.pointerType !== "mouse") timer = window.setTimeout(begin, 350);
+      });
+      node.addEventListener("pointermove", event => {
+        if (event.pointerId !== pointer) return;
+        const dx = event.clientX - startX, dy = event.clientY - startY;
+        if (!active) {
+          if (Math.hypot(dx, dy) < 6) return;
+          if (event.pointerType !== "mouse") { end(false); return; }
+          begin();
+        }
+        node.style.transform = `translate(${dx}px, ${dy}px)`;
+        target = indexAt(event.clientY, node);
+        mark(target);
+      });
+      node.addEventListener("pointerup", () => end(true));
+      node.addEventListener("pointercancel", () => end(false));
+      node.addEventListener("touchmove", event => { if (active) event.preventDefault(); }, { passive: false });
+      node.addEventListener("contextmenu", event => { if (pointer >= 0) event.preventDefault(); });
+    }
+    const moveLeg = (from: number, to: number) => {
+      const [leg] = legs.splice(from, 1);
+      legs.splice(to > from ? to - 1 : to, 0, leg!);
+      paint();
+    };
+    const addLeg = (agentId: string, index = legs.length) => {
+      legs.splice(Math.max(index, firstFree()), 0, { agentId, ask: "", check: false });
+      if (legs.length >= max) palette = false;
+      paint();
+    };
+
+    const status = (label: string, state: string) => el("span", { class: "a4-state", "data-state": state }, label);
+    function selfNode(label: string, note: HTMLElement | null, end = false): HTMLElement {
+      return el("li", { class: "a4-relay-node", "data-kind": "self", ...(end ? { "data-end": "true" } : {}) },
+        el("span", { class: "a4-avatar", "data-kind": "self", "aria-hidden": "true" }, port.self().label.slice(0, 1)),
+        el("div", { class: "a4-relay-body" }, el("div", { class: "a4-relay-line" }, el("strong", {}, label), note)));
+    }
+    function legNode(leg: RelayLeg, index: number, started: boolean, at: number, state: string): HTMLElement {
+      const locked = !editable || index < firstFree();
+      const name = nameOf(leg.agentId);
+      const badge = !started || index > at ? status("これから", "none") : index < at ? status("済み", "accepted") : status(AGENT_STATE[state] ?? state, state);
+      const ask = multi && !locked ? el("input", { class: "a4-relay-ask", value: leg.ask, maxlength: 60, placeholder: "頼みごと（例：下書き）", "aria-label": `${name}への頼みごと` }) : null;
+      ask?.addEventListener("input", () => { legs[index] = { ...legs[index]!, ask: ask.value }; paintHint(); });
+      const remove = locked ? null : el("button", { type: "button", class: "a4-relay-x", "aria-label": `${name}を外す` }, "×");
+      remove?.addEventListener("click", () => { legs.splice(index, 1); paint(); });
+      const node = el("li", { class: "a4-relay-node", "data-kind": "agent", "data-index": String(index), "data-status": !started || index > at ? "next" : index < at ? "done" : "now",
+        "data-draggable": String(multi && !locked), "aria-label": `${index + 1}番目 ${name}${leg.ask ? `：${leg.ask}` : ""}` },
+        el("span", { class: "a4-avatar", "data-kind": "agent", "aria-hidden": "true" }, name.slice(0, 1)),
+        el("div", { class: "a4-relay-body" },
+          el("div", { class: "a4-relay-line" }, el("strong", {}, name), badge),
+          ask ?? (leg.ask ? el("span", { class: "a4-meta" }, leg.ask) : null)),
+        remove);
+      if (multi && !locked) {
+        dragify(node, to => moveLeg(index, to));
+        node.addEventListener("keydown", event => {
+          if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+          event.preventDefault();
+          const to = event.key === "ArrowUp" ? index - 1 : index + 2;
+          if (to < firstFree() || to > legs.length) return;
+          moveLeg(index, to);
+          list.querySelector<HTMLElement>(`.a4-relay-node[data-index="${event.key === "ArrowUp" ? index - 1 : index + 1}"] input`)?.focus();
+        });
+      }
+      return node;
+    }
+    function link(after: number | null, at: number, label = ""): HTMLElement {
+      if (after === null || !multi) return el("li", { class: "a4-relay-link", "aria-hidden": label ? null : "true" }, label ? el("span", { class: "a4-meta" }, label) : null);
+      const leg = legs[after]!;
+      if (!editable || after < at) return el("li", { class: "a4-relay-link" }, el("span", { class: "a4-meta" }, leg.check ? "あなたが確認してから次へ" : "そのまま次へ"));
+      const toggle = el("button", { type: "button", class: "a4-relay-check", "aria-pressed": String(leg.check) }, leg.check ? "確認を挟む" : "そのまま次へ");
+      toggle.addEventListener("click", () => { legs[after] = { ...legs[after]!, check: !legs[after]!.check }; paint(); });
+      return el("li", { class: "a4-relay-link" }, toggle);
+    }
+    function paintHint(): void {
+      const { started } = position();
+      const first = legs[0];
+      hint.textContent = !changed() ? (legs.length === 0 && editable ? (multi ? "Agentを足すと、順番にバトンを渡します。最後はあなたが確認します。" : "Agentを足すと、そのAgentに渡します。終わったらあなたが確認します。") : "")
+        : legs.length === 0 ? "保存すると自分の担当に戻します。"
+        : !started || (!multi && first?.agentId !== quest.assignee.id) ? `保存すると ${nameOf(first!.agentId)} に渡します。${legs.length > 1 ? `終わったら ${legs.slice(1).map(leg => nameOf(leg.agentId)).join(" → ")} へ回り、` : "終わったら、"}最後にあなたが確認します。`
+        : "保存すると、このあとの順番を変えます。";
+    }
+    function paint(): void {
+      const { started, at, state } = position();
+      const items: HTMLElement[] = [selfNode(`${port.self().label}（あなた）`, null)];
+      legs.forEach((leg, index) => {
+        items.push(index === 0 ? link(null, at, "渡す") : link(index - 1, at));
+        items.push(legNode(leg, index, started, at, state));
+      });
+      const last = started && at === legs.length - 1;
+      items.push(link(null, at, legs.length > 0 ? "終わったら" : ""));
+      items.push(selfNode(legs.length > 0 ? "あなたが最後の確認" : "あなたが進める",
+        last && state === "review_required" ? status("あなたの番", "review_required") : last && state === "accepted" ? status("完了", "accepted") : null, true));
+      const add = editable && legs.length < max ? (() => {
+        const button = el("button", { type: "button", class: "a4-relay-add", "aria-expanded": String(palette) }, "＋ Agent を足す");
+        button.addEventListener("click", () => { palette = !palette; paint(); list.querySelector<HTMLElement>(".a4-relay-palette button")?.focus(); });
+        return button;
+      })() : null;
+      const chips = palette && add ? el("li", { class: "a4-relay-palette", role: "group", "aria-label": "足すAgent" }, ...(agents.length === 0
+        ? [el("span", { class: "a4-muted" }, "使えるAgentがいません。登録は詳しい画面で行います。")]
+        : agents.map(agent => {
+          const chip = el("button", { type: "button", class: "a4-chip", title: agent.role }, agent.name);
+          chip.addEventListener("click", () => { if (Date.now() > suppressClickUntil) addLeg(agent.id); });
+          if (multi) dragify(chip, to => addLeg(agent.id, to));
+          return chip;
+        }))) : null;
+      replaceChildren(list, ...items, add ? el("li", { class: "a4-relay-tail" }, add) : null, chips);
+      paintHint();
+    }
+    const changed = () => JSON.stringify(legs.map(leg => ({ ...leg, ask: leg.ask.trim() }))) !== JSON.stringify(initial);
+    paint();
+    return { node: host, paint, changed, legs: () => legs.map(leg => ({ ...leg, ask: leg.ask.trim() })), nameOf };
+  }
+
   function openSheet(quest: Quest): void {
     sheet?.close();
-    const field = (label: string, control: HTMLElement, hint = "") => el("label", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, label), control, hint ? el("small", { class: "a4-muted" }, hint) : null);
-    const title = el("input", { class: "a4-input", name: "title", value: quest.title, required: true, maxlength: 200 });
-    const step = el("input", { class: "a4-input", name: "nextAction", value: quest.nextAction, placeholder: "例：ファイルを開くだけ", maxlength: 200 });
-    const date = el("input", { class: "a4-input", type: "date", name: "scheduledDate", value: quest.scheduledDate });
-    const time = el("input", { class: "a4-input", type: "time", name: "scheduledTime", value: quest.scheduledTime, step: 300 });
-    const due = el("input", { class: "a4-input", type: "date", name: "dueDate", value: quest.dueDate });
-    const notes = el("textarea", { class: "a4-input a4-textarea", name: "notes", rows: 4, maxlength: 4000 });
+    const today = port.today();
+    const title = el("input", { class: "a4-sheet-title", name: "title", value: quest.title, required: true, maxlength: 200, "aria-label": "やること" });
+    const step = el("input", { class: "a4-sheet-next", name: "nextAction", value: quest.nextAction, placeholder: "次の一歩：最初の1分でできること", "aria-label": "次の一歩", maxlength: 200 });
+    const date = el("input", { class: "a4-input", type: "date", name: "scheduledDate", value: quest.scheduledDate, "aria-label": "日付" });
+    const time = el("input", { class: "a4-input", type: "time", name: "scheduledTime", value: quest.scheduledTime, step: 300, "aria-label": "時刻" });
+    const due = el("input", { class: "a4-input", type: "date", name: "dueDate", value: quest.dueDate, "aria-label": "締め切り" });
+    const notes = el("textarea", { class: "a4-input a4-textarea", name: "notes", rows: 4, maxlength: 4000, "aria-label": "メモ", placeholder: "メモ" });
     notes.value = quest.notes;
     let estimate = quest.estimatedMinutes;
-    const chips = el("div", { class: "a4-chips", role: "group", "aria-label": "目安の時間" }, ...ESTIMATES.map(minutes => {
-      const chip = el("button", { type: "button", class: "a4-chip", "aria-pressed": String(estimate === minutes) }, `${minutes}分`);
-      chip.addEventListener("click", () => {
-        estimate = estimate === minutes ? 0 : minutes;
-        for (const node of chips.children) node.setAttribute("aria-pressed", String(node === chip && estimate === minutes));
-      });
+
+    // Values read as chips; an editor opens only for the one being changed.
+    const shortDay = (value: string) => value === today ? "今日" : value === addDays(today, 1) ? "明日" : dayLabel.format(noon(value));
+    const quick = (label: string, apply: () => void) => {
+      const chip = el("button", { type: "button", class: "a4-chip" }, label);
+      chip.addEventListener("click", () => { apply(); paintChips(); });
+      return chip;
+    };
+    // Length can be picked, typed freely (up to a day), or implied by an end time.
+    const hours = el("input", { class: "a4-input a4-num", type: "number", min: 0, max: 24, step: 1, inputmode: "numeric", "aria-label": "目安（時間）" });
+    const mins = el("input", { class: "a4-input a4-num", type: "number", min: 0, max: 59, step: 5, inputmode: "numeric", "aria-label": "目安（分）" });
+    const end = el("input", { class: "a4-input", type: "time", step: 300, "aria-label": "終わる時刻" });
+    const estimateChips = el("div", { class: "a4-chips", role: "group", "aria-label": "目安の時間" }, ...[...ESTIMATES, 90, 120].map(minutes => {
+      const chip = el("button", { type: "button", class: "a4-chip", "data-minutes": String(minutes) }, minutesLabel(minutes));
+      chip.addEventListener("click", () => setEstimate(estimate === minutes ? 0 : minutes));
       return chip;
     }));
-    // Handing work to an Agent is spelled out before saving; it is never automatic.
-    const assignable = !isDone(quest) && !quest.humanRequest && quest.assignee.type !== "human";
-    const agents = port.agents().filter(agent => agent.active);
-    const assignee = el("select", { class: "a4-input", name: "assignee", disabled: !assignable },
-      el("option", { value: "self" }, `自分（${port.self().label}）`),
-      ...agents.map(agent => el("option", { value: agent.id }, `${agent.name}${agent.role ? ` · ${agent.role}` : ""}`)),
-      quest.assignee.type === "agent" && !agents.some(agent => agent.id === quest.assignee.id) ? el("option", { value: quest.assignee.id }, quest.assignee.label || "Agent") : null);
-    assignee.value = quest.assignee.type === "agent" ? quest.assignee.id : "self";
-    const assignHint = el("small", { class: "a4-muted", "aria-live": "polite" });
-    const paintAssign = () => {
-      const target = agents.find(agent => agent.id === assignee.value);
-      const current = quest.assignee.type === "agent" ? quest.assignee.id : "self";
-      assignHint.textContent = assignee.value === current
-        ? quest.assignee.type === "agent" ? `いまは ${quest.assignee.label || "Agent"} が担当しています（${AGENT_STATE[quest.assignee.handoffState] ?? quest.assignee.handoffState}）。` : ""
-        : target ? `保存すると ${target.name} に渡します。${target.name} が受け取って進め、終わったらあなたに確認を頼みます。` : "保存すると自分の担当に戻します。";
+    function setEstimate(minutes: number, from?: HTMLInputElement): void {
+      estimate = Math.min(1440, Math.max(0, Math.round(minutes)));
+      for (const node of estimateChips.children) node.setAttribute("aria-pressed", String(Number((node as HTMLElement).dataset.minutes) === estimate));
+      if (from !== hours && from !== mins) { hours.value = estimate ? String(Math.floor(estimate / 60)) : ""; mins.value = estimate ? String(estimate % 60) : ""; }
+      if (from !== end) end.value = time.value && estimate > 0 ? clock(toMinutes(time.value) + estimate) : "";
+      end.disabled = !time.value;
+      paintChips();
+    }
+    const typed = () => setEstimate((Number(hours.value) || 0) * 60 + (Number(mins.value) || 0), document.activeElement as HTMLInputElement);
+    hours.addEventListener("input", typed);
+    mins.addEventListener("input", typed);
+    // An end before the start means it runs past midnight.
+    end.addEventListener("input", () => { if (time.value && end.value) setEstimate((toMinutes(end.value) - toMinutes(time.value) + 1440) % 1440 || 1440, end); });
+    time.addEventListener("input", () => setEstimate(estimate));
+    // Our own 15-minute list instead of the browser's spinner popup; typing still works.
+    const slots = el("div", { class: "a4-timelist", role: "listbox", "aria-label": "時刻を選ぶ" });
+    let slotFor: HTMLInputElement = time;
+    function paintSlots(): void {
+      const isEnd = slotFor === end;
+      const start = time.value ? toMinutes(time.value) : 0;
+      const current = slotFor.value ? toMinutes(slotFor.value) : -1;
+      const now = new Date().getHours() * 60 + new Date().getMinutes();
+      const items = Array.from({ length: 96 }, (_, index) => isEnd ? start + (index + 1) * 15 : index * 15);
+      replaceChildren(slots, ...items.map(minutes => {
+        const value = clock(minutes);
+        const slot = el("button", { type: "button", class: "a4-slot-pick", role: "option", "aria-selected": String(toMinutes(value) === current) },
+          el("span", {}, value), isEnd ? el("span", { class: "a4-meta" }, minutesLabel(minutes - start)) : null);
+        slot.addEventListener("click", () => {
+          slotFor.value = value;
+          slotFor.dispatchEvent(new Event("input", { bubbles: true }));
+          if (slotFor === time) { slotFor = end; paintSlots(); end.focus(); } else paintSlots();
+        });
+        return slot;
+      }));
+      const target = slots.querySelector<HTMLElement>('[aria-selected="true"]')
+        ?? (isEnd ? slots.querySelector<HTMLElement>(`:nth-child(${Math.max(1, (estimate || 30) / 15)})`) : slots.children[Math.floor(now / 15)] as HTMLElement | undefined);
+      queueMicrotask(() => { if (target) slots.scrollTop = target.offsetTop - slots.offsetTop - 8; });
+    }
+    for (const input of [time, end]) input.addEventListener("focus", () => { if (slotFor !== input) { slotFor = input; paintSlots(); } });
+    const panes = {
+      date: el("div", { class: "a4-sheet-pane", hidden: true }, date, quick("今日", () => { date.value = today; }), quick("明日", () => { date.value = addDays(today, 1); }), quick("なし", () => { date.value = ""; time.value = ""; setEstimate(estimate); })),
+      time: el("div", { class: "a4-sheet-pane", hidden: true },
+        el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, "始まり"), time),
+        el("span", { class: "a4-meta", "aria-hidden": "true" }, "〜"),
+        el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, "終わり"), end),
+        quick("なし", () => { time.value = ""; setEstimate(estimate); paintSlots(); }), slots),
+      estimate: el("div", { class: "a4-sheet-pane", hidden: true }, estimateChips,
+        el("div", { class: "a4-pane-free" }, el("span", { class: "a4-step-label" }, "自由に"), hours, el("span", {}, "時間"), mins, el("span", {}, "分"))),
+      due: el("div", { class: "a4-sheet-pane", hidden: true }, due, quick("なし", () => { due.value = ""; })),
     };
-    assignee.addEventListener("change", paintAssign);
-    paintAssign();
-    const assignField = el("label", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, "担当"), assignee, assignHint);
+    type Pane = keyof typeof panes;
+    let open: Pane | null = null;
+    const memo = el("div", { class: "a4-field-row", hidden: !quest.notes }, notes);
+    const memoChip = el("button", { type: "button", class: "a4-chip" }, "＋メモ");
+    memoChip.addEventListener("click", () => { memo.hidden = false; memoChip.hidden = true; notes.focus(); });
+    memoChip.hidden = !memo.hidden;
+    const chipFor = (key: Pane) => {
+      const chip = el("button", { type: "button", class: "a4-chip", "aria-expanded": "false" });
+      chip.addEventListener("click", () => {
+        open = open === key ? null : key;
+        paintChips();
+        const input = panes[key].querySelector<HTMLInputElement>("input, button");
+        input?.focus();
+        if (key === "time") paintSlots();
+        if (open === key && input instanceof HTMLInputElement && input.type === "date") try { input.showPicker(); } catch { /* not every browser opens pickers on demand */ }
+      });
+      return chip;
+    };
+    const chips = { date: chipFor("date"), time: chipFor("time"), estimate: chipFor("estimate"), due: chipFor("due") };
+    function paintChips(): void {
+      const labels: Record<Pane, [string, boolean]> = {
+        date: date.value ? [shortDay(date.value), true] : ["＋日付", false],
+        time: time.value ? [estimate > 0 ? `${time.value}–${clock(toMinutes(time.value) + estimate)}` : time.value, true] : ["＋時刻", false],
+        estimate: estimate > 0 ? [minutesLabel(estimate), true] : ["＋目安", false],
+        due: due.value ? [`締め切り ${shortDay(due.value)}`, true] : ["＋締め切り", false],
+      };
+      for (const key of Object.keys(panes) as Pane[]) {
+        chips[key].textContent = labels[key][0];
+        chips[key].dataset.set = String(labels[key][1]);
+        chips[key].setAttribute("aria-expanded", String(open === key));
+        panes[key].hidden = open !== key;
+      }
+    }
+    for (const input of [date, time, due]) input.addEventListener("input", paintChips);
+    setEstimate(estimate);
+
+    const relay = relayEditor(quest);
     const form = el("form", { class: "a4-sheet-form", id: "a4-sheet-form" },
-      field("やること", title),
-      field("次の一歩", step, "小さくてOK。最初の1分でできること。"),
-      el("div", { class: "a4-field-pair" }, field("日付", date), field("時刻", time)),
-      el("div", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, "目安"), chips),
-      field("締め切り", due),
-      assignField,
-      field("メモ", notes));
+      title, step,
+      el("div", { class: "a4-chips a4-sheet-chips" }, chips.date, chips.time, chips.estimate, chips.due, memoChip),
+      ...Object.values(panes), memo);
 
     const mine = quest.assignee.type === "self" && !isDone(quest);
     const steps = el("div", { class: "a4-sheet-steps" });
@@ -387,19 +638,22 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         stepInput.focus();
       }, "ステップを追加できませんでした。");
     });
-    repaintSheet = () => replaceChildren(steps, stepList(quest) ?? el("p", { class: "a4-muted" }, "大きいときは、ステップに分けると始めやすくなります。"));
-    repaintSheet();
+    repaintSheet = () => {
+      replaceChildren(steps, stepList(quest) ?? el("p", { class: "a4-muted" }, "大きいときは、ステップに分けると始めやすくなります。"));
+      if (!relay.node.contains(document.activeElement)) relay.paint();
+    };
 
     const close = el("button", { type: "button", class: "a4-button" }, "閉じる");
     const dialog = el("dialog", { class: "a4-sheet", "aria-labelledby": "a4-sheet-title" },
-      el("div", { class: "a4-sheet-head" }, el("h2", { id: "a4-sheet-title", class: "a4-subtitle" }, "詳しく"), close),
-
+      el("div", { class: "a4-sheet-head" }, el("h2", { id: "a4-sheet-title", class: "a4-eyebrow" }, "詳しく"), close),
       form,
+      el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "担当"), relay.node),
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "小さなステップ"), steps, mine ? stepForm : null),
       el("div", { class: "a4-actions a4-sheet-foot" },
         el("button", { type: "submit", class: "a4-button a4-primary", form: "a4-sheet-form" }, "保存"),
         mine ? button("今やる", () => { dialog.close(); focusId = quest.id; skipped.delete(quest.id); go("now"); }) : null,
         el("a", { class: "a4-link", href: "../relay-forge/" }, "詳しい画面で開く")));
+    repaintSheet();
     close.addEventListener("click", () => dialog.close());
     form.addEventListener("submit", event => {
       event.preventDefault();
@@ -411,9 +665,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       set("notes", notes.value);
       set("estimatedMinutes", estimate);
       set("dueDate", due.value);
-      const owner = current.assignee.type === "agent" ? current.assignee.id : "self";
-      if (assignable && assignee.value !== owner) {
-        const agent = agents.find(item => item.id === assignee.value);
+      const legs = relay.legs();
+      const handOver = relay.changed();
+      // Without relay support the chain is the assignee: one Agent, or yourself.
+      if (handOver && !port.relay) {
+        const agent = port.agents().find(item => item.id === legs[0]?.agentId);
         patch.assignee = agent
           ? { type: "agent", id: agent.id, label: agent.name, handoffState: agent.startState || "ready" }
           : { type: "self", id: port.self().id, label: port.self().label, handoffState: "none" };
@@ -425,7 +681,15 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         Object.assign(patch, { scheduledDate: day, scheduledTime: at, planningState: day ? "scheduled" : "backlog", ...(day ? {} : { planningMode: "on_date" }) });
       }
       dialog.close();
-      if (Object.keys(patch).length > 0) update(current, { ...patch, expectedUpdatedAt: current.updatedAt }, "保存しました");
+      const relayWrite = handOver && port.relay ? port.relay : null;
+      if (Object.keys(patch).length === 0 && !relayWrite) return;
+      const firstHand = handOver && current.assignee.type !== "agent" && legs.length > 0;
+      void run(async () => {
+        let saved = current;
+        if (Object.keys(patch).length > 0) saved = await port.update(current, { ...patch, expectedUpdatedAt: current.updatedAt });
+        if (relayWrite) await relayWrite.set(saved, legs);
+        say(firstHand ? `${relay.nameOf(legs[0]!.agentId)} に渡しました` : "保存しました");
+      }, "保存できませんでした。もう一度試してください。");
     });
     const opener = document.activeElement;
     dialog.addEventListener("close", () => {
@@ -676,10 +940,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function review(quest: Quest, accept: boolean): void {
     const note = (replies.get(quest.id) ?? "").trim();
     void run(async () => {
-      await port.review(quest, accept, note);
+      const saved = await port.review(quest, accept, note);
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
+      const passed = accept && saved.assignee.type === "agent" && saved.assignee.id !== quest.assignee.id ? saved.assignee.label : "";
       if (cheer && accept) celebrate(innerWidth / 2, innerHeight * 0.55);
-      say(accept ? "受け取りました" : "やり直しをお願いしました");
+      say(passed ? `${passed} に回しました` : accept ? "受け取りました" : "やり直しをお願いしました");
     }, "送れませんでした。Agentの状態が変わっていないか確認して、もう一度試してください。");
   }
 
@@ -689,20 +954,27 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const source = request?.sourceQuestId ? byId(request.sourceQuestId) : null;
     const link = safeUrl(request?.artifactUrl || quest.handoff?.artifactUrl);
     const detail = (label: string, value: string | undefined) => value ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, label), value) : null;
+    const relay = !request ? port.relay?.get(quest.id) ?? null : null;
+    const leg = relay?.legs[relay.at];
+    const nextLeg = relay?.legs[relay.at + 1];
+    const nextName = nextLeg ? port.agents().find(agent => agent.id === nextLeg.agentId)?.name ?? "Agent" : "";
+    const headline = request?.checkTarget || quest.title;
+    const details = [detail("理由", request?.reason), detail("完了の条件", quest.completionCriteria), detail("報告", request ? undefined : quest.handoff?.note)].filter(Boolean) as HTMLElement[];
     const check = el("input", { type: "checkbox", checked: confirmed.has(quest.id) });
     const reply = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, "aria-label": "直してほしいこと", placeholder: "例：見出しをもう少し短く" });
     reply.value = replies.get(quest.id) ?? "";
-    const ok = button(request ? "OK、これで良い" : "受け取る", () => request ? answer(quest, "approve") : review(quest, true), "primary", !confirmed.has(quest.id));
+    const ok = button(request ? "OK、これで良い" : nextLeg ? `受け取って ${nextName} に回す` : "受け取る", () => request ? answer(quest, "approve") : review(quest, true), "primary", !confirmed.has(quest.id));
     const send = button("送る", () => request ? answer(quest, "revise") : review(quest, false), "secondary", !confirmed.has(quest.id) || !reply.value.trim());
     const sync = () => { ok.disabled = busy || !check.checked; send.disabled = busy || !check.checked || !reply.value.trim(); };
     check.addEventListener("change", () => { if (check.checked) confirmed.add(quest.id); else confirmed.delete(quest.id); sync(); });
     reply.addEventListener("input", () => { replies.set(quest.id, reply.value); sync(); });
     const revising = reviseFor === quest.id;
     return el("div", { class: "a4-focus a4-decision" },
-      el("p", { class: "a4-eyebrow" }, request ? `${quest.requester?.label || "Agent"} からの確認依頼` : `${quest.assignee.label || "Agent"} が「終わった」と報告しています`,
+      el("p", { class: "a4-eyebrow" }, request ? `${quest.requester?.label || "Agent"} からの確認依頼` : leg?.ask ? `${quest.assignee.label || "Agent"} が「${leg.ask}」を終えました` : `${quest.assignee.label || "Agent"} が「終わった」と報告しています`,
         total > 1 ? el("span", { class: "a4-meta" }, `  ${index + 1} / ${total}`) : null),
-      el("h2", { class: "a4-focus-title" }, quest.title),
-      detail("理由", request?.reason), detail("確認すること", request?.checkTarget), detail("完了の条件", quest.completionCriteria), detail("報告", request ? undefined : quest.handoff?.note),
+      el("h2", { class: "a4-focus-title" }, headline),
+      headline !== quest.title ? el("p", { class: "a4-meta a4-decision-sub" }, quest.title) : null,
+      details.length > 0 ? el("details", { class: "a4-more" }, el("summary", {}, "詳しく"), el("div", { class: "a4-more-body" }, ...details)) : null,
       el("div", { class: "a4-actions" },
         source ? button("元のタスクを見る", () => openSheet(source), "link") : null,
         link ? el("a", { class: "a4-link", href: link, target: "_blank", rel: "noopener noreferrer" }, "成果物を開く ↗") : null),
@@ -835,6 +1107,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   window.addEventListener("popstate", onHash);
   window.addEventListener("focus", onFocus);
   window.addEventListener("online", onFocus);
+  const unsubscribe = port.subscribe?.(() => { if (!busy) render(); });
   render();
 
   return () => {
@@ -849,5 +1122,6 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     window.removeEventListener("popstate", onHash);
     window.removeEventListener("focus", onFocus);
     window.removeEventListener("online", onFocus);
+    unsubscribe?.();
   };
 }
