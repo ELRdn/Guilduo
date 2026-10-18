@@ -128,11 +128,13 @@ button, input, textarea { font: inherit; color: inherit; }
 /* Toast: bottom center, never covers the primary action column for long. */
 .a4-toast {
   position: fixed; left: 50%; bottom: var(--qf-space-8); transform: translateX(-50%); z-index: var(--qf-z-toast);
-  display: flex; align-items: center; gap: var(--qf-space-6); max-width: calc(100vw - 32px);
+  display: flex; align-items: center; gap: var(--qf-space-6); width: max-content; max-width: calc(100vw - 32px);
   padding: var(--qf-space-4) var(--qf-space-4) var(--qf-space-4) var(--qf-space-7);
   background: var(--qf-color-raised); color: var(--qf-color-fg-strong); border: var(--qf-border-width) solid var(--qf-color-border-default);
   border-radius: var(--qf-radius-md); box-shadow: var(--qf-shadow-overlay);
 }
+
+.a4-toast .a4-link { white-space: nowrap; }
 
 .a4-boot { max-width: 520px; margin: 15vh auto; padding: 0 var(--qf-space-8); display: flex; flex-direction: column; gap: var(--qf-space-6); }
 .a4-boot h1 { margin: 0; font: var(--qf-text-page); color: var(--qf-color-fg-strong); outline: none; }
@@ -373,3 +375,7 @@ body, .a4-top { background: var(--a4-wash, var(--qf-color-canvas)) fixed; }
 }
 .a4-wk-more:hover { border-color: var(--qf-color-border-strong); }
 @media (prefers-reduced-motion: reduce) { [data-run-start] { transition: none; } }
+
+/* Completion confetti (see celebrate.ts): pointer-transparent, above everything, short-lived. */
+.a4-confetti { position: fixed; inset: 0; z-index: var(--qf-z-tooltip); pointer-events: none; overflow: hidden; }
+.a4-confetti span { position: absolute; display: block; will-change: transform, opacity; }

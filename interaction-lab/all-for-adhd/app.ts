@@ -9,7 +9,8 @@
 
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { el, replaceChildren, svg } from "../relay-forge/primitives/dom.ts";
-import { addDays, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
+import { celebrate } from "./celebrate.ts";
+import { addDays, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
 
 export interface AllForPort {
   readonly demo: boolean;
@@ -58,6 +59,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let afterOpen = false;
   let busy = false;
   let game = store.get("a4-game") !== "off";
+  let cheer = store.get("a4-cheer") !== "off";
+  // Confetti starts where the person tapped; keyboard use falls back to the focused control.
+  let lastPointer = { x: 0, y: 0, at: 0 };
+  const onPointer = (event: PointerEvent) => { lastPointer = { x: event.clientX, y: event.clientY, at: Date.now() }; };
   let disposed = false;
   // Completions wait out the undo window before they are sent.
   const pending = new Map<string, number>();
@@ -137,7 +142,15 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       }, "完了を保存できませんでした。もう一度試してください。");
     }, UNDO_MS);
     pending.set(quest.id, timer);
-    say(game ? "完了！ よくできました" : "完了しました", () => { window.clearTimeout(timer); pending.delete(quest.id); render(); });
+    const today = port.today();
+    const dayDone = onDay(quest, today) && groups(quests(), today).today.length === 0;
+    if (cheer) {
+      const focused = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement.getBoundingClientRect() : null;
+      const origin = Date.now() - lastPointer.at < 1000 ? lastPointer
+        : focused ? { x: focused.left + focused.width / 2, y: focused.top + focused.height / 2 } : { x: innerWidth / 2, y: innerHeight * 0.6 };
+      celebrate(origin.x, origin.y, dayDone);
+    }
+    say(dayDone ? "今日の分、ぜんぶ終わりました！" : game ? "完了！ よくできました" : "完了しました", () => { window.clearTimeout(timer); pending.delete(quest.id); render(); });
     render();
   }
 
@@ -594,6 +607,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   function settingsView(): HTMLElement {
+    const cheerToggle = el("input", { type: "checkbox", checked: cheer });
+    cheerToggle.addEventListener("change", () => { cheer = cheerToggle.checked; store.set("a4-cheer", cheer ? null : "off"); });
     const gameToggle = el("input", { type: "checkbox", checked: game });
     gameToggle.addEventListener("change", () => { game = gameToggle.checked; store.set("a4-game", game ? null : "off"); say(game ? "ゲーム要素を表示します" : "ゲーム要素を隠しました"); });
     const theme = document.documentElement.getAttribute("data-theme") ?? "system";
@@ -613,6 +628,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     });
     return el("section", { class: "a4-view" },
       el("h1", { class: "a4-title", tabindex: -1 }, "設定"),
+      el("label", { class: "a4-option" }, cheerToggle, "完了したら紙吹雪でお祝いする"),
       el("label", { class: "a4-option" }, gameToggle, "ゲーム要素（レベル・XP）を表示する"),
       themes,
       el("label", { class: "a4-option" }, bloom, "やわらかい色分け（背景のグラデーションとタスクごとの色）"),
@@ -666,6 +682,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet) void port.refresh().then(render, () => undefined); };
   const onHash = () => { if (viewFromHash() !== view) go(viewFromHash()); };
   document.addEventListener("visibilitychange", onHide);
+  root.addEventListener("pointerdown", onPointer, true);
   window.addEventListener("hashchange", onHash);
   window.addEventListener("popstate", onHash);
   window.addEventListener("focus", onFocus);
@@ -679,6 +696,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     window.clearInterval(tick);
     window.clearTimeout(toastTimer);
     document.removeEventListener("visibilitychange", onHide);
+    root.removeEventListener("pointerdown", onPointer, true);
     window.removeEventListener("hashchange", onHash);
     window.removeEventListener("popstate", onHash);
     window.removeEventListener("focus", onFocus);
