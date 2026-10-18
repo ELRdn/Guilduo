@@ -38,6 +38,8 @@ Mobile
 
 Quests: heading, Board/List/Gantt selector, common search/status filters, primary workspace and shared detail rail. Calendar: heading, month/week/day selector, period/today controls, independent search, calendar and undated list. Notes: heading, note list, title/body/Quest editor, save/archive/restore. Mobile recomposes calendar and notes without page-wide horizontal scrolling. The shell owns the shared timer and reserves its height above mobile navigation and screen actions. Unsaved Notes navigation opens a native modal save/discard/cancel guard.
 
+Quest creation has one entry point per surface: the desktop operation bar, the mobile Home header, and the mobile Quests sticky action. The shared timer renders only when a storage port exists. Quest detail offers "Change assignee", opening the common editor on the assignee field. An empty month view states it is empty and offers week view.
+
 Calendar Day/Week presents a shared hourly axis, separate all-day items, today marker and quarter-hour range preview. Empty-axis mouse drag or touch long press opens a range form; record uses native TimeEntry save, schedule uses the common Quest editor prefilled with planned date/time and estimate. Keyboard selection is equivalent. Common Quest editing exposes planned date/time and on-date/until-due mode independently of deadline.
 
 ## Today / 今日の作戦

@@ -108,6 +108,7 @@
 
   .rf-m-header { row-gap: var(--qf-space-2); }
   .rf-m-header > .rf-human-inbox-trigger { margin-left: auto; }
+  .rf-m-header > .rf-m-create { min-height: var(--qf-control-comfortable); padding-inline: var(--qf-space-4); }
   .rf-m-status { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: center; gap: var(--qf-space-5); }
 
   .rf-m-attention { display: inline-flex; align-items: baseline; gap: var(--qf-space-2); }

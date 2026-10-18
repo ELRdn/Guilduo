@@ -841,7 +841,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     queueMicrotask(() => createTitle.focus());
   }
 
-  function openEdit(quest: Quest): void {
+  function openEdit(quest: Quest, focus: HTMLElement = createTitle): void {
     if (screenWriteHeld()) return;
     if (quest.humanRequest) { inbox.open(undefined, quest.id); return; }
     editingQuestId = quest.id;
@@ -860,7 +860,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     createError.hidden = true;
     createError.textContent = "";
     if (!createDialog.open) createDialog.showModal();
-    queueMicrotask(() => createTitle.focus());
+    queueMicrotask(() => focus.focus());
   }
 
   createCancel.addEventListener("click", closeCreate);
@@ -2978,6 +2978,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       },
       onExternalChecked: setExternalChecked,
       onInbox: (trigger: HTMLElement) => inbox.open(trigger),
+      onCreate: screenWriteHeld() ? undefined : openCreate,
       onRefreshWorkspace: runtime?.refreshWorkspace ? () => { void refreshWorkspace(); } : undefined,
       onApprove: () => { void runDecision("approve"); },
       onRequestRevision: focusRevision,
@@ -3091,6 +3092,10 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
         onEdit: (questId: string) => {
           const quest = sharedQuests.find((entry) => entry.id === questId);
           if (quest !== undefined) openEdit(quest);
+        },
+        onAssign: (questId: string) => {
+          const quest = sharedQuests.find((entry) => entry.id === questId);
+          if (quest !== undefined) openEdit(quest, createAssignee);
         },
         onSendToCommand: (questId: string) => {
           if (sharedQuests.some((quest) => quest.id === questId && quest.humanRequest)) inbox.open(undefined, questId);

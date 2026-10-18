@@ -265,8 +265,8 @@ function evidenceCell(row: QuestRow): HTMLElement {
 export interface QuestsCallbacks {
   readonly relatedNotes?: (questId: string) => HTMLElement;
   readonly workTime?: (questId: string) => string;
-  /** Assign the Quest to a different actor. Backed by `updateQuest`. */
-  readonly onAssign?: (questId: string, actorId: string) => void;
+  /** Open the Quest editor focused on the assignee. Backed by `updateQuest`. */
+  readonly onAssign?: (questId: string) => void;
   /** Edit title, due date, estimate, next action, or assignee. */
   readonly onEdit?: (questId: string) => void;
   /** Move to Command with this Quest selected. */
@@ -337,6 +337,10 @@ function detailRail(
   const edit = el("button", { type: "button", class: "rf-secondary-button" }, relayText("editQuest"));
   edit.hidden = row.humanRequest === true;
   if (callbacks.onEdit !== undefined) edit.addEventListener("click", () => callbacks.onEdit?.(row.id));
+  const assign = callbacks.onAssign === undefined || row.archived || row.humanRequest === true || row.bucket === "done"
+    ? null
+    : el("button", { type: "button", class: "rf-secondary-button rf-q-assign" }, relayText("changeAssignee"));
+  assign?.addEventListener("click", () => callbacks.onAssign?.(row.id));
 
   return screenRegion(
     relayText("selectedQuest"),
@@ -378,8 +382,8 @@ function detailRail(
     ),
     el("h4", { class: "rf-q-detail-label" }, relayText("nextOperation")),
     row.interventionCandidate
-      ? el("div", { class: "rf-q-detail-actions" }, callbacks.onEdit === undefined || row.archived ? null : edit, sendToCommand, inspect)
-      : el("div", { class: "rf-q-detail-actions" }, callbacks.onEdit === undefined || row.archived ? null : edit, inspect),
+      ? el("div", { class: "rf-q-detail-actions" }, sendToCommand, assign, callbacks.onEdit === undefined || row.archived ? null : edit, inspect)
+      : el("div", { class: "rf-q-detail-actions" }, assign, callbacks.onEdit === undefined || row.archived ? null : edit, inspect),
     row.interventionCandidate
       ? null
       : el("p", { class: "rf-q-detail-note" }, relayText("noIntervention")),
@@ -548,9 +552,6 @@ export function renderQuestsDesktop(
   const rows = visibleRows(model, state);
   const visibleSelectedId = rows.some((row) => row.id === selectedId) ? selectedId : rows[0]?.id ?? null;
 
-  const create = el("button", { type: "button", class: "rf-primary-button" }, relayText("createQuest"));
-  if (callbacks.onCreate !== undefined) create.addEventListener("click", () => callbacks.onCreate?.());
-
   const table = el(
     "div",
     {
@@ -630,7 +631,6 @@ export function renderQuestsDesktop(
         { label: relayText("scope"), value: countLabel(scopedRows(model, state).length) },
         { label: relayText("displayed"), value: countLabel(rows.length) },
       ],
-      actions: callbacks.onCreate === undefined ? [] : [create],
     }),
     ...model.notices.map((notice) => screenNotice(notice)),
     metricRow(portfolioMetrics(model, state, context)),

@@ -458,6 +458,7 @@ export const relayCopy = {
   expandRail: ["ナビを開く", "Expand navigation", "Expandir navegación", "Expandir navegação", "Développer la navigation", "Navigation ausklappen", "탐색 펼치기", "展开导航", "Развернуть навигацию"],
   createQuest: ["Questを作成", "Create Quest", "Crear Quest", "Criar Quest", "Créer une Quest", "Quest erstellen", "Quest 만들기", "创建 Quest", "Создать Quest"],
   noDue: ["期限なし", "No due date", "Sin fecha límite", "Sem prazo", "Sans échéance", "Ohne Frist", "기한 없음", "无截止日期", "Без срока"],
+  changeAssignee: ["担当を変更", "Change assignee", "Cambiar responsable", "Alterar responsável", "Changer le responsable", "Zuständigkeit ändern", "담당 변경", "更改负责人", "Сменить исполнителя"],
   unassigned: ["未割り当て", "Unassigned", "Sin asignar", "Sem responsável", "Non attribué", "Nicht zugewiesen", "미배정", "未分配", "Не назначено"],
   questsQuestion: ["何を進め、何が止まり、次に何を選ぶべきか。", "What is moving, what is blocked, and what should you choose next?", "¿Qué avanza, qué está bloqueado y qué debes elegir después?", "O que avança, o que está bloqueado e o que escolher a seguir?", "Qu’est-ce qui avance, qu’est-ce qui bloque et que choisir ensuite ?", "Was läuft, was ist blockiert und was solltest du als Nächstes wählen?", "무엇이 진행되고, 무엇이 막혀 있으며, 다음에 무엇을 선택할까요?", "哪些任务正在推进，哪些被阻塞，接下来该选择什么？", "Что продвигается, что заблокировано и что выбрать дальше?"],
   archiveShow: ["アーカイブを表示", "Show archived", "Mostrar archivadas", "Mostrar arquivadas", "Afficher les archives", "Archivierte anzeigen", "보관 항목 표시", "显示已归档", "Показать архив"],

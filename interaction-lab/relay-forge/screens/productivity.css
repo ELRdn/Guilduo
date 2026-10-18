@@ -53,6 +53,7 @@
 .rf-work-timer-host { grid-column: 2 / -1; grid-row: -1; min-width: 0; z-index: calc(var(--qf-z-sticky) - 2); }
 .rf-work-timer { display: flex; align-items: center; flex-wrap: wrap; gap: var(--qf-space-2); padding: var(--qf-space-2) var(--qf-page-gutter); border-top: 1px solid var(--qf-color-border-default); background: var(--qf-color-surface); }
 .rf-work-timer select { width: min(260px,35%); }
+.rf-work-timer[hidden],.rf-work-timer [hidden] { display: none; }
 .rf-work-timer .rf-work-status { flex-basis: 100%; }
 .rf-work-elapsed { font-variant-numeric: tabular-nums; }
 @media (min-width:901px) {
@@ -67,7 +68,7 @@
 @media (max-width:900px) {
   .rf-work-timer-host { position: fixed; left: 0; right: 0; bottom: calc(var(--qf-control-comfortable) + var(--qf-space-6) + var(--qf-border-width) + env(safe-area-inset-bottom,0px)); }
   .rf-work-timer { gap: var(--qf-space-1); padding: var(--qf-space-2); }
-  .rf-work-timer select { width: 45%; }
+  .rf-work-timer select { flex: 1 1 0; width: auto; }
   .rf-work-timer button { min-height: var(--qf-control-comfortable); }
   .rf-work-timer .rf-work-status { max-height: 48px; overflow: auto; }
   .rf-work-screen { height: auto; overflow: visible; }

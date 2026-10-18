@@ -130,6 +130,13 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 - Settings includes private work-time source, export/restore and confirmed deletion. Loading/error/stale data stays explicit; a missing backend never pretends to save a demo.
 - Calendar additionally offers Day view. Day/Week time axes support mouse press-and-drag and touch long-press selection on empty space, snapping to 15 minutes and showing a range preview. Ordinary touch swipes scroll. Escape/pointer cancellation cancels selection; arrows/Shift+arrows and Enter provide a keyboard path. Selection opens an explicit choice between recording work and scheduling a Quest, never saving automatically. Existing event dragging/resizing remains outside this change.
 
+## UX consolidation (2026-10-13)
+
+- Quest作成の入口はDesktopの上部操作バーに1つだけ置く。Quests画面見出しの重複ボタンは置かない。Mobileはホームヘッダーと Quests の下部操作から作成できる。
+- 作業タイマーは保存先（productivity port）がない場合は描画せず、固定領域も確保しない。稼働していない間は経過時間を隠し、ノートへの移動は既存ナビに任せる。保存先がない状態の通知に効果のない再読込を付けない。
+- Quest詳細の次の操作に「担当を変更」を置き、共通Quest編集を担当欄へフォーカスして開く。完了・保管済み・Human依頼には出さない。
+- カレンダー月表示で期間内の項目が0件の場合は、空であることと週表示への切替を示す。
+
 ## 3. 画面マップ
 
 | View | Nextで検証する差分 |
