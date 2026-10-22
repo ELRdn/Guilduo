@@ -7,6 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { prepareGuilduoPlugin } from "../tools/prepare-guilduo-plugin.mts";
 import { archiveGuilduoPlugin } from "../tools/package-guilduo-plugins.mts";
+import { TAR } from "../tools/prepare-guilduo-review.mts";
 
 test('archive rejects linked validation and contradictory target/connection/member metadata, retaining the prior ZIP', {skip:process.platform !== 'win32'}, async () => {
   const root = await mkdtemp(join(tmpdir(),'guilduo-archive-metadata-'));
@@ -52,7 +53,7 @@ test("OpenAI ZIP refuses drift before replacing an existing artifact", { skip: p
     const previous = await readFile(archive.path);
     assert.ok(archive.files > 0);
     assert.equal(archive.liveAcceptance, "pending");
-    const entries = execFileSync("tar", ["-tf", archive.path], { encoding: "utf8" }).trim().split(/\r?\n/);
+    const entries = execFileSync(TAR, ["-tf", archive.path], { encoding: "utf8" }).trim().split(/\r?\n/);
     assert.equal(entries.length, archive.files);
     assert.ok(entries.every(path => !path.includes('\\') && !path.startsWith('/')));
     const rawEntries = JSON.parse(execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
@@ -62,8 +63,8 @@ test("OpenAI ZIP refuses drift before replacing an existing artifact", { skip: p
     assert.ok(rawEntries.every(path => !path.includes('\\') && !path.startsWith('/')));
     assert.ok(entries.includes("skills/guilduo-workflows/SKILL.md"));
     assert.ok(!entries.some(path => path.includes("questforge-workflows")));
-    const skill = execFileSync("tar", ["-xOf", archive.path, "skills/guilduo-workflows/SKILL.md"], { encoding: "utf8" });
-    const manifest = JSON.parse(execFileSync("tar", ["-xOf", archive.path, "plugin.json"], { encoding: "utf8" }));
+    const skill = execFileSync(TAR, ["-xOf", archive.path, "skills/guilduo-workflows/SKILL.md"], { encoding: "utf8" });
+    const manifest = JSON.parse(execFileSync(TAR, ["-xOf", archive.path, "plugin.json"], { encoding: "utf8" }));
     assert.equal(manifest.name, "guilduo-workflows");
     assert.match(skill, /^---\r?\nname: guilduo-workflows\r?\n/);
     const validationPath = join(output, "validation.json");

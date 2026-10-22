@@ -22,7 +22,7 @@ test("deployment guard checks both public and compatibility HTML without auth or
     assert.ok(options?.signal);
     return new Response("shell", { headers: { "cf-cache-status": paths.length === 1 ? "DYNAMIC" : "BYPASS" } });
   });
-  assert.deepEqual(paths, ["/", "/next/relay-forge/"]);
+  assert.deepEqual(paths, ["/", "/next/relay-forge/", "/next/all-for-adhd/"]);
 });
 
 test("deployment guard blocks failed probes, cached compatibility HTML and non-origin inputs", async () => {

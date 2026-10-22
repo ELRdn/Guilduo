@@ -156,7 +156,7 @@ test("all Docs links and fragments resolve and public service links retain their
       assert.doesNotMatch(anchor.href, /^\s*(?:javascript|data|vbscript):/i);
       const url = new URL(anchor.href, current);
       allHrefs.push(url.href);
-      assert.doesNotMatch(url.href, /workers\.dev|appwrite\.(?:network|io)|docs\.guilduo\.com|\/interaction-lab\/|\/next\/relay-forge\//i);
+      assert.doesNotMatch(url.href, /workers\.dev|appwrite\.(?:network|io)|docs\.guilduo\.com|\/interaction-lab\/|\/next\/(?:relay-forge|all-for-adhd)\//i);
       if (url.origin === OFFICIAL_SITE_ORIGIN && url.pathname.startsWith("/docs/")) {
         const target = assets.get(`${url.pathname.slice(1)}index.html`);
         assert.ok(target, `${current} broken Docs link ${anchor.href}`);
@@ -203,7 +203,7 @@ test("the search index parses and includes every localized article with no compa
       for (const section of page.sections) assert.ok(entry.text.includes(section.title), "search includes section content");
     }
   }
-  assert.doesNotMatch(serialized, /workers\.dev|docs\.guilduo\.com|\/next\/relay-forge\//);
+  assert.doesNotMatch(serialized, /workers\.dev|docs\.guilduo\.com|\/next\/(?:relay-forge|all-for-adhd)\//);
 });
 
 test("renderer escapes hostile text in metadata, article fields, code and JSON-LD", () => {

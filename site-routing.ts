@@ -16,18 +16,21 @@ export const WEB_APP_HOST = "app.guilduo.com";
 
 export const LP_ENTRY_PATH = "/lp/";
 export const RELAY_FORGE_ENTRY_PATH = "/next/relay-forge/";
+/** Official Web App (All for ADHD); Relay Forge stays reachable at its compatibility path. */
+export const WEB_APP_ENTRY_PATH = "/next/all-for-adhd/";
 
 export const COMPATIBILITY_PATHS = Object.freeze([
   "/lp/",
   "/lp/en/",
   "/next/",
   "/next/relay-forge/",
+  "/next/all-for-adhd/",
 ] as const);
 
 export type PublicHostRoute = Readonly<{
   host: typeof OFFICIAL_SITE_HOST | typeof WEB_APP_HOST;
   publicPath: "/";
-  deploymentPath: typeof LP_ENTRY_PATH | typeof RELAY_FORGE_ENTRY_PATH;
+  deploymentPath: typeof LP_ENTRY_PATH | typeof WEB_APP_ENTRY_PATH;
 }>;
 
 function normalizeHostname(hostname: string): string {
@@ -46,7 +49,7 @@ export function resolvePublicHostRoute(hostname: string, pathname: string): Publ
     return { host, publicPath: "/", deploymentPath: LP_ENTRY_PATH };
   }
   if (host === WEB_APP_HOST) {
-    return { host, publicPath: "/", deploymentPath: RELAY_FORGE_ENTRY_PATH };
+    return { host, publicPath: "/", deploymentPath: WEB_APP_ENTRY_PATH };
   }
   return null;
 }
@@ -80,9 +83,9 @@ export const CLOUDFLARE_SITE_REWRITE_RULES = Object.freeze([
     deploymentPath: LP_ENTRY_PATH,
   },
   {
-    name: "Guilduo app root to Relay Forge",
+    name: "Guilduo app root to Web App",
     expression: `(http.host eq "${WEB_APP_HOST}" and http.request.uri.path eq "/")`,
-    deploymentPath: RELAY_FORGE_ENTRY_PATH,
+    deploymentPath: WEB_APP_ENTRY_PATH,
   },
 ] as const);
 

@@ -12,10 +12,10 @@
 
 - Read [docs/public-urls.md](docs/public-urls.md) before adding or changing a user-facing link.
 - Official site: https://guilduo.com/
-- Official Web App: https://app.guilduo.com/ — the public **Guilduo / Relay Forge** entry.
+- Official Web App: https://app.guilduo.com/ — the public **Guilduo** entry (All for ADHD, served from /next/all-for-adhd/ since the 2026-10-22 switch).
 - Official MCP endpoint: https://mcp.guilduo.com/mcp
 - Appwrite API endpoint: https://api.guilduo.com/v1
-- app.guilduo.com/next/relay-forge/ is an internal deployment and compatibility path, not a new-user entry point.
+- app.guilduo.com/next/all-for-adhd/ and app.guilduo.com/next/relay-forge/ (Relay Forge) are internal deployment and compatibility paths, not new-user entry points.
 - Old workers.dev and Appwrite generated domains are compatibility or rollback surfaces only.
 - Keep QuestForge in compatibility-sensitive technical identifiers, but use Guilduo and Guilduo / Relay Forge in new public copy and links.
 
@@ -35,6 +35,6 @@
 ## Validation
 
 - Keep the root surface and `/next/` implementation surface responsibilities separate.
-- Treat `/interaction-lab/` as the local development route, app.guilduo.com/ as the official Web App, and `/next/relay-forge/` as its compatibility/deployment path.
+- Treat `/interaction-lab/` as the local development route, app.guilduo.com/ as the official Web App (`/next/all-for-adhd/`), and `/next/relay-forge/` as the Relay Forge compatibility path.
 - Run `npm run design:check` after changing design documents, tokens, components, screens, or asset references.
 - Run the relevant type checks, tests, build, contract checks, and visual validation before declaring a change complete.
