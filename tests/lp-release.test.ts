@@ -22,10 +22,11 @@ test("official LP documents preserve public canonical and language URLs", () => 
   assert.match(ja, /<a class="wordmark" href="\/"/);
 });
 test("Web App metadata and host routing stay separate from the LP", () => {
-  for (const file of ["index.html", "interaction-lab/index.html", "interaction-lab/relay-forge/index.html"]) assert.match(read(file), /__GUILDUO_WEB_APP_ORIGIN__\//);
+  for (const file of ["index.html", "interaction-lab/index.html", "interaction-lab/relay-forge/index.html", "interaction-lab/all-for-adhd/index.html"]) assert.match(read(file), /__GUILDUO_WEB_APP_ORIGIN__\//);
   assert.match(read("vite.config.ts"), /PUBLIC_SITE_URL/);
   assert.match(read("site-routing.ts"), /LP_ENTRY_PATH = "\/lp\/"/);
   assert.match(read("site-routing.ts"), /RELAY_FORGE_ENTRY_PATH = "\/next\/relay-forge\/"/);
+  assert.match(read("site-routing.ts"), /WEB_APP_ENTRY_PATH = "\/next\/all-for-adhd\/"/);
 });
 test("official LP shares the approved demo and motion implementation", () => {
   assert.match(read("lp/main.ts"), /import "\.\.\/lpv3\/main"/);

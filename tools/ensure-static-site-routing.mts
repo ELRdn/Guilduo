@@ -30,7 +30,7 @@ export async function ensureStaticSiteRouting(
 ): Promise<"unchanged" | "updated"> {
   // Do not apply this setting to an archive that depends on arbitrary SPA paths.
   for (const file of ["index.html", "lp/index.html", "lp/en/index.html", "next/index.html",
-    "next/relay-forge/index.html", "privacy/index.html", "terms/index.html",
+    "next/relay-forge/index.html", "next/all-for-adhd/index.html", "privacy/index.html", "terms/index.html",
     "docs/index.html", "docs/en/index.html"]) await access(resolve(directory, file));
   const endpoint = new URL(env.APPWRITE_SITE_ENDPOINT ?? "");
   assert.equal(endpoint.protocol, "https:");

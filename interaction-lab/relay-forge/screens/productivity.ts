@@ -122,7 +122,7 @@ export function productivityWorkspace(options: {
   function status(): HTMLElement {
     const feedback = message(), error = feedback !== "" && feedback !== w("saved");
     const actions = pending ? [button(w("retry"), () => { if (pending) void perform(pending); }, busy || options.held() || !navigator.onLine)] : [button(w("retry"), () => { message = () => ""; void load(); }, loading || busy)];
-    return el("div", { class: "rf-work-status", role: failed || pending || error ? "alert" : "status" }, feedback || (!options.port ? w("unavailable") : loading ? "…" : ""), ...(error || !loaded ? actions : []));
+    return el("div", { class: "rf-work-status", role: failed || pending || error ? "alert" : "status" }, feedback || (!options.port ? w("unavailable") : loading ? "…" : ""), ...(options.port && (error || !loaded) ? actions : []));
   }
   async function saveNote(after?: () => void): Promise<void> {
     if (!draft) return;
@@ -187,7 +187,7 @@ export function productivityWorkspace(options: {
     });
     const daySelector = mobile && calendarMode !== "day" ? calendarMode === "week" ? el("div", { class: "rf-work-day-selector" }, ...Array.from({ length: 7 }, (_, i) => { const date = addDays(from, i); const choose = button(String(Number(date.slice(-2))), () => { calendarSelected = date; refresh(); }); choose.setAttribute("aria-label", date); choose.setAttribute("aria-pressed", String(date === calendarSelected)); return choose; })) : el("div", { class: "rf-work-day-selector" }, ...Array.from({ length: 7 }, (_, i) => el("span", {}, new Intl.DateTimeFormat(getLocale(), { timeZone: "UTC", weekday: "narrow" }).format(new Date(`${addDays(from, i)}T12:00:00Z`))))) : null;
     const agenda = mobile && calendarMode === "month" ? el("section", { class: "rf-work-day-agenda" }, el("h2", {}, calendarSelected), ...events.filter(item => item.date === calendarSelected).map(eventButton)) : null;
-    return el("section", { class: "rf-screen rf-work-screen" }, screenHeader({ title: w("calendar"), question: `${from} — ${to} · ${timezone()}` }), status(), el("div", { class: "rf-work-toolbar" }, segmentControl(w("view"), ["month", "week", "day"].map(id => ({ id, label: w(id as "month" | "week" | "day") })), calendarMode, id => { calendarMode = id; if (id === "day") calendarDate = calendarSelected; refresh(); }), button(w("previous"), () => navigateDate(-1)), button(w("today"), () => { calendarDate = today; calendarSelected = today; refresh(); }), button(w("next"), () => navigateDate(1)), search), ...(calendarMode !== "month" ? [el("p", { class: "rf-work-selection-hint" }, w("selectionHint"))] : []), daySelector, el("div", { class: "rf-work-calendar", "data-mode": calendarMode }, ...(mobile && calendarMode === "week" ? [days[Math.floor((Date.parse(calendarSelected) - Date.parse(from)) / 86400000)]!] : days)), agenda, el("h2", {}, w("unscheduled")), ...options.quests().filter(q => q.lifecycleState === "active" && !q.scheduledDate && !q.dueDate && q.title.toLowerCase().includes(query.toLowerCase())).map(q => button(q.title, () => options.navigate("quests", q.id))));
+    return el("section", { class: "rf-screen rf-work-screen" }, screenHeader({ title: w("calendar"), question: `${from} — ${to} · ${timezone()}` }), status(), el("div", { class: "rf-work-toolbar" }, segmentControl(w("view"), ["month", "week", "day"].map(id => ({ id, label: w(id as "month" | "week" | "day") })), calendarMode, id => { calendarMode = id; if (id === "day") calendarDate = calendarSelected; refresh(); }), button(w("previous"), () => navigateDate(-1)), button(w("today"), () => { calendarDate = today; calendarSelected = today; refresh(); }), button(w("next"), () => navigateDate(1)), search), ...(calendarMode !== "month" ? [el("p", { class: "rf-work-selection-hint" }, w("selectionHint"))] : events.length === 0 ? [el("p", { class: "rf-work-selection-hint" }, w("empty"), " ", button(w("week"), () => { calendarMode = "week"; calendarDate = calendarSelected; refresh(); }))] : []), daySelector, el("div", { class: "rf-work-calendar", "data-mode": calendarMode }, ...(mobile && calendarMode === "week" ? [days[Math.floor((Date.parse(calendarSelected) - Date.parse(from)) / 86400000)]!] : days)), agenda, el("h2", {}, w("unscheduled")), ...options.quests().filter(q => q.lifecycleState === "active" && !q.scheduledDate && !q.dueDate && q.title.toLowerCase().includes(query.toLowerCase())).map(q => button(q.title, () => options.navigate("quests", q.id))));
   }
   function selectRange(date: string, from: number, to: number): void {
     if (held()) return;
@@ -236,6 +236,8 @@ export function productivityWorkspace(options: {
     openModal(w("history"), body, [button(w("cancel"), () => { entryDraft = null; modal?.close(); historyOpen = false; })]);
   }
   function renderTimer(): HTMLElement {
+    // Without a storage port the timer can never run; keep the shell free of a dead bar.
+    if (!options.port) return el("section", { class: "rf-work-timer", hidden: true });
     const running = current();
     const selector = questSelect(timerQuest || running?.questId || "", value => { timerQuest = value; renderTimerHost(); }, false, true); selector.disabled = held();
     const action = button(w(running ? (timerQuest && timerQuest !== running.questId ? "switch" : "stop") : "start"), () => {
@@ -243,8 +245,8 @@ export function productivityWorkspace(options: {
       const apply = () => { void write(running && !switchTo ? "/timer/stop" : "/timer/start", { questId: timerQuest || running?.questId, expectedEntryId: running?.id ?? "", ...(running ? { expectedUpdatedAt: running.updatedAt } : {}) }); };
       if (switchTo) confirmAction(w("switch"), apply); else apply();
     }, held() || (!running && !timerQuest));
-    const elapsed = el("span", { "data-work-elapsed": "true", class: "rf-work-elapsed" }, elapsedText());
-    return el("section", { class: "rf-work-timer", "aria-label": w("time") }, selector, elapsed, action, button(w("history"), () => { entryDraft = null; historyOpen = true; openHistory(); }, !loaded), button(w("notes"), () => guard(() => options.navigate("notes"))), ...(message() || !loaded ? [status()] : []));
+    const elapsed = el("span", { "data-work-elapsed": "true", class: "rf-work-elapsed", hidden: !running }, elapsedText());
+    return el("section", { class: "rf-work-timer", "aria-label": w("time"), "data-running": running ? "true" : "false" }, selector, elapsed, action, button(w("history"), () => { entryDraft = null; historyOpen = true; openHistory(); }, !loaded), ...(message() || !loaded ? [status()] : []));
   }
   function elapsedText(): string { const running = current(); if (!running) return "00:00:00"; const seconds = Math.floor(entrySeconds(running)); return `${w("provisional")} ${[Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map(n => String(n).padStart(2, "0")).join(":")}`; }
   function renderTimerHost(): void { if (timerHost && !disposed) replaceChildren(timerHost, renderTimer()); }
@@ -275,6 +277,15 @@ export function productivityWorkspace(options: {
     guard, dirty, busy: () => busy || pending !== null || selecting || Boolean(modal?.open), load,
     clearCalendar() { const previous = selections; selections = []; previous.forEach(dispose => dispose()); },
     attachTimer(host: HTMLElement) { timerHost = host; timerSize.observe(host); renderTimerHost(); },
+    /** Starts (or switches) the native timer for a Quest, or stops it with null; for surfaces with their own start button. */
+    track(questId: string | null): void {
+      const running = current();
+      if (questId === null) { if (running) void write("/timer/stop", { questId: running.questId, expectedEntryId: running.id, expectedUpdatedAt: running.updatedAt }); return; }
+      if (running?.questId === questId) return;
+      void write("/timer/start", { questId, expectedEntryId: running?.id ?? "", ...(running ? { expectedUpdatedAt: running.updatedAt } : {}) });
+    },
+    trackedQuest: () => current()?.questId ?? null,
+    history: openHistory,
     renderTimer: renderTimerHost,
     screen: (id: "calendar" | "notes") => ({ main: id === "calendar" ? calendarScreen() : notesScreen() }), settings,
     relatedNotes(questId: string): HTMLElement { return el("div", {}, ...data.notes.filter(n => !n.archived && n.questId === questId).map(n => button(n.title, () => guard(() => { original = n; draft = { ...n }; mobileEditor = true; options.navigate("notes"); })))); },

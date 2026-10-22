@@ -40,6 +40,7 @@ export interface MobileCallbacks {
   readonly onRefreshWorkspace?: () => void;
   readonly onExternalChecked?: (value: boolean) => void;
   readonly onInbox?: (trigger: HTMLElement) => void;
+  readonly onCreate?: () => void;
   readonly onSelect: (questId: string, trigger: HTMLElement) => void;
   readonly onOpenQuestFlow: (trigger: HTMLElement) => void;
   readonly onToggleEvidence: () => void;
@@ -100,11 +101,14 @@ function mobileHeader(state: MobileState, callbacks: MobileCallbacks): HTMLEleme
   inbox.addEventListener("click", () => callbacks.onInbox?.(inbox));
   const sync = el(callbacks.onRefreshWorkspace ? "button" : "span", { class:"rf-m-sync", "data-state":syncState, ...(callbacks.onRefreshWorkspace ? { type:"button", title:relayText("refresh"), "aria-label":`${relayText("refresh")} · ${syncLabel}`, disabled:syncState === "syncing" } : {}) }, `${syncLabel} · ${state.model.lastSyncLabel}`);
   if (callbacks.onRefreshWorkspace) sync.addEventListener("click", callbacks.onRefreshWorkspace);
+  const create = el("button", { type: "button", class: "rf-primary-button rf-m-create", disabled: callbacks.onCreate === undefined }, relayText("createQuest"));
+  create.addEventListener("click", () => callbacks.onCreate?.());
   return el(
     "header",
     { class: "rf-m-header" },
     el("h1", { class: "rf-m-title" }, workText("home")),
     inbox,
+    create,
     el(
       "div",
       { class: "rf-m-status" },

@@ -355,18 +355,10 @@ export function actorKindFromAssignee(type: AssigneeType): ActorKind {
   return type === "agent" ? "agent" : "human";
 }
 
-/** Section 13.1 label text. Uppercase Latin only, never applied to Japanese. */
+/** Section 13.1 label text: localized, uppercased where the script has case (a no-op for Japanese). */
 export function actorTypeLabel(kind: ActorKind): string {
-  switch (kind) {
-    case "human":
-      return "HUMAN";
-    case "agent":
-      return "AGENT";
-    case "system":
-      return "SYSTEM";
-    case "companion":
-      return "COMPANION";
-  }
+  const key = ({ human: "kindHuman", agent: "kindAgent", system: "kindSystem", companion: "kindCompanion" } as const)[kind];
+  return relayText(key).toLocaleUpperCase();
 }
 
 export function priorityFromImpact(impact: Impact, blocking: boolean): LoomQuest["priority"] {

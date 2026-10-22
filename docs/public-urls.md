@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | 公式サイト / LP | https://guilduo.com/ | Guilduoの紹介、機能説明、公開入口 | READY |
 | 英語LP | https://guilduo.com/lp/en/ | 英語の公式LP | READY |
-| Web App | https://app.guilduo.com/ | **Guilduo / Relay Forge**の正式Web App | READY |
+| Web App | https://app.guilduo.com/ | **Guilduo**の正式Web App（All for ADHD。2026-10-22切替承認、Cloudflare反映待ち） | READY |
 | MCP | https://mcp.guilduo.com/mcp | OAuth対応Remote HTTP MCP | READY |
 | Appwrite API | https://api.guilduo.com/v1 | Appwrite SDKとWorkerが使うAPI endpoint | READY |
 | Documentation | https://guilduo.com/docs/ | 日本語Docsの正式URL（同じSiteに静的生成） | READY / PUBLISHED |
@@ -28,10 +28,10 @@
 ### 新規ユーザーへ案内する入口
 
 1. Guilduoを知る人には [guilduo.com](https://guilduo.com/) を案内する。
-2. 実際に作業を始める人には [Guilduo / Relay Forge](https://app.guilduo.com/) を案内する。
+2. 実際に作業を始める人には [Guilduo](https://app.guilduo.com/) を案内する。
 3. AIクライアントを接続する人には https://mcp.guilduo.com/mcp を案内する。
 
-Relay ForgeはGuilduoの正式Web Appである。/next/relay-forge/ はAppwrite Site内のデプロイpathであり、新規ユーザー向けの正式入口ではない。
+All for ADHDがGuilduoの正式Web Appである（2026-10-22オーナー決定）。/next/all-for-adhd/ と /next/relay-forge/ はAppwrite Site内のデプロイpathであり、新規ユーザー向けの正式入口ではない。Guilduo / Relay Forge は /next/relay-forge/ の互換pathとして残す。
 
 ## 公開URLと内部pathの関係
 
@@ -40,7 +40,8 @@ Relay ForgeはGuilduoの正式Web Appである。/next/relay-forge/ はAppwrite 
 | https://guilduo.com/ | LP内部path /lp/ へrewriteされる公式root | 使う |
 | https://guilduo.com/lp/en/ | 英語LP | 使う |
 | https://guilduo.com/lp/ | 日本語LPの互換path | 公式rootを優先する |
-| https://app.guilduo.com/ | Relay Forge内部path /next/relay-forge/ へrewriteされる公式root | 使う |
+| https://app.guilduo.com/ | All for ADHD内部path /next/all-for-adhd/ へrewriteされる公式root | 使う |
+| https://app.guilduo.com/next/all-for-adhd/ | All for ADHDの内部デプロイpath | 新規リンクに使わない |
 | https://app.guilduo.com/next/relay-forge/ | Relay Forgeの内部デプロイ・互換path | 新規リンクに使わない |
 | /interaction-lab/ | ローカル開発・キャプチャ用のソースroute | 本番URLとして案内しない |
 | Appwrite generated domain | 検証・rollback用のSite URL | 新規ユーザーへ案内しない |

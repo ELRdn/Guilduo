@@ -7,7 +7,7 @@ export async function assertSiteDeployCacheSafe(siteUrl: string, fetcher: typeof
   if (!/^https?:$/.test(origin.protocol) || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) {
     throw new Error("APPWRITE_SITE_URL must be an HTTP(S) origin.");
   }
-  for (const path of ["/", "/next/relay-forge/"]) {
+  for (const path of ["/", "/next/relay-forge/", "/next/all-for-adhd/"]) {
     const response = await fetcher(new URL(path, origin), { redirect: "error", signal: AbortSignal.timeout(20_000) });
     await response.arrayBuffer();
     if (!response.ok) throw new Error(`Public shell check failed with HTTP ${response.status}; deployment not started.`);

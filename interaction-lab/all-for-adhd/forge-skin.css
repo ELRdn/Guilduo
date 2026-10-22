@@ -1,0 +1,157 @@
+/* AFA skin for the Relay Forge modules opened from Settings → ほかの機能.
+ * The markup stays Relay Forge's; this layer restyles it in the AFA vocabulary:
+ * one sans face, sentence-case labels, rounded cards and pill toggles, 44px
+ * targets, soft state pills without red, and page scroll instead of the
+ * fixed-height panes Relay Forge's shell expects. Scoped to `.a4-extra`. */
+
+.a4-extra {
+  /* Token remaps reach every Relay Forge rule that reads them. */
+  --qf-radius-xs: var(--qf-radius-md);
+  --qf-radius-sm: var(--qf-radius-md);
+  --qf-font-mono: var(--qf-font-sans);
+  --qf-text-operational: 500 14px/20px var(--qf-font-sans);
+  --qf-text-label: 600 13px/18px var(--qf-font-sans);
+  --qf-text-metadata: 400 13px/18px var(--qf-font-sans);
+  --qf-text-compact: 400 14px/20px var(--qf-font-sans);
+  --qf-text-body: 400 15px/22px var(--qf-font-sans);
+  --qf-text-component: 600 15px/22px var(--qf-font-sans);
+  --qf-text-page: var(--qf-text-display);
+  --qf-control-default: 44px;
+  --qf-control-compact: 28px;
+  /* AFA keeps red out of the palette; blocked and failing states read as amber. */
+  --qf-color-danger: var(--qf-color-warning);
+}
+.a4-extra [class*="rf-"] { text-transform: none; letter-spacing: normal; font-family: var(--qf-font-sans); }
+
+/* Frame: the AFA view already gives the column and the way back. */
+.a4-extra .rf-screen { padding: 0; background: transparent; height: auto; min-height: 0; overflow: visible; grid-template-rows: none; gap: var(--qf-space-7); }
+.a4-extra .rf-screen-header { border-bottom: 0; padding-bottom: 0; align-items: flex-start; gap: var(--qf-space-5); }
+.a4-extra .rf-screen-title { outline: none; }
+.a4-extra .rf-screen-question { font-size: 15px; max-width: none; }
+.a4-extra .rf-screen-meta dt, .a4-extra .rf-col-label, .a4-extra .rf-inline-label, .a4-extra .rf-region-label { color: var(--qf-color-fg-muted); font-weight: 600; }
+.a4-extra .rf-region-label { font-size: 15px; color: var(--qf-color-fg-strong); }
+
+/* Regions read as AFA cards; long content scrolls with the page. */
+.a4-extra .rf-screen-region {
+  padding: var(--qf-space-7); border-radius: var(--qf-radius-lg);
+  border-color: var(--qf-color-border-subtle); box-shadow: var(--a4-card-shadow, none);
+}
+.a4-extra .rf-screen-region[data-scroll="true"],
+.a4-extra :is(.rf-work-screen, .rf-skills-screen, .rf-set-screen, .rf-screen--battle) { height: auto; max-height: none; overflow: visible; }
+.a4-extra .rf-screen--battle [data-variant="timeline"] { max-height: none; }
+.a4-extra .rf-screen-region[data-variant="canvas"] { overflow: hidden; }
+.a4-extra .rf-metric { border-radius: var(--qf-radius-lg); box-shadow: var(--a4-card-shadow, none); }
+
+/* Buttons match .a4-button / .a4-primary. */
+.a4-extra :is(.rf-primary-button, .rf-secondary-button) {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--qf-space-3);
+  min-height: 44px; height: auto; padding: 0 var(--qf-space-7);
+  border-radius: var(--qf-radius-md); font: 600 15px/20px var(--qf-font-sans); cursor: pointer;
+}
+.a4-extra .rf-secondary-button { background: var(--qf-color-surface); color: var(--qf-color-fg-strong); border: var(--qf-border-width) solid var(--qf-color-border-default); }
+.a4-extra .rf-secondary-button:hover:not(:disabled) { border-color: var(--qf-color-border-strong); }
+.a4-extra .rf-primary-button { background: var(--qf-color-accent); color: var(--qf-color-fg-on-accent); border: var(--qf-border-width) solid var(--qf-color-accent); }
+.a4-extra .rf-primary-button:hover:not(:disabled) { background: var(--qf-color-accent-hover); }
+.a4-extra :is(.rf-primary-button, .rf-secondary-button):disabled { opacity: 0.55; cursor: default; }
+
+/* Segmented controls become separate pills, like the AFA chips. */
+.a4-extra .rf-segments { gap: var(--qf-space-3); padding: 0; background: none; border: 0; }
+.a4-extra .rf-segment {
+  min-height: 44px; height: auto; padding: 0 var(--qf-space-6);
+  background: transparent; color: var(--qf-color-fg-default);
+  border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-pill); cursor: pointer;
+}
+.a4-extra .rf-segment[aria-checked="true"] { background: var(--qf-color-selected); color: var(--qf-color-fg-strong); border-color: var(--qf-color-border-strong); font-weight: 600; }
+.a4-extra .rf-segment-count { color: var(--qf-color-fg-muted); font-size: 13px; }
+
+/* Fields match .a4-input. */
+.a4-extra :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  min-height: 44px; padding: 0 var(--qf-space-5); font: 400 15px/22px var(--qf-font-sans);
+  color: var(--qf-color-fg-default); background: transparent;
+  border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-md);
+}
+.a4-extra textarea { padding: var(--qf-space-4) var(--qf-space-5); }
+
+/* State chips: soft filled pills; blocked reads as amber, never red (AFA rule). */
+.a4-extra .rf-chip {
+  height: 28px; padding-inline: var(--qf-space-4); border: 0; border-radius: var(--qf-radius-pill);
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.a4-extra .rf-chip-mark { display: none; }
+.a4-extra .rf-chip:is([data-tone="blocked"], [data-tone="danger"]) { color: var(--qf-color-warning); border-left-width: 0; }
+
+/* Rows and cards inside the modules pick up AFA corners and spacing. */
+.a4-extra :is(.rf-srow, .rf-q-row, .rf-c-row, .rf-p-row, .rf-n-node, .rf-work-card, .rf-skills-group, .rf-b-command) { border-radius: var(--qf-radius-md); }
+.a4-extra .rf-skills-group { box-shadow: var(--a4-card-shadow, none); }
+
+/* Relay Forge's foundation.css is not loaded here (its body rules fight AFA's
+ * page scroll); these are the few shared classes the modules still rely on. */
+.rf-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.a4-extra :is(.rf-quiet-button, .rf-icon-button, .rf-filter-chip, .rf-q-sort-option, .rf-n-map-control) {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--qf-space-2);
+  min-height: 44px; min-width: 44px; padding: 0 var(--qf-space-5);
+  background: transparent; color: var(--qf-color-fg-default);
+  border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-pill); cursor: pointer;
+}
+.a4-extra .rf-quiet-button { border-color: transparent; color: var(--qf-color-accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.a4-extra :is(.rf-filter-chip, .rf-q-sort-option):is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"], [data-selected="true"]) {
+  background: var(--qf-color-selected); color: var(--qf-color-fg-strong); border-color: var(--qf-color-border-strong); font-weight: 600;
+}
+.a4-extra .rf-kbd { font-size: 12px; padding: 0 var(--qf-space-2); border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-sm); }
+
+/* A portrait that fails to load must not print its alt text over the initials. */
+.a4-extra .rf-avatar-image { color: transparent; font-size: 0; }
+
+/* Metric tiles drop Relay Forge's coloured leading edge; the number carries the meaning. */
+.a4-extra .rf-metric { border-left-width: var(--qf-border-width); border-left-color: var(--qf-color-border-subtle); }
+.a4-extra :is(.rf-q-row, .rf-srow, .rf-c-row, .rf-p-row):is([data-tone="blocked"], [data-tone="danger"]) { border-left-color: var(--qf-color-warning); }
+
+/* The element resets Relay Forge's markup was written against, at zero specificity
+ * so every module rule still wins. */
+:where(.a4-extra) :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:where(.a4-extra) :where(ul, ol) { margin: 0; padding: 0; list-style: none; }
+:where(.a4-extra) :where(h1, h2, h3, h4, p, dl, dd, figure) { margin: 0; }
+
+/* Sticky table heads would slide under the AFA header; the page scrolls instead. */
+.a4-extra .rf-q-head { position: static; }
+.a4-extra .rf-srow { border-radius: var(--qf-radius-md); }
+.a4-extra .rf-q-row[data-bucket="blocked"] { border-left-color: var(--qf-color-warning); }
+
+/* The network map lays nodes out at fixed pixel sizes: keep Relay Forge's type
+ * metrics inside it and give the canvas a real height, since the page scrolls. */
+.a4-extra .rf-n-canvas {
+  --qf-text-component: 600 14px/20px var(--qf-font-sans);
+  --qf-text-compact: 400 13px/18px var(--qf-font-sans);
+  --qf-text-metadata: 400 12px/16px var(--qf-font-sans);
+  --qf-text-label: 600 11px/16px var(--qf-font-sans);
+  --qf-text-operational: 500 12px/16px var(--qf-font-sans);
+  flex: none; height: min(68vh, 640px); background: var(--qf-color-field);
+}
+.a4-extra .rf-n-workspace { align-items: start; }
+
+/* Calendar: days as soft cards, events as small tinted pills like the AFA week view. */
+.a4-extra .rf-work-calendar { gap: var(--qf-space-2); background: none; border: 0; }
+.a4-extra .rf-work-calendar-day { border-radius: var(--qf-radius-md); border: var(--qf-border-width) solid var(--qf-color-border-subtle); padding: var(--qf-space-3); }
+.a4-extra .rf-work-calendar-day h2 { font: 600 13px/18px var(--qf-font-sans); color: var(--qf-color-fg-muted); }
+.a4-extra .rf-work-calendar-day[data-today="true"] { border-color: var(--qf-color-accent); }
+.a4-extra .rf-work-calendar-day[data-today="true"] h2 { color: var(--qf-color-accent); text-decoration: none; }
+.a4-extra .rf-work-event.rf-work-event {
+  display: block; min-height: 0; height: auto; padding: 3px var(--qf-space-3); margin-bottom: var(--qf-space-1);
+  font: 500 12px/16px var(--qf-font-sans); text-align: left; white-space: normal; color: var(--qf-color-fg-strong);
+  border: 0; border-left: 3px solid var(--qf-color-agent); border-radius: var(--qf-radius-sm);
+  background: color-mix(in srgb, var(--qf-color-agent) 12%, var(--qf-color-surface));
+}
+.a4-extra .rf-work-event[data-kind="deadline"] { border-left-color: var(--qf-color-warning); background: color-mix(in srgb, var(--qf-color-warning) 12%, var(--qf-color-surface)); }
+.a4-extra .rf-work-event[data-kind="recorded"] { border-left-color: var(--qf-color-human); background: color-mix(in srgb, var(--qf-color-human) 12%, var(--qf-color-surface)); }
+.a4-extra .rf-work-card { border-radius: var(--qf-radius-md); box-shadow: var(--a4-card-shadow, none); }
+/* Battle MP keeps its meaning without a violet fill. */
+.a4-extra { --qf-color-mp: var(--qf-color-agent); }
+
+/* Time tracking: the Relay Forge bottom bar becomes an AFA card at the top of the view. */
+.a4-extra .rf-work-timer {
+  gap: var(--qf-space-4); padding: var(--qf-space-7); border: var(--qf-border-width) solid var(--qf-color-border-subtle);
+  border-radius: var(--qf-radius-lg); background: var(--qf-color-surface); box-shadow: var(--a4-card-shadow, none);
+}
+.a4-extra .rf-work-timer select { flex: 1 1 240px; width: auto; }
+.a4-extra .rf-work-elapsed { font: 600 20px/28px var(--qf-font-sans); font-variant-numeric: tabular-nums; color: var(--qf-color-fg-strong); }
+.a4-extra .rf-work-settings { display: grid; gap: var(--qf-space-4); }

@@ -6,6 +6,9 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+/** bsdtar reads both .zip and .tgz; on Windows a GNU tar earlier on PATH (Git Bash) cannot. */
+export const TAR = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
+
 type ReviewCase = { description: string; prompt: string; tools_triggered?: string; expected_behavior: string };
 type Manifest = { version: string; apps?: unknown; hooks?: unknown; interface: unknown;
   extensions: { "com.openai": { review: { test_cases: { positive: ReviewCase[]; negative: ReviewCase[] };
@@ -124,7 +127,7 @@ export async function prepareGuilduoReview(root = repositoryRoot, outputName = "
     const version = validation.version;
     const expectedVersion = `${sourceManifest.version}${item.hooks && ["claude", "muse"].includes(target) ? ".hooks" : ""}`;
     if (version !== expectedVersion) throw new Error(`Stale archive version: ${target}`);
-    const tar = (args: string[]): Buffer => execFileSync("tar", args, { timeout: 30_000, maxBuffer: 8 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+    const tar = (args: string[]): Buffer => execFileSync(TAR, args, { timeout: 30_000, maxBuffer: 8 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
     const names = tar(["-tf", archive]).toString().trim().split(/\r?\n/);
     const prefix = archive.endsWith(".tgz") ? "package/" : "";
     const expectedNames = files.map(file => `${prefix}${file.path}`);

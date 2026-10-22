@@ -1,0 +1,99 @@
+{
+  "baseUrl": "http://127.0.0.1:5191",
+  "path": "/interaction-lab/relay-forge/",
+  "measuredAt": "2026-10-18T06:05:49.589Z",
+  "rows": [
+    {
+      "viewport": "desktop",
+      "screen": "ホーム",
+      "controlsAboveFold": 40,
+      "controlsTotal": 41,
+      "primaryActions": 6,
+      "jargonHits": 7,
+      "textChars": 1587,
+      "fixedAreaRatio": 0
+    },
+    {
+      "viewport": "desktop",
+      "screen": "Quests",
+      "controlsAboveFold": 44,
+      "controlsTotal": 60,
+      "primaryActions": 2,
+      "jargonHits": 12,
+      "textChars": 2780,
+      "fixedAreaRatio": 0.02
+    },
+    {
+      "viewport": "desktop",
+      "screen": "カレンダー",
+      "controlsAboveFold": 22,
+      "controlsTotal": 23,
+      "primaryActions": 1,
+      "jargonHits": 3,
+      "textChars": 567,
+      "fixedAreaRatio": 0
+    },
+    {
+      "viewport": "desktop",
+      "screen": "ノート",
+      "controlsAboveFold": 16,
+      "controlsTotal": 17,
+      "primaryActions": 1,
+      "jargonHits": 3,
+      "textChars": 172,
+      "fixedAreaRatio": 0
+    },
+    {
+      "viewport": "mobile",
+      "screen": "ホーム",
+      "controlsAboveFold": 15,
+      "controlsTotal": 18,
+      "primaryActions": 1,
+      "jargonHits": 1,
+      "textChars": 712,
+      "fixedAreaRatio": 0.37
+    },
+    {
+      "viewport": "mobile",
+      "screen": "Quests",
+      "controlsAboveFold": 23,
+      "controlsTotal": 40,
+      "primaryActions": 1,
+      "jargonHits": 7,
+      "textChars": 1372,
+      "fixedAreaRatio": 0.14
+    },
+    {
+      "viewport": "mobile",
+      "screen": "カレンダー",
+      "controlsAboveFold": 55,
+      "controlsTotal": 56,
+      "primaryActions": 0,
+      "jargonHits": 1,
+      "textChars": 192,
+      "fixedAreaRatio": 0.07
+    },
+    {
+      "viewport": "mobile",
+      "screen": "ノート",
+      "controlsAboveFold": 7,
+      "controlsTotal": 8,
+      "primaryActions": 0,
+      "jargonHits": 1,
+      "textChars": 64,
+      "fixedAreaRatio": 0.07
+    }
+  ],
+  "create": {
+    "desktop": {
+      "fields": 8,
+      "requiredFields": 1,
+      "stepsToSave": 3
+    },
+    "mobile": {
+      "fields": 8,
+      "requiredFields": 1,
+      "stepsToSave": 3
+    }
+  }
+}

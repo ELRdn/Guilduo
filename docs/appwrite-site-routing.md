@@ -2,9 +2,11 @@
 
 > 現在のキャッシュはTTL120秒＋SWR3600秒。下部の「2026-09-21 current cache policy after old-shell startup verification」を現行契約として優先する。120/120秒・最大240秒という記述は変更前の履歴。
 
-このリポジトリは、LPとRelay Forgeを1つのAppwrite Siteの同じactive deploymentへ梱包します。hostごとに異なるHTMLを返す処理はAppwrite Siteの静的ファイルツリーへ埋め込まず、CloudflareのURL Rewriteで入口だけを切り替えます。正式URLの利用ルールは[`public-urls.md`](public-urls.md)を参照してください。
+このリポジトリは、LPとWeb App（All for ADHD・Relay Forge）を1つのAppwrite Siteの同じactive deploymentへ梱包します。hostごとに異なるHTMLを返す処理はAppwrite Siteの静的ファイルツリーへ埋め込まず、CloudflareのURL Rewriteで入口だけを切り替えます。正式URLの利用ルールは[`public-urls.md`](public-urls.md)を参照してください。
 
-この方式は本番へ反映済みです。`https://guilduo.com/`は公式LP、`https://app.guilduo.com/`はGuilduo / Relay Forgeの正式Web Appとして案内します。
+この方式は本番へ反映済みです。`https://guilduo.com/`は公式LP、`https://app.guilduo.com/`はGuilduoの正式Web Appとして案内します。
+
+2026-10-22：正式Web AppをAll for ADHD（`/next/all-for-adhd/`）へ切り替える（オーナー承認）。`site-routing.ts`の契約は変更済み。本番反映にはCloudflareのrewrite先とCache Ruleの変更（下記「2026-10-22 Web AppをAll for ADHDへ切り替える手順」）が必要。Relay Forgeは`/next/relay-forge/`のcompatibility pathとして残す。
 
 ## 採用方式
 
@@ -14,8 +16,9 @@
 | `https://guilduo.com/lp/en/` | 変更なし | `/lp/en/` | `https://guilduo.com/lp/en/` |
 | `https://guilduo.com/docs/` | 変更なし | `/docs/` | `https://guilduo.com/docs/`（静的Docs・公開済み） |
 | `https://guilduo.com/docs/en/` | 変更なし | `/docs/en/` | `https://guilduo.com/docs/en/`（英語Docs・公開済み） |
-| `https://app.guilduo.com/` | `/`を`/next/relay-forge/`へrewrite | `/next/relay-forge/` | `https://app.guilduo.com/` |
-| `https://app.guilduo.com/next/relay-forge/` | 変更なし | `/next/relay-forge/` | `https://app.guilduo.com/` |
+| `https://app.guilduo.com/` | `/`を`/next/all-for-adhd/`へrewrite | `/next/all-for-adhd/` | `https://app.guilduo.com/` |
+| `https://app.guilduo.com/next/all-for-adhd/` | 変更なし | `/next/all-for-adhd/` | `https://app.guilduo.com/` |
+| `https://app.guilduo.com/next/relay-forge/` | 変更なし | `/next/relay-forge/` | `https://app.guilduo.com/`（Relay Forge・compatibility path） |
 | Appwrite generated domain | 変更なし | 全deployment tree | 検証・rollback用 |
 
 正本のroute契約は[`site-routing.ts`](../site-routing.ts)です。2つのrewriteはroot pathにだけ適用し、`/assets/`、`/lp/`、`/next/`へcatch-all rewriteを適用しません。これにより、ブラウザに表示されるURLとquery stringを保ったまま、既存pathとassetの相対解決を維持できます。
@@ -76,7 +79,7 @@ rewrite path:
 rewrite path:
 
 ```text
-/next/relay-forge/
+/next/all-for-adhd/
 ```
 
 ### 3. `www` redirect
@@ -180,11 +183,11 @@ npm run build
 npm test
 ```
 
-ローカルのVite originではhost-based rewriteは発生しないため、`/lp/`と`/next/relay-forge/`を直接確認します。Cloudflare反映後は、次の4つをブラウザまたはcurlで確認します。
+ローカルのVite originではhost-based rewriteは発生しないため、`/lp/`、`/next/all-for-adhd/`、`/next/relay-forge/`を直接確認します。Cloudflare反映後は、次の4つをブラウザまたはcurlで確認します。
 
 - `guilduo.com/`がLP本文と`https://guilduo.com/`のcanonicalを返す
 - `guilduo.com/lp/en/`が英語LPを返す
-- `app.guilduo.com/`がRelay Forgeを返し、アドレスバーが`/next/relay-forge/`へ変わらない
+- `app.guilduo.com/`がAll for ADHDを返し、アドレスバーが`/next/all-for-adhd/`へ変わらない
 - `app.guilduo.com/next/relay-forge/`がcompatibility pathとして引き続き開ける
 
 上記のroutingとactive deploymentは本番で確認済みです。今後Siteを更新するときも、同じactive deploymentへdist全体を公開し、host ruleを変更せずに`guilduo.com/`、`app.guilduo.com/`、英語LP、compatibility path、assetsの相対解決を確認します。`www`のapex redirectは別Ruleであり、DNSが有効になるまで`WAITING FOR DNS`として扱います。
@@ -214,3 +217,15 @@ PR #41のSite配備run `35529717689`（main `89580b9562bbc3ca86e266b7f41f010975f
 以後はこの節を現行契約とし、上の120/120秒・最大240秒という記録は変更前の履歴として扱う。最大のHTML保持は3720秒で、旧assetの48時間保持より短い。配備時は引き続き両ルール停止・DYNAMIC/BYPASS確認・保持付きarchive検査を必須とする。復旧条件は新旧HTMLのGUI起動と旧asset保持の確認であり、240秒を待つだけでは代替できない。従来の240秒の停止時間も当面維持するが、長く残る旧HTMLの安全性は検証済みasset保持で担保する。
 
 旧asset保持の検査に失敗した場合はuploadを停止し、旧archiveを直接配備しない。保持を保証できない緊急rollbackではキャッシュ両ルールを停止したまま復旧する。元設定へ戻すときはCloudflare onlyのstale-while-revalidateを120秒へ戻す。長い猶予で保存済みのHTMLは直ちに消えないため、保持を削除する理由にはしない。
+
+## 2026-10-22 Web AppをAll for ADHDへ切り替える手順
+
+オーナーが手作業で行う。順序を守り、rewriteより先にdeploymentを確認する。
+
+1. `main`を通常どおりAppwrite Siteへ配備し、generated domainで`/next/all-for-adhd/`が開くことを確認する（`npm run build`の`dist/next/all-for-adhd/`を含むdist全体）。
+2. Cloudflare Cache Rule `Guilduo public app shell`の条件のpath集合に`"/next/all-for-adhd/"`を加える：`http.request.uri.path in {"/" "/next/relay-forge/" "/next/all-for-adhd/"}`。
+3. URL Rewrite `Guilduo app root to Relay Forge`のrewrite pathを`/next/all-for-adhd/`に変え、名前を`Guilduo app root to Web App`にする（`site-routing.ts`の`CLOUDFLARE_SITE_REWRITE_RULES`と一致させる）。
+4. `app.guilduo.com/`のキャッシュをpurgeする（SWR 3600秒のため、purgeしないと最大1時間Relay Forgeが返る）。
+5. 上の確認リストで`app.guilduo.com/`がAll for ADHDを返し、`/next/relay-forge/`が引き続き開けることを確かめる。
+
+rollback：手順3のrewrite pathを`/next/relay-forge/`へ戻し、手順4と同じpurgeを行う。

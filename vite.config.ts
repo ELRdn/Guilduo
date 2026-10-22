@@ -137,6 +137,8 @@ export default defineConfig({
         // relay-forge and is carried to dist/next/relay-forge by the rename in
         // copyQuestForgeRuntime, matching NEWDESIGN.md section 29 Phase 1.
         relayForge: resolve(root, "interaction-lab/relay-forge/index.html"),
+        // Parallel calm surface on the same data; ships to dist/next/all-for-adhd.
+        allForAdhd: resolve(root, "interaction-lab/all-for-adhd/index.html"),
       },
     },
   },
