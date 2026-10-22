@@ -77,10 +77,10 @@ function visibleMembers(model: PartyModel, state: PartyState): readonly PartyMem
 }
 
 const KIND_LABEL: Readonly<Record<Actor["kind"], string>> = {
-  human: "Human",
-  agent: "Agent",
-  system: "System",
-  companion: "Companion",
+  get human() { return relayText("kindHuman"); },
+  get agent() { return relayText("kindAgent"); },
+  get system() { return relayText("kindSystem"); },
+  get companion() { return relayText("kindCompanion"); },
 };
 
 const HELD_CHIP = {

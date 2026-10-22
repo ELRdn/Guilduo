@@ -143,7 +143,7 @@ function participants(model: BattleModel): HTMLElement {
       el(
         "div",
         { class: "rf-b-actor", "data-side": "player" },
-        el("span", { class: "rf-b-actor-kind" }, "Human"),
+        el("span", { class: "rf-b-actor-kind" }, relayText("kindHuman")),
         el("strong", { class: "rf-b-actor-name" }, model.playerName),
         el("span", { class: "rf-b-actor-role" }, model.playerRole),
       ),

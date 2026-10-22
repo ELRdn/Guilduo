@@ -75,7 +75,7 @@ export interface AllForPort {
   readonly runtime?: RelayForgeRuntime;
 }
 
-type Extra = "profile" | "calendar" | "notes" | "work" | "billing" | ForgeScreen;
+type Extra = "profile" | "billing" | Exclude<ForgeScreen, "list">;
 type View = "now" | "plan" | "all" | "guild" | "settings" | Extra;
 const VIEWS: readonly { id: View; label: string }[] = [
   { id: "now", label: tx("今") },
@@ -87,18 +87,13 @@ const VIEWS: readonly { id: View; label: string }[] = [
 /** The rest of Relay Forge, reached from Settings so the five tabs stay calm. */
 const EXTRAS: readonly { id: Extra; label: string; hint: string }[] = [
   { id: "profile", label: tx("プロフィール"), hint: tx("表示名・ユーザー名・ひとこと") },
-  { id: "calendar", label: tx("カレンダー"), hint: tx("月や週で予定を見渡す") },
-  { id: "notes", label: tx("メモ"), hint: tx("タスクに結びつくメモを書く") },
-  { id: "work", label: tx("時間の記録"), hint: tx("使った時間を測って振り返る") },
-  { id: "list", label: tx("一覧・ボード・ガント"), hint: tx("すべてのタスクを並べ替えて見る") },
   { id: "network", label: tx("つながり"), hint: tx("タスクと人と連携の関係を図で見る") },
-  { id: "party", label: tx("パーティ"), hint: tx("仲間と Agent の顔ぶれと負荷") },
   { id: "battle", label: tx("バトル"), hint: tx("終えたタスクで戦うゲーム") },
   { id: "connections", label: tx("連携"), hint: tx("Google などの外部サービスと同期") },
   { id: "skills", label: tx("スキル"), hint: tx("Agent が使える MCP ツールの一覧") },
   { id: "billing", label: tx("プラン"), hint: tx("利用プランと支払い") },
 ];
-const FORGE: readonly Extra[] = ["list", "network", "party", "battle", "connections", "skills"];
+const FORGE: readonly Extra[] = ["network", "battle", "connections", "skills"];
 const isExtra = (view: View): view is Extra => EXTRAS.some(item => item.id === view);
 const UNDO_MS = 5000;
 // The language is fixed for a page load; changing it in Settings reloads the page.
@@ -115,6 +110,7 @@ const shortDate = (date: string) => shortDateLabel.format(noon(date));
 const GRID_PX = 1.4;
 /** Side-by-side cards per overlap in the week grid before the rest fold away. */
 const MAX_LANES = 2;
+const MONTH_PILLS = 3;
 const store = {
   get(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } },
   set(key: string, value: string | null): void { try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch { /* storage is a convenience */ } },
@@ -143,12 +139,17 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const openFolds = new Set<string>();
   let search = "";
   const replies = new Map<string, string>();
-  let planMode: "day" | "week" = store.get("a4-plan-mode") === "week" ? "week" : "day";
+  type PlanMode = "day" | "week" | "month";
+  const storedPlanMode = store.get("a4-plan-mode");
+  let planMode: PlanMode = storedPlanMode === "week" || storedPlanMode === "month" ? storedPlanMode : "day";
   let sheet: HTMLDialogElement | null = null;
   let repaintSheet: (() => void) | null = null;
   let stepDraftFor: string | null = null;
   let estimateFor: string | null = null;
   let afterOpen = false;
+  let workOpen = false;
+  // Relay Forge's detailed views live inside the tab they belong to.
+  let allMode: "list" | "table" | "notes" = "list";
   let busy = false;
   let game = store.get("a4-game") !== "off";
   let cheer = store.get("a4-cheer") !== "off";
@@ -167,7 +168,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const workUi = productivityWorkspace({
     port: runtime?.productivityPort, quests: port.quests, held: () => busy,
     refresh: () => render(),
-    navigate: (screen, id) => { if (screen === "quests") { if (id) { const quest = port.quests().find(q => q.id === id); if (quest) openSheet(quest); } go("all"); } else go(screen); },
+    navigate: (screen, id) => {
+      if (screen === "calendar") { planMode = "month"; go("plan"); return; }
+      allMode = screen === "notes" ? "notes" : "list";
+      go("all");
+      if (screen === "quests" && id) { const quest = port.quests().find(q => q.id === id); if (quest) openSheet(quest); }
+    },
     schedule: (id, date, time, minutes) => {
       const quest = port.quests().find(q => q.id === id);
       if (quest) update(quest, { scheduledDate: date, scheduledTime: time, estimatedMinutes: minutes, planningState: "scheduled", planningMode: "on_date" }, tx("予定に入れました"), previousPlan(quest));
@@ -186,12 +192,15 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     runtime: () => port.runtime!, quests: port.quests, busy: () => busy, render: () => render(),
     announce: message => say(message),
     openQuest: id => { const quest = port.quests().find(q => q.id === id); if (quest) openSheet(quest); },
-    openAgentForm: () => openAgentForm(),
-    navigate: screen => go(screen),
+    navigate: screen => {
+      if (screen === "list") { allMode = "table"; go("all"); }
+      else if (screen === "calendar") { planMode = "month"; go("plan"); } else go(screen);
+    },
     refresh: async () => { await port.refresh?.(); },
     workTime: quest => workUi.totals(quest),
     relatedNotes: id => workUi.relatedNotes(id),
   }) : null;
+  if (runtime) void workUi.load();
   const analyticsUi = createAnalyticsUi({ port: runtime?.analyticsPort ?? null, render: () => render(), alive: () => !disposed });
   const byId = (id: string | null) => (id === null ? null : port.quests().find(q => q.id === id) ?? null);
 
@@ -258,6 +267,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     if (pending.has(quest.id)) return;
     if (focusId === quest.id) focusId = null;
     store.set(`a4-start:${quest.id}`, null);
+    stopTracking(quest);
     const timer = window.setTimeout(() => {
       pending.delete(quest.id);
       void run(async () => {
@@ -293,11 +303,17 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function start(quest: Quest): void {
     store.set(`a4-start:${quest.id}`, String(Date.now()));
     focusId = quest.id;
+    // Starting also records time, so there is one start button, not two. Track before saving:
+    // the save marks the app busy, and the time recorder refuses writes while it is busy.
+    if (runtime) workUi.track(quest.id);
     update(quest, { assignee: { ...quest.assignee, handoffState: "working" }, handoff: { ...quest.handoff, startedAt: quest.handoff?.startedAt || new Date().toISOString() } }, tx("始めました。まずは次の一歩だけ。"));
   }
 
+  const stopTracking = (quest: Quest) => { if (runtime && workUi.trackedQuest() === quest.id) workUi.track(null); };
+
   function pause(quest: Quest): void {
     store.set(`a4-start:${quest.id}`, null);
+    stopTracking(quest);
     update(quest, { assignee: { ...quest.assignee, handoffState: "none" } }, tx("一時停止しました。続きはいつでもここから。"));
   }
 
@@ -881,6 +897,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
             ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("目安")), minutesLabel(focus.estimatedMinutes), " ", button(tx("変える"), () => { estimateFor = focus.id; render(); }, "link"))
             : el("div", { class: "a4-estimate" }, el("span", { class: "a4-step-label" }, tx("どのくらい？")), estimateChips(focus)),
         el("div", { class: "a4-actions" }, ...actions)),
+      runtime ? workFold(focus) : null,
       rest.length === 0 ? null : (() => {
         const after = el("details", { class: "a4-after", open: afterOpen },
           el("summary", { class: "a4-subtitle" }, tx("このあと（{count}）", { count: rest.length })),
@@ -893,6 +910,54 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         return after;
       })(),
       agentBusy === 0 ? null : el("p", { class: "a4-muted" }, tx("Agentが {count} 件を進めています。", { count: agentBusy })));
+  }
+
+  /** Month at a glance in the week grid's language: Monday-first weeks, a few pills per day, "+N件" opens the day. */
+  function monthGrid(list: readonly Quest[]): HTMLElement {
+    const today = port.today();
+    const month = planDate.slice(0, 7);
+    const start = weekOf(`${month}-01`)[0]!;
+    const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+    if (days[35]!.slice(0, 7) !== month) days.length = 35;
+    const openDay = (date: string) => { planDate = date; planMode = "day"; store.set("a4-plan-mode", null); render(); };
+    const cells = days.map(date => {
+      const { anytime, timed } = dayPlan(list, date);
+      const items = [...timed, ...anytime];
+      const shown = items.slice(0, items.length > MONTH_PILLS ? MONTH_PILLS - 1 : MONTH_PILLS);
+      const head = el("button", { type: "button", class: "a4-wk-day a4-mo-day", "aria-pressed": String(date === planDate), "data-today": String(date === today),
+        "aria-label": tx("{day} {count}件", { day: dayLabel.format(noon(date)), count: items.length }) },
+        el("span", { class: "a4-day-num" }, String(Number(date.slice(8)))),
+        el("span", { class: "a4-dots", "aria-hidden": "true" }, ...items.slice(0, 4).map(q => el("i", { "data-tone": tone(q), "data-hue": hue(q) }))));
+      // Phones show dots only, so a tap opens the day itself.
+      head.addEventListener("click", () => { if (matchMedia("(max-width: 760px)").matches) openDay(date); else { planDate = date; render(); } });
+      const hidden = items.length - shown.length;
+      const more = hidden === 0 ? null : el("button", { type: "button", class: "a4-mo-more", "aria-label": tx("{day} ほか{count}件を日表示で見る", { day: dayLabel.format(noon(date)), count: hidden }) }, tx("+{count}件", { count: hidden }));
+      more?.addEventListener("click", () => openDay(date));
+      return el("div", { class: "a4-mo-cell", "data-selected": String(date === planDate), "data-outside": String(date.slice(0, 7) !== month) },
+        head,
+        ...shown.map(q => el("div", { class: "a4-wk-item a4-mo-item", "data-tone": tone(q), "data-hue": hue(q) },
+          q.scheduledTime ? el("span", { class: "a4-meta" }, q.scheduledTime) : null, titleButton(q))),
+        more);
+    });
+    return el("div", { class: "a4-mo" },
+      ...weekOf(start).map(date => el("span", { class: "a4-day-name a4-mo-name" }, weekdayLabel.format(noon(date)))),
+      ...cells);
+  }
+
+  const shiftMonth = (date: string, months: number) => {
+    const first = new Date(`${date.slice(0, 7)}-01T12:00:00Z`);
+    first.setUTCMonth(first.getUTCMonth() + months);
+    return first.toISOString().slice(0, 10);
+  };
+
+  /** Recorded time for the task in focus and its history, folded under 今; the time settings live in 設定. */
+  function workFold(focus: Quest): HTMLElement {
+    const fold = el("details", { class: "a4-after a4-extra a4-work-fold", open: workOpen },
+      el("summary", { class: "a4-subtitle" }, tx("時間の記録")),
+      el("p", { class: "a4-muted" }, tx("この作業の記録：{time}", { time: workUi.totals(focus) })),
+      el("p", {}, button(tx("記録の履歴"), () => workUi.history(), "link")));
+    fold.addEventListener("toggle", () => { workOpen = fold.open; });
+    return fold;
   }
 
   /** Week at a glance: an "anytime" row, then an hourly axis with cards sized by duration. */
@@ -973,13 +1038,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const day = dayPlan(list, planDate);
     const open = [...day.anytime, ...day.timed].filter(q => !isDone(q));
 
-    const modeButton = (mode: "day" | "week", label: string) => {
+    const modeButton = (mode: PlanMode, label: string) => {
       const node = el("button", { type: "button", class: "a4-seg-button", "aria-pressed": String(planMode === mode) }, label);
-      node.addEventListener("click", () => { planMode = mode; store.set("a4-plan-mode", mode === "week" ? "week" : null); render(); });
+      node.addEventListener("click", () => { planMode = mode; store.set("a4-plan-mode", mode === "day" ? null : mode); render(); });
       return node;
     };
-    const shift = (label: string, days: number, aria: string) => {
-      const node = button(label, () => { planDate = addDays(planDate, days); render(); });
+    const shift = (label: string, step: number, aria: string) => {
+      const node = button(label, () => { planDate = planMode === "month" ? shiftMonth(planDate, step) : addDays(planDate, step * 7); render(); });
       node.setAttribute("aria-label", aria);
       return node;
     };
@@ -1026,11 +1091,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     return el("section", { class: "a4-view a4-plan", "data-mode": planMode },
       el("div", { class: "a4-plan-main" },
         el("div", { class: "a4-plan-head" },
-          el("h1", { class: "a4-title", tabindex: -1 }, planMode === "week" ? monthLabel.format(noon(planDate)) : planDate === today ? tx("今日 {day}", { day: dayLabel.format(noon(planDate)) }) : dayLabel.format(noon(planDate))),
+          el("h1", { class: "a4-title", tabindex: -1 }, planMode !== "day" ? monthLabel.format(noon(planDate)) : planDate === today ? tx("今日 {day}", { day: dayLabel.format(noon(planDate)) }) : dayLabel.format(noon(planDate))),
           el("div", { class: "a4-plan-nav" },
-            el("div", { class: "a4-seg", role: "group", "aria-label": tx("表示") }, modeButton("day", tx("日")), modeButton("week", tx("週"))),
-            planDate === today ? null : button(tx("今日へ"), () => { planDate = today; render(); }, "link"), shift("‹", -7, tx("前の週")), shift("›", 7, tx("次の週")))),
-        ...(planMode === "week" ? [weekGrid(list)] : [week,
+            el("div", { class: "a4-seg", role: "group", "aria-label": tx("表示") }, modeButton("day", tx("日")), modeButton("week", tx("週")), modeButton("month", tx("月"))),
+            planDate === today ? null : button(tx("今日へ"), () => { planDate = today; render(); }, "link"),
+            planMode === "month" ? shift("‹", -1, tx("前の月")) : shift("‹", -1, tx("前の週")),
+            planMode === "month" ? shift("›", 1, tx("次の月")) : shift("›", 1, tx("次の週")))),
+        ...(planMode === "month" ? [monthGrid(list)] : planMode === "week" ? [weekGrid(list)] : [week,
         el("p", { class: "a4-lead" }, day.timed.length + day.anytime.length === 0
           ? tx("この日の予定はありません。受け箱から＋で入れるか、上の欄に書き出しましょう。")
           : open.length === 0 ? tx("この日の分はすべて終わりました。") : tx("残り {count} 件 · 目安 {time}", { count: open.length, time: minutesLabel(plannedMinutes(open)) })),
@@ -1083,9 +1150,27 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       section("later", tx("これから")),
       section("agent", tx("Agentが担当")));
     paintSearch();
-    return el("section", { class: "a4-view" },
-      el("h1", { class: "a4-title", tabindex: -1 }, tx("やること")),
-      el("div", { class: "a4-search" }, field), results, sections);
+    const head = el("div", { class: "a4-plan-head" }, el("h1", { class: "a4-title", tabindex: -1 }, tx("やること")),
+      runtime ? modeSwitch([["list", tx("まとめ")], ["table", tx("表・ボード・ガント")], ["notes", tx("メモ")]], allMode, mode => { allMode = mode; }) : null);
+    if (allMode !== "list" && runtime) {
+      return el("section", { class: "a4-view a4-wide" }, head,
+        embed(allMode === "table" ? forge!.render("list") : workUi.screen("notes").main));
+    }
+    return el("section", { class: "a4-view" }, head, el("div", { class: "a4-search" }, field), results, sections);
+  }
+
+  /** A small pill group that switches views inside one tab. */
+  function modeSwitch<T extends string>(options: readonly (readonly [T, string])[], current: T, choose: (mode: T) => void): HTMLElement {
+    return el("div", { class: "a4-seg", role: "group", "aria-label": tx("表示") }, ...options.map(([mode, label]) => {
+      const node = el("button", { type: "button", class: "a4-seg-button", "aria-pressed": String(current === mode) }, label);
+      node.addEventListener("click", () => { choose(mode); render(); });
+      return node;
+    }));
+  }
+
+  /** A Relay Forge screen inside an AFA tab: the tab supplies the heading, the skin supplies the look. */
+  function embed(screen: HTMLElement): HTMLElement {
+    return el("div", { class: "a4-extra a4-embed" }, screen);
   }
 
   /** Shows a request's link only when it is a plain web address. */
@@ -1190,7 +1275,24 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   /** A person or Agent and what they are on right now. */
-  function memberRow(kind: "self" | "human" | "agent", name: string, sub: string, doing: readonly Quest[], inactive = false, agentId = ""): HTMLElement {
+  /** Load as one stacked bar: open tasks by state, scaled against the busiest member so loads compare at a glance. */
+  function loadBar(load: readonly Quest[], scale: number): HTMLElement | null {
+    if (load.length === 0) return null;
+    const all = port.quests();
+    const state = (quest: Quest): string => needsDecision(quest) ? "review_required"
+      : quest.assignee.handoffState === "none" && blockers(quest, all).length > 0 ? "waiting" : quest.assignee.handoffState;
+    const parts = ["working", "review_required", "blocked", "waiting", "ready", "accepted", "none"]
+      .map(key => ({ key, count: load.filter(q => state(q) === key).length })).filter(part => part.count > 0);
+    const label = (key: string) => key === "none" ? tx("これから") : key === "waiting" ? tx("前の作業待ち") : AGENT_STATE[key] ?? key;
+    const summary = [tx("{count} 件を担当", { count: load.length }), ...parts.map(part => `${label(part.key)} ${part.count}`)].join(" · ");
+    return el("div", { class: "a4-load" },
+      el("div", { class: "a4-load-track", role: "img", "aria-label": summary },
+        el("div", { class: "a4-load-bar", style: `width: ${Math.max(6, (load.length / scale) * 100)}%` },
+          ...parts.map(part => el("i", { "data-state": part.key, style: `flex-grow: ${part.count}` })))),
+      el("span", { class: "a4-meta", "aria-hidden": "true" }, summary));
+  }
+
+  function memberRow(kind: "self" | "human" | "agent", name: string, sub: string, doing: readonly Quest[], load: HTMLElement | null, inactive = false, agentId = ""): HTMLElement {
     const shown = doing.slice(0, 3);
     const confirming = agentId !== "" && removingAgent === agentId;
     const remove = agentId === "" ? null : confirming ? null : button(tx("外す"), () => { removingAgent = agentId; render(); }, "link");
@@ -1205,7 +1307,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
             void run(async () => { await port.removeAgent(agentId); removingAgent = null; say(tx("{name} を外しました", { name })); }, tx("外せませんでした。もう一度試してください。"));
           }, "primary"),
           button(tx("やめる"), () => { removingAgent = null; render(); }, "link"))) : null,
-      el("div", { class: "a4-doing" },
+      el("div", { class: "a4-doing" }, load,
         shown.length === 0 ? el("span", { class: "a4-meta" }, inactive ? tx("停止中") : kind === "human" ? tx("担当しているタスクはありません") : tx("いまは手が空いています"))
           : el("ul", { class: "a4-doing-list" }, ...shown.map(quest => el("li", {},
             el("span", { class: "a4-state", "data-state": kind === "agent" ? quest.assignee.handoffState : "working" },
@@ -1361,6 +1463,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const later = quests().filter(q => q.humanRequest?.status === "deferred" && isOpen(q));
     const agents = port.agents();
     const others = port.members().filter(member => member.id !== port.self().id);
+    const loads = {
+      self: quests().filter(q => isOpen(q) && q.assignee.type === "self"),
+      human: (id: string) => quests().filter(q => isOpen(q) && q.assignee.type === "human" && q.assignee.id === id),
+      agent: (id: string) => agentWork.filter(q => q.assignee.id === id),
+    };
+    const scale = Math.max(1, loads.self.length, ...others.map(m => loads.human(m.id).length), ...agents.map(a => loads.agent(a.id).length));
     return el("section", { class: "a4-view" },
       el("h1", { class: "a4-title", tabindex: -1 }, tx("ギルド")),
       el("p", { class: "a4-lead" }, tx("Agentや仲間と一緒に進めるための場所です。あなたが決めることだけ、ここに集まります。")),
@@ -1374,9 +1482,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("section", { class: "a4-group" },
         el("div", { class: "a4-group-head" }, el("h2", { class: "a4-subtitle" }, tx("人と Agent")), button(tx("＋ Agent を登録"), openAgentForm)),
         el("ul", { class: "a4-list" },
-          memberRow("self", tx("{name}（あなた）", { name: port.self().label }), "", quests().filter(q => q.assignee.type === "self" && isWorking(q))),
-          ...others.map(member => memberRow("human", member.name, member.owner ? tx("オーナー") : tx("メンバー"), quests().filter(q => isOpen(q) && q.assignee.type === "human" && q.assignee.id === member.id))),
-          ...agents.map(agent => memberRow("agent", agent.name, agent.role ? `Agent · ${agent.role}` : "Agent", byAgent(agent.id), !agent.active, agent.id)))),
+          memberRow("self", tx("{name}（あなた）", { name: port.self().label }), "", quests().filter(q => q.assignee.type === "self" && isWorking(q)), loadBar(loads.self, scale)),
+          ...others.map(member => memberRow("human", member.name, member.owner ? tx("オーナー") : tx("メンバー"), loads.human(member.id), loadBar(loads.human(member.id), scale))),
+          ...agents.map(agent => memberRow("agent", agent.name, agent.role ? `Agent · ${agent.role}` : "Agent", byAgent(agent.id), loadBar(loads.agent(agent.id), scale), !agent.active, agent.id)))),
       el("section", { class: "a4-group" },
         el("h2", { class: "a4-subtitle" }, tx("最近の活動")),
         activity === null ? el("p", { class: "a4-muted" }, activityError ? tx("活動を読み込めませんでした。") : tx("読み込んでいます…"), activityError ? button(tx("もう一度"), loadActivity, "link") : null)
@@ -1424,13 +1532,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       return el("section", { class: "a4-view a4-extra" }, back,
         el("h1", { class: "a4-title", tabindex: -1 }, tx("プラン")), billingUi.render(), analyticsUi.render());
     }
-    if (id === "work") {
-      const timer = el("div", { class: "a4-work-timer" });
-      workUi.attachTimer(timer);
-      return el("section", { class: "a4-view a4-extra" }, back,
-        el("h1", { class: "a4-title", tabindex: -1 }, tx("時間の記録")), timer, workUi.settings());
-    }
-    const screen = FORGE.includes(id) ? forge!.render(id as ForgeScreen) : workUi.screen(id as "calendar" | "notes").main;
+    const screen = forge!.render(id as ForgeScreen);
     // Relay Forge titles are English destination names; AFA names the screen in the reader's language.
     screen.querySelector(".rf-screen-title")?.replaceChildren(EXTRAS.find(item => item.id === id)!.label);
     return el("section", { class: "a4-view a4-extra" }, back, screen);
@@ -1475,6 +1577,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       themes,
       el("label", { class: "a4-option" }, bloom, tx("やわらかい色分け（背景のグラデーションとタスクごとの色）")),
       mcpSection(),
+      runtime ? el("section", { class: "a4-group" }, el("h2", { class: "a4-subtitle" }, tx("時間の記録")), embed(workUi.settings())) : null,
       el("p", {}, el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("Relay Forge（詳しい画面）を開く"))),
       port.signOut ? button(tx("サインアウト"), () => { void port.signOut?.(); }, "link") : null);
   }

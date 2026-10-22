@@ -277,6 +277,15 @@ export function productivityWorkspace(options: {
     guard, dirty, busy: () => busy || pending !== null || selecting || Boolean(modal?.open), load,
     clearCalendar() { const previous = selections; selections = []; previous.forEach(dispose => dispose()); },
     attachTimer(host: HTMLElement) { timerHost = host; timerSize.observe(host); renderTimerHost(); },
+    /** Starts (or switches) the native timer for a Quest, or stops it with null; for surfaces with their own start button. */
+    track(questId: string | null): void {
+      const running = current();
+      if (questId === null) { if (running) void write("/timer/stop", { questId: running.questId, expectedEntryId: running.id, expectedUpdatedAt: running.updatedAt }); return; }
+      if (running?.questId === questId) return;
+      void write("/timer/start", { questId, expectedEntryId: running?.id ?? "", ...(running ? { expectedUpdatedAt: running.updatedAt } : {}) });
+    },
+    trackedQuest: () => current()?.questId ?? null,
+    history: openHistory,
     renderTimer: renderTimerHost,
     screen: (id: "calendar" | "notes") => ({ main: id === "calendar" ? calendarScreen() : notesScreen() }), settings,
     relatedNotes(questId: string): HTMLElement { return el("div", {}, ...data.notes.filter(n => !n.archived && n.questId === questId).map(n => button(n.title, () => guard(() => { original = n; draft = { ...n }; mobileEditor = true; options.navigate("notes"); })))); },

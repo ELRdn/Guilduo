@@ -1,5 +1,5 @@
 /**
- * The Relay Forge destinations (list/board/gantt, network, party, battle,
+ * The Relay Forge destinations (list/board/gantt, network, battle,
  * connections, skills) mounted inside All for ADHD. The renderers, models and
  * ports are Relay Forge's own, wired the way its shell wires them, so every
  * feature stays available after the switch; only the frame around them is ours.
@@ -7,11 +7,11 @@
 
 import type { BattleSession, Quest } from "../../types/questforge.ts";
 import type { RelayForgeRuntime } from "../relay-forge/production.ts";
+import { relayText } from "../relay-forge/relay-copy.ts";
 import { deriveMcpUrl } from "../relay-forge/screens/settings.ts";
 import type { ScreenContext } from "../relay-forge/screens/runtime.ts";
 import { initialQuestsState, normalizeQuestsModel, renderQuestsDesktop, renderQuestsMobile } from "../relay-forge/screens/quests.ts";
 import { initialNetworkState, normalizeNetworkModel, renderNetworkDesktop, renderNetworkMobile } from "../relay-forge/screens/network.ts";
-import { initialPartyState, normalizePartyModel, renderPartyDesktop, renderPartyMobile } from "../relay-forge/screens/party.ts";
 import { initialBattleState, normalizeBattleModel, renderBattleDesktop, renderBattleMobile } from "../relay-forge/screens/battle.ts";
 import { validateBattleSession } from "../relay-forge/screens/battle-port.ts";
 import { initialConnectionsState, normalizeConnectionsModel, renderConnectionsDesktop, renderConnectionsMobile } from "../relay-forge/screens/connections.ts";
@@ -19,7 +19,7 @@ import { REQUIRED_SCOPES } from "../relay-forge/screens/connections-port.ts";
 import type { ConnectionActionResult } from "../relay-forge/screens/connections-model.ts";
 import { initialSkillsState, normalizeSkillsModel, renderSkillsDesktop, renderSkillsMobile } from "../relay-forge/screens/skills.ts";
 
-export type ForgeScreen = "list" | "network" | "party" | "battle" | "connections" | "skills";
+export type ForgeScreen = "list" | "network" | "battle" | "connections" | "skills";
 
 export interface ForgeHost {
   readonly runtime: () => RelayForgeRuntime;
@@ -28,7 +28,6 @@ export interface ForgeHost {
   readonly render: () => void;
   readonly announce: (message: string) => void;
   readonly openQuest: (id: string) => void;
-  readonly openAgentForm: () => void;
   readonly navigate: (screen: ForgeScreen | "guild" | "all" | "calendar") => void;
   readonly refresh: () => Promise<void>;
   readonly workTime?: (quest: Quest) => string;
@@ -36,13 +35,13 @@ export interface ForgeHost {
 }
 
 const DOMAIN: Readonly<Record<string, ForgeScreen | "guild" | "all" | "calendar">> = {
-  command: "guild", quests: "list", network: "network", party: "party", battle: "battle",
+  command: "guild", quests: "list", network: "network", party: "guild", battle: "battle",
   connections: "connections", skills: "skills", calendar: "calendar", notes: "all",
 };
 
 export function forgeScreens(host: ForgeHost) {
   const state = {
-    quests: initialQuestsState(), network: initialNetworkState(), party: initialPartyState(),
+    quests: initialQuestsState(), network: initialNetworkState(),
     battle: initialBattleState(), connections: initialConnectionsState(), skills: initialSkillsState(),
   };
   let battle: BattleSession | null = null;
@@ -62,9 +61,8 @@ export function forgeScreens(host: ForgeHost) {
     onNavigate: (domain, id) => {
       const target = DOMAIN[domain];
       if (!target) return;
-      if (id && target === "party") { state.party.selectedActorId = id; state.party.mobileDetailOpen = true; }
       if (id && target === "connections") { state.connections.selectedId = id; state.connections.mobileDetailOpen = true; }
-      if (id && target !== "party" && target !== "connections") selected = id;
+      if (id && target !== "connections") selected = id;
       host.navigate(target);
     },
     announce: host.announce,
@@ -155,14 +153,6 @@ export function forgeScreens(host: ForgeHost) {
       });
       return pick(() => renderNetworkDesktop(model, state.network, ctx, selected), () => renderNetworkMobile(model, state.network, ctx, selected)).main;
     }
-    if (screen === "party") {
-      const model = normalizePartyModel({
-        quests, actors: ctx.actors, members: runtime.members, agents: runtime.agents, selfUid: runtime.selfUid,
-        partyName: runtime.partyName, notices: [], now: Date.now(),
-      });
-      const callbacks = { canManageAgents: true, onCreateAgent: host.openAgentForm, onEditAgent: () => host.navigate("guild") };
-      return pick(() => renderPartyDesktop(model, state.party, ctx, callbacks), () => renderPartyMobile(model, state.party, ctx, callbacks)).main;
-    }
     if (screen === "battle") {
       const model = normalizeBattleModel({ session: battle, notices: [], writeHeld: ctx.writeLocked, decisions: state.battle.decisions });
       const callbacks = {
@@ -185,7 +175,7 @@ export function forgeScreens(host: ForgeHost) {
     const authorized = runtime.agentConnections.filter(connection => connection.authorized).length;
     const model = normalizeSkillsModel({
       tools: tools ?? [], sourceLabel: "Guilduo MCP", sourceUrl: deriveMcpUrl(runtime.gatewayUrl),
-      connectionLabel: `OAuth: ${authorized}`, query: state.skills.query,
+      connectionLabel: authorized === 0 ? relayText("skillsNoClients") : `${relayText("skillsOAuth")}: ${authorized}`, query: state.skills.query,
       loading: toolsLoading, connected: true, error: toolsError,
     });
     const callbacks = {

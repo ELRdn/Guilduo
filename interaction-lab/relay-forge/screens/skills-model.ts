@@ -97,7 +97,7 @@ export const SKILL_CATEGORIES: readonly CategoryDefinition[] = [
     get description() { return relayText("skillsSocialDescription"); },
     aliases: ["profile", "social", "friends"],
   },
-  { id: "party", title: "Party", get description() { return relayText("skillsPartyDescription"); }, aliases: ["party", "party-management"] },
+  { id: "party", get title() { return relayText("partyName"); }, get description() { return relayText("skillsPartyDescription"); }, aliases: ["party", "party-management"] },
   { id: "toggl-focus", title: "Toggl Focus", get description() { return relayText("skillsFocusDescription"); }, aliases: ["toggl", "focus"] },
   { id: "character", get title() { return relayText("skillsCharacterTitle"); }, get description() { return relayText("skillsCharacterDescription"); }, aliases: ["character", "character-growth"] },
   {

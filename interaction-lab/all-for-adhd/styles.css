@@ -192,9 +192,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .a4-plan-nav { display: flex; align-items: center; gap: var(--qf-space-3); }
 .a4-plan-nav .a4-button { min-width: 44px; padding: 0; font-size: 20px; }
 @media (min-width: 1100px) {
-  .a4-plan:not([data-mode="week"]) { grid-template-columns: 320px minmax(0, 1fr); }
-  .a4-plan[data-mode="week"] .a4-plan-side { order: 0; position: static; max-height: none; }
-  .a4-plan[data-mode="week"] .a4-plan-side .a4-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .a4-plan[data-mode="day"] { grid-template-columns: 320px minmax(0, 1fr); }
+  .a4-plan:not([data-mode="day"]) .a4-plan-side { order: 0; position: static; max-height: none; }
+  .a4-plan:not([data-mode="day"]) .a4-plan-side .a4-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
   .a4-plan-side { order: -1; position: sticky; top: 96px; align-self: start; max-height: calc(100vh - 120px); overflow: auto; padding-right: var(--qf-space-2); }
 }
 
@@ -275,6 +275,30 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .a4-wk-item .a4-meta { font-size: 11px; }
 .a4-wk-item .a4-check { flex: none; width: 20px; height: 20px; margin: 2px; border-width: 2px; }
 .a4-wk-item .a4-check-space { width: 0; }
+/* Month grid: the week grid's day heads and pills, one cell per day; phones keep the dots only. */
+.a4-mo { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.a4-mo-name { text-align: center; letter-spacing: 0.06em; padding-bottom: var(--qf-space-2); }
+.a4-mo-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 104px; padding: 0 4px var(--qf-space-2); border-top: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-md); }
+.a4-mo-cell[data-selected="true"] { background-color: color-mix(in srgb, var(--qf-color-selected) 35%, transparent); }
+.a4-mo-cell[data-outside="true"] > :not(.a4-mo-day) { opacity: 0.6; }
+.a4-mo-cell[data-outside="true"] .a4-day-num { color: var(--qf-color-fg-muted); }
+.a4-mo-day { min-height: 40px; padding: var(--qf-space-1) 0; }
+.a4-mo-day .a4-day-num { width: 32px; height: 32px; }
+.a4-mo-day .a4-dots { display: none; }
+.a4-mo-item { align-items: baseline; gap: var(--qf-space-1); padding: 2px var(--qf-space-2); }
+.a4-mo-item .a4-meta { flex: none; font-variant-numeric: tabular-nums; }
+.a4-mo-item .a4-row-title { display: block; min-width: 0; min-height: 24px; white-space: nowrap; text-overflow: ellipsis; }
+.a4-mo-more {
+  min-height: 24px; cursor: pointer; border: var(--qf-border-width) dashed var(--qf-color-border-default); border-radius: var(--qf-radius-md);
+  background: none; color: var(--qf-color-fg-strong); font-size: 12px; font-weight: 600;
+}
+.a4-mo-more:hover { border-color: var(--qf-color-border-strong); }
+@media (max-width: 760px) {
+  .a4-mo-cell { min-height: 0; padding: 0 0 var(--qf-space-1); }
+  .a4-mo-cell > :not(.a4-mo-day) { display: none; }
+  .a4-mo-day .a4-dots { display: flex; }
+  .a4-mo-day .a4-day-num { width: 36px; height: 36px; }
+}
 .a4-wk-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--qf-color-accent); z-index: 1; }
 .a4-wk-now::before { content: ""; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: var(--qf-radius-pill); background: var(--qf-color-accent); }
 
@@ -526,6 +550,16 @@ body { min-height: 100vh; background-repeat: no-repeat; background-color: var(--
 .a4-group-head { display: flex; align-items: center; justify-content: space-between; gap: var(--qf-space-4); flex-wrap: wrap; }
 .a4-group-head .a4-subtitle { margin: 0; }
 .a4-doing { display: flex; flex-direction: column; gap: var(--qf-space-1); padding: 0 var(--qf-space-5) var(--qf-space-4) calc(var(--qf-space-5) + 44px + var(--qf-space-5)); }
+/* Guild load: one stacked bar per member, scaled to the busiest; states reuse the chip colors (never red). */
+.a4-load { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--qf-space-2); }
+.a4-load-track { height: 10px; border-radius: var(--qf-radius-pill); background: var(--qf-color-border-subtle); overflow: hidden; }
+.a4-load-bar { display: flex; height: 100%; gap: 2px; }
+.a4-load-bar i { min-width: 4px; border-radius: var(--qf-radius-pill); background: var(--qf-color-border-strong); }
+.a4-load-bar i[data-state="working"] { background: var(--qf-color-success); }
+.a4-load-bar i[data-state="review_required"] { background: var(--qf-color-review); }
+.a4-load-bar i[data-state="blocked"] { background: repeating-linear-gradient(-45deg, var(--qf-color-warning) 0 3px, color-mix(in srgb, var(--qf-color-warning) 35%, var(--qf-color-surface)) 3px 6px); }
+.a4-load-bar i:is([data-state="ready"], [data-state="accepted"]) { background: var(--qf-color-agent); }
+.a4-load-bar i[data-state="waiting"] { background: color-mix(in srgb, var(--qf-color-warning) 45%, var(--qf-color-border-subtle)); }
 .a4-doing-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .a4-doing-list li { display: flex; align-items: center; gap: var(--qf-space-4); min-width: 0; }
 .a4-doing-list .a4-row-title { font-weight: 400; color: var(--qf-color-fg-default); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -583,3 +617,9 @@ body { word-break: auto-phrase; }
 .a4-extras .a4-row:hover { border-color: var(--qf-color-border-strong); }
 .a4-extras .a4-row { position: relative; }
 .a4-extras .a4-row-title::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+
+/* Relay Forge screens embedded in a tab: the tab heading replaces theirs. */
+.a4-embed .rf-screen-heading { display: none; }
+.a4-embed .rf-screen-header:not(:has(> :not(.rf-screen-heading))) { display: none; }
+.a4-main:has(> .a4-wide) { max-width: 1280px; }
+.a4-wide { gap: var(--qf-space-7); }
