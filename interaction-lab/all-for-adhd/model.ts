@@ -1,3 +1,4 @@
+import { tx } from "./copy.ts";
 import type { Quest } from "../../types/questforge.ts";
 
 /** Where a Quest belongs on the All for ADHD surface. */
@@ -19,7 +20,7 @@ const isSettledRequest = (quest: Quest) => quest.humanRequest != null && quest.h
 
 /** Agent handoff states in plain words. */
 export const AGENT_STATE: Readonly<Record<string, string>> = {
-  none: "担当", ready: "受け取り待ち", working: "作業中", blocked: "止まっている", review_required: "確認してほしい", accepted: "受け取り済み",
+  none: tx("担当"), ready: tx("受け取り待ち"), working: tx("作業中"), blocked: tx("止まっている"), review_required: tx("確認してほしい"), accepted: tx("受け取り済み"),
 };
 export const AGENT_STATE_ORDER = ["blocked", "working", "ready", "accepted", "none"] as const;
 
@@ -99,9 +100,9 @@ export function plannedMinutes(quests: readonly Quest[]): number {
 }
 
 export function minutesLabel(total: number): string {
-  if (total <= 0) return "0分";
+  if (total <= 0) return tx("0分");
   const hours = Math.floor(total / 60), minutes = total % 60;
-  return hours === 0 ? `${minutes}分` : minutes === 0 ? `${hours}時間` : `${hours}時間${minutes}分`;
+  return hours === 0 ? tx("{count}分", { count: minutes }) : minutes === 0 ? tx("{count}時間", { count: hours }) : tx("{hours}時間{minutes}分", { hours, minutes });
 }
 
 export function addDays(date: string, days: number): string {

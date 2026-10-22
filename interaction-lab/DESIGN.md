@@ -150,7 +150,8 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 - 起動画面（確認中・読み込み・サインイン・エラー）は、背景の上に中央寄せの1列で、ワードマーク・見出し・1行の説明を並べる。読み込み中は「今」のカードの輪郭を薄く出し、Reduced Motion でなければゆっくり明滅させる。サインイン画面は約束を3つだけ添え、主ボタンは横幅いっぱいにする。日本語の見出しは文節で折り返す。
 - 完了時は紙吹雪で祝う（2026-10-18 オーナー決定、BRAND.md の「装飾的な粒子を避ける」に対する All for ADHD だけの例外）。完了の直後だけ、タップ位置から約1秒、繰り返さない。その日の最後の1件を終えたときは大きめにし「今日の分、ぜんぶ終わりました！」と出す。色はタスク色。Reduced Motion では出さず、設定でオフにできる。
 - ゲーム要素（レベル・XP）は初期表示し、設定で隠せる。Reduced Motion では動きを止める。
-- 試作は日本語のみ。9言語対応は正式版で行う。調査と計測は [docs/research/2026-10-18-all-for-adhd-brief.md](../docs/research/2026-10-18-all-for-adhd-brief.md)。
+- Relay Forge の全機能を段階的に移す（2026-10-22 オーナー決定）。第1段：「やること」に検索（完了・しまったものも対象）と「戻す」、詳細シートに「しまう」（トーストと検索から戻せるので確認なし）。第2段：設定の「ほかの機能」から、プロフィール（自前フォーム）と、Relay Forge のカレンダー・メモ・時間の記録・プラン（`productivityWorkspace` / `createBillingUi` / `createAnalyticsUi`）、一覧・ボード・ガント、つながり、パーティ、バトル、連携、スキル（`forge.ts` が Relay Forge の model・renderer・port をそのまま組む）を開く。5つのタブは増やさない。Relay Forge 部分は `forge-skin.css`（`.a4-extra` 限定）で AFA の書き方に揃える：書体は sans 1つ、ラベルは大文字化しない、角丸カード、切替はピル、44px のターゲット、状態は淡い塗りのピルで赤を使わない（停止・失敗は amber）、MP は紫を使わない、固定高の内側スクロールをやめてページでスクロールする（つながりの図だけは高さを持つ）。見出しは各画面の日本語名に差し替える。Relay Forge の foundation.css は読み込まず、必要なリセットは詳細度0で同じファイルに置く。MCP 接続は設定で切断できる（確認を1段挟む）。
+- 文言は Guilduo の9言語（ja, en, es, pt-BR, fr, de, ko, zh-Hans, ru）で出す。日本語の原文をキーにした `copy.ts` の `tx()` を通し、`tests/all-for-adhd-copy.test.ts` が全キーの8訳とプレースホルダの一致を確かめる。言語は Relay Forge と共有（`questforge-locale`）し、設定で切り替えると再読み込みする。日付・時刻は `Intl` で言語に合わせる。デモの中身は Relay Forge の共有フィクスチャなので日本語のまま。調査と計測は [docs/research/2026-10-18-all-for-adhd-brief.md](../docs/research/2026-10-18-all-for-adhd-brief.md)。
 
 ## 3. 画面マップ
 

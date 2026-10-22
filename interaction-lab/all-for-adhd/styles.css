@@ -29,6 +29,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .a4-brand { color: var(--qf-color-fg-strong); font-weight: 600; text-decoration: none; }
 .a4-capture { display: flex; gap: var(--qf-space-4); max-width: 640px; width: 100%; justify-self: center; }
+.a4-search { display: flex; margin-bottom: var(--qf-space-6); }
 .a4-capture-input, .a4-input {
   flex: 1; min-width: 0; min-height: 44px; padding: 0 var(--qf-space-5);
   background: transparent; border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-md);
@@ -123,7 +124,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 /* Settings. */
 .a4-option { display: flex; align-items: center; gap: var(--qf-space-4); min-height: 44px; }
-.a4-option input { width: 20px; height: 20px; }
+.a4-option input { flex: none; width: 20px; height: 20px; }
 .a4-field { border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-md); padding: var(--qf-space-5) var(--qf-space-6); margin: 0; }
 
 /* Toast: bottom center, never covers the primary action column for long. */
@@ -180,6 +181,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 /* Plan: week strip, day timeline, and the undated inbox beside it. */
 .a4-main[data-view="plan"] { max-width: 1120px; }
+.a4-main:is([data-view="calendar"], [data-view="notes"], [data-view="list"], [data-view="network"], [data-view="party"], [data-view="battle"], [data-view="connections"], [data-view="skills"]) { max-width: 1280px; }
+.a4-extra { display: grid; gap: var(--qf-space-6); justify-items: stretch; }
+.a4-extra > .a4-link:first-child { justify-self: start; }
 .a4-plan { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--qf-space-9); }
 .a4-plan-main { display: flex; flex-direction: column; gap: var(--qf-space-7); min-width: 0; }
 .a4-plan-side { display: flex; flex-direction: column; gap: var(--qf-space-4); }
@@ -288,6 +292,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .a4-field-row { display: flex; flex-direction: column; gap: var(--qf-space-2); }
 .a4-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--qf-space-5); }
 .a4-textarea { padding: var(--qf-space-4) var(--qf-space-5); resize: vertical; line-height: 1.5; }
+.a4-form { display: grid; gap: var(--qf-space-6); }
 
 /* Running task dock. */
 .a4-dock {
@@ -553,3 +558,28 @@ body { min-height: 100vh; background-repeat: no-repeat; background-color: var(--
 /* Sheet text grows with its content instead of scrolling inside a small box. */
 .a4-sheet-title, .a4-sheet-next { resize: none; overflow: hidden; field-sizing: content; font-family: inherit; }
 .a4-sheet .a4-textarea { field-sizing: content; min-height: 4.5em; max-height: 50vh; }
+
+/* Launch polish: hit areas. Check circles stay small to look calm, but each takes a 44px touch area. */
+.a4-check { position: relative; }
+.a4-check::before { content: ""; position: absolute; inset: -8px; border-radius: var(--qf-radius-pill); }
+.a4-steps .a4-check::before { inset: -10px; }
+.a4-wk-item .a4-check::before { inset: -6px; }
+.a4-steps .a4-row-title, .a4-row-steps summary { min-height: 44px; }
+.a4-sheet-chips .a4-chip[aria-expanded="true"] { color: var(--qf-color-fg-strong); }
+/* Japanese breaks between phrases, not inside words (Chrome/Edge; others fall back to normal breaking). */
+body { word-break: auto-phrase; }
+.a4-tab { white-space: nowrap; }
+.a4-wk-item .a4-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a4-decision { gap: var(--qf-space-5); }
+@media (max-width: 380px) {
+  .a4-tab { font-size: 14px; }
+  .a4-capture { gap: var(--qf-space-2); }
+  .a4-capture .a4-chip, .a4-capture .a4-button { padding: 0 var(--qf-space-4); min-width: 0; }
+}
+
+/* Settings → ほかの機能: compact tiles, two columns where there is room. */
+.a4-extras { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+.a4-extras .a4-row-title { text-decoration: none; }
+.a4-extras .a4-row:hover { border-color: var(--qf-color-border-strong); }
+.a4-extras .a4-row { position: relative; }
+.a4-extras .a4-row-title::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }

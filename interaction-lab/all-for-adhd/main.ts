@@ -3,8 +3,22 @@
  * ones, so this surface reads and writes exactly the same Quests.
  */
 
+import { tx } from "./copy.ts";
+import { getLocale } from "../../i18n.ts";
 import "../../runtime-config.js";
 import "../relay-forge/tokens.css";
+// Relay Forge modules reused for calendar, notes, time and plan bring their scoped styles.
+import "../relay-forge/primitives.css";
+import "../relay-forge/screens/screens.css";
+import "../relay-forge/screens/settings.css";
+import "../relay-forge/screens/productivity.css";
+import "../relay-forge/screens/quests.css";
+import "../relay-forge/screens/network.css";
+import "../relay-forge/screens/party.css";
+import "../relay-forge/screens/battle.css";
+import "../relay-forge/screens/connections.css";
+import "../relay-forge/screens/skills.css";
+import "./forge-skin.css";
 import "./styles.css";
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { requireElement } from "../relay-forge/primitives/dom.ts";
@@ -13,6 +27,9 @@ import { QuestForgeRepository } from "../repository.ts";
 import { mountAllFor, type AllForActivity, type AllForAgent, type AllForConnection, type AllForPort, type Relay } from "./app.ts";
 
 const root = requireElement<HTMLElement>(document, "#a4-root");
+document.documentElement.lang = getLocale();
+const skip = document.querySelector(".a4-skip");
+if (skip) skip.textContent = tx("本文へ移動");
 let unmount: (() => void) | null = null;
 let stopAuth: (() => void) | null = null;
 
@@ -79,23 +96,23 @@ async function showDemo(): Promise<void> {
   } as Quest);
   const day = (offset: number) => { const at = new Date(`${FIXTURE_TODAY}T12:00:00Z`); at.setUTCDate(at.getUTCDate() + offset); return at.toISOString().slice(0, 10); };
   let quests: Quest[] = [
-    mine("demo-morning", "朝の支度", { scheduledDate: FIXTURE_TODAY, scheduledTime: "08:30", planningState: "scheduled", estimatedMinutes: 30, done: true, lifecycleState: "completed" }),
-    mine("demo-mail", "請求書のメールに返信する", { scheduledDate: FIXTURE_TODAY, scheduledTime: "10:00", planningState: "scheduled", estimatedMinutes: 15, nextAction: "メールを開いて宛名だけ書く" }),
-    mine("demo-meet", "打ち合わせの準備", { scheduledDate: FIXTURE_TODAY, scheduledTime: "13:00", planningState: "scheduled", estimatedMinutes: 30 }),
-    mine("demo-walk", "散歩する", { scheduledDate: FIXTURE_TODAY, scheduledTime: "16:00", planningState: "scheduled", estimatedMinutes: 30 }),
-    mine("demo-slide", "来週の発表スライドを作る", { scheduledDate: FIXTURE_TODAY, planningState: "scheduled", estimatedMinutes: 60 }),
-    mine("demo-slide-1", "構成を3行で書く", { parentQuestId: "demo-slide" }),
-    mine("demo-slide-2", "図を1枚つくる", { parentQuestId: "demo-slide" }),
-    mine("demo-review", "週報の下書きを確認する", {
+    mine("demo-morning", tx("朝の支度"), { scheduledDate: FIXTURE_TODAY, scheduledTime: "08:30", planningState: "scheduled", estimatedMinutes: 30, done: true, lifecycleState: "completed" }),
+    mine("demo-mail", tx("請求書のメールに返信する"), { scheduledDate: FIXTURE_TODAY, scheduledTime: "10:00", planningState: "scheduled", estimatedMinutes: 15, nextAction: tx("メールを開いて宛名だけ書く") }),
+    mine("demo-meet", tx("打ち合わせの準備"), { scheduledDate: FIXTURE_TODAY, scheduledTime: "13:00", planningState: "scheduled", estimatedMinutes: 30 }),
+    mine("demo-walk", tx("散歩する"), { scheduledDate: FIXTURE_TODAY, scheduledTime: "16:00", planningState: "scheduled", estimatedMinutes: 30 }),
+    mine("demo-slide", tx("来週の発表スライドを作る"), { scheduledDate: FIXTURE_TODAY, planningState: "scheduled", estimatedMinutes: 60 }),
+    mine("demo-slide-1", tx("構成を3行で書く"), { parentQuestId: "demo-slide" }),
+    mine("demo-slide-2", tx("図を1枚つくる"), { parentQuestId: "demo-slide" }),
+    mine("demo-review", tx("週報の下書きを確認する"), {
       requester: { type: "agent", id: "a-scribe", label: "Scribe" },
-      completionCriteria: "数字と日付が先週の記録と一致している",
-      humanRequest: { sourceQuestId: "demo-slide", requestKey: "demo-review", recipientId: "admin", reason: "来週の発表で使う週報の下書きができました。", checkTarget: "売上の数字と日付が合っているか", artifactUrl: "", status: "pending", seenAt: "", respondedAt: "", response: "", outcome: "" },
+      completionCriteria: tx("数字と日付が先週の記録と一致している"),
+      humanRequest: { sourceQuestId: "demo-slide", requestKey: "demo-review", recipientId: "admin", reason: tx("来週の発表で使う週報の下書きができました。"), checkTarget: tx("売上の数字と日付が合っているか"), artifactUrl: "", status: "pending", seenAt: "", respondedAt: "", response: "", outcome: "" },
     }),
-    mine("demo-gym", "ジムに行く", { scheduledDate: day(1), scheduledTime: "19:00", planningState: "scheduled", estimatedMinutes: 60 }),
-    mine("demo-tax", "確定申告の書類を集める", { dueDate: day(-3), planningState: "scheduled" }),
-    mine("demo-dentist", "歯医者を予約する", {}),
-    mine("demo-book", "借りた本を返す", {}),
-    mine("demo-plan", "旅行の候補を3つ挙げる", { scheduledDate: day(2), planningState: "scheduled" }),
+    mine("demo-gym", tx("ジムに行く"), { scheduledDate: day(1), scheduledTime: "19:00", planningState: "scheduled", estimatedMinutes: 60 }),
+    mine("demo-tax", tx("確定申告の書類を集める"), { dueDate: day(-3), planningState: "scheduled" }),
+    mine("demo-dentist", tx("歯医者を予約する"), {}),
+    mine("demo-book", tx("借りた本を返す"), {}),
+    mine("demo-plan", tx("旅行の候補を3つ挙げる"), { scheduledDate: day(2), planningState: "scheduled" }),
     ...fixtureRawQuests.map(q => ({ ...q })),
   ];
   const replace = (next: Quest) => { quests = [next, ...quests.filter(q => q.id !== next.id)]; return next; };
@@ -145,7 +162,7 @@ async function showDemo(): Promise<void> {
         handTo(quest, next.agentId);
         simulate(id, next.agentId);
       } else {
-        log("quest.handoff.transitioned", replace({ ...quest, assignee: { ...quest.assignee, handoffState: "review_required" }, handoff: { ...quest.handoff, note: `${leg?.ask || "作業"}が終わりました。確認をお願いします。` }, updatedAt: stamp() }), "mcp", { to: "review_required" });
+        log("quest.handoff.transitioned", replace({ ...quest, assignee: { ...quest.assignee, handoffState: "review_required" }, handoff: { ...quest.handoff, note: tx("{ask}が終わりました。確認をお願いします。", { ask: leg?.ask || tx("作業") }) }, updatedAt: stamp() }), "mcp", { to: "review_required" });
       }
       notify();
     }, 9000);
@@ -175,6 +192,7 @@ async function showDemo(): Promise<void> {
       url: "https://mcp.guilduo.com/mcp",
       connections: async () => connections,
       link: async (connection, agentIds) => { connections = connections.map(item => item.clientId === connection.clientId ? { ...item, agentIds: [...agentIds] } : item); },
+      revoke: async connection => { connections = connections.filter(item => item.clientId !== connection.clientId); },
     },
     self: () => ({ id: "admin", label: "admin" }),
     agents: () => agents,
@@ -201,7 +219,7 @@ async function showDemo(): Promise<void> {
     today: () => FIXTURE_TODAY,
     quests: () => quests,
     create: async input => { const quest = replace({ ...(fixtureRawQuests[0] as Quest), id: `demo-${Date.now()}`, assignee: { type: "self", id: "self", label: "", handoffState: "none" }, humanRequest: null, parentQuestId: "", ...input, createdAt: stamp(), updatedAt: stamp() } as Quest); log("quest.created", quest, "app"); return quest; },
-    update: async (quest, patch) => { const next = replace({ ...quest, ...patch, updatedAt: stamp() } as Quest); log("quest.updated", next, "app"); return next; },
+    update: async (quest, patch) => { const next = replace({ ...quest, ...patch, ...("lifecycleState" in patch ? { done: patch.lifecycleState === "completed" } : {}), updatedAt: stamp() } as Quest); log("quest.updated", next, "app"); return next; },
     complete: async quest => { const done = replace({ ...quest, lifecycleState: "completed", done: true, updatedAt: stamp() }); log("quest.scored", done, "app"); return { quest: done, character: { level: 12, xp: 340, nextXp: 500 } as CharacterState }; },
   };
   unmount?.();
@@ -209,7 +227,7 @@ async function showDemo(): Promise<void> {
 }
 
 async function showProduction(uid: string, email: string): Promise<void> {
-  message("読み込んでいます", "やることを取り出しています。少しだけ待ってください。");
+  message(tx("読み込んでいます"), tx("やることを取り出しています。少しだけ待ってください。"));
   try {
     const [{ createProductionRuntime, normalizeAgentRecord, normalizeAgentConnections }, { runHandoff }, { deriveMcpUrl }] = await Promise.all([
       import("../relay-forge/production.ts"), import("../relay-forge/adapter.ts"), import("../relay-forge/screens/settings-model.ts")]);
@@ -219,7 +237,7 @@ async function showProduction(uid: string, email: string): Promise<void> {
     const replace = (next: Quest) => { quests = [next, ...quests.filter(q => q.id !== next.id)]; return next; };
     const port: AllForPort = {
       demo: false,
-      self: () => ({ id: runtime.selfUid, label: runtime.profile?.displayName || "自分" }),
+      self: () => ({ id: runtime.selfUid, label: runtime.profile?.displayName || tx("自分") }),
       agents: () => runtime.agents.filter(agent => agent.status !== "archived").map(agent => ({ id: agent.agentId, name: agent.displayName, role: agent.role ?? "", active: (agent.status ?? "active") === "active", startState: agent.defaultHandoffState || "ready" })),
       members: () => runtime.members.map(member => ({ id: member.uid, name: member.displayName, owner: member.role === "owner" })),
       answer: async (quest, action, response) => {
@@ -268,6 +286,7 @@ async function showProduction(uid: string, email: string): Promise<void> {
           if (agentIds.length > 0) await runtime.agentConnectionPort.linkAgentConnection(agentIds[0]!, connection.clientId, agentIds);
           else if (connection.agentIds[0]) await runtime.agentConnectionPort.unlinkAgentConnection(connection.agentIds[0], connection.clientId);
         },
+        revoke: async connection => { await runtime.agentConnectionPort.revokeMcpConnection(connection.clientId); },
       },
       today: localToday,
       quests: () => quests,
@@ -279,11 +298,12 @@ async function showProduction(uid: string, email: string): Promise<void> {
       },
       refresh: runtime.refreshWorkspace ? async () => { runtime = await runtime.refreshWorkspace!(); quests = [...runtime.quests]; } : undefined,
       signOut: async () => { await signOutUser(); checkAuth(); },
+      get runtime() { return runtime; },
     };
     unmount?.();
     unmount = mountAllFor(root, port);
   } catch {
-    message("読み込めませんでした", "通信を確認して、もう一度試してください。データは変更されていません。", [["再試行", () => { void showProduction(uid, email); }], ["デモを見る", () => { void showDemo(); }]]);
+    message(tx("読み込めませんでした"), tx("通信を確認して、もう一度試してください。データは変更されていません。"), [[tx("再試行"), () => { void showProduction(uid, email); }], [tx("デモを見る"), () => { void showDemo(); }]]);
   }
 }
 
@@ -291,11 +311,11 @@ function checkAuth(): void {
   stopAuth?.();
   stopAuth = observeAuthState(state => {
     if (state.status === "authenticated") { void showProduction(state.user.uid, state.user.email); return; }
-    if (state.status === "checking") { message("ようこそ", "サインインの状態を確かめています。"); return; }
-    message("ひとつずつ、迷わず進める。", "Googleでサインインすると、いつものやることがそのまま使えます。", [
-      ["Googleでサインイン", () => { void signIn().catch(() => message("サインインできませんでした", "もう一度試してください。", [["再試行", checkAuth]])); }],
-      ["デモを見る", () => { void showDemo(); }],
-    ], "welcome", ["今やることは、いつも1つだけ", "予定は時間の帯で見える", "Agent に任せて、あなたは判断だけ"]);
+    if (state.status === "checking") { message(tx("ようこそ"), tx("サインインの状態を確かめています。")); return; }
+    message(tx("ひとつずつ、迷わず進める。"), tx("Googleでサインインすると、いつものやることがそのまま使えます。"), [
+      [tx("Googleでサインイン"), () => { void signIn().catch(() => message(tx("サインインできませんでした"), tx("もう一度試してください。"), [[tx("再試行"), checkAuth]])); }],
+      [tx("デモを見る"), () => { void showDemo(); }],
+    ], "welcome", [tx("今やることは、いつも1つだけ"), tx("予定は時間の帯で見える"), tx("Agent に任せて、あなたは判断だけ")]);
   });
 }
 

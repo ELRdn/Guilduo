@@ -10,6 +10,13 @@
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { el, replaceChildren, svg } from "../relay-forge/primitives/dom.ts";
 import { celebrate } from "./celebrate.ts";
+import { getLocale, setLocale, LOCALE_METADATA, SUPPORTED_LOCALES } from "../../i18n.ts";
+import { tx } from "./copy.ts";
+import type { RelayForgeRuntime } from "../relay-forge/production.ts";
+import { productivityWorkspace } from "../relay-forge/screens/productivity.ts";
+import { createBillingUi } from "../relay-forge/screens/billing.ts";
+import { createAnalyticsUi } from "../relay-forge/screens/analytics.ts";
+import { forgeScreens, type ForgeScreen } from "./forge.ts";
 import { addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
 
 export interface AllForAgent {
@@ -54,6 +61,8 @@ export interface AllForPort {
     connections(): Promise<readonly AllForConnection[]>;
     /** Sets which Agents a client acts as; an empty list unlinks it. */
     link(connection: AllForConnection, agentIds: readonly string[]): Promise<void>;
+    /** Signs the client out of Guilduo; it must authorize again to reconnect. */
+    revoke(connection: AllForConnection): Promise<void>;
   };
   readonly today: () => string;
   readonly quests: () => readonly Quest[];
@@ -62,21 +71,46 @@ export interface AllForPort {
   complete(quest: Quest): Promise<{ quest: Quest; character: CharacterState | null }>;
   refresh?(): Promise<void>;
   readonly signOut?: () => Promise<void>;
+  /** Relay Forge services reused as-is for calendar, notes, time and plan. Absent in the demo. */
+  readonly runtime?: RelayForgeRuntime;
 }
 
-type View = "now" | "plan" | "all" | "guild" | "settings";
+type Extra = "profile" | "calendar" | "notes" | "work" | "billing" | ForgeScreen;
+type View = "now" | "plan" | "all" | "guild" | "settings" | Extra;
 const VIEWS: readonly { id: View; label: string }[] = [
-  { id: "now", label: "今" },
-  { id: "plan", label: "予定" },
-  { id: "all", label: "やること" },
-  { id: "guild", label: "ギルド" },
-  { id: "settings", label: "設定" },
+  { id: "now", label: tx("今") },
+  { id: "plan", label: tx("予定") },
+  { id: "all", label: tx("やること") },
+  { id: "guild", label: tx("ギルド") },
+  { id: "settings", label: tx("設定") },
 ];
+/** The rest of Relay Forge, reached from Settings so the five tabs stay calm. */
+const EXTRAS: readonly { id: Extra; label: string; hint: string }[] = [
+  { id: "profile", label: tx("プロフィール"), hint: tx("表示名・ユーザー名・ひとこと") },
+  { id: "calendar", label: tx("カレンダー"), hint: tx("月や週で予定を見渡す") },
+  { id: "notes", label: tx("メモ"), hint: tx("タスクに結びつくメモを書く") },
+  { id: "work", label: tx("時間の記録"), hint: tx("使った時間を測って振り返る") },
+  { id: "list", label: tx("一覧・ボード・ガント"), hint: tx("すべてのタスクを並べ替えて見る") },
+  { id: "network", label: tx("つながり"), hint: tx("タスクと人と連携の関係を図で見る") },
+  { id: "party", label: tx("パーティ"), hint: tx("仲間と Agent の顔ぶれと負荷") },
+  { id: "battle", label: tx("バトル"), hint: tx("終えたタスクで戦うゲーム") },
+  { id: "connections", label: tx("連携"), hint: tx("Google などの外部サービスと同期") },
+  { id: "skills", label: tx("スキル"), hint: tx("Agent が使える MCP ツールの一覧") },
+  { id: "billing", label: tx("プラン"), hint: tx("利用プランと支払い") },
+];
+const FORGE: readonly Extra[] = ["list", "network", "party", "battle", "connections", "skills"];
+const isExtra = (view: View): view is Extra => EXTRAS.some(item => item.id === view);
 const UNDO_MS = 5000;
-const dayLabel = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short", timeZone: "UTC" });
-const weekdayLabel = new Intl.DateTimeFormat("ja-JP", { weekday: "short", timeZone: "UTC" });
-const monthLabel = new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", timeZone: "UTC" });
+// The language is fixed for a page load; changing it in Settings reloads the page.
+const LOCALE = getLocale();
+// The Web App root may serve this page, so a relative link would miss Relay Forge.
+const RELAY_FORGE_URL = location.pathname.startsWith("/interaction-lab/") ? "../relay-forge/" : "/next/relay-forge/";
+const dayLabel = new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric", weekday: "short", timeZone: "UTC" });
+const weekdayLabel = new Intl.DateTimeFormat(LOCALE, { weekday: "short", timeZone: "UTC" });
+const monthLabel = new Intl.DateTimeFormat(LOCALE, { year: "numeric", month: "long", timeZone: "UTC" });
+const shortDateLabel = new Intl.DateTimeFormat(LOCALE, { month: "numeric", day: "numeric", timeZone: "UTC" });
 const noon = (date: string) => new Date(`${date}T12:00:00Z`);
+const shortDate = (date: string) => shortDateLabel.format(noon(date));
 /** Week grid scale: pixels per minute. */
 const GRID_PX = 1.4;
 /** Side-by-side cards per overlap in the week grid before the rest fold away. */
@@ -88,7 +122,7 @@ const store = {
 
 export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   // "#today" is the previous name of the plan view.
-  const viewFromHash = (): View => location.hash === "#today" ? "plan" : VIEWS.find(v => location.hash === `#${v.id}`)?.id ?? "now";
+  const viewFromHash = (): View => location.hash === "#today" ? "plan" : [...VIEWS, ...EXTRAS].find(v => location.hash === `#${v.id}`)?.id ?? "now";
   let view: View = viewFromHash();
   let focusId: string | null = null;
   const skipped = new Set<string>();
@@ -103,8 +137,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let connectionsLoading = false, connectionsError = false;
   const linkDrafts = new Map<string, string[]>();
   let removingAgent: string | null = null;
+  let revokingClient: string | null = null;
+  let profile: RelayForgeRuntime["profile"] = null;
   // Folded step lists stay open across rerenders.
   const openFolds = new Set<string>();
+  let search = "";
   const replies = new Map<string, string>();
   let planMode: "day" | "week" = store.get("a4-plan-mode") === "week" ? "week" : "day";
   let sheet: HTMLDialogElement | null = null;
@@ -124,21 +161,53 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let toastTimer = 0;
 
   const quests = () => port.quests().filter(q => !pending.has(q.id));
+
+  // Relay Forge's own calendar, notes, time and plan modules, so nothing is lost by switching.
+  const runtime = port.runtime;
+  const workUi = productivityWorkspace({
+    port: runtime?.productivityPort, quests: port.quests, held: () => busy,
+    refresh: () => render(),
+    navigate: (screen, id) => { if (screen === "quests") { if (id) { const quest = port.quests().find(q => q.id === id); if (quest) openSheet(quest); } go("all"); } else go(screen); },
+    schedule: (id, date, time, minutes) => {
+      const quest = port.quests().find(q => q.id === id);
+      if (quest) update(quest, { scheduledDate: date, scheduledTime: time, estimatedMinutes: minutes, planningState: "scheduled", planningMode: "on_date" }, tx("予定に入れました"), previousPlan(quest));
+    },
+  });
+  const billingUi = createBillingUi({
+    port: runtime?.billingPort ?? null,
+    agents: () => (runtime?.agents ?? []).filter(agent => agent.status !== "archived").map(agent => ({
+      agentId: agent.agentId, displayName: agent.displayName, status: agent.status ?? "active",
+      role: agent.role ?? "", provider: agent.provider ?? "", allowedScopes: agent.allowedScopes,
+    })),
+    quests: port.quests, render: () => render(), alive: () => !disposed, writeLocked: () => busy,
+    refreshWorkspace: async () => { await port.refresh?.(); },
+  });
+  const forge = runtime ? forgeScreens({
+    runtime: () => port.runtime!, quests: port.quests, busy: () => busy, render: () => render(),
+    announce: message => say(message),
+    openQuest: id => { const quest = port.quests().find(q => q.id === id); if (quest) openSheet(quest); },
+    openAgentForm: () => openAgentForm(),
+    navigate: screen => go(screen),
+    refresh: async () => { await port.refresh?.(); },
+    workTime: quest => workUi.totals(quest),
+    relatedNotes: id => workUi.relatedNotes(id),
+  }) : null;
+  const analyticsUi = createAnalyticsUi({ port: runtime?.analyticsPort ?? null, render: () => render(), alive: () => !disposed });
   const byId = (id: string | null) => (id === null ? null : port.quests().find(q => q.id === id) ?? null);
 
   const toast = el("div", { class: "a4-toast", role: "status", "aria-live": "polite", hidden: true });
   const main = el("main", { class: "a4-main", id: "a4-main", tabindex: -1 });
   const dockHost = el("div", { class: "a4-dock-host" });
-  const nav = el("nav", { class: "a4-tabs", "aria-label": "画面" });
-  const captureInput = el("input", { class: "a4-capture-input", type: "text", name: "title", placeholder: "思いついたら書く", "aria-label": "やることを書き出す", autocomplete: "off", enterkeyhint: "done", maxlength: 200 });
-  const captureToday = el("button", { type: "button", class: "a4-chip", "aria-pressed": "false" }, "今日やる");
-  const captureForm = el("form", { class: "a4-capture" }, captureInput, captureToday, el("button", { type: "submit", class: "a4-button" }, "追加"));
+  const nav = el("nav", { class: "a4-tabs", "aria-label": tx("画面") });
+  const captureInput = el("input", { class: "a4-capture-input", type: "text", name: "title", placeholder: tx("思いついたら書く"), "aria-label": tx("やることを書き出す"), autocomplete: "off", enterkeyhint: "done", maxlength: 200 });
+  const captureToday = el("button", { type: "button", class: "a4-chip", "aria-pressed": "false" }, tx("今日やる"));
+  const captureForm = el("form", { class: "a4-capture" }, captureInput, captureToday, el("button", { type: "submit", class: "a4-button" }, tx("追加")));
   const header = el("header", { class: "a4-top" },
     el("span", { class: "a4-brand" }, "Guilduo"),
     captureForm,
     nav,
   );
-  const banner = port.demo ? el("p", { class: "a4-demo" }, "デモ（保存されません） ", el("a", { href: location.pathname }, "サインイン")) : null;
+  const banner = port.demo ? el("p", { class: "a4-demo" }, tx("デモ（保存されません） "), el("a", { href: location.pathname }, tx("サインイン"))) : null;
   replaceChildren(root, el("div", { class: "a4-app" }, banner, header, main, dockHost, toast));
 
   captureToday.addEventListener("click", () => captureToday.setAttribute("aria-pressed", String(captureToday.getAttribute("aria-pressed") !== "true")));
@@ -154,14 +223,14 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         scheduledDate: today ? port.today() : "", scheduledTime: "", planningMode: "on_date", planningState: today ? "scheduled" : "backlog",
       });
       captureInput.value = "";
-      say(today ? "今日のやることに追加しました" : "受け箱に追加しました");
-    }, "追加できませんでした。入力は残しています。");
+      say(today ? tx("今日のやることに追加しました") : tx("受け箱に追加しました"));
+    }, tx("追加できませんでした。入力は残しています。"));
   });
 
   function say(message: string, undo?: () => void): void {
     window.clearTimeout(toastTimer);
     replaceChildren(toast, el("span", {}, message), undo ? (() => {
-      const button = el("button", { type: "button", class: "a4-link" }, "元に戻す");
+      const button = el("button", { type: "button", class: "a4-link" }, tx("元に戻す"));
       button.addEventListener("click", () => { undo(); toast.hidden = true; });
       return button;
     })() : null);
@@ -181,8 +250,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function update(quest: Quest, patch: Record<string, unknown>, message: string, revert?: Record<string, unknown>): void {
     void run(async () => {
       const saved = await port.update(quest, patch);
-      say(message, revert ? () => { void run(async () => { await port.update(saved, revert); }, "元に戻せませんでした"); } : undefined);
-    }, "保存できませんでした。もう一度試してください。");
+      say(message, revert ? () => { void run(async () => { await port.update(saved, revert); }, tx("元に戻せませんでした")); } : undefined);
+    }, tx("保存できませんでした。もう一度試してください。"));
   }
 
   function complete(quest: Quest): void {
@@ -193,8 +262,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       pending.delete(quest.id);
       void run(async () => {
         const result = await port.complete(quest);
-        if (game && result.character) say(`完了！ Lv ${result.character.level} · XP ${result.character.xp}/${result.character.nextXp}`);
-      }, "完了を保存できませんでした。もう一度試してください。");
+        if (game && result.character) say(tx("完了！ Lv {level} · XP {xp}/{next}", { level: result.character.level, xp: result.character.xp, next: result.character.nextXp }));
+      }, tx("完了を保存できませんでした。もう一度試してください。"));
     }, UNDO_MS);
     pending.set(quest.id, timer);
     const today = port.today();
@@ -205,7 +274,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         : focused ? { x: focused.left + focused.width / 2, y: focused.top + focused.height / 2 } : { x: innerWidth / 2, y: innerHeight * 0.6 };
       celebrate(origin.x, origin.y, dayDone);
     }
-    say(dayDone ? "今日の分、ぜんぶ終わりました！" : game ? "完了！ よくできました" : "完了しました", () => { window.clearTimeout(timer); pending.delete(quest.id); render(); });
+    say(dayDone ? tx("今日の分、ぜんぶ終わりました！") : game ? tx("完了！ よくできました") : tx("完了しました"), () => { window.clearTimeout(timer); pending.delete(quest.id); render(); });
     render();
   }
 
@@ -224,12 +293,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function start(quest: Quest): void {
     store.set(`a4-start:${quest.id}`, String(Date.now()));
     focusId = quest.id;
-    update(quest, { assignee: { ...quest.assignee, handoffState: "working" }, handoff: { ...quest.handoff, startedAt: quest.handoff?.startedAt || new Date().toISOString() } }, "始めました。まずは次の一歩だけ。");
+    update(quest, { assignee: { ...quest.assignee, handoffState: "working" }, handoff: { ...quest.handoff, startedAt: quest.handoff?.startedAt || new Date().toISOString() } }, tx("始めました。まずは次の一歩だけ。"));
   }
 
   function pause(quest: Quest): void {
     store.set(`a4-start:${quest.id}`, null);
-    update(quest, { assignee: { ...quest.assignee, handoffState: "none" } }, "一時停止しました。続きはいつでもここから。");
+    update(quest, { assignee: { ...quest.assignee, handoffState: "none" } }, tx("一時停止しました。続きはいつでもここから。"));
   }
 
   /* ------------------------------ pieces ------------------------------ */
@@ -242,11 +311,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   };
 
   function estimateChips(quest: Quest): HTMLElement {
-    return el("div", { class: "a4-chips", role: "group", "aria-label": "目安の時間" },
+    return el("div", { class: "a4-chips", role: "group", "aria-label": tx("目安の時間") },
       ...ESTIMATES.map(minutes => {
-        const chip = button(`${minutes}分`, () => {
+        const chip = button(minutesLabel(minutes), () => {
           estimateFor = null;
-          update(quest, { estimatedMinutes: quest.estimatedMinutes === minutes ? 0 : minutes, expectedUpdatedAt: quest.updatedAt }, `目安を${minutes}分にしました`);
+          update(quest, { estimatedMinutes: quest.estimatedMinutes === minutes ? 0 : minutes, expectedUpdatedAt: quest.updatedAt }, tx("目安を{time}にしました", { time: minutesLabel(minutes) }));
         });
         chip.className = "a4-chip";
         chip.setAttribute("aria-pressed", String(quest.estimatedMinutes === minutes));
@@ -255,9 +324,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   function stepEditor(quest: Quest): HTMLElement {
-    const input = el("input", { class: "a4-input", type: "text", value: quest.nextAction, "aria-label": "次の一歩", placeholder: "例：ファイルを開くだけ", maxlength: 180 });
-    const form = el("form", { class: "a4-step-form" }, input, el("button", { type: "submit", class: "a4-button", disabled: busy }, "保存"));
-    form.addEventListener("submit", event => { event.preventDefault(); stepDraftFor = null; update(quest, { nextAction: input.value.trim(), expectedUpdatedAt: quest.updatedAt }, "次の一歩を保存しました"); });
+    const input = el("input", { class: "a4-input", type: "text", value: quest.nextAction, "aria-label": tx("次の一歩"), placeholder: tx("例：ファイルを開くだけ"), maxlength: 180 });
+    const form = el("form", { class: "a4-step-form" }, input, el("button", { type: "submit", class: "a4-button", disabled: busy }, tx("保存")));
+    form.addEventListener("submit", event => { event.preventDefault(); stepDraftFor = null; update(quest, { nextAction: input.value.trim(), expectedUpdatedAt: quest.updatedAt }, tx("次の一歩を保存しました")); });
     queueMicrotask(() => input.focus());
     return form;
   }
@@ -284,9 +353,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       ring.setAttribute("stroke-dasharray", `${goal > 0 ? Math.min(100, (seconds / goal) * 100) : 0} 100`);
     };
     paint();
-    const node = el("div", { class: small ? "a4-ring a4-ring-sm" : "a4-ring", role: "timer", "aria-label": goal > 0 ? `経過時間。目安は${minutesLabel(quest.estimatedMinutes)}` : "経過時間" },
+    const node = el("div", { class: small ? "a4-ring a4-ring-sm" : "a4-ring", role: "timer", "aria-label": goal > 0 ? tx("経過時間。目安は{time}", { time: minutesLabel(quest.estimatedMinutes) }) : tx("経過時間") },
       svg("svg", { viewBox: "0 0 120 120", "aria-hidden": "true" }, svg("circle", { class: "a4-ring-track", cx: 60, cy: 60, r: 52 }), ring),
-      el("div", { class: "a4-ring-text" }, label, small ? null : el("small", {}, goal > 0 ? `/ ${minutesLabel(quest.estimatedMinutes)}` : "経過")));
+      el("div", { class: "a4-ring-text" }, label, small ? null : el("small", {}, goal > 0 ? `/ ${minutesLabel(quest.estimatedMinutes)}` : tx("経過"))));
     (node as HTMLElement & { a4Paint?: () => void }).a4Paint = paint;
     return node;
   }
@@ -294,7 +363,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function decisionNotice(): HTMLElement | null {
     const count = quests().filter(needsDecision).length;
     if (count === 0) return null;
-    const link = el("a", { class: "a4-notice", href: "#guild" }, `あなたの判断待ちが ${count} 件あります`, el("span", { "aria-hidden": "true" }, " →"));
+    const link = el("a", { class: "a4-notice", href: "#guild" }, tx("あなたの判断待ちが {count} 件あります", { count }), el("span", { "aria-hidden": "true" }, " →"));
     link.addEventListener("click", event => { event.preventDefault(); go("guild"); });
     return link;
   }
@@ -313,10 +382,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   function checkButton(quest: Quest): HTMLElement {
-    if (isDone(quest)) return el("span", { class: "a4-check", "data-done": "true", role: "img", "aria-label": "完了" });
+    if (isDone(quest)) return el("span", { class: "a4-check", "data-done": "true", role: "img", "aria-label": tx("完了") });
     // Only the person's own tasks can be ticked off here; others show no dead control.
     if (quest.assignee.type !== "self" || needsDecision(quest)) return el("span", { class: "a4-check-space", "aria-hidden": "true" });
-    const node = el("button", { type: "button", class: "a4-check", "aria-label": `${quest.title} を完了`, disabled: busy });
+    const node = el("button", { type: "button", class: "a4-check", "aria-label": tx("{title} を完了", { title: quest.title }), disabled: busy });
     node.addEventListener("click", () => complete(quest));
     return node;
   }
@@ -329,10 +398,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   function meta(quest: Quest, withTime = true): string {
     const steps = children(quest);
-    const parts = [withTime ? quest.scheduledTime : "", quest.estimatedMinutes > 0 ? `目安 ${minutesLabel(quest.estimatedMinutes)}` : "",
-      steps.length > 0 ? `ステップ ${steps.filter(isDone).length}/${steps.length}` : "",
-      quest.dueDate ? `締切 ${Number(quest.dueDate.slice(5, 7))}/${Number(quest.dueDate.slice(8))}` : ""];
-    if (quest.assignee.type !== "self") parts.push(`担当 ${quest.assignee.label || "Agent"}`);
+    const parts = [withTime ? quest.scheduledTime : "", quest.estimatedMinutes > 0 ? tx("目安 {time}", { time: minutesLabel(quest.estimatedMinutes) }) : "",
+      steps.length > 0 ? tx("ステップ {done}/{total}", { done: steps.filter(isDone).length, total: steps.length }) : "",
+      quest.dueDate ? tx("締切 {date}", { date: shortDate(quest.dueDate) }) : ""];
+    if (quest.assignee.type !== "self") parts.push(tx("担当 {name}", { name: quest.assignee.label || "Agent" }));
     return parts.filter(Boolean).join(" · ");
   }
 
@@ -343,14 +412,14 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   function row(quest: Quest, bucket: Bucket): HTMLElement {
     const quick = bucket === "inbox" || bucket === "review" || bucket === "later"
-      ? button("今日やる", () => update(quest, { ...plan(port.today()), expectedUpdatedAt: quest.updatedAt }, "今日に入れました", previousPlan(quest)), "link")
-      : bucket === "decision" ? button("確認する", () => { decisionId = quest.id; go("guild"); }, "link") : null;
+      ? button(tx("今日やる"), () => update(quest, { ...plan(port.today()), expectedUpdatedAt: quest.updatedAt }, tx("今日に入れました"), previousPlan(quest)), "link")
+      : bucket === "decision" ? button(tx("確認する"), () => { decisionId = quest.id; go("guild"); }, "link") : null;
     const steps = openSteps(quest);
     const next = steps.find(step => blockers(step, port.quests()).length === 0);
     return el("li", { class: "a4-row", "data-bucket": bucket }, el("div", { class: "a4-row-main" }, checkButton(quest), rowText(quest), quick),
       steps.length === 0 ? null : (() => {
         const fold = el("details", { class: "a4-row-steps", open: openFolds.has(quest.id) },
-          el("summary", {}, `ステップ（残り ${steps.length}）${next ? `· 次は「${shortTitle(next.title)}」` : ""}`),
+          el("summary", {}, (next ? tx("ステップ（残り {count}）· 次は「{title}」", { count: steps.length, title: shortTitle(next.title) }) : tx("ステップ（残り {count}）", { count: steps.length }))),
           stepList(quest, false));
         fold.addEventListener("toggle", () => { if (fold.open) openFolds.add(quest.id); else openFolds.delete(quest.id); });
         return fold;
@@ -367,12 +436,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const done = withDone ? children(quest).filter(isDone) : [];
     if (open.length + done.length === 0) return null;
     const next = open.find(step => blockers(step, port.quests()).length === 0);
-    return el("ul", { class: "a4-steps", "aria-label": "小さなステップ" },
+    return el("ul", { class: "a4-steps", "aria-label": tx("小さなステップ") },
       ...[...open, ...done].map(step => {
         const waits = isDone(step) ? [] : blockers(step, port.quests());
         return el("li", { "data-waiting": String(waits.length > 0) }, checkButton(step), titleButton(step),
-          step === next ? el("span", { class: "a4-step-tag", "data-kind": "next" }, "次はこれ")
-            : waits.length > 0 ? el("span", { class: "a4-step-tag" }, `待ち（${waits.slice(0, 2).map(item => shortTitle(item.title)).join("・")}${waits.length > 2 ? ` ほか${waits.length - 2}件` : ""} のあと）`) : null);
+          step === next ? el("span", { class: "a4-step-tag", "data-kind": "next" }, tx("次はこれ"))
+            : waits.length > 0 ? el("span", { class: "a4-step-tag" }, (waits.length > 2 ? tx("待ち（{names} ほか{count}件 のあと）", { names: waits.slice(0, 2).map(item => shortTitle(item.title)).join(tx("・")), count: waits.length - 2 }) : tx("待ち（{names} のあと）", { names: waits.map(item => shortTitle(item.title)).join(tx("・")) }))) : null);
       }));
   }
 
@@ -394,7 +463,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     let legs = initial.map(leg => ({ ...leg }));
     let palette = false;
     let suppressClickUntil = 0;
-    const list = el("ol", { class: "a4-relay", "aria-label": "担当のリレー" });
+    const list = el("ol", { class: "a4-relay", "aria-label": tx("担当のリレー") });
     const hint = el("small", { class: "a4-muted", "aria-live": "polite" });
     const host = el("div", { class: "a4-relay-host" }, list, hint);
     const position = () => {
@@ -475,13 +544,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     function legNode(leg: RelayLeg, index: number, started: boolean, at: number, state: string): HTMLElement {
       const locked = !editable || index < firstFree();
       const name = nameOf(leg.agentId);
-      const badge = !started || index > at ? status("これから", "none") : index < at ? status("済み", "accepted") : status(AGENT_STATE[state] ?? state, state);
-      const ask = multi && !locked ? el("input", { class: "a4-relay-ask", value: leg.ask, maxlength: 60, placeholder: "頼みごと（例：下書き）", "aria-label": `${name}への頼みごと` }) : null;
+      const badge = !started || index > at ? status(tx("これから"), "none") : index < at ? status(tx("済み"), "accepted") : status(AGENT_STATE[state] ?? state, state);
+      const ask = multi && !locked ? el("input", { class: "a4-relay-ask", value: leg.ask, maxlength: 60, placeholder: tx("頼みごと（例：下書き）"), "aria-label": tx("{name}への頼みごと", { name }) }) : null;
       ask?.addEventListener("input", () => { legs[index] = { ...legs[index]!, ask: ask.value }; paintHint(); });
-      const remove = locked ? null : el("button", { type: "button", class: "a4-relay-x", "aria-label": `${name}を外す` }, "×");
+      const remove = locked ? null : el("button", { type: "button", class: "a4-relay-x", "aria-label": tx("{name}を外す", { name }) }, "×");
       remove?.addEventListener("click", () => { legs.splice(index, 1); paint(); });
       const node = el("li", { class: "a4-relay-node", "data-kind": "agent", "data-index": String(index), "data-status": !started || index > at ? "next" : index < at ? "done" : "now",
-        "data-draggable": String(multi && !locked), "aria-label": `${index + 1}番目 ${name}${leg.ask ? `：${leg.ask}` : ""}` },
+        "data-draggable": String(multi && !locked), "aria-label": tx("{index}番目 {name}", { index: index + 1, name }) + (leg.ask ? `${tx("：")}${leg.ask}` : "") },
         el("span", { class: "a4-avatar", "data-kind": "agent", "aria-hidden": "true" }, name.slice(0, 1)),
         el("div", { class: "a4-relay-body" },
           el("div", { class: "a4-relay-line" }, el("strong", {}, name), badge),
@@ -503,37 +572,37 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     function link(after: number | null, at: number, label = ""): HTMLElement {
       if (after === null || !multi) return el("li", { class: "a4-relay-link", "aria-hidden": label ? null : "true" }, label ? el("span", { class: "a4-meta" }, label) : null);
       const leg = legs[after]!;
-      if (!editable || after < at) return el("li", { class: "a4-relay-link" }, el("span", { class: "a4-meta" }, leg.check ? "あなたが確認してから次へ" : "そのまま次へ"));
-      const toggle = el("button", { type: "button", class: "a4-relay-check", "aria-pressed": String(leg.check) }, leg.check ? "確認を挟む" : "そのまま次へ");
+      if (!editable || after < at) return el("li", { class: "a4-relay-link" }, el("span", { class: "a4-meta" }, leg.check ? tx("あなたが確認してから次へ") : tx("そのまま次へ")));
+      const toggle = el("button", { type: "button", class: "a4-relay-check", "aria-pressed": String(leg.check) }, leg.check ? tx("確認を挟む") : tx("そのまま次へ"));
       toggle.addEventListener("click", () => { legs[after] = { ...legs[after]!, check: !legs[after]!.check }; paint(); });
       return el("li", { class: "a4-relay-link" }, toggle);
     }
     function paintHint(): void {
       const { started } = position();
       const first = legs[0];
-      hint.textContent = !changed() ? (legs.length === 0 && editable ? (multi ? "Agentを足すと、順番にバトンを渡します。最後はあなたが確認します。" : "Agentを足すと、そのAgentに渡します。終わったらあなたが確認します。") : "")
-        : legs.length === 0 ? "保存すると自分の担当に戻します。"
-        : !started || (!multi && first?.agentId !== quest.assignee.id) ? `保存すると ${nameOf(first!.agentId)} に渡します。${legs.length > 1 ? `終わったら ${legs.slice(1).map(leg => nameOf(leg.agentId)).join(" → ")} へ回り、` : "終わったら、"}最後にあなたが確認します。`
-        : "保存すると、このあとの順番を変えます。";
+      hint.textContent = !changed() ? (legs.length === 0 && editable ? (multi ? tx("Agentを足すと、順番にバトンを渡します。最後はあなたが確認します。") : tx("Agentを足すと、そのAgentに渡します。終わったらあなたが確認します。")) : "")
+        : legs.length === 0 ? tx("保存すると自分の担当に戻します。")
+        : !started || (!multi && first?.agentId !== quest.assignee.id) ? (legs.length > 1 ? tx("保存すると {first} に渡します。終わったら {rest} へ回り、最後にあなたが確認します。", { first: nameOf(first!.agentId), rest: legs.slice(1).map(leg => nameOf(leg.agentId)).join(" → ") }) : tx("保存すると {first} に渡します。終わったら、最後にあなたが確認します。", { first: nameOf(first!.agentId) }))
+        : tx("保存すると、このあとの順番を変えます。");
     }
     function paint(): void {
       const { started, at, state } = position();
-      const items: HTMLElement[] = [selfNode(`${port.self().label}（あなた）`, null)];
+      const items: HTMLElement[] = [selfNode(tx("{name}（あなた）", { name: port.self().label }), null)];
       legs.forEach((leg, index) => {
-        items.push(index === 0 ? link(null, at, "渡す") : link(index - 1, at));
+        items.push(index === 0 ? link(null, at, tx("渡す")) : link(index - 1, at));
         items.push(legNode(leg, index, started, at, state));
       });
       const last = started && at === legs.length - 1;
-      items.push(link(null, at, legs.length > 0 ? "終わったら" : ""));
-      items.push(selfNode(legs.length > 0 ? "あなたが最後の確認" : "あなたが進める",
-        last && state === "review_required" ? status("あなたの番", "review_required") : last && state === "accepted" ? status("完了", "accepted") : null, true));
+      items.push(link(null, at, legs.length > 0 ? tx("終わったら") : ""));
+      items.push(selfNode(legs.length > 0 ? tx("あなたが最後の確認") : tx("あなたが進める"),
+        last && state === "review_required" ? status(tx("あなたの番"), "review_required") : last && state === "accepted" ? status(tx("完了"), "accepted") : null, true));
       const add = editable && legs.length < max ? (() => {
-        const button = el("button", { type: "button", class: "a4-relay-add", "aria-expanded": String(palette) }, "＋ Agent を足す");
+        const button = el("button", { type: "button", class: "a4-relay-add", "aria-expanded": String(palette) }, tx("＋ Agent を足す"));
         button.addEventListener("click", () => { palette = !palette; paint(); list.querySelector<HTMLElement>(".a4-relay-palette button")?.focus(); });
         return button;
       })() : null;
-      const chips = palette && add ? el("li", { class: "a4-relay-palette", role: "group", "aria-label": "足すAgent" }, ...(agents.length === 0
-        ? [el("span", { class: "a4-muted" }, "使えるAgentがいません。登録は詳しい画面で行います。")]
+      const chips = palette && add ? el("li", { class: "a4-relay-palette", role: "group", "aria-label": tx("足すAgent") }, ...(agents.length === 0
+        ? [el("span", { class: "a4-muted" }, tx("使えるAgentがいません。登録は詳しい画面で行います。"))]
         : agents.map(agent => {
           const chip = el("button", { type: "button", class: "a4-chip", title: agent.role }, agent.name);
           chip.addEventListener("click", () => { if (Date.now() > suppressClickUntil) addLeg(agent.id); });
@@ -562,29 +631,29 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       requestAnimationFrame(fit);
       return node;
     };
-    const title = line({ class: "a4-sheet-title", name: "title", required: true, maxlength: 200, "aria-label": "やること" }, quest.title);
-    const step = line({ class: "a4-sheet-next", name: "nextAction", placeholder: "次の一歩：最初の1分でできること", "aria-label": "次の一歩", maxlength: 180 }, quest.nextAction);
-    const date = el("input", { class: "a4-input", type: "date", name: "scheduledDate", value: quest.scheduledDate, "aria-label": "日付" });
-    const time = el("input", { class: "a4-input", type: "time", name: "scheduledTime", value: quest.scheduledTime, step: 300, "aria-label": "時刻" });
-    const due = el("input", { class: "a4-input", type: "date", name: "dueDate", value: quest.dueDate, "aria-label": "締め切り" });
-    const notes = el("textarea", { class: "a4-input a4-textarea", name: "notes", rows: 4, maxlength: 180, "aria-label": "メモ", placeholder: "メモ" });
-    const criteria = el("textarea", { class: "a4-input a4-textarea", name: "completionCriteria", rows: 3, maxlength: 300, "aria-label": "完了の条件", placeholder: "例：対象SHAで、ログインから同期まで確認できたら完了" });
+    const title = line({ class: "a4-sheet-title", name: "title", required: true, maxlength: 200, "aria-label": tx("やること") }, quest.title);
+    const step = line({ class: "a4-sheet-next", name: "nextAction", placeholder: tx("次の一歩：最初の1分でできること"), "aria-label": tx("次の一歩"), maxlength: 180 }, quest.nextAction);
+    const date = el("input", { class: "a4-input", type: "date", name: "scheduledDate", value: quest.scheduledDate, "aria-label": tx("日付") });
+    const time = el("input", { class: "a4-input", type: "time", name: "scheduledTime", value: quest.scheduledTime, step: 300, "aria-label": tx("時刻") });
+    const due = el("input", { class: "a4-input", type: "date", name: "dueDate", value: quest.dueDate, "aria-label": tx("締め切り") });
+    const notes = el("textarea", { class: "a4-input a4-textarea", name: "notes", rows: 4, maxlength: 180, "aria-label": tx("メモ"), placeholder: tx("メモ") });
+    const criteria = el("textarea", { class: "a4-input a4-textarea", name: "completionCriteria", rows: 3, maxlength: 300, "aria-label": tx("完了の条件"), placeholder: tx("例：対象SHAで、ログインから同期まで確認できたら完了") });
     criteria.value = quest.completionCriteria ?? "";
     notes.value = quest.notes;
     let estimate = quest.estimatedMinutes;
 
     // Values read as chips; an editor opens only for the one being changed.
-    const shortDay = (value: string) => value === today ? "今日" : value === addDays(today, 1) ? "明日" : dayLabel.format(noon(value));
+    const shortDay = (value: string) => value === today ? tx("今日") : value === addDays(today, 1) ? tx("明日") : dayLabel.format(noon(value));
     const quick = (label: string, apply: () => void) => {
       const chip = el("button", { type: "button", class: "a4-chip" }, label);
       chip.addEventListener("click", () => { apply(); paintChips(); });
       return chip;
     };
     // Length can be picked, typed freely (up to a day), or implied by an end time.
-    const hours = el("input", { class: "a4-input a4-num", type: "number", min: 0, max: 24, step: 1, inputmode: "numeric", "aria-label": "目安（時間）" });
-    const mins = el("input", { class: "a4-input a4-num", type: "number", min: 0, max: 59, step: 5, inputmode: "numeric", "aria-label": "目安（分）" });
-    const end = el("input", { class: "a4-input", type: "time", step: 300, "aria-label": "終わる時刻" });
-    const estimateChips = el("div", { class: "a4-chips", role: "group", "aria-label": "目安の時間" }, ...[...ESTIMATES, 90, 120].map(minutes => {
+    const hours = el("input", { class: "a4-input a4-num", type: "number", min: 0, max: 24, step: 1, inputmode: "numeric", "aria-label": tx("目安（時間）") });
+    const mins = el("input", { class: "a4-input a4-num", type: "number", min: 0, max: 59, step: 5, inputmode: "numeric", "aria-label": tx("目安（分）") });
+    const end = el("input", { class: "a4-input", type: "time", step: 300, "aria-label": tx("終わる時刻") });
+    const estimateChips = el("div", { class: "a4-chips", role: "group", "aria-label": tx("目安の時間") }, ...[...ESTIMATES, 90, 120].map(minutes => {
       const chip = el("button", { type: "button", class: "a4-chip", "data-minutes": String(minutes) }, minutesLabel(minutes));
       chip.addEventListener("click", () => setEstimate(estimate === minutes ? 0 : minutes));
       return chip;
@@ -604,7 +673,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     end.addEventListener("input", () => { if (time.value && end.value) setEstimate((toMinutes(end.value) - toMinutes(time.value) + 1440) % 1440 || 1440, end); });
     time.addEventListener("input", () => setEstimate(estimate));
     // Our own 15-minute list instead of the browser's spinner popup; typing still works.
-    const slots = el("div", { class: "a4-timelist", role: "listbox", "aria-label": "時刻を選ぶ" });
+    const slots = el("div", { class: "a4-timelist", role: "listbox", "aria-label": tx("時刻を選ぶ") });
     let slotFor: HTMLInputElement = time;
     function paintSlots(): void {
       const isEnd = slotFor === end;
@@ -629,29 +698,29 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     }
     for (const input of [time, end]) input.addEventListener("focus", () => { if (slotFor !== input) { slotFor = input; paintSlots(); } });
     const panes = {
-      date: el("div", { class: "a4-sheet-pane", hidden: true }, date, quick("今日", () => { date.value = today; }), quick("明日", () => { date.value = addDays(today, 1); }), quick("なし", () => { date.value = ""; time.value = ""; setEstimate(estimate); })),
+      date: el("div", { class: "a4-sheet-pane", hidden: true }, date, quick(tx("今日"), () => { date.value = today; }), quick(tx("明日"), () => { date.value = addDays(today, 1); }), quick(tx("なし"), () => { date.value = ""; time.value = ""; setEstimate(estimate); })),
       time: el("div", { class: "a4-sheet-pane", hidden: true },
-        el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, "始まり"), time),
+        el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, tx("始まり")), time),
         el("span", { class: "a4-meta", "aria-hidden": "true" }, "〜"),
-        el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, "終わり"), end),
-        quick("なし", () => { time.value = ""; setEstimate(estimate); paintSlots(); }), slots),
+        el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, tx("終わり")), end),
+        quick(tx("なし"), () => { time.value = ""; setEstimate(estimate); paintSlots(); }), slots),
       estimate: el("div", { class: "a4-sheet-pane", hidden: true }, estimateChips,
-        el("div", { class: "a4-pane-free" }, el("span", { class: "a4-step-label" }, "自由に"), hours, el("span", {}, "時間"), mins, el("span", {}, "分"))),
-      due: el("div", { class: "a4-sheet-pane", hidden: true }, due, quick("なし", () => { due.value = ""; })),
+        el("div", { class: "a4-pane-free" }, el("span", { class: "a4-step-label" }, tx("自由に")), hours, el("span", {}, tx("時間")), mins, el("span", {}, tx("分")))),
+      due: el("div", { class: "a4-sheet-pane", hidden: true }, due, quick(tx("なし"), () => { due.value = ""; })),
     };
     type Pane = keyof typeof panes;
     let open: Pane | null = null;
-    const memo = el("div", { class: "a4-field-row", hidden: !quest.notes }, el("span", { class: "a4-step-label" }, "メモ"), notes);
-    const memoChip = el("button", { type: "button", class: "a4-chip" }, "＋メモ");
+    const memo = el("div", { class: "a4-field-row", hidden: !quest.notes }, el("span", { class: "a4-step-label" }, tx("メモ")), notes);
+    const memoChip = el("button", { type: "button", class: "a4-chip" }, tx("＋メモ"));
     memoChip.addEventListener("click", () => { memo.hidden = false; memoChip.hidden = true; notes.focus(); });
     memoChip.hidden = !memo.hidden;
-    const done = el("div", { class: "a4-field-row", hidden: !quest.completionCriteria }, el("span", { class: "a4-step-label" }, "完了の条件"), criteria);
-    const doneChip = el("button", { type: "button", class: "a4-chip" }, "＋完了の条件");
+    const done = el("div", { class: "a4-field-row", hidden: !quest.completionCriteria }, el("span", { class: "a4-step-label" }, tx("完了の条件")), criteria);
+    const doneChip = el("button", { type: "button", class: "a4-chip" }, tx("＋完了の条件"));
     doneChip.hidden = !done.hidden;
     doneChip.addEventListener("click", () => { done.hidden = false; doneChip.hidden = true; criteria.focus(); });
     // What has to finish first; each opens its own sheet.
     const deps = (quest.dependencyIds ?? []).map(id => byId(id)).filter((item): item is Quest => item !== null);
-    const depList = deps.length === 0 ? null : el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "先にやること"),
+    const depList = deps.length === 0 ? null : el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, tx("先にやること")),
       el("ul", { class: "a4-steps" }, ...deps.map(dep => el("li", {}, checkButton(dep), titleButton(dep)))));
     const parent = quest.parentQuestId ? byId(quest.parentQuestId) : null;
     const chipFor = (key: Pane) => {
@@ -669,10 +738,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const chips = { date: chipFor("date"), time: chipFor("time"), estimate: chipFor("estimate"), due: chipFor("due") };
     function paintChips(): void {
       const labels: Record<Pane, [string, boolean]> = {
-        date: date.value ? [shortDay(date.value), true] : ["＋日付", false],
-        time: time.value ? [estimate > 0 ? `${time.value}–${clock(toMinutes(time.value) + estimate)}` : time.value, true] : ["＋時刻", false],
-        estimate: estimate > 0 ? [minutesLabel(estimate), true] : ["＋目安", false],
-        due: due.value ? [`締め切り ${shortDay(due.value)}`, true] : ["＋締め切り", false],
+        date: date.value ? [shortDay(date.value), true] : [tx("＋日付"), false],
+        time: time.value ? [estimate > 0 ? `${time.value}–${clock(toMinutes(time.value) + estimate)}` : time.value, true] : [tx("＋時刻"), false],
+        estimate: estimate > 0 ? [minutesLabel(estimate), true] : [tx("＋目安"), false],
+        due: due.value ? [tx("締め切り {date}", { date: shortDay(due.value) }), true] : [tx("＋締め切り"), false],
       };
       for (const key of Object.keys(panes) as Pane[]) {
         chips[key].textContent = labels[key][0];
@@ -692,8 +761,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
     const mine = quest.assignee.type === "self" && !isDone(quest);
     const steps = el("div", { class: "a4-sheet-steps" });
-    const stepInput = el("input", { class: "a4-input", placeholder: "ステップを追加", "aria-label": "小さなステップを追加", maxlength: 200, enterkeyhint: "done" });
-    const stepForm = el("form", { class: "a4-step-form" }, stepInput, el("button", { type: "submit", class: "a4-button" }, "追加"));
+    const stepInput = el("input", { class: "a4-input", placeholder: tx("ステップを追加"), "aria-label": tx("小さなステップを追加"), maxlength: 200, enterkeyhint: "done" });
+    const stepForm = el("form", { class: "a4-step-form" }, stepInput, el("button", { type: "submit", class: "a4-button" }, tx("追加")));
     stepForm.addEventListener("submit", event => {
       event.preventDefault();
       const value = stepInput.value.trim();
@@ -703,25 +772,29 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
           scheduledDate: "", scheduledTime: "", planningMode: "on_date", planningState: "backlog", parentQuestId: quest.id });
         stepInput.value = "";
         stepInput.focus();
-      }, "ステップを追加できませんでした。");
+      }, tx("ステップを追加できませんでした。"));
     });
     repaintSheet = () => {
-      replaceChildren(steps, stepList(quest) ?? el("p", { class: "a4-muted" }, "大きいときは、ステップに分けると始めやすくなります。"));
+      replaceChildren(steps, stepList(quest) ?? el("p", { class: "a4-muted" }, tx("大きいときは、ステップに分けると始めやすくなります。")));
       if (!relay.node.contains(document.activeElement)) relay.paint();
     };
 
-    const close = el("button", { type: "button", class: "a4-button" }, "閉じる");
-    const dialog = el("dialog", { class: "a4-sheet", "aria-label": `詳しく：${quest.title}` },
+    const close = el("button", { type: "button", class: "a4-button" }, tx("閉じる"));
+    const dialog = el("dialog", { class: "a4-sheet", "aria-label": tx("詳しく：{title}", { title: quest.title }) },
       el("div", { class: "a4-sheet-head" },
-        parent ? button(`← 「${shortTitle(parent.title)}」の一部`, () => openSheet(parent), "link") : el("h2", { id: "a4-sheet-title", class: "a4-eyebrow" }, "詳しく"), close),
+        parent ? button(tx("← 「{title}」の一部", { title: shortTitle(parent.title) }), () => openSheet(parent), "link") : el("h2", { id: "a4-sheet-title", class: "a4-eyebrow" }, tx("詳しく")), close),
       form,
       depList,
-      el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "担当"), relay.node),
-      el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, "小さなステップ"), steps, mine ? stepForm : null),
+      el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, tx("担当")), relay.node),
+      el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, tx("小さなステップ")), steps, mine ? stepForm : null),
       el("div", { class: "a4-actions a4-sheet-foot" },
-        el("button", { type: "submit", class: "a4-button a4-primary", form: "a4-sheet-form" }, "保存"),
-        mine ? button("今やる", () => { dialog.close(); focusId = quest.id; skipped.delete(quest.id); go("now"); }) : null,
-        el("a", { class: "a4-link", href: "../relay-forge/" }, "詳しい画面で開く")));
+        el("button", { type: "submit", class: "a4-button a4-primary", form: "a4-sheet-form" }, tx("保存")),
+        mine ? button(tx("今やる"), () => { dialog.close(); focusId = quest.id; skipped.delete(quest.id); go("now"); }) : null,
+        // Putting away is reversible from search and the toast, so it needs no confirm step.
+        quest.lifecycleState === "archived"
+          ? button(tx("戻す"), () => { dialog.close(); update(quest, { lifecycleState: "active" }, tx("やることに戻しました"), { lifecycleState: "archived" }); }, "link")
+          : button(tx("しまう"), () => { dialog.close(); update(quest, { lifecycleState: "archived" }, tx("しまいました。「やること」の検索から戻せます。"), { lifecycleState: quest.lifecycleState }); }, "link"),
+        el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("詳しい画面で開く"))));
     repaintSheet();
     close.addEventListener("click", () => dialog.close());
     form.addEventListener("submit", event => {
@@ -758,8 +831,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         let saved = current;
         if (Object.keys(patch).length > 0) saved = await port.update(current, { ...patch, expectedUpdatedAt: current.updatedAt });
         if (relayWrite) await relayWrite.set(saved, legs);
-        say(firstHand ? `${relay.nameOf(legs[0]!.agentId)} に渡しました` : "保存しました");
-      }, "保存できませんでした。もう一度試してください。");
+        say(firstHand ? tx("{name} に渡しました", { name: relay.nameOf(legs[0]!.agentId) }) : tx("保存しました"));
+      }, tx("保存できませんでした。もう一度試してください。"));
     });
     const opener = document.activeElement;
     dialog.addEventListener("close", () => {
@@ -784,33 +857,33 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const agentBusy = quests().filter(q => q.assignee.type === "agent" && !needsDecision(q)).length;
     if (!focus) {
       return el("section", { class: "a4-view a4-now" }, decisionNotice(),
-        el("h1", { class: "a4-title", tabindex: -1 }, "今やることはありません"),
-        el("p", { class: "a4-lead" }, "上の欄に、頭にあることを1つ書き出してみましょう。"));
+        el("h1", { class: "a4-title", tabindex: -1 }, tx("今やることはありません")),
+        el("p", { class: "a4-lead" }, tx("上の欄に、頭にあることを1つ書き出してみましょう。")));
     }
     const running = isWorking(focus);
     const actions = running
-      ? [button("完了", () => complete(focus), "primary"), button("一時停止", () => pause(focus))]
-      : [button("始める", () => start(focus), "primary"),
-        candidates.length > 1 ? button("別のにする", () => { skipped.add(focus.id); if (skipped.size >= candidates.length) skipped.clear(); focusId = null; render(); }) : null,
-        button("明日にする", () => update(focus, { ...plan(addDays(today, 1)), expectedUpdatedAt: focus.updatedAt }, "明日に移しました", previousPlan(focus)), "link")];
+      ? [button(tx("完了"), () => complete(focus), "primary"), button(tx("一時停止"), () => pause(focus))]
+      : [button(tx("始める"), () => start(focus), "primary"),
+        candidates.length > 1 ? button(tx("別のにする"), () => { skipped.add(focus.id); if (skipped.size >= candidates.length) skipped.clear(); focusId = null; render(); }) : null,
+        button(tx("明日にする"), () => update(focus, { ...plan(addDays(today, 1)), expectedUpdatedAt: focus.updatedAt }, tx("明日に移しました"), previousPlan(focus)), "link")];
     return el("section", { class: "a4-view a4-now" },
       decisionNotice(),
       el("div", { class: "a4-focus", "data-running": String(running) },
-        el("p", { class: "a4-eyebrow" }, running ? "続きから" : "次はこれ"),
+        el("p", { class: "a4-eyebrow" }, running ? tx("続きから") : tx("次はこれ")),
         el("h1", { class: "a4-focus-title", tabindex: -1 }, focus.title),
         stepDraftFor === focus.id ? stepEditor(focus)
-          : focus.nextAction ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, "次の一歩"), focus.nextAction, " ", button("変える", () => { stepDraftFor = focus.id; render(); }, "link"))
-            : button("次の一歩を書く（小さくてOK）", () => { stepDraftFor = focus.id; render(); }, "link"),
+          : focus.nextAction ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("次の一歩")), focus.nextAction, " ", button(tx("変える"), () => { stepDraftFor = focus.id; render(); }, "link"))
+            : button(tx("次の一歩を書く（小さくてOK）"), () => { stepDraftFor = focus.id; render(); }, "link"),
         stepList(focus),
         running ? timer(focus)
           // A set estimate collapses to one line so the start button stays the obvious next move.
           : focus.estimatedMinutes > 0 && estimateFor !== focus.id
-            ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, "目安"), minutesLabel(focus.estimatedMinutes), " ", button("変える", () => { estimateFor = focus.id; render(); }, "link"))
-            : el("div", { class: "a4-estimate" }, el("span", { class: "a4-step-label" }, "どのくらい？"), estimateChips(focus)),
+            ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("目安")), minutesLabel(focus.estimatedMinutes), " ", button(tx("変える"), () => { estimateFor = focus.id; render(); }, "link"))
+            : el("div", { class: "a4-estimate" }, el("span", { class: "a4-step-label" }, tx("どのくらい？")), estimateChips(focus)),
         el("div", { class: "a4-actions" }, ...actions)),
       rest.length === 0 ? null : (() => {
         const after = el("details", { class: "a4-after", open: afterOpen },
-          el("summary", { class: "a4-subtitle" }, `このあと（${rest.length}）`),
+          el("summary", { class: "a4-subtitle" }, tx("このあと（{count}）", { count: rest.length })),
           el("ul", { class: "a4-list" }, ...rest.map(q => {
             const pick = el("button", { type: "button", class: "a4-pick" }, el("span", {}, q.title), el("span", { class: "a4-meta" }, meta(q)));
             pick.addEventListener("click", () => { focusId = q.id; render(); });
@@ -819,7 +892,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         after.addEventListener("toggle", () => { afterOpen = after.open; });
         return after;
       })(),
-      agentBusy === 0 ? null : el("p", { class: "a4-muted" }, `Agentが ${agentBusy} 件を進めています。`));
+      agentBusy === 0 ? null : el("p", { class: "a4-muted" }, tx("Agentが {count} 件を進めています。", { count: agentBusy })));
   }
 
   /** Week at a glance: an "anytime" row, then an hourly axis with cards sized by duration. */
@@ -875,8 +948,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         });
         if (!folded) return cards;
         const hidden = cluster.items.length - shown.length;
-        const more = el("button", { type: "button", class: "a4-wk-more", "aria-label": `${dayLabel.format(noon(date))} ほか${hidden}件を日表示で見る`,
-          style: `top: ${top(cluster.start)}; height: ${Math.max(40, (cluster.end - cluster.start) * GRID_PX - 4)}px; ${place(MAX_LANES - 1)}` }, `+${hidden}件`);
+        const more = el("button", { type: "button", class: "a4-wk-more", "aria-label": tx("{day} ほか{count}件を日表示で見る", { day: dayLabel.format(noon(date)), count: hidden }),
+          style: `top: ${top(cluster.start)}; height: ${Math.max(40, (cluster.end - cluster.start) * GRID_PX - 4)}px; ${place(MAX_LANES - 1)}` }, tx("+{count}件", { count: hidden }));
         more.addEventListener("click", () => { planDate = date; planMode = "day"; store.set("a4-plan-mode", null); render(); });
         return [...cards, more];
       });
@@ -887,7 +960,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     return el("div", { class: "a4-wk-scroll" },
       el("div", { class: "a4-wk", style: `--a4-wk-height: ${(last - first) * 60 * GRID_PX}px; --a4-wk-hour: ${60 * GRID_PX}px` },
         el("span", { class: "a4-wk-corner" }), ...head,
-        el("span", { class: "a4-wk-label" }, "いつでも"),
+        el("span", { class: "a4-wk-label" }, tx("いつでも")),
         ...plans.map((plan, index) => el("div", { class: "a4-wk-allday", "data-selected": String(days[index] === planDate) }, ...plan.anytime.map(q => card(q)))),
         el("div", { class: "a4-wk-hours", "aria-hidden": "true" }, ...hours),
         ...columns));
@@ -895,7 +968,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   function planView(): HTMLElement {
     const today = port.today();
-    const dayName = (date: string) => date === today ? "今日" : dayLabel.format(noon(date));
+    const dayName = (date: string) => date === today ? tx("今日") : dayLabel.format(noon(date));
     const list = port.quests();
     const day = dayPlan(list, planDate);
     const open = [...day.anytime, ...day.timed].filter(q => !isDone(q));
@@ -910,9 +983,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       node.setAttribute("aria-label", aria);
       return node;
     };
-    const week = el("div", { class: "a4-week", role: "group", "aria-label": "この週" }, ...weekOf(planDate).map(date => {
+    const week = el("div", { class: "a4-week", role: "group", "aria-label": tx("この週") }, ...weekOf(planDate).map(date => {
       const items = (({ anytime, timed }) => [...anytime, ...timed])(dayPlan(list, date));
-      const node = el("button", { type: "button", class: "a4-day", "aria-pressed": String(date === planDate), "data-today": String(date === today), "aria-label": `${dayLabel.format(noon(date))} ${items.length}件` },
+      const node = el("button", { type: "button", class: "a4-day", "aria-pressed": String(date === planDate), "data-today": String(date === today), "aria-label": tx("{day} {count}件", { day: dayLabel.format(noon(date)), count: items.length }) },
         el("span", { class: "a4-day-name" }, weekdayLabel.format(noon(date))),
         el("span", { class: "a4-day-num" }, String(Number(date.slice(8)))),
         el("span", { class: "a4-dots", "aria-hidden": "true" }, ...items.slice(0, 4).map(q => el("i", { "data-tone": tone(q), "data-hue": hue(q) }))));
@@ -925,13 +998,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     const free = gaps(day.timed);
     let nowShown = planDate !== today;
-    const nowLine = () => el("li", { class: "a4-now-line" }, el("span", { class: "a4-slot-time" }, clock(nowMinutes)), el("span", { class: "a4-now-label" }, "いま"));
+    const nowLine = () => el("li", { class: "a4-now-line" }, el("span", { class: "a4-slot-time" }, clock(nowMinutes)), el("span", { class: "a4-now-label" }, tx("いま")));
     const slots: HTMLElement[] = [];
     for (const quest of day.timed) {
       const start = toMinutes(quest.scheduledTime), end = endOf(quest);
       const gap = free.find(g => g.before === quest.id);
       if (!nowShown && nowMinutes < start) { slots.push(nowLine()); nowShown = true; }
-      if (gap) slots.push(el("li", { class: "a4-gap" }, el("span", { class: "a4-slot-time" }), el("span", { class: "a4-muted" }, `空き ${minutesLabel(gap.minutes)}。ひと息つけます。`)));
+      if (gap) slots.push(el("li", { class: "a4-gap" }, el("span", { class: "a4-slot-time" }), el("span", { class: "a4-muted" }, tx("空き {time}。ひと息つけます。", { time: minutesLabel(gap.minutes) }))));
       slots.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-len: ${Math.min(end - start, 180)}` },
         el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
         el("span", { class: "a4-slot-pill", "aria-hidden": "true" }),
@@ -943,8 +1016,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     // Undated work sits beside the day (below it on phones), one tap from being planned.
     const all = groups(quests(), today);
     const place = (quest: Quest) => {
-      const node = el("button", { type: "button", class: "a4-add", "aria-label": `${quest.title} を${dayName(planDate)}に入れる`, disabled: busy }, "＋");
-      node.addEventListener("click", () => update(quest, { ...plan(planDate), expectedUpdatedAt: quest.updatedAt }, `${dayName(planDate)}に入れました`, previousPlan(quest)));
+      const node = el("button", { type: "button", class: "a4-add", "aria-label": tx("{title} を{day}に入れる", { title: quest.title, day: dayName(planDate) }), disabled: busy }, tx("＋"));
+      node.addEventListener("click", () => update(quest, { ...plan(planDate), expectedUpdatedAt: quest.updatedAt }, tx("{day}に入れました", { day: dayName(planDate) }), previousPlan(quest)));
       return node;
     };
     const sideList = (items: readonly Quest[]) => el("ul", { class: "a4-list" }, ...items.map(q => el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, rowText(q), place(q)))));
@@ -953,45 +1026,66 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     return el("section", { class: "a4-view a4-plan", "data-mode": planMode },
       el("div", { class: "a4-plan-main" },
         el("div", { class: "a4-plan-head" },
-          el("h1", { class: "a4-title", tabindex: -1 }, planMode === "week" ? monthLabel.format(noon(planDate)) : planDate === today ? `今日 ${dayLabel.format(noon(planDate))}` : dayLabel.format(noon(planDate))),
+          el("h1", { class: "a4-title", tabindex: -1 }, planMode === "week" ? monthLabel.format(noon(planDate)) : planDate === today ? tx("今日 {day}", { day: dayLabel.format(noon(planDate)) }) : dayLabel.format(noon(planDate))),
           el("div", { class: "a4-plan-nav" },
-            el("div", { class: "a4-seg", role: "group", "aria-label": "表示" }, modeButton("day", "日"), modeButton("week", "週")),
-            planDate === today ? null : button("今日へ", () => { planDate = today; render(); }, "link"), shift("‹", -7, "前の週"), shift("›", 7, "次の週"))),
+            el("div", { class: "a4-seg", role: "group", "aria-label": tx("表示") }, modeButton("day", tx("日")), modeButton("week", tx("週"))),
+            planDate === today ? null : button(tx("今日へ"), () => { planDate = today; render(); }, "link"), shift("‹", -7, tx("前の週")), shift("›", 7, tx("次の週")))),
         ...(planMode === "week" ? [weekGrid(list)] : [week,
         el("p", { class: "a4-lead" }, day.timed.length + day.anytime.length === 0
-          ? "この日の予定はありません。受け箱から＋で入れるか、上の欄に書き出しましょう。"
-          : open.length === 0 ? "この日の分はすべて終わりました。" : `残り ${open.length} 件 · 目安 ${minutesLabel(plannedMinutes(open))}`),
+          ? tx("この日の予定はありません。受け箱から＋で入れるか、上の欄に書き出しましょう。")
+          : open.length === 0 ? tx("この日の分はすべて終わりました。") : tx("残り {count} 件 · 目安 {time}", { count: open.length, time: minutesLabel(plannedMinutes(open)) })),
         day.anytime.length === 0 ? null : el("section", { class: "a4-group" },
-          el("h2", { class: "a4-subtitle" }, "いつでも"),
+          el("h2", { class: "a4-subtitle" }, tx("いつでも")),
           el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-row", "data-tone": tone(q), "data-hue": hue(q) }, el("div", { class: "a4-row-main" }, checkButton(q), rowText(q)))))),
         slots.length === 0 ? null : el("section", { class: "a4-group" },
-          el("h2", { class: "a4-subtitle" }, "時間で"),
+          el("h2", { class: "a4-subtitle" }, tx("時間で")),
           el("ol", { class: "a4-timeline" }, ...slots))])),
-      el("aside", { class: "a4-plan-side", "aria-label": "日付のないもの" },
-        el("h2", { class: "a4-subtitle" }, `受け箱（${all.inbox.length}）`),
-        all.inbox.length === 0 ? el("p", { class: "a4-muted" }, "受け箱は空です。") : sideList(all.inbox),
+      el("aside", { class: "a4-plan-side", "aria-label": tx("日付のないもの") },
+        el("h2", { class: "a4-subtitle" }, tx("受け箱（{count}）", { count: all.inbox.length })),
+        all.inbox.length === 0 ? el("p", { class: "a4-muted" }, tx("受け箱は空です。")) : sideList(all.inbox),
         review.length === 0 ? null : el("section", { class: "a4-group" },
-          el("h2", { class: "a4-subtitle" }, `日付を見直す（${review.length}）`),
-          el("p", { class: "a4-muted" }, "予定日を過ぎたものです。＋で今日に入れるか、タイトルから日付を変えます。"),
+          el("h2", { class: "a4-subtitle" }, tx("日付を見直す（{count}）", { count: review.length })),
+          el("p", { class: "a4-muted" }, tx("予定日を過ぎたものです。＋で今日に入れるか、タイトルから日付を変えます。")),
           sideList(review))));
   }
 
   function allView(): HTMLElement {
     const all = groups(quests(), port.today());
     const section = (bucket: Bucket, title: string, hint = "") => all[bucket].length === 0 ? null : el("section", { class: "a4-group" },
-      el("h2", { class: "a4-subtitle" }, `${title}（${all[bucket].length}）`),
+      el("h2", { class: "a4-subtitle" }, tx("{title}（{count}）", { title, count: all[bucket].length })),
       hint ? el("p", { class: "a4-muted" }, hint) : null,
       el("ul", { class: "a4-list" }, ...all[bucket].map(q => row(q, bucket))));
     const empty = Object.values(all).every(list => list.length === 0);
+    // Search covers finished and put-away tasks too, so nothing is lost; typing repaints only the results.
+    const results = el("div", { "aria-live": "polite" });
+    const sections = el("div", {});
+    const paintSearch = () => {
+      const words = search.trim().toLowerCase();
+      sections.hidden = words !== "";
+      if (!words) { replaceChildren(results); return; }
+      const found = quests().filter(q => q.kind !== "reward" && `${q.title} ${q.notes ?? ""} ${q.nextAction ?? ""}`.toLowerCase().includes(words)).slice(0, 50);
+      replaceChildren(results, found.length === 0 ? el("p", { class: "a4-muted" }, tx("見つかりませんでした。")) : el("ul", { class: "a4-list" }, ...found.map(q => {
+        const away = q.lifecycleState === "archived" || isDone(q);
+        const state = q.lifecycleState === "archived" ? tx("しまったもの") : isDone(q) ? tx("完了") : "";
+        return el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" },
+          el("div", { class: "a4-row-text" }, titleButton(q), el("span", { class: "a4-meta" }, [state, meta(q)].filter(Boolean).join(" · "))),
+          away ? button(tx("戻す"), () => update(q, { lifecycleState: "active" }, tx("やることに戻しました"), { lifecycleState: q.lifecycleState }), "link") : null));
+      })));
+    };
+    const field = el("input", { class: "a4-input", type: "search", value: search, placeholder: tx("やることを探す"), "aria-label": tx("やることを探す") });
+    field.addEventListener("input", () => { search = field.value; paintSearch(); });
+    replaceChildren(sections,
+      empty ? el("p", { class: "a4-lead" }, tx("やることはありません。")) : null,
+      section("decision", tx("あなたの判断待ち"), tx("Agentや他の人からの確認依頼です。「確認する」から内容を見て判断します。")),
+      section("today", tx("今日")),
+      section("review", tx("日付を見直す")),
+      section("inbox", tx("受け箱"), tx("日付のないものです。今日やるものだけ選べば十分です。")),
+      section("later", tx("これから")),
+      section("agent", tx("Agentが担当")));
+    paintSearch();
     return el("section", { class: "a4-view" },
-      el("h1", { class: "a4-title", tabindex: -1 }, "やること"),
-      empty ? el("p", { class: "a4-lead" }, "やることはありません。") : null,
-      section("decision", "あなたの判断待ち", "Agentや他の人からの確認依頼です。「確認する」から内容を見て判断します。"),
-      section("today", "今日"),
-      section("review", "日付を見直す"),
-      section("inbox", "受け箱", "日付のないものです。今日やるものだけ選べば十分です。"),
-      section("later", "これから"),
-      section("agent", "Agentが担当"));
+      el("h1", { class: "a4-title", tabindex: -1 }, tx("やること")),
+      el("div", { class: "a4-search" }, field), results, sections);
   }
 
   /** Shows a request's link only when it is a plain web address. */
@@ -1003,8 +1097,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       await port.answer(quest, action, text);
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
       if (cheer && action === "approve") celebrate(innerWidth / 2, innerHeight * 0.55);
-      say(action === "approve" ? "OKを伝えました" : action === "revise" ? "直してほしい点を伝えました" : action === "defer" ? "あとで見るに移しました" : "判断待ちに戻しました");
-    }, "送れませんでした。内容が更新されていないか確認して、もう一度試してください。");
+      say(action === "approve" ? tx("OKを伝えました") : action === "revise" ? tx("直してほしい点を伝えました") : action === "defer" ? tx("あとで見るに移しました") : tx("判断待ちに戻しました"));
+    }, tx("送れませんでした。内容が更新されていないか確認して、もう一度試してください。"));
   }
 
   function review(quest: Quest, accept: boolean): void {
@@ -1014,8 +1108,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
       const passed = accept && saved.assignee.type === "agent" && saved.assignee.id !== quest.assignee.id ? saved.assignee.label : "";
       if (cheer && accept) celebrate(innerWidth / 2, innerHeight * 0.55);
-      say(passed ? `${passed} に回しました` : accept ? "受け取りました" : "やり直しをお願いしました");
-    }, "送れませんでした。Agentの状態が変わっていないか確認して、もう一度試してください。");
+      say(passed ? tx("{name} に回しました", { name: passed }) : accept ? tx("受け取りました") : tx("やり直しをお願いしました"));
+    }, tx("送れませんでした。Agentの状態が変わっていないか確認して、もう一度試してください。"));
   }
 
   /** One decision at a time, like the Now screen: what is asked, what to check, then a single clear answer. */
@@ -1029,32 +1123,32 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const nextLeg = relay?.legs[relay.at + 1];
     const nextName = nextLeg ? port.agents().find(agent => agent.id === nextLeg.agentId)?.name ?? "Agent" : "";
     const headline = request?.checkTarget || quest.title;
-    const details = [detail("理由", request?.reason), detail("完了の条件", quest.completionCriteria), detail("報告", request ? undefined : quest.handoff?.note)].filter(Boolean) as HTMLElement[];
+    const details = [detail(tx("理由"), request?.reason), detail(tx("完了の条件"), quest.completionCriteria), detail(tx("報告"), request ? undefined : quest.handoff?.note)].filter(Boolean) as HTMLElement[];
     const check = el("input", { type: "checkbox", checked: confirmed.has(quest.id) });
-    const reply = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, "aria-label": "直してほしいこと", placeholder: "例：見出しをもう少し短く" });
+    const reply = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, "aria-label": tx("直してほしいこと"), placeholder: tx("例：見出しをもう少し短く") });
     reply.value = replies.get(quest.id) ?? "";
-    const ok = button(request ? "OK、これで良い" : nextLeg ? `受け取って ${nextName} に回す` : "受け取る", () => request ? answer(quest, "approve") : review(quest, true), "primary", !confirmed.has(quest.id));
-    const send = button("送る", () => request ? answer(quest, "revise") : review(quest, false), "secondary", !confirmed.has(quest.id) || !reply.value.trim());
+    const ok = button(request ? tx("OK、これで良い") : nextLeg ? tx("受け取って {name} に回す", { name: nextName }) : tx("受け取る"), () => request ? answer(quest, "approve") : review(quest, true), "primary", !confirmed.has(quest.id));
+    const send = button(tx("送る"), () => request ? answer(quest, "revise") : review(quest, false), "secondary", !confirmed.has(quest.id) || !reply.value.trim());
     const sync = () => { ok.disabled = busy || !check.checked; send.disabled = busy || !check.checked || !reply.value.trim(); };
     check.addEventListener("change", () => { if (check.checked) confirmed.add(quest.id); else confirmed.delete(quest.id); sync(); });
     reply.addEventListener("input", () => { replies.set(quest.id, reply.value); sync(); });
     const revising = reviseFor === quest.id;
     return el("div", { class: "a4-focus a4-decision" },
-      el("p", { class: "a4-eyebrow" }, request ? `${quest.requester?.label || "Agent"} からの確認依頼` : leg?.ask ? `${quest.assignee.label || "Agent"} が「${leg.ask}」を終えました` : `${quest.assignee.label || "Agent"} が「終わった」と報告しています`,
+      el("p", { class: "a4-eyebrow" }, request ? tx("{name} からの確認依頼", { name: quest.requester?.label || "Agent" }) : leg?.ask ? tx("{name} が「{ask}」を終えました", { name: quest.assignee.label || "Agent", ask: leg.ask }) : tx("{name} が「終わった」と報告しています", { name: quest.assignee.label || "Agent" }),
         total > 1 ? el("span", { class: "a4-meta" }, `  ${index + 1} / ${total}`) : null),
       el("h2", { class: "a4-focus-title" }, headline),
       headline !== quest.title ? el("p", { class: "a4-meta a4-decision-sub" }, quest.title) : null,
-      details.length > 0 ? el("details", { class: "a4-more" }, el("summary", {}, "詳しく"), el("div", { class: "a4-more-body" }, ...details)) : null,
+      details.length > 0 ? el("details", { class: "a4-more" }, el("summary", {}, tx("詳しく")), el("div", { class: "a4-more-body" }, ...details)) : null,
       el("div", { class: "a4-actions" },
-        source ? button("元のタスクを見る", () => openSheet(source), "link") : null,
-        link ? el("a", { class: "a4-link", href: link, target: "_blank", rel: "noopener noreferrer" }, "成果物を開く ↗") : null),
-      el("label", { class: "a4-option" }, check, "中身を確認しました"),
-      revising ? el("div", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, request ? "直してほしいこと" : "やり直してほしいこと"), reply) : null,
+        source ? button(tx("元のタスクを見る"), () => openSheet(source), "link") : null,
+        link ? el("a", { class: "a4-link", href: link, target: "_blank", rel: "noopener noreferrer" }, tx("成果物を開く ↗")) : null),
+      el("label", { class: "a4-option" }, check, tx("中身を確認しました")),
+      revising ? el("div", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, request ? tx("直してほしいこと") : tx("やり直してほしいこと")), reply) : null,
       el("div", { class: "a4-actions" },
         revising ? send : ok,
-        revising ? button("やめる", () => { reviseFor = null; render(); }, "link") : button("直してほしい", () => { reviseFor = quest.id; render(); main.querySelector<HTMLElement>(".a4-decision textarea")?.focus(); }),
-        request && !revising ? button("あとで", () => answer(quest, "defer"), "link") : null,
-        total > 1 && !revising ? button("次の判断へ", next, "link") : null));
+        revising ? button(tx("やめる"), () => { reviseFor = null; render(); }, "link") : button(tx("直してほしい"), () => { reviseFor = quest.id; render(); main.querySelector<HTMLElement>(".a4-decision textarea")?.focus(); }),
+        request && !revising ? button(tx("あとで"), () => answer(quest, "defer"), "link") : null,
+        total > 1 && !revising ? button(tx("次の判断へ"), next, "link") : null));
   }
 
   /* ------------------------------ guild: people, activity, registration ------------------------------ */
@@ -1062,8 +1156,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const timeLabel = (iso: string) => {
     const at = new Date(iso);
     if (Number.isNaN(at.getTime())) return "";
-    const hm = at.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-    return at.toDateString() === new Date().toDateString() ? hm : `${at.getMonth() + 1}/${at.getDate()} ${hm}`;
+    const hm = at.toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
+    return at.toDateString() === new Date().toDateString() ? hm : `${at.toLocaleDateString(LOCALE, { month: "numeric", day: "numeric" })} ${hm}`;
   };
 
   function loadActivity(): void {
@@ -1076,47 +1170,48 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   /** One sentence per event: who, what, which task. Agents act through MCP, you through the app. */
   function activityLine(event: AllForActivity): HTMLElement {
     const quest = byId(event.questId);
-    const title = quest ? `「${quest.title}」` : "タスク";
+    const title = quest?.title ?? tx("タスク");
     const agentName = quest?.assignee.type === "agent" ? quest.assignee.label || "Agent" : "Agent";
-    const who = event.source === "mcp" ? agentName : "あなた";
+    const who = event.source === "mcp" ? agentName : tx("あなた");
     const assignee = (event.details.assignee as { label?: string } | undefined)?.label;
     const to = String(event.details.to ?? "");
-    const what = event.type === "quest.created" ? `${title}を作りました`
-      : event.type === "quest.assignment.ready" ? `${title}を ${assignee || "Agent"} に渡しました`
-      : event.type === "quest.handoff.transitioned" ? `${title}を「${AGENT_STATE[to as keyof typeof AGENT_STATE] ?? to}」にしました`
-      : event.type === "quest.scored" ? `${title}を完了しました`
-      : event.type === "quest.reopened" ? `${title}を戻しました`
-      : event.type === "quest.archived" ? `${title}をしまいました`
-      : `${title}を更新しました`;
+    const vars = { who, title, name: assignee || "Agent", state: AGENT_STATE[to as keyof typeof AGENT_STATE] ?? to };
+    const line = event.type === "quest.created" ? tx("{who} が「{title}」を作りました", vars)
+      : event.type === "quest.assignment.ready" ? tx("{who} が「{title}」を {name} に渡しました", vars)
+      : event.type === "quest.handoff.transitioned" ? tx("{who} が「{title}」を「{state}」にしました", vars)
+      : event.type === "quest.scored" ? tx("{who} が「{title}」を完了しました", vars)
+      : event.type === "quest.reopened" ? tx("{who} が「{title}」を戻しました", vars)
+      : event.type === "quest.archived" ? tx("{who} が「{title}」をしまいました", vars)
+      : tx("{who} が「{title}」を更新しました", vars);
     return el("li", { class: "a4-activity" },
       el("span", { class: "a4-activity-time" }, timeLabel(event.at)),
       el("span", { class: "a4-avatar a4-avatar-sm", "data-kind": event.source === "mcp" ? "agent" : "self", "aria-hidden": "true" }, who.slice(0, 1)),
-      el("span", {}, el("strong", {}, who), ` が${what}`));
+      el("span", {}, line));
   }
 
   /** A person or Agent and what they are on right now. */
   function memberRow(kind: "self" | "human" | "agent", name: string, sub: string, doing: readonly Quest[], inactive = false, agentId = ""): HTMLElement {
     const shown = doing.slice(0, 3);
     const confirming = agentId !== "" && removingAgent === agentId;
-    const remove = agentId === "" ? null : confirming ? null : button("外す", () => { removingAgent = agentId; render(); }, "link");
+    const remove = agentId === "" ? null : confirming ? null : button(tx("外す"), () => { removingAgent = agentId; render(); }, "link");
     return el("li", { class: "a4-row a4-member", "data-inactive": String(inactive) },
       el("div", { class: "a4-row-main" },
         el("span", { class: "a4-avatar", "data-kind": kind, "aria-hidden": "true" }, name.slice(0, 1)),
         el("div", { class: "a4-row-text" }, el("strong", {}, name), sub ? el("span", { class: "a4-meta" }, sub) : null), remove),
-      confirming ? el("div", { class: "a4-conn-edit", role: "group", "aria-label": `${name}を外す` },
-        el("p", { class: "a4-muted" }, `${name} をギルドから外します。${doing.length > 0 ? `担当中の ${doing.length} 件はそのまま残るので、必要なら担当を変えてください。` : ""}外した Agent は担当に選べなくなり、MCP の紐付けも使えなくなります。`),
+      confirming ? el("div", { class: "a4-conn-edit", role: "group", "aria-label": tx("{name}を外す", { name }) },
+        el("p", { class: "a4-muted" }, tx("{name} をギルドから外します。", { name }) + (doing.length > 0 ? tx("担当中の {count} 件はそのまま残るので、必要なら担当を変えてください。", { count: doing.length }) : "") + tx("外した Agent は担当に選べなくなり、MCP の紐付けも使えなくなります。")),
         el("div", { class: "a4-actions" },
-          button("外す", () => {
-            void run(async () => { await port.removeAgent(agentId); removingAgent = null; say(`${name} を外しました`); }, "外せませんでした。もう一度試してください。");
+          button(tx("外す"), () => {
+            void run(async () => { await port.removeAgent(agentId); removingAgent = null; say(tx("{name} を外しました", { name })); }, tx("外せませんでした。もう一度試してください。"));
           }, "primary"),
-          button("やめる", () => { removingAgent = null; render(); }, "link"))) : null,
+          button(tx("やめる"), () => { removingAgent = null; render(); }, "link"))) : null,
       el("div", { class: "a4-doing" },
-        shown.length === 0 ? el("span", { class: "a4-meta" }, inactive ? "停止中" : kind === "human" ? "担当しているタスクはありません" : "いまは手が空いています")
+        shown.length === 0 ? el("span", { class: "a4-meta" }, inactive ? tx("停止中") : kind === "human" ? tx("担当しているタスクはありません") : tx("いまは手が空いています"))
           : el("ul", { class: "a4-doing-list" }, ...shown.map(quest => el("li", {},
             el("span", { class: "a4-state", "data-state": kind === "agent" ? quest.assignee.handoffState : "working" },
-              kind === "agent" ? AGENT_STATE[quest.assignee.handoffState] ?? quest.assignee.handoffState : "いまやっている"),
+              kind === "agent" ? AGENT_STATE[quest.assignee.handoffState] ?? quest.assignee.handoffState : tx("いまやっている")),
             titleButton(quest)))),
-        doing.length > shown.length ? el("span", { class: "a4-meta" }, `ほか ${doing.length - shown.length} 件`) : null));
+        doing.length > shown.length ? el("span", { class: "a4-meta" }, tx("ほか {count} 件", { count: doing.length - shown.length })) : null));
   }
 
   const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
@@ -1124,10 +1219,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   /** Register an Agent with plain choices; the raw scopes stay in Relay Forge. */
   function openAgentForm(): void {
     sheet?.close();
-    const name = el("input", { class: "a4-sheet-title", required: true, maxlength: 60, placeholder: "Agent の名前（例：Scribe）", "aria-label": "Agent の名前" });
-    const id = el("input", { class: "a4-input", required: true, maxlength: 80, pattern: "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", placeholder: "例：scribe", "aria-label": "Agent ID", autocapitalize: "off", spellcheck: false });
-    const role = el("input", { class: "a4-input", maxlength: 80, placeholder: "例：文書をまとめる", "aria-label": "何をする Agent か" });
-    const instructions = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, placeholder: "例：下書きは箇条書きで。数字は必ず出典を書く。", "aria-label": "お願いしておくこと" });
+    const name = el("input", { class: "a4-sheet-title", required: true, maxlength: 60, placeholder: tx("Agent の名前（例：Scribe）"), "aria-label": tx("Agent の名前") });
+    const id = el("input", { class: "a4-input", required: true, maxlength: 80, pattern: "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", placeholder: tx("例：scribe"), "aria-label": "Agent ID", autocapitalize: "off", spellcheck: false });
+    const role = el("input", { class: "a4-input", maxlength: 80, placeholder: tx("例：文書をまとめる"), "aria-label": tx("何をする Agent か") });
+    const instructions = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, placeholder: tx("例：下書きは箇条書きで。数字は必ず出典を書く。"), "aria-label": tx("お願いしておくこと") });
     let idTouched = false;
     name.addEventListener("input", () => { if (!idTouched) id.value = slug(name.value); });
     id.addEventListener("input", () => { idTouched = true; });
@@ -1138,27 +1233,27 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const field = (label: string, control: HTMLElement, hint = "") => el("label", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, label), control, hint ? el("small", { class: "a4-muted" }, hint) : null);
     const form = el("form", { class: "a4-sheet-form", id: "a4-agent-form", novalidate: true },
       name,
-      field("何をする Agent ？", role),
-      field("Agent ID", id, "英小文字・数字・ハイフン。MCP で Agent を指すときに使います。あとから変えられません。"),
-      el("fieldset", { class: "a4-field" }, el("legend", { class: "a4-step-label" }, "やってよいこと"),
-        power("read", "見るだけ", "タスクを読むだけで、変えません", false),
-        power("write", "タスクを進める", "タスクを読み、状態や中身を書き換えます", true)),
-      el("label", { class: "a4-option" }, review, "終わったら、あなたの確認を待つ"),
-      field("お願いしておくこと（任意）", instructions),
+      field(tx("何をする Agent ？"), role),
+      field("Agent ID", id, tx("英小文字・数字・ハイフン。MCP で Agent を指すときに使います。あとから変えられません。")),
+      el("fieldset", { class: "a4-field" }, el("legend", { class: "a4-step-label" }, tx("やってよいこと")),
+        power("read", tx("見るだけ"), tx("タスクを読むだけで、変えません"), false),
+        power("write", tx("タスクを進める"), tx("タスクを読み、状態や中身を書き換えます"), true)),
+      el("label", { class: "a4-option" }, review, tx("終わったら、あなたの確認を待つ")),
+      field(tx("お願いしておくこと（任意）"), instructions),
       error);
-    const close = el("button", { type: "button", class: "a4-button" }, "閉じる");
+    const close = el("button", { type: "button", class: "a4-button" }, tx("閉じる"));
     const dialog = el("dialog", { class: "a4-sheet", "aria-labelledby": "a4-agent-title" },
-      el("div", { class: "a4-sheet-head" }, el("h2", { id: "a4-agent-title", class: "a4-eyebrow" }, "Agent を登録"), close),
+      el("div", { class: "a4-sheet-head" }, el("h2", { id: "a4-agent-title", class: "a4-eyebrow" }, tx("Agent を登録")), close),
       form,
-      el("div", { class: "a4-actions a4-sheet-foot" }, el("button", { type: "submit", class: "a4-button a4-primary", form: "a4-agent-form" }, "登録する")));
+      el("div", { class: "a4-actions a4-sheet-foot" }, el("button", { type: "submit", class: "a4-button a4-primary", form: "a4-agent-form" }, tx("登録する"))));
     close.addEventListener("click", () => dialog.close());
     const fail = (message: string, focus: HTMLElement) => { error.textContent = message; error.hidden = false; focus.focus(); };
     form.addEventListener("submit", event => {
       event.preventDefault();
       const agentId = id.value.trim().toLowerCase();
-      if (!name.value.trim()) return fail("名前を入れてください。", name);
-      if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(agentId)) return fail("Agent ID は英小文字・数字・ハイフンで入れてください。", id);
-      if (port.agents().some(agent => agent.id === agentId)) return fail("この Agent ID はもう使われています。", id);
+      if (!name.value.trim()) return fail(tx("名前を入れてください。"), name);
+      if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(agentId)) return fail(tx("Agent ID は英小文字・数字・ハイフンで入れてください。"), id);
+      if (port.agents().some(agent => agent.id === agentId)) return fail(tx("この Agent ID はもう使われています。"), id);
       const write = form.querySelector<HTMLInputElement>('input[name="a4-agent-power"]:checked')?.value === "write";
       error.hidden = true;
       void run(async () => {
@@ -1167,8 +1262,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
           allowedScopes: write ? ["quests:read", "quests:write"] : ["quests:read"], reviewRequired: review.checked,
         });
         dialog.close();
-        say(`${agent.name} を登録しました。担当のリレーで選べます。`);
-      }, "登録できませんでした。もう一度試してください。");
+        say(tx("{name} を登録しました。担当のリレーで選べます。", { name: agent.name }));
+      }, tx("登録できませんでした。もう一度試してください。"));
     });
     dialog.addEventListener("close", () => { dialog.remove(); if (sheet === dialog) sheet = null; });
     sheet = dialog;
@@ -1188,10 +1283,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   function mcpSection(): HTMLElement {
     if (connections === null && !connectionsLoading && !connectionsError) loadConnections();
-    const url = el("input", { class: "a4-input a4-mono", readonly: true, value: port.mcp.url, "aria-label": "MCP の接続URL" });
+    const url = el("input", { class: "a4-input a4-mono", readonly: true, value: port.mcp.url, "aria-label": tx("MCP の接続URL") });
     url.addEventListener("focus", () => url.select());
-    const copy = button("コピー", () => {
-      void navigator.clipboard.writeText(port.mcp.url).then(() => say("接続URLをコピーしました"), () => { url.focus(); say("コピーできませんでした。URLを選んで手動でコピーしてください。"); });
+    const copy = button(tx("コピー"), () => {
+      void navigator.clipboard.writeText(port.mcp.url).then(() => say(tx("接続URLをコピーしました")), () => { url.focus(); say(tx("コピーできませんでした。URLを選んで手動でコピーしてください。")); });
     });
     const agents = port.agents().filter(agent => agent.active);
     const nameOf = (agentId: string) => port.agents().find(agent => agent.id === agentId)?.name ?? agentId;
@@ -1200,14 +1295,14 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       const head = el("div", { class: "a4-row-main" },
         el("span", { class: "a4-avatar", "data-kind": "agent", "aria-hidden": "true" }, connection.clientName.slice(0, 1)),
         el("div", { class: "a4-row-text" }, el("strong", {}, connection.clientName),
-          el("span", { class: "a4-meta" }, [connection.authorized ? "接続中" : "接続が切れています", connection.lastUsedAt ? `最後に使ったのは ${timeLabel(connection.lastUsedAt)}` : ""].filter(Boolean).join(" · "))),
-        editing ? null : button(connection.agentIds.length ? "変える" : "Agent を紐付ける", () => { linkDrafts.set(connection.clientId, [...connection.agentIds]); render(); }));
+          el("span", { class: "a4-meta" }, [connection.authorized ? tx("接続中") : tx("接続が切れています"), connection.lastUsedAt ? tx("最後に使ったのは {time}", { time: timeLabel(connection.lastUsedAt) }) : ""].filter(Boolean).join(" · "))),
+        editing ? null : button(connection.agentIds.length ? tx("変える") : tx("Agent を紐付ける"), () => { linkDrafts.set(connection.clientId, [...connection.agentIds]); render(); }));
       const linked = el("p", { class: "a4-muted a4-conn-line" }, connection.agentIds.length
-        ? `この接続は ${connection.agentIds.map(nameOf).join("・")} として動きます。`
-        : "まだ Agent に紐付いていません。紐付けると、この接続での作業がその Agent の担当として記録されます。");
+        ? tx("この接続は {names} として動きます。", { names: connection.agentIds.map(nameOf).join(tx("・")) })
+        : tx("まだ Agent に紐付いていません。紐付けると、この接続での作業がその Agent の担当として記録されます。"));
       if (!editing) return el("li", { class: "a4-row" }, head, linked);
-      const chips = el("div", { class: "a4-chips", role: "group", "aria-label": "紐付ける Agent" }, ...(agents.length === 0
-        ? [el("span", { class: "a4-muted" }, "先にギルドで Agent を登録してください。")]
+      const chips = el("div", { class: "a4-chips", role: "group", "aria-label": tx("紐付ける Agent") }, ...(agents.length === 0
+        ? [el("span", { class: "a4-muted" }, tx("先にギルドで Agent を登録してください。"))]
         : agents.map(agent => {
           const chip = el("button", { type: "button", class: "a4-chip", "aria-pressed": String(editing.includes(agent.id)) }, agent.name);
           chip.addEventListener("click", () => {
@@ -1218,27 +1313,41 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         })));
       return el("li", { class: "a4-row" }, head,
         el("div", { class: "a4-conn-edit" },
-          el("p", { class: "a4-muted" }, "この接続で動かす Agent を選んでください。複数選ぶと、最初の Agent が既定になります。"),
+          el("p", { class: "a4-muted" }, tx("この接続で動かす Agent を選んでください。複数選ぶと、最初の Agent が既定になります。")),
           chips,
           el("div", { class: "a4-actions" },
-            button("保存", () => {
+            button(tx("保存"), () => {
               const next = linkDrafts.get(connection.clientId) ?? [];
               void run(async () => {
                 await port.mcp.link(connection, next);
                 linkDrafts.delete(connection.clientId);
                 connections = await port.mcp.connections();
-                say(next.length ? `${next.map(nameOf).join("・")} に紐付けました` : "紐付けを外しました");
-              }, "保存できませんでした。もう一度試してください。");
+                say(next.length ? tx("{names} に紐付けました", { names: next.map(nameOf).join(tx("・")) }) : tx("紐付けを外しました"));
+              }, tx("保存できませんでした。もう一度試してください。"));
             }, "primary"),
-            button("やめる", () => { linkDrafts.delete(connection.clientId); render(); }, "link"))));
+            button(tx("やめる"), () => { linkDrafts.delete(connection.clientId); revokingClient = null; render(); }, "link")),
+          revokingClient === connection.clientId
+            ? el("div", { class: "a4-conn-edit", role: "group", "aria-label": tx("接続を切る") },
+              el("p", {}, tx("{name} の接続を切ります。もう一度使うには、クライアント側でサインインし直します。", { name: connection.clientName })),
+              el("div", { class: "a4-actions" },
+                button(tx("接続を切る"), () => {
+                  void run(async () => {
+                    await port.mcp.revoke(connection);
+                    linkDrafts.delete(connection.clientId); revokingClient = null;
+                    connections = await port.mcp.connections();
+                    say(tx("{name} の接続を切りました", { name: connection.clientName }));
+                  }, tx("接続を切れませんでした。もう一度試してください。"));
+                }, "primary"),
+                button(tx("やめる"), () => { revokingClient = null; render(); }, "link")))
+            : button(tx("この接続を切る…"), () => { revokingClient = connection.clientId; render(); }, "link")));
     };
     return el("section", { class: "a4-group" },
-      el("h2", { class: "a4-subtitle" }, "MCP 接続"),
-      el("p", { class: "a4-muted" }, "Claude や Codex などの MCP クライアントにこの URL を追加してサインインすると、下に接続が表示されます。"),
+      el("h2", { class: "a4-subtitle" }, tx("MCP 接続")),
+      el("p", { class: "a4-muted" }, tx("Claude や Codex などの MCP クライアントにこの URL を追加してサインインすると、下に接続が表示されます。")),
       el("div", { class: "a4-step-form" }, url, copy),
-      connectionsLoading && connections === null ? el("p", { class: "a4-muted" }, "接続を読み込んでいます…")
-        : connectionsError ? el("p", { class: "a4-muted" }, "接続を読み込めませんでした。", button("もう一度", loadConnections, "link"))
-        : (connections ?? []).length === 0 ? el("p", { class: "a4-muted" }, "まだ接続はありません。")
+      connectionsLoading && connections === null ? el("p", { class: "a4-muted" }, tx("接続を読み込んでいます…"))
+        : connectionsError ? el("p", { class: "a4-muted" }, tx("接続を読み込めませんでした。"), button(tx("もう一度"), loadConnections, "link"))
+        : (connections ?? []).length === 0 ? el("p", { class: "a4-muted" }, tx("まだ接続はありません。"))
         : el("ul", { class: "a4-list" }, ...(connections ?? []).map(card)));
   }
 
@@ -1253,40 +1362,93 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const agents = port.agents();
     const others = port.members().filter(member => member.id !== port.self().id);
     return el("section", { class: "a4-view" },
-      el("h1", { class: "a4-title", tabindex: -1 }, "ギルド"),
-      el("p", { class: "a4-lead" }, "Agentや仲間と一緒に進めるための場所です。あなたが決めることだけ、ここに集まります。"),
+      el("h1", { class: "a4-title", tabindex: -1 }, tx("ギルド")),
+      el("p", { class: "a4-lead" }, tx("Agentや仲間と一緒に進めるための場所です。あなたが決めることだけ、ここに集まります。")),
       el("section", { class: "a4-group" },
-        el("h2", { class: "a4-subtitle" }, `あなたの判断待ち（${list.length}）`),
+        el("h2", { class: "a4-subtitle" }, tx("あなたの判断待ち（{count}）", { count: list.length })),
         current ? decisionCard(current, index, list.length, () => { decisionId = list[(index + 1) % list.length]!.id; reviseFor = null; render(); })
-          : el("p", { class: "a4-muted" }, "いま、あなたの判断を待っているものはありません。")),
+          : el("p", { class: "a4-muted" }, tx("いま、あなたの判断を待っているものはありません。"))),
       later.length === 0 ? null : el("section", { class: "a4-group" },
-        el("h2", { class: "a4-subtitle" }, `あとで見る（${later.length}）`),
-        el("ul", { class: "a4-list" }, ...later.map(q => el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, rowText(q), button("判断待ちに戻す", () => answer(q, "resume"), "link")))))),
+        el("h2", { class: "a4-subtitle" }, tx("あとで見る（{count}）", { count: later.length })),
+        el("ul", { class: "a4-list" }, ...later.map(q => el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, rowText(q), button(tx("判断待ちに戻す"), () => answer(q, "resume"), "link")))))),
       el("section", { class: "a4-group" },
-        el("div", { class: "a4-group-head" }, el("h2", { class: "a4-subtitle" }, "人と Agent"), button("＋ Agent を登録", openAgentForm)),
+        el("div", { class: "a4-group-head" }, el("h2", { class: "a4-subtitle" }, tx("人と Agent")), button(tx("＋ Agent を登録"), openAgentForm)),
         el("ul", { class: "a4-list" },
-          memberRow("self", `${port.self().label}（あなた）`, "", quests().filter(q => q.assignee.type === "self" && isWorking(q))),
-          ...others.map(member => memberRow("human", member.name, member.owner ? "オーナー" : "メンバー", quests().filter(q => isOpen(q) && q.assignee.type === "human" && q.assignee.id === member.id))),
+          memberRow("self", tx("{name}（あなた）", { name: port.self().label }), "", quests().filter(q => q.assignee.type === "self" && isWorking(q))),
+          ...others.map(member => memberRow("human", member.name, member.owner ? tx("オーナー") : tx("メンバー"), quests().filter(q => isOpen(q) && q.assignee.type === "human" && q.assignee.id === member.id))),
           ...agents.map(agent => memberRow("agent", agent.name, agent.role ? `Agent · ${agent.role}` : "Agent", byAgent(agent.id), !agent.active, agent.id)))),
       el("section", { class: "a4-group" },
-        el("h2", { class: "a4-subtitle" }, "最近の活動"),
-        activity === null ? el("p", { class: "a4-muted" }, activityError ? "活動を読み込めませんでした。" : "読み込んでいます…", activityError ? button("もう一度", loadActivity, "link") : null)
-          : activity.length === 0 ? el("p", { class: "a4-muted" }, "まだ活動はありません。")
+        el("h2", { class: "a4-subtitle" }, tx("最近の活動")),
+        activity === null ? el("p", { class: "a4-muted" }, activityError ? tx("活動を読み込めませんでした。") : tx("読み込んでいます…"), activityError ? button(tx("もう一度"), loadActivity, "link") : null)
+          : activity.length === 0 ? el("p", { class: "a4-muted" }, tx("まだ活動はありません。"))
           : el("ul", { class: "a4-activity-list" }, ...activity.slice(0, 10).map(activityLine))));
+  }
+
+  /** Same fields and limits as Relay Forge's profile form; the server re-validates. */
+  function profileView(back: HTMLElement): HTMLElement {
+    const current = profile ?? runtime!.profile ?? {};
+    const name = el("input", { class: "a4-input", value: current.displayName ?? "", maxlength: 60, autocomplete: "nickname" });
+    const handle = el("input", { class: "a4-input", value: current.handle ?? "", maxlength: 21, autocomplete: "username", spellcheck: "false" });
+    const bio = el("textarea", { class: "a4-input a4-textarea", maxlength: 160 }, current.bio ?? "");
+    const form = el("form", { class: "a4-form" },
+      el("label", { class: "a4-field-row" }, el("span", { class: "a4-meta" }, tx("表示名")), name),
+      el("label", { class: "a4-field-row" }, el("span", { class: "a4-meta" }, tx("ユーザー名")), handle,
+        el("span", { class: "a4-muted" }, tx("英小文字・数字・_ で 3〜20 文字。ほかの人があなたを探すときに使います。"))),
+      el("label", { class: "a4-field-row" }, el("span", { class: "a4-meta" }, tx("ひとこと")), bio),
+      el("div", { class: "a4-actions" }, el("button", { type: "submit", class: "a4-button a4-primary" }, tx("保存"))));
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const input = { displayName: name.value.trim(), handle: handle.value.trim().replace(/^@+/, "").toLowerCase(), bio: bio.value.trim() };
+      if (input.displayName.length < 1) { say(tx("表示名を入れてください。")); name.focus(); return; }
+      if (!/^[a-z0-9_]{3,20}$/.test(input.handle)) { say(tx("ユーザー名は英小文字・数字・_ で 3〜20 文字にしてください。")); handle.focus(); return; }
+      void run(async () => {
+        const response = await runtime!.profilePort.updateProfile(input) as { profile?: typeof profile };
+        profile = response.profile ?? { ...current, ...input };
+        say(tx("プロフィールを保存しました"));
+      }, tx("保存できませんでした。ユーザー名がほかの人と重なっていないか確かめてください。"));
+    });
+    return el("section", { class: "a4-view a4-extra" }, back,
+      el("h1", { class: "a4-title", tabindex: -1 }, tx("プロフィール")), form);
+  }
+
+  /** Relay Forge modules keep their own heading; this adds only the way back. */
+  function extraView(id: Extra): HTMLElement {
+    const back = button(tx("← 設定"), () => go("settings"), "link");
+    if (!runtime) {
+      return el("section", { class: "a4-view" }, back,
+        el("h1", { class: "a4-title", tabindex: -1 }, EXTRAS.find(item => item.id === id)!.label),
+        el("p", { class: "a4-lead" }, tx("サインインすると使えます。デモでは表示できません。")));
+    }
+    if (id === "profile") return profileView(back);
+    if (id === "billing") {
+      return el("section", { class: "a4-view a4-extra" }, back,
+        el("h1", { class: "a4-title", tabindex: -1 }, tx("プラン")), billingUi.render(), analyticsUi.render());
+    }
+    if (id === "work") {
+      const timer = el("div", { class: "a4-work-timer" });
+      workUi.attachTimer(timer);
+      return el("section", { class: "a4-view a4-extra" }, back,
+        el("h1", { class: "a4-title", tabindex: -1 }, tx("時間の記録")), timer, workUi.settings());
+    }
+    const screen = FORGE.includes(id) ? forge!.render(id as ForgeScreen) : workUi.screen(id as "calendar" | "notes").main;
+    // Relay Forge titles are English destination names; AFA names the screen in the reader's language.
+    screen.querySelector(".rf-screen-title")?.replaceChildren(EXTRAS.find(item => item.id === id)!.label);
+    return el("section", { class: "a4-view a4-extra" }, back, screen);
   }
 
   function settingsView(): HTMLElement {
     const cheerToggle = el("input", { type: "checkbox", checked: cheer });
     cheerToggle.addEventListener("change", () => { cheer = cheerToggle.checked; store.set("a4-cheer", cheer ? null : "off"); });
     const gameToggle = el("input", { type: "checkbox", checked: game });
-    gameToggle.addEventListener("change", () => { game = gameToggle.checked; store.set("a4-game", game ? null : "off"); say(game ? "ゲーム要素を表示します" : "ゲーム要素を隠しました"); });
+    gameToggle.addEventListener("change", () => { game = gameToggle.checked; store.set("a4-game", game ? null : "off"); say(game ? tx("ゲーム要素を表示します") : tx("ゲーム要素を隠しました")); });
     const theme = document.documentElement.getAttribute("data-theme") ?? "system";
-    const themes = el("fieldset", { class: "a4-field" }, el("legend", {}, "表示テーマ"),
-      ...[["system", "端末に合わせる"], ["light", "ライト"], ["dark", "ダーク"]].map(([value, label]) => {
+    const themes = el("fieldset", { class: "a4-field" }, el("legend", {}, tx("表示テーマ")),
+      ...[["system", tx("端末に合わせる")], ["light", tx("ライト")], ["dark", tx("ダーク")]].map(([value, label]) => {
         const input = el("input", { type: "radio", name: "a4-theme", value, checked: theme === value });
         input.addEventListener("change", () => {
           if (value === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", value!);
           store.set("qf-relay-forge-theme", value === "system" ? null : value!);
+          paintThemeColor();
         });
         return el("label", { class: "a4-option" }, input, label!);
       }));
@@ -1295,15 +1457,26 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       if (bloom.checked) document.documentElement.setAttribute("data-a4-palette", "bloom"); else document.documentElement.removeAttribute("data-a4-palette");
       store.set("a4-palette", bloom.checked ? null : "plain");
     });
+    // Copy is resolved once at load, so a language change reloads the page.
+    const language = el("select", { class: "a4-input", "aria-label": tx("言語") },
+      ...SUPPORTED_LOCALES.map(code => el("option", { value: code, selected: code === LOCALE, lang: code }, LOCALE_METADATA[code].label)));
+    language.addEventListener("change", () => { setLocale(language.value); location.reload(); });
     return el("section", { class: "a4-view" },
-      el("h1", { class: "a4-title", tabindex: -1 }, "設定"),
-      el("label", { class: "a4-option" }, cheerToggle, "完了したら紙吹雪でお祝いする"),
-      el("label", { class: "a4-option" }, gameToggle, "ゲーム要素（レベル・XP）を表示する"),
+      el("h1", { class: "a4-title", tabindex: -1 }, tx("設定")),
+      el("nav", { class: "a4-group", "aria-labelledby": "a4-extras" }, el("h2", { id: "a4-extras", class: "a4-subtitle" }, tx("ほかの機能")),
+        el("ul", { class: "a4-list a4-extras" }, ...EXTRAS.map(item => {
+          const open = el("a", { class: "a4-row-title", href: `#${item.id}` }, item.label);
+          open.addEventListener("click", event => { event.preventDefault(); go(item.id); });
+          return el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, el("div", { class: "a4-row-text" }, open, el("span", { class: "a4-meta" }, item.hint))));
+        }))),
+      el("label", { class: "a4-field-row" }, el("span", { class: "a4-meta" }, tx("言語")), language),
+      el("label", { class: "a4-option" }, cheerToggle, tx("完了したら紙吹雪でお祝いする")),
+      el("label", { class: "a4-option" }, gameToggle, tx("ゲーム要素（レベル・XP）を表示する")),
       themes,
-      el("label", { class: "a4-option" }, bloom, "やわらかい色分け（背景のグラデーションとタスクごとの色）"),
+      el("label", { class: "a4-option" }, bloom, tx("やわらかい色分け（背景のグラデーションとタスクごとの色）")),
       mcpSection(),
-      el("p", {}, el("a", { class: "a4-link", href: "../relay-forge/" }, "Relay Forge（詳しい画面）を開く")),
-      port.signOut ? button("サインアウト", () => { void port.signOut?.(); }, "link") : null);
+      el("p", {}, el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("Relay Forge（詳しい画面）を開く"))),
+      port.signOut ? button(tx("サインアウト"), () => { void port.signOut?.(); }, "link") : null);
   }
 
   /** The running task follows the person to every other screen. */
@@ -1312,14 +1485,25 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     if (!running) return null;
     const open = el("button", { type: "button", class: "a4-row-title" }, running.title);
     open.addEventListener("click", () => { focusId = running.id; go("now"); });
-    return el("aside", { class: "a4-dock", "aria-label": "作業中" }, timer(running, true),
-      el("div", { class: "a4-row-text" }, el("span", { class: "a4-meta" }, "作業中"), open),
-      button("一時停止", () => pause(running)), button("完了", () => complete(running)));
+    return el("aside", { class: "a4-dock", "aria-label": tx("作業中") }, timer(running, true),
+      el("div", { class: "a4-row-text" }, el("span", { class: "a4-meta" }, tx("作業中")), open),
+      button(tx("一時停止"), () => pause(running)), button(tx("完了"), () => complete(running)));
   }
 
   /* ------------------------------ shell ------------------------------ */
 
   function go(next: View): void {
+    // An unsaved note asks before it is left behind.
+    if (workUi.dirty() && next !== view) { workUi.guard(() => { workUi.clearCalendar(); leave(next); }); return; }
+    leave(next);
+  }
+
+  function leave(next: View): void {
+    if (isExtra(next) && next !== view) {
+      if (next === "billing") { billingUi.enter(); analyticsUi.enter(); }
+      else if (FORGE.includes(next)) forge?.enter(next as ForgeScreen);
+      void workUi.load();
+    }
     if (next === "guild" && view !== "guild") { activity = null; activityError = false; }
     if (next === "settings" && view !== "settings") { connections = null; connectionsError = false; }
     view = next;
@@ -1330,30 +1514,48 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     window.scrollTo(0, 0);
   }
 
+  /** The browser chrome follows the canvas, including an explicit theme choice. */
+  function paintThemeColor(): void {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", getComputedStyle(document.body).backgroundColor);
+  }
+
   function render(): void {
     if (disposed) return;
     const active = document.activeElement;
     const keepFocus = active instanceof HTMLElement && main.contains(active) && active.matches("input") ? null : active instanceof HTMLElement && main.contains(active) ? active.textContent : null;
     replaceChildren(nav, ...VIEWS.map(item => {
       const waiting = item.id === "guild" ? quests().filter(needsDecision).length : 0;
-      const tab = el("a", { class: "a4-tab", href: `#${item.id}`, "aria-current": view === item.id ? "page" : null, "data-view": item.id }, item.label,
-        waiting > 0 ? el("span", { class: "a4-badge", "aria-label": `判断待ち ${waiting} 件` }, String(waiting)) : null);
+      const tab = el("a", { class: "a4-tab", href: `#${item.id}`, "aria-current": view === item.id || (item.id === "settings" && isExtra(view)) ? "page" : null, "data-view": item.id }, item.label,
+        waiting > 0 ? el("span", { class: "a4-badge", "aria-label": tx("判断待ち {count} 件", { count: waiting }) }, String(waiting)) : null);
       tab.addEventListener("click", event => { event.preventDefault(); go(item.id); });
       return tab;
     }));
     root.querySelector(".a4-app")?.setAttribute("data-busy", String(busy));
     main.setAttribute("data-view", view);
-    replaceChildren(main, view === "now" ? nowView() : view === "plan" ? planView() : view === "all" ? allView() : view === "guild" ? guildView() : settingsView());
+    document.title = `${[...VIEWS, ...EXTRAS].find(item => item.id === view)?.label} — Guilduo`;
+    paintThemeColor();
+    workUi.clearCalendar();
+    replaceChildren(main, view === "now" ? nowView() : view === "plan" ? planView() : view === "all" ? allView() : view === "guild" ? guildView() : isExtra(view) ? extraView(view) : settingsView());
     replaceChildren(dockHost, dock());
     repaintSheet?.();
     paintProgress();
     // Keep keyboard users on the control they used when it survives the rerender.
     if (keepFocus) [...main.querySelectorAll<HTMLElement>("button")].find(node => node.textContent === keepFocus)?.focus({ preventScroll: true });
+    // A background refresh must not take the search box away mid-typing.
+    if (active instanceof HTMLInputElement && active.type === "search" && !main.contains(active)) {
+      const field = main.querySelector<HTMLInputElement>('input[type="search"]');
+      field?.focus({ preventScroll: true });
+      field?.setSelectionRange(field.value.length, field.value.length);
+    }
   }
 
   const tick = window.setInterval(() => { for (const node of root.querySelectorAll<HTMLElement & { a4Paint?: () => void }>(".a4-ring")) node.a4Paint?.(); paintProgress(); }, 1000);
-  const onHide = () => { if (document.visibilityState === "hidden") flushPending(); };
   const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet) void port.refresh().then(render, () => undefined); };
+  const onHide = () => { if (document.visibilityState === "hidden") flushPending(); else onFocus(); };
+  // Agents move work while the page sits open; pick that up unless someone is typing.
+  const poll = window.setInterval(() => {
+    if (document.visibilityState === "visible" && !document.activeElement?.matches("input, textarea, select")) onFocus();
+  }, 60_000);
   const onHash = () => { if (viewFromHash() !== view) go(viewFromHash()); };
   document.addEventListener("visibilitychange", onHide);
   root.addEventListener("pointerdown", onPointer, true);
@@ -1369,6 +1571,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     flushPending();
     sheet?.close();
     window.clearInterval(tick);
+    window.clearInterval(poll);
     window.clearTimeout(toastTimer);
     document.removeEventListener("visibilitychange", onHide);
     root.removeEventListener("pointerdown", onPointer, true);
@@ -1377,5 +1580,6 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     window.removeEventListener("focus", onFocus);
     window.removeEventListener("online", onFocus);
     unsubscribe?.();
+    workUi.dispose();
   };
 }
