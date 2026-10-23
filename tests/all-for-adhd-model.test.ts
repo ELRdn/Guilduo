@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Quest } from "../types/questforge.ts";
+import { setLocale } from "../i18n.ts";
 import { blockers, bucketOf, dayPlan, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes } from "../interaction-lab/all-for-adhd/model.ts";
+
+// The labels below are the Japanese source copy; CI runs in an English locale.
+setLocale("ja");
 
 const TODAY = "2026-10-18";
 function quest(id: string, patch: Partial<Quest> & { owner?: "self" | "agent"; state?: string } = {}): Quest {
