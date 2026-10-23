@@ -10,8 +10,10 @@ export async function assertSiteDeployCacheSafe(siteUrl: string, fetcher: typeof
   for (const path of ["/", "/next/relay-forge/", "/next/all-for-adhd/"]) {
     const response = await fetcher(new URL(path, origin), { redirect: "error", signal: AbortSignal.timeout(20_000) });
     await response.arrayBuffer();
-    if (!response.ok) throw new Error(`Public shell check failed with HTTP ${response.status}; deployment not started.`);
     const status = response.headers.get("cf-cache-status")?.trim().toUpperCase();
+    // A shell this deployment introduces is still an uncached 404 on its first release.
+    if (response.status === 404 && (status === "DYNAMIC" || status === "BYPASS")) continue;
+    if (!response.ok) throw new Error(`Public shell check failed with HTTP ${response.status}; deployment not started.`);
     if (status && status !== "DYNAMIC" && status !== "BYPASS") {
       throw new Error("Public HTML is CDN-cacheable. Disable both Guilduo public app shell Cache and Cache Response Rules, wait for propagation, and retry. Re-enable them after verifying the deployment and shell expiry. See docs/appwrite-site-routing.md.");
     }

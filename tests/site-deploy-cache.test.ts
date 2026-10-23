@@ -27,6 +27,10 @@ test("deployment guard checks both public and compatibility HTML without auth or
 
 test("deployment guard blocks failed probes, cached compatibility HTML and non-origin inputs", async () => {
   await assert.rejects(assertSiteDeployCacheSafe("https://example.test", async () => new Response("error", { status: 503 })), /HTTP 503/);
+  await assert.rejects(assertSiteDeployCacheSafe("https://example.test", async () => new Response("missing", { status: 404 })), /HTTP 404/);
+  await assertSiteDeployCacheSafe("https://example.test", async (input) => new Response("shell", {
+    status: new URL(String(input)).pathname === "/next/all-for-adhd/" ? 404 : 200, headers: { "cf-cache-status": "DYNAMIC" },
+  }));
   await assert.rejects(assertSiteDeployCacheSafe("https://example.test", async () => { throw new Error("network unavailable"); }), /network unavailable/);
   await assert.rejects(assertSiteDeployCacheSafe("https://example.test", async (input) => new Response("shell", {
     headers: { "cf-cache-status": new URL(String(input)).pathname === "/" ? "DYNAMIC" : "HIT" },
