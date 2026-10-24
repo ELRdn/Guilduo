@@ -26,6 +26,8 @@ export function productivityWorkspace(options: {
   let selecting = false;
   let selections: (() => void)[] = [];
   let entryDraft: TimeEntry | null = null, timerQuest = "", timerHost: HTMLElement | null = null, modal: HTMLDialogElement | null = null;
+  // A start pressed before the first load (or while a save holds writes) waits here instead of being dropped.
+  let queuedTrack: string | null | undefined;
   let preferenceDraft: { timeSource: TimeSource; timezone: string; expectedUpdatedAt: string } | null = null;
   const dirty = () => draft !== null && JSON.stringify(draft) !== JSON.stringify(original);
   const held = () => !options.port || options.held() || busy || failed || !loaded || pending !== null || !navigator.onLine;
@@ -90,7 +92,7 @@ export function productivityWorkspace(options: {
       data = snapshot; loaded = true; failed = false;
       if (original && !dirty()) { original = data.notes.find(n => n.id === original?.id) ?? null; draft = original ? { ...original } : null; }
     } catch (error) { if (!disposed) { failed = true; message = () => errorText(error); } }
-    finally { loading = false; refresh(); }
+    finally { loading = false; refresh(); flushTrack(); }
   }
   async function perform(operation: Pending): Promise<boolean> {
     if (!options.port || busy || disposed || !navigator.onLine || options.held()) return false;
@@ -248,6 +250,15 @@ export function productivityWorkspace(options: {
     const elapsed = el("span", { "data-work-elapsed": "true", class: "rf-work-elapsed", hidden: !running }, elapsedText());
     return el("section", { class: "rf-work-timer", "aria-label": w("time"), "data-running": running ? "true" : "false" }, selector, elapsed, action, button(w("history"), () => { entryDraft = null; historyOpen = true; openHistory(); }, !loaded), ...(message() || !loaded ? [status()] : []));
   }
+  function flushTrack(): void {
+    if (queuedTrack === undefined || disposed || failed) return;
+    if (held()) { if (loaded) window.setTimeout(flushTrack, 500); return; }
+    const questId = queuedTrack, running = current();
+    queuedTrack = undefined;
+    if (questId === null) { if (running) void write("/timer/stop", { questId: running.questId, expectedEntryId: running.id, expectedUpdatedAt: running.updatedAt }); return; }
+    if (running?.questId === questId) return;
+    void write("/timer/start", { questId, expectedEntryId: running?.id ?? "", ...(running ? { expectedUpdatedAt: running.updatedAt } : {}) });
+  }
   function elapsedText(): string { const running = current(); if (!running) return "00:00:00"; const seconds = Math.floor(entrySeconds(running)); return `${w("provisional")} ${[Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map(n => String(n).padStart(2, "0")).join(":")}`; }
   function renderTimerHost(): void { if (timerHost && !disposed) replaceChildren(timerHost, renderTimer()); }
   function settings(): HTMLElement {
@@ -278,13 +289,8 @@ export function productivityWorkspace(options: {
     clearCalendar() { const previous = selections; selections = []; previous.forEach(dispose => dispose()); },
     attachTimer(host: HTMLElement) { timerHost = host; timerSize.observe(host); renderTimerHost(); },
     /** Starts (or switches) the native timer for a Quest, or stops it with null; for surfaces with their own start button. */
-    track(questId: string | null): void {
-      const running = current();
-      if (questId === null) { if (running) void write("/timer/stop", { questId: running.questId, expectedEntryId: running.id, expectedUpdatedAt: running.updatedAt }); return; }
-      if (running?.questId === questId) return;
-      void write("/timer/start", { questId, expectedEntryId: running?.id ?? "", ...(running ? { expectedUpdatedAt: running.updatedAt } : {}) });
-    },
-    trackedQuest: () => current()?.questId ?? null,
+    track(questId: string | null): void { queuedTrack = questId; flushTrack(); },
+    trackedQuest: () => (queuedTrack !== undefined ? queuedTrack : current()?.questId ?? null),
     history: openHistory,
     renderTimer: renderTimerHost,
     screen: (id: "calendar" | "notes") => ({ main: id === "calendar" ? calendarScreen() : notesScreen() }), settings,
