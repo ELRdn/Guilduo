@@ -234,7 +234,12 @@ async function showProduction(uid: string, email: string): Promise<void> {
     const repository = new QuestForgeRepository({ getToken: force => getIdToken(force) });
     let runtime = await createProductionRuntime(repository, uid, email);
     let quests: Quest[] = [...runtime.quests];
-    const replace = (next: Quest) => { quests = [next, ...quests.filter(q => q.id !== next.id)]; return next; };
+    const savedDuringRefresh = new Set<Set<string>>();
+    const replace = (next: Quest) => {
+      quests = [next, ...quests.filter(q => q.id !== next.id)];
+      for (const touched of savedDuringRefresh) touched.add(next.id);
+      return next;
+    };
     const port: AllForPort = {
       demo: false,
       self: () => ({ id: runtime.selfUid, label: runtime.profile?.displayName || tx("自分") }),
@@ -296,7 +301,14 @@ async function showProduction(uid: string, email: string): Promise<void> {
         const response = await runtime.questPort.scoreQuest(quest.id, "up", quest.updatedAt);
         return { quest: replace(questOf(response, quest.id)), character: (response.character as CharacterState | undefined) ?? null };
       },
-      refresh: runtime.refreshWorkspace ? async () => { runtime = await runtime.refreshWorkspace!(); quests = [...runtime.quests]; } : undefined,
+      refresh: runtime.refreshWorkspace ? async () => {
+        const touched = new Set<string>();
+        savedDuringRefresh.add(touched);
+        try { runtime = await runtime.refreshWorkspace!(); } finally { savedDuringRefresh.delete(touched); }
+        // A save that lands while the refresh is in flight is newer than its snapshot; keep it.
+        const newer = quests.filter(q => touched.has(q.id));
+        quests = [...newer, ...runtime.quests.filter(q => !touched.has(q.id))];
+      } : undefined,
       signOut: async () => { await signOutUser(); checkAuth(); },
       get runtime() { return runtime; },
     };
