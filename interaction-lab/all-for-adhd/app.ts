@@ -167,7 +167,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let lastPointer = { x: 0, y: 0, at: 0 };
   const onPointer = (event: PointerEvent) => { lastPointer = { x: event.clientX, y: event.clientY, at: Date.now() }; };
   let disposed = false;
-  // Completions wait out the undo window before they are sent.
+  // Completions wait out the undo window before they are sent: the undo timer while waiting, 0 while the
+  // save is in flight. They stay hidden until the server answers, so the old copy never flashes back.
   const pending = new Map<string, number>();
   let toastTimer = 0;
 
@@ -316,14 +317,19 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     if (focusId === quest.id) focusId = null;
     store.set(`a4-start:${quest.id}`, null);
     stopTracking(quest);
-    const timer = window.setTimeout(() => {
-      pending.delete(quest.id);
+    const send = () => {
+      if (disposed) return;
+      // Another save holds the screen; wait for it instead of dropping the completion.
+      if (busy) { pending.set(quest.id, window.setTimeout(send, 500)); return; }
+      pending.set(quest.id, 0);
       void run(async () => {
-        const result = await port.complete(quest);
-        if (game && result.character) say(tx("完了！ Lv {level} · XP {xp}/{next}", { level: result.character.level, xp: result.character.xp, next: result.character.nextXp }));
+        try {
+          const result = await port.complete(quest);
+          if (game && result.character) say(tx("完了！ Lv {level} · XP {xp}/{next}", { level: result.character.level, xp: result.character.xp, next: result.character.nextXp }));
+        } finally { pending.delete(quest.id); }
       }, tx("完了を保存できませんでした。もう一度試してください。"));
-    }, UNDO_MS);
-    pending.set(quest.id, timer);
+    };
+    pending.set(quest.id, window.setTimeout(send, UNDO_MS));
     const today = port.today();
     const dayDone = onDay(quest, today) && groups(quests(), today).today.length === 0;
     if (cheer) {
@@ -332,16 +338,25 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         : focused ? { x: focused.left + focused.width / 2, y: focused.top + focused.height / 2 } : { x: innerWidth / 2, y: innerHeight * 0.6 };
       celebrate(origin.x, origin.y, dayDone);
     }
-    say(dayDone ? tx("今日の分、ぜんぶ終わりました！") : game ? tx("完了！ よくできました") : tx("完了しました"), () => { window.clearTimeout(timer); pending.delete(quest.id); render(); });
+    say(dayDone ? tx("今日の分、ぜんぶ終わりました！") : game ? tx("完了！ よくできました") : tx("完了しました"), () => {
+      const timer = pending.get(quest.id);
+      if (!timer) return;
+      window.clearTimeout(timer);
+      pending.delete(quest.id);
+      render();
+    });
     render();
   }
 
+  /** Sends waiting completions now (the page is being hidden or closed); they stay hidden until saved. */
   function flushPending(): void {
     for (const [id, timer] of pending) {
+      if (!timer) continue;
       window.clearTimeout(timer);
-      pending.delete(id);
       const quest = byId(id);
-      if (quest) void port.complete(quest).catch(() => undefined);
+      if (!quest) { pending.delete(id); continue; }
+      pending.set(id, 0);
+      void port.complete(quest).catch(() => undefined).finally(() => { pending.delete(id); if (!disposed) render(); });
     }
   }
 
