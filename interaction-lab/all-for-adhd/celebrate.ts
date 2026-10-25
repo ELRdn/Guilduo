@@ -2,11 +2,12 @@
  * A short confetti burst for finishing a task. It is the one deliberate
  * exception to the "no decorative particles" brand rule: it only follows a
  * completion, lasts about a second, never loops, and is skipped entirely under
- * Reduced Motion. Colours are brighter cousins of the Bloom task hues (orange,
- * gold, sage, teal) so the burst reads on both the cream and charcoal grounds.
+ * Reduced Motion. Colours are brighter cousins of the Spine task hues (clay,
+ * mustard, plum, sage, slate) plus the now-coral and Antique Gold, so the burst
+ * reads on both the paper and Night Surface grounds.
  */
 
-const COLORS = ["#f29b38", "#f5bd3c", "#e8823a", "#ffd27a", "#62b585", "#3fa59a", "#c9a45c"];
+const COLORS = ["#d9957f", "#d8b55e", "#a8759a", "#8fb08a", "#8293a0", "#e2725b", "#b89a5e"];
 
 export function celebrate(x: number, y: number, big = false): void {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;

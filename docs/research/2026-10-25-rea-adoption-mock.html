@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="ja" data-palette="spine">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>今＋タイムライン モック</title>
+<!-- Static mock for docs/research/2026-10-25-rea-adoption-plan.md. Not shipped. Bloom values copied from interaction-lab/all-for-adhd/styles.css. -->
+<style>
+:root {
+  --canvas: #fdf8f1; --surface: #ffffff; --selected: #f5e3c9; --inset: #efe4d4;
+  --line: #ece0cf; --line-2: #d6c6ae;
+  --fg-strong: #17201e; --fg: #40504b; --muted: #66756f;
+  --accent: #23312d; --on-accent: #ffffff; --agent: #2d65a7; --review: #76531b; --now: #c9914a;
+  --hue-0: #c9914a; --hue-1: #d4893a; --hue-2: #b8963e; --hue-3: #6f9f7c; --hue-4: #5c9784;
+  --pill-fill: 30%;
+  --shadow: 0 1px 2px rgba(80, 52, 20, .05), 0 4px 16px rgba(80, 52, 20, .06);
+  --font: Inter, "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #121213; --surface: #1d1d1f; --selected: #352c20; --inset: #0b0b0c;
+    --line: #2b2b2e; --line-2: #3d3d41;
+    --fg-strong: #edf2ef; --fg: #c4ceca; --muted: #8e9b97;
+    --accent: #e7e3da; --on-accent: #121213; --agent: #69a8ef; --review: #d6ad5e; --now: #ddb072;
+    --hue-0: #ddb072; --hue-1: #e6a35e; --hue-2: #cfb06a; --hue-3: #86c19c; --hue-4: #78b39f;
+    --pill-fill: 22%;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #121213; --surface: #1d1d1f; --selected: #352c20; --inset: #0b0b0c;
+  --line: #2b2b2e; --line-2: #3d3d41;
+  --fg-strong: #edf2ef; --fg: #c4ceca; --muted: #8e9b97;
+  --accent: #e7e3da; --on-accent: #121213; --agent: #69a8ef; --review: #d6ad5e; --now: #ddb072;
+  --hue-0: #ddb072; --hue-1: #e6a35e; --hue-2: #cfb06a; --hue-3: #86c19c; --hue-4: #78b39f;
+  --pill-fill: 22%;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+}
+
+/* Spine palette from the REA research (06-synthesis §3.1–3.2). Trial only, not adopted.
+ * Task hues use the six low-saturation category colours; agent = indigo.
+ * Dark swaps the Spine base for the Guilduo brand colours (DESIGN.md §1.1):
+ * Night Surface canvas, Forge Teal selection, Ivory text, Antique Gold primary. */
+:root[data-palette="spine"] {
+  --canvas: #fbfaf7; --surface: #ffffff; --selected: #f3f1ec; --inset: #f3f1ec;
+  --line: #e6e2da; --line-2: #d3cec4;
+  --fg-strong: #17161a; --fg: #5c5a63; --muted: #6f6c76;
+  --accent: #2f5d50; --on-accent: #ffffff; --agent: #5a6b9b; --review: #b4762a; --now: #e2725b;
+  --hue-0: #c08573; --hue-1: #c2a25a; --hue-2: #8a5f7d; --hue-3: #7c9a78; --hue-4: #6e7b85;
+  --pill-fill: 16%;
+  --shadow: 0 1px 2px rgba(23, 22, 26, .06);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette="spine"]:not([data-theme="light"]) {
+    --canvas: #0f1418; --surface: #172026; --selected: #13352f; --inset: #0b1013;
+    --line: #26323a; --line-2: #3a4850;
+    --fg-strong: #e7e3da; --fg: #bdb8ae; --muted: #948f86;
+    --accent: #b89a5e; --on-accent: #0f1418; --agent: #8f9ccc; --review: #d6a560; --now: #f0937d;
+    --hue-0: #d9a090; --hue-1: #d8bb78; --hue-2: #b48aa7; --hue-3: #9cba98; --hue-4: #98a5ae;
+    --pill-fill: 20%;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  }
+}
+:root[data-palette="spine"][data-theme="dark"] {
+  --canvas: #0f1418; --surface: #172026; --selected: #13352f; --inset: #0b1013;
+  --line: #26323a; --line-2: #3a4850;
+  --fg-strong: #e7e3da; --fg: #bdb8ae; --muted: #948f86;
+  --accent: #b89a5e; --on-accent: #0f1418; --agent: #8f9ccc; --review: #d6a560; --now: #f0937d;
+  --hue-0: #d9a090; --hue-1: #d8bb78; --hue-2: #b48aa7; --hue-3: #9cba98; --hue-4: #98a5ae;
+  --pill-fill: 20%;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { min-height: 100vh; background: var(--canvas); color: var(--fg); font: 400 16px/1.6 var(--font); }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--agent); outline-offset: 2px; }
+
+/* Mock banner */
+.mock { margin: 0; padding: 8px 16px; background: var(--selected); color: var(--fg-strong); font-size: 13px; text-align: center; }
+.mock button { min-height: 32px; margin-left: 8px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); cursor: pointer; }
+
+/* Header: brand, capture, tabs */
+.top { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 12px 24px; background: var(--canvas); border-bottom: 1px solid var(--line); }
+.brand { align-self: center; color: var(--fg-strong); font-weight: 600; }
+.capture { justify-self: center; width: 100%; max-width: 640px; }
+.capture-row { display: flex; gap: 8px; }
+.capture input { flex: 1; min-width: 0; min-height: 44px; padding: 0 14px; background: transparent; border: 1px solid var(--line-2); border-radius: 10px; }
+.capture input::placeholder { color: var(--muted); }
+.parse:empty { display: none; }
+.parse { margin: 4px 2px 0; color: var(--muted); font-size: 13px; }
+.parse b { color: var(--fg-strong); font-weight: 600; }
+.tabs { display: flex; gap: 4px; align-self: center; }
+.tab { display: inline-flex; align-items: center; white-space: nowrap; min-height: 44px; padding: 0 16px; border-radius: 10px; color: var(--muted); font-weight: 600; text-decoration: none; }
+.tab[aria-current="page"] { background: var(--selected); color: var(--fg-strong); }
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; background: var(--surface); color: var(--fg-strong); border: 1px solid var(--line-2); border-radius: 10px; font-weight: 600; cursor: pointer; }
+.primary { min-height: 52px; padding: 0 28px; background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-size: 17px; }
+.link { min-height: 44px; padding: 0 4px; background: none; border: 0; color: var(--fg); text-decoration: underline; text-underline-offset: 3px; font-weight: 600; cursor: pointer; }
+
+/* Home: now + timeline */
+.home { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 32px; max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+.date { margin: 0 0 6px; color: var(--fg-strong); font-size: 48px; font-weight: 300; line-height: 1.1; letter-spacing: -0.02em; }
+.date small { margin-left: 10px; color: var(--muted); font-size: 16px; font-weight: 400; letter-spacing: 0; }
+.summary { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+.summary b { color: var(--fg-strong); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* Emoji circle */
+[data-hue="0"] { --tone: var(--hue-0); } [data-hue="1"] { --tone: var(--hue-1); } [data-hue="2"] { --tone: var(--hue-2); }
+[data-hue="3"] { --tone: var(--hue-3); } [data-hue="4"] { --tone: var(--hue-4); } [data-hue="agent"] { --tone: var(--agent); }
+.emoji { flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; background: color-mix(in srgb, var(--tone) 26%, var(--surface)); font-size: 19px; line-height: 1; }
+.emoji.lg { width: 56px; height: 56px; font-size: 30px; }
+.emoji.empty::after { content: ""; width: 10px; height: 10px; border-radius: 999px; background: var(--tone); }
+
+/* Now card */
+.now { position: sticky; top: 112px; align-self: start; }
+.focus { padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.label { margin: 0 0 12px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.focus-head { display: flex; gap: 14px; align-items: flex-start; }
+.focus h2 { margin: 4px 0 0; color: var(--fg-strong); font-size: 24px; line-height: 1.35; }
+.step { margin: 16px 0 0; padding: 12px 14px; background: var(--canvas); border-radius: 10px; }
+.step span { display: block; color: var(--muted); font-size: 13px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+.focus-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 20px; }
+.ring { position: relative; width: 52px; height: 52px; }
+.ring svg { transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 5; }
+.ring .bg { stroke: var(--inset); }
+.ring .val { stroke: var(--tone); stroke-linecap: round; stroke-dasharray: 138.2; stroke-dashoffset: 92; }
+.ring span { position: absolute; inset: 0; display: grid; place-items: center; font: 600 12px var(--mono); color: var(--fg-strong); }
+.after { margin-top: 16px; }
+.after-list { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.after-list li { display: flex; align-items: center; gap: 10px; color: var(--fg); font-size: 14px; }
+.after-list time { margin-left: auto; color: var(--muted); font: 12px var(--mono); }
+
+/* Timeline */
+.timeline-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.timeline-head h2 { margin: 0; color: var(--fg-strong); font-size: 18px; }
+.earlier { display: block; margin: 0 0 8px; }
+/* Home timeline: evenly spaced rows (Structured); duration shows in the capsule height. */
+.timeline { padding: 12px 12px 12px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.rows { position: relative; margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.rows::before { content: ""; position: absolute; top: 18px; bottom: 18px; left: 79px; width: 2px; background: var(--line); }
+.row { position: relative; display: grid; grid-template-columns: 52px 40px minmax(0, 1fr); column-gap: 8px; align-items: start; }
+.row > time { padding-top: 10px; color: var(--muted); font: 12px var(--mono); text-align: right; }
+.capsule { position: relative; z-index: 1; justify-self: center; display: grid; place-items: center; width: 40px; height: var(--cap, 40px); border-radius: 999px; background: color-mix(in srgb, var(--tone) 34%, var(--surface)); border: 2px solid var(--surface); font-size: 19px; }
+.capsule.empty::after { content: ""; width: 10px; height: 10px; border-radius: 999px; background: var(--tone); }
+.card { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 8px 10px 8px 12px; border-radius: 14px; background: color-mix(in srgb, var(--tone) var(--pill-fill), var(--surface)); box-shadow: inset 3px 0 0 var(--tone); cursor: pointer; }
+.card .body { flex: 1; min-width: 0; }
+.card .title { display: block; color: var(--fg-strong); font-weight: 600; font-size: 15px; line-height: 1.35; }
+.card .time { display: block; color: var(--muted); font: 12px var(--mono); }
+.card .who { display: block; color: var(--agent); font-size: 12px; font-weight: 600; }
+.check { flex: none; width: 26px; height: 26px; margin-left: auto; border: 2px solid var(--tone); border-radius: 999px; background: transparent; cursor: pointer; padding: 0; display: grid; place-items: center; transition: background 120ms cubic-bezier(.2, .8, .2, 1), transform 120ms; }
+.check::after { content: ""; width: 10px; height: 6px; margin-top: -3px; border: solid var(--on-accent); border-width: 0 0 2px 2px; transform: rotate(-45deg); opacity: 0; }
+.check[aria-checked="true"] { background: var(--tone); transform: scale(.92); }
+.check[aria-checked="true"]::after { opacity: 1; border-color: #fff; }
+.row[data-done] .card, .row[data-done] .capsule { opacity: .55; }
+.row[data-done] .title { text-decoration: line-through; text-decoration-thickness: 1.5px; font-weight: 500; }
+.row[data-working] .capsule { background: conic-gradient(var(--tone) var(--elapsed, 40%), color-mix(in srgb, var(--tone) 34%, var(--surface)) 0); }
+.row[data-working] .card { box-shadow: inset 3px 0 0 var(--tone), 0 0 0 2px var(--tone); }
+.row[data-working] .working { display: block; color: var(--fg-strong); font-size: 12px; font-weight: 600; }
+.now-row { position: relative; display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: 8px; align-items: center; }
+.now-row time { padding: 0 6px; background: var(--now); color: #fff; border-radius: 6px; font: 600 11px/20px var(--mono); justify-self: end; }
+.now-row::after { content: ""; height: 2px; background: var(--now); border-radius: 2px; }
+.free .free-body { padding: 8px 4px 4px; }
+.free .capsule { width: 28px; height: 28px; background: var(--surface); border: 2px dashed var(--line-2); }
+.free-head { margin: 0; color: var(--fg); font-size: 14px; }
+.free-head .more { min-height: 32px; margin-left: 4px; font-size: 13px; }
+.free-head b { color: var(--fg-strong); font-family: var(--mono); }
+.suggest { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
+.suggest button { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px 0 6px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 999px; cursor: pointer; font-size: 14px; }
+.suggest[hidden] { display: none; }
+.suggest button:hover { border-color: var(--fg); }
+.suggest .emoji { width: 32px; height: 32px; font-size: 16px; }
+.suggest small { color: var(--muted); font: 12px var(--mono); }
+.suggest .by { color: var(--agent); font-weight: 600; font-family: var(--font); }
+
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 10px 12px 10px 18px; background: var(--fg-strong); color: var(--canvas); border-radius: 12px; box-shadow: var(--shadow); transform: translateX(-50%); }
+.toast[hidden] { display: none; }
+.toast button { flex: none; white-space: nowrap; min-height: 36px; padding: 0 12px; background: none; border: 1px solid currentColor; border-radius: 8px; color: inherit; cursor: pointer; font-weight: 600; }
+.confetti { position: fixed; z-index: 20; width: 8px; height: 8px; border-radius: 2px; pointer-events: none; animation: fall 900ms cubic-bezier(.2, .8, .2, 1) forwards; }
+@keyframes fall { to { transform: translate(var(--dx), var(--dy)) rotate(260deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .check { transition: none; } }
+
+.notes { max-width: 1180px; margin: 0 auto; padding: 0 24px 48px; color: var(--muted); font-size: 13px; }
+.notes ol { padding-left: 20px; }
+
+@media (max-width: 899px) {
+  .top { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px 16px; }
+  .brand { display: none; }
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; justify-content: space-around; padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); background: var(--canvas); border-top: 1px solid var(--line); }
+  .home { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 20px 16px 96px; }
+  .now { position: static; }
+  .date { font-size: 40px; }
+  .toast { bottom: 76px; width: calc(100% - 32px); }
+  .earlier { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<p class="mock">モック（静的・保存されません）。計画書 §4.1〜4.4 の確認用
+  <button type="button" id="theme">ライト／ダーク</button>
+  <button type="button" id="palette" aria-pressed="true">配色：Spine（試用）</button>
+</p>
+
+<header class="top">
+  <span class="brand">Guilduo</span>
+  <form class="capture" id="capture" autocomplete="off">
+    <div class="capture-row">
+      <input id="capture-input" placeholder="思いついたら書く（例：明日 15時 30分 歯医者 #health）" aria-label="やることを書き出す" aria-describedby="parse">
+      <button class="button" type="submit">追加</button>
+    </div>
+    <p class="parse" id="parse" aria-live="polite"></p>
+  </form>
+  <nav class="tabs" aria-label="画面">
+    <a class="tab" href="#" aria-current="page">今</a>
+    <a class="tab" href="#">予定</a>
+    <a class="tab" href="#">やること</a>
+    <a class="tab" href="#">ギルド</a>
+    <a class="tab" href="#">設定</a>
+  </nav>
+</header>
+
+<main class="home">
+  <section class="now" aria-labelledby="now-title">
+    <h1 class="date">10月25日<small>日曜日</small></h1>
+    <p class="summary">今日 <b>3 / 8</b> 完了 · 予定 <b>4h 30m</b></p>
+
+    <div class="focus" data-hue="1">
+      <p class="label" id="now-title">今やること</p>
+      <div class="focus-head">
+        <span class="emoji lg" aria-hidden="true">📝</span>
+        <h2>四半期の振り返りを書く</h2>
+      </div>
+      <p class="step"><span>次の一歩</span>去年のメモを開くだけ</p>
+      <p class="meta"><span>10:30–11:30</span><span>目安 1時間</span><span>ステップ 1/3</span></p>
+      <div class="focus-actions">
+        <div class="ring" role="img" aria-label="経過 22分。目安 1時間">
+          <svg width="52" height="52" viewBox="0 0 52 52"><circle class="bg" cx="26" cy="26" r="22"/><circle class="val" cx="26" cy="26" r="22"/></svg>
+          <span>22m</span>
+        </div>
+        <button class="button primary" type="button" id="done-now">完了</button>
+        <button class="link" type="button">一時停止</button>
+      </div>
+    </div>
+
+    <div class="after">
+      <p class="label">このあと</p>
+      <ul class="after-list">
+        <li><span class="emoji" data-hue="3" aria-hidden="true">🍱</span>昼ごはん<time>12:00</time></li>
+        <li><span class="emoji" data-hue="agent" aria-hidden="true">📨</span>請求書の下書き確認<time>14:00</time></li>
+      </ul>
+    </div>
+  </section>
+
+  <section aria-labelledby="tl-title">
+    <div class="timeline-head">
+      <h2 id="tl-title">今日のタイムライン</h2>
+      <a class="tab" href="#">日・週・月 →</a>
+    </div>
+    <button class="link earlier" type="button">9:00より前 1件</button>
+    <div class="timeline">
+      <ol class="rows" id="grid" aria-label="今日のタイムライン"></ol>
+    </div>
+  </section>
+</main>
+
+<section class="notes" aria-label="モックの注記">
+  <ol>
+    <li>左：今のQuest 1件（主操作は「完了」だけ）。右：等間隔に並ぶ今日の予定（Structured型）。長さは絵文字カプセルの高さで示す。現在時刻の線、空き時間の提案。900px未満では縦に積む。時間比例のグリッドは「予定」タブに残す。</li>
+    <li>空きカードの提案順：Agentの提案 → 受け箱から収まる1件 → 休む。選ぶと空きに入り、5秒「元に戻す」。</li>
+    <li>書き出し欄に「明日 15時 30分 歯医者 #health」などと打つと、読み取り結果が下に1行で出る（ルールのみ、AIなし）。</li>
+    <li>日付は48px・細字。完了した予定は薄くなり取り消し線が入る。絵文字はパステルの円、Agent担当は青系。</li>
+  </ol>
+</section>
+
+<div class="toast" id="toast" role="status" hidden><span id="toast-text"></span><button type="button" id="undo">元に戻す</button></div>
+
+<script>
+const NOW = 10 * 60 + 52;
+const grid = document.getElementById("grid");
+const clock = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const items = [
+  { start: 540, min: 15, emoji: "💊", title: "薬を飲む", hue: 3, done: true, note: "毎日" },
+  { start: 570, min: 45, emoji: "📧", title: "メールを片付ける", hue: 0, done: true },
+  { start: 630, min: 60, emoji: "📝", title: "四半期の振り返りを書く", hue: 1, working: true },
+  { start: 720, min: 60, emoji: "🍱", title: "昼ごはん", hue: 3 },
+  { start: 840, min: 30, emoji: "📨", title: "請求書の下書き確認", hue: "agent", who: "Astraが作業中" },
+  { start: 960, min: 30, emoji: "", title: "歯医者の予約を取る", hue: 2 },
+];
+const SUGGEST = [
+  { key: "agent", min: 30, emoji: "🗂️", title: "領収書を整理", hue: "agent", by: "Astraの提案" },
+  { key: "inbox", min: 15, emoji: "📚", title: "本を返す", hue: 4 },
+  { key: "rest", min: 15, emoji: "🌿", title: "休む", hue: 3, keep: true },
+];
+let used = new Set();
+
+const capHeight = min => Math.max(40, Math.min(96, 24 + min * 0.6));
+const span = min => (min >= 60 ? `${min / 60}時間` : `${min}分`);
+
+function gapsAfterNow(sorted) {
+  const out = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const from = Math.max(sorted[i].start + sorted[i].min, NOW), next = sorted[i + 1].start;
+    if (next - from >= 15) out.push({ start: from, min: next - from, after: sorted[i] });
+  }
+  return out;
+}
+
+function render() {
+  grid.innerHTML = "";
+  const sorted = [...items].sort((x, y) => x.start - y.start);
+  const free = gapsAfterNow(sorted);
+  let nowShown = sorted.some(q => q.working);
+  for (const q of sorted) {
+    if (!nowShown && q.start >= NOW) { grid.append(nowRow()); nowShown = true; }
+    const li = document.createElement("li");
+    li.className = "row"; li.dataset.hue = q.hue;
+    li.setAttribute("aria-label", `${clock(q.start)} ${q.title} ${q.min}分${q.done ? " 完了" : ""}`);
+    if (q.done) li.dataset.done = "";
+    if (q.working) { li.dataset.working = ""; li.style.setProperty("--elapsed", `${Math.round((NOW - q.start) / q.min * 100)}%`); }
+    li.style.setProperty("--cap", `${capHeight(q.min)}px`);
+    li.innerHTML = `<time>${clock(q.start)}</time>
+      <span class="capsule${q.emoji ? "" : " empty"}" aria-hidden="true">${q.emoji}</span>
+      <div class="card"><span class="body"><span class="title">${q.title}</span><span class="time">${clock(q.start)}–${clock(q.start + q.min)} · ${span(q.min)}${q.note ? " · " + q.note : ""}</span>${q.who ? `<span class="who">${q.who}</span>` : ""}${q.working ? `<span class="working">いま作業中</span>` : ""}</span>
+      <button class="check" type="button" role="checkbox" aria-checked="${!!q.done}" aria-label="${q.title} を完了"></button></div>`;
+    li.querySelector(".check").addEventListener("click", e => { e.stopPropagation(); toggle(q, e); });
+    grid.append(li);
+    const gap = free.find(g => g.after === q);
+    if (gap) grid.append(freeRow(gap, gap === free[0]));
+  }
+  if (!nowShown) grid.append(nowRow());
+}
+
+function nowRow() {
+  const li = document.createElement("li");
+  li.className = "now-row"; li.setAttribute("aria-label", `現在 ${clock(NOW)}`);
+  li.innerHTML = `<time>${clock(NOW)}</time>`;
+  return li;
+}
+
+function freeRow(gap, open) {
+  const li = document.createElement("li");
+  li.className = "row free";
+  const fits = SUGGEST.filter(x => (x.keep || !used.has(x.key)) && x.min <= gap.min);
+  li.innerHTML = `<time>${clock(gap.start)}</time><span class="capsule" aria-hidden="true"></span>
+    <div class="free-body"><p class="free-head"><b>${span(gap.min)}</b> 空いています${open ? "" : ` <button class="link more" type="button">提案を見る</button>`}</p>
+    <ul class="suggest"${open ? "" : " hidden"}>${fits.map(x => `<li><button type="button" data-pick="${x.key}"><span class="emoji" data-hue="${x.hue}" aria-hidden="true">${x.emoji}</span>${x.title}${x.keep ? "" : ` <small>${x.min}分</small>`}${x.by ? ` <small class="by">${x.by}</small>` : ""}</button></li>`).join("")}</ul></div>`;
+  li.querySelector(".more")?.addEventListener("click", e => { e.target.remove(); li.querySelector(".suggest").hidden = false; li.querySelector("[data-pick]")?.focus(); });
+  li.querySelectorAll("[data-pick]").forEach(btn => btn.addEventListener("click", () => pick(btn.dataset.pick, gap)));
+  return li;
+}
+
+let undo = null;
+function toast(text, restore) {
+  document.getElementById("toast-text").textContent = text;
+  document.getElementById("toast").hidden = false;
+  undo = restore;
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => { document.getElementById("toast").hidden = true; undo = null; }, 5000);
+}
+document.getElementById("undo").addEventListener("click", () => { undo?.(); document.getElementById("toast").hidden = true; render(); });
+
+function pick(kind, gap) {
+  const snapshot = items.length, usedBefore = new Set(used);
+  const choice = SUGGEST.find(x => x.key === kind);
+  items.push({ start: gap.start, min: choice.min, emoji: choice.emoji, title: choice.title, hue: choice.hue });
+  used.add(kind);
+  toast(`${clock(gap.start)} に「${choice.title}」を入れました`, () => { items.length = snapshot; used = usedBefore; });
+  render();
+}
+
+function toggle(q, e) {
+  q.done = !q.done;
+  if (q.done) { confetti(e.clientX, e.clientY, getComputedStyle(e.target).borderColor); toast(`完了！ よくできました · Lv 12 · XP 340/400`, () => { q.done = false; }); }
+  render();
+}
+
+function confetti(x, y, color) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < 18; i++) {
+    const p = document.createElement("i");
+    p.className = "confetti";
+    p.style.left = `${x}px`; p.style.top = `${y}px`; p.style.background = i % 3 ? color : "var(--hue-3)";
+    p.style.setProperty("--dx", `${(Math.random() - .5) * 160}px`);
+    p.style.setProperty("--dy", `${Math.random() * 120 - 90}px`);
+    document.body.append(p);
+    setTimeout(() => p.remove(), 950);
+  }
+}
+document.getElementById("done-now").addEventListener("click", e => { const q = items.find(i => i.working); toggle(q, { clientX: e.clientX, clientY: e.clientY, target: document.querySelector(".focus .emoji") }); });
+
+/* Rule-only capture parser (plan §4.4), Japanese subset for the mock. */
+const DAYS = { "今日": 0, "明日": 1, "あさって": 2, "明後日": 2 };
+const EMOJI = [[/歯医者|病院|通院/, "🦷"], [/薬/, "💊"], [/買い物|スーパー/, "🛒"], [/メール/, "📧"], [/本|読書/, "📚"], [/掃除|片付け/, "🧹"], [/会議|ミーティング/, "👥"], [/書く|資料|レポート/, "📝"]];
+function parseCapture(text) {
+  let rest = ` ${text} `, out = {};
+  rest = rest.replace(/\s(今日|明日|あさって|明後日)\s/, (_, d) => { out.day = d; return " "; });
+  rest = rest.replace(/\s(?:午後)?(\d{1,2})(?:時|:(\d{2}))(\d{1,2}分)?\s/, (m, h, mm) => { let hh = +h; if (m.includes("午後") && hh < 12) hh += 12; out.time = `${String(hh).padStart(2, "0")}:${mm ?? "00"}`; return " "; });
+  rest = rest.replace(/\s(?:(\d+)時間)?(?:(\d+)分)?\s/, (m, h, mi) => { if (!h && !mi) return m; out.min = (+h || 0) * 60 + (+mi || 0); return " "; });
+  rest = rest.replace(/\s(\d+)(m|h)\s/, (_, n, u) => { out.min = u === "h" ? n * 60 : +n; return " "; });
+  rest = rest.replace(/\s#(\S+)/g, (_, t) => { (out.tags ??= []).push(t); return " "; });
+  out.title = rest.trim().replace(/\s+/g, " ");
+  out.emoji = EMOJI.find(([re]) => re.test(out.title))?.[1] ?? "";
+  return out;
+}
+const input = document.getElementById("capture-input"), parse = document.getElementById("parse");
+input.addEventListener("input", () => {
+  const p = parseCapture(input.value);
+  if (!input.value.trim()) { parse.textContent = ""; return; }
+  const end = p.time && p.min ? `–${clock(+p.time.slice(0, 2) * 60 + +p.time.slice(3) + p.min)}` : "";
+  const bits = [p.day ?? (p.time ? "今日" : "受け箱"), p.time ? `<b>${p.time}${end}</b>` : "", p.min ? `目安 <b>${p.min}分</b>` : "", ...(p.tags ?? []).map(t => `#${t}`)].filter(Boolean);
+  parse.innerHTML = `${p.emoji ? p.emoji + " " : ""}<b>${p.title || "（タイトルなし）"}</b> · ${bits.join(" · ")}`;
+});
+document.getElementById("capture").addEventListener("submit", e => { e.preventDefault(); if (input.value.trim()) toast(`追加しました：${parseCapture(input.value).title}`, () => {}); input.value = ""; parse.textContent = ""; });
+
+document.getElementById("palette").addEventListener("click", e => {
+  const root = document.documentElement, spine = root.dataset.palette === "spine";
+  root.dataset.palette = spine ? "bloom" : "spine";
+  e.target.textContent = spine ? "配色：Bloom（グラデーションなし）" : "配色：Spine（試用）";
+  e.target.setAttribute("aria-pressed", String(!spine));
+});
+document.getElementById("theme").addEventListener("click", () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+});
+render();
+</script>
+</body>
+</html>

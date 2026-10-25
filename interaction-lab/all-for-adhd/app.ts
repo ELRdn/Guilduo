@@ -17,7 +17,7 @@ import { productivityWorkspace } from "../relay-forge/screens/productivity.ts";
 import { createBillingUi } from "../relay-forge/screens/billing.ts";
 import { createAnalyticsUi } from "../relay-forge/screens/analytics.ts";
 import { forgeScreens, type ForgeScreen } from "./forge.ts";
-import { addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
+import { addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, fitForGap, freeAhead, gaps, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
 
 export interface AllForAgent {
   readonly id: string;
@@ -103,6 +103,8 @@ const RELAY_FORGE_URL = location.pathname.startsWith("/interaction-lab/") ? "../
 const dayLabel = new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric", weekday: "short", timeZone: "UTC" });
 const weekdayLabel = new Intl.DateTimeFormat(LOCALE, { weekday: "short", timeZone: "UTC" });
 const monthLabel = new Intl.DateTimeFormat(LOCALE, { year: "numeric", month: "long", timeZone: "UTC" });
+const dateLabel = new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric", timeZone: "UTC" });
+const weekdayLong = new Intl.DateTimeFormat(LOCALE, { weekday: "long", timeZone: "UTC" });
 const shortDateLabel = new Intl.DateTimeFormat(LOCALE, { month: "numeric", day: "numeric", timeZone: "UTC" });
 const noon = (date: string) => new Date(`${date}T12:00:00Z`);
 const shortDate = (date: string) => shortDateLabel.format(noon(date));
@@ -147,6 +149,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let stepDraftFor: string | null = null;
   let estimateFor: string | null = null;
   let afterOpen = false;
+  let earlierOpen = false;
+  // Free stretches the person chose to rest in, and later stretches whose suggestions were opened (this session only).
+  const rested = new Set<string>();
+  const openGaps = new Set<string>();
   let workOpen = false;
   // Relay Forge's detailed views live inside the tab they belong to.
   let allMode: "list" | "table" | "notes" = "list";
@@ -871,27 +877,34 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const focus = pinned && !pending.has(pinned.id) && candidates.includes(pinned) ? pinned : candidates.find(q => !skipped.has(q.id)) ?? candidates[0] ?? null;
     const rest = candidates.filter(q => q !== focus).slice(0, 3);
     const agentBusy = quests().filter(q => q.assignee.type === "agent" && !needsDecision(q)).length;
+    const dateLine = el("p", { class: "a4-date" }, dateLabel.format(noon(today)), el("small", {}, weekdayLong.format(noon(today))));
+    const todays = (({ anytime, timed }) => [...anytime, ...timed])(dayPlan(port.quests(), today));
+    const summary = todays.length === 0 ? null : el("p", { class: "a4-summary" }, tx("今日 {done} / {total} 完了 · 予定 {time}", {
+      done: todays.filter(isDone).length, total: todays.length, time: minutesLabel(plannedMinutes(todays.filter(q => !isDone(q)))) }));
+    // The focus card and today's timeline share one screen: side by side on wide screens, stacked on phones.
+    const home = (...focusSide: (HTMLElement | null)[]) => el("div", { class: "a4-home" },
+      el("section", { class: "a4-view a4-now" }, el("div", {}, dateLine, summary), ...focusSide), todayTimeline());
     if (!focus) {
-      return el("section", { class: "a4-view a4-now" }, decisionNotice(),
+      return home(decisionNotice(),
         el("h1", { class: "a4-title", tabindex: -1 }, tx("今やることはありません")),
         el("p", { class: "a4-lead" }, tx("上の欄に、頭にあることを1つ書き出してみましょう。")));
     }
     const running = isWorking(focus);
     const actions = running
-      ? [button(tx("完了"), () => complete(focus), "primary"), button(tx("一時停止"), () => pause(focus))]
+      ? [timer(focus, true), button(tx("完了"), () => complete(focus), "primary"), button(tx("一時停止"), () => pause(focus), "link")]
       : [button(tx("始める"), () => start(focus), "primary"),
         candidates.length > 1 ? button(tx("別のにする"), () => { skipped.add(focus.id); if (skipped.size >= candidates.length) skipped.clear(); focusId = null; render(); }) : null,
         button(tx("明日にする"), () => update(focus, { ...plan(addDays(today, 1)), expectedUpdatedAt: focus.updatedAt }, tx("明日に移しました"), previousPlan(focus)), "link")];
-    return el("section", { class: "a4-view a4-now" },
+    return home(
       decisionNotice(),
       el("div", { class: "a4-focus", "data-running": String(running) },
         el("p", { class: "a4-eyebrow" }, running ? tx("続きから") : tx("次はこれ")),
         el("h1", { class: "a4-focus-title", tabindex: -1 }, focus.title),
         stepDraftFor === focus.id ? stepEditor(focus)
-          : focus.nextAction ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("次の一歩")), focus.nextAction, " ", button(tx("変える"), () => { stepDraftFor = focus.id; render(); }, "link"))
+          : focus.nextAction ? el("p", { class: "a4-step a4-step-box" }, el("span", { class: "a4-step-label" }, tx("次の一歩")), el("span", {}, focus.nextAction), button(tx("変える"), () => { stepDraftFor = focus.id; render(); }, "link"))
             : button(tx("次の一歩を書く（小さくてOK）"), () => { stepDraftFor = focus.id; render(); }, "link"),
         stepList(focus),
-        running ? timer(focus)
+        running ? null
           // A set estimate collapses to one line so the start button stays the obvious next move.
           : focus.estimatedMinutes > 0 && estimateFor !== focus.id
             ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("目安")), minutesLabel(focus.estimatedMinutes), " ", button(tx("変える"), () => { estimateFor = focus.id; render(); }, "link"))
@@ -1031,6 +1044,104 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         ...columns));
   }
 
+  const nowMinutes = () => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); };
+  const nowLine = (at: number) => el("li", { class: "a4-now-line" }, el("span", { class: "a4-slot-time" }, clock(at)), el("span", { class: "a4-now-label" }, tx("いま")));
+
+  /** Timed tasks sized by duration, with the current time and free stretches worth noticing (the plan view). */
+  function timelineSlots(timed: readonly Quest[], isToday: boolean): HTMLElement[] {
+    const at = nowMinutes();
+    const free = gaps(timed);
+    let nowShown = !isToday;
+    const slots: HTMLElement[] = [];
+    for (const quest of timed) {
+      const start = toMinutes(quest.scheduledTime), end = endOf(quest);
+      const gap = free.find(g => g.before === quest.id);
+      if (!nowShown && at < start) { slots.push(nowLine(at)); nowShown = true; }
+      if (gap) slots.push(el("li", { class: "a4-gap" }, el("span", { class: "a4-slot-time" }), el("span", { class: "a4-muted" }, tx("空き {time}。ひと息つけます。", { time: minutesLabel(gap.minutes) }))));
+      slots.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-len: ${Math.min(end - start, 180)}` },
+        el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
+        el("span", { class: "a4-slot-pill", "aria-hidden": "true" }),
+        rowText(quest, false),
+        checkButton(quest)));
+    }
+    if (!nowShown && timed.length > 0) slots.push(nowLine(at));
+    return slots;
+  }
+
+  /**
+   * A free stretch ahead today, offered as a choice: one inbox task that fits, or a rest. Only the next
+   * stretch shows its choices; later ones open on request so the same suggestion is not repeated.
+   */
+  function freeRow(gap: { start: number; minutes: number }, first: boolean): HTMLElement {
+    const today = port.today();
+    const key = `${today}:${gap.start}`;
+    const time = el("span", { class: "a4-slot-time" }, clock(gap.start));
+    const pill = el("span", { class: "a4-slot-pill", "aria-hidden": "true" });
+    if (rested.has(key)) return el("li", { class: "a4-free", "data-rest": "" }, time, pill, el("p", { class: "a4-free-head" }, tx("休憩 {time}", { time: minutesLabel(gap.minutes) })));
+    const head = el("p", { class: "a4-free-head" }, tx("{time} 空いています", { time: minutesLabel(gap.minutes) }));
+    if (!first && !openGaps.has(key)) {
+      const more = button(tx("提案を見る"), () => { openGaps.add(key); render(); }, "link");
+      return el("li", { class: "a4-free" }, time, pill, el("div", {}, head, more));
+    }
+    const fit = fitForGap(quests(), gap.minutes, today);
+    const chip = (label: string, minutes: string, dot: HTMLElement | null, action: () => void) => {
+      const node = el("button", { type: "button", class: "a4-suggest", disabled: busy }, dot, el("span", {}, label), minutes ? el("small", {}, minutes) : null);
+      node.addEventListener("click", action);
+      return node;
+    };
+    return el("li", { class: "a4-free" }, time, pill,
+      el("div", {}, head,
+        el("div", { class: "a4-suggests", role: "group", "aria-label": tx("空き時間にすること") },
+          fit ? chip(fit.title, minutesLabel(fit.estimatedMinutes), el("i", { class: "a4-suggest-dot", "data-tone": "self", "data-hue": hue(fit) }), () =>
+            update(fit, { ...plan(today), scheduledTime: clock(gap.start), expectedUpdatedAt: fit.updatedAt }, tx("{time}に「{title}」を入れました", { time: clock(gap.start), title: fit.title }), previousPlan(fit))) : null,
+          chip(tx("休む"), "", null, () => {
+            rested.add(key);
+            say(tx("休憩にしました"), () => { rested.delete(key); render(); });
+            render();
+          }))));
+  }
+
+  /** Today's rows for the Now screen: evenly spaced cards; duration shows in the pill's height. */
+  function homeRows(timed: readonly Quest[], isToday: boolean): HTMLElement[] {
+    const at = nowMinutes();
+    const free = isToday ? freeAhead(timed, at) : [];
+    let nowShown = !isToday;
+    const rows: HTMLElement[] = [];
+    for (const quest of timed) {
+      const start = toMinutes(quest.scheduledTime), end = endOf(quest);
+      if (!nowShown && at < start) { rows.push(nowLine(at)); nowShown = true; }
+      const gap = free.find(g => g.before === quest.id);
+      if (gap) rows.push(freeRow(gap, gap === free[0]));
+      rows.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-cap: ${Math.round(Math.max(40, Math.min(96, 24 + (end - start) * 0.6)))}px` },
+        el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
+        el("span", { class: "a4-slot-pill", "aria-hidden": "true" }),
+        el("div", { class: "a4-slot-card" }, rowText(quest, false), checkButton(quest))));
+    }
+    if (!nowShown && timed.length > 0) rows.push(nowLine(at));
+    return rows;
+  }
+
+  /** Today beside the focus card, with finished stretches more than an hour back folded away. */
+  function todayTimeline(): HTMLElement {
+    const today = port.today();
+    const day = dayPlan(port.quests(), today);
+    const cutoff = nowMinutes() - 60;
+    const earlier = day.timed.filter(q => isDone(q) && endOf(q) < cutoff);
+    const timed = day.timed.filter(q => !earlier.includes(q));
+    const fold = el("details", { class: "a4-earlier", open: earlierOpen },
+      el("summary", {}, tx("それより前（{count}）", { count: earlier.length })),
+      el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(earlier, false)));
+    fold.addEventListener("toggle", () => { earlierOpen = fold.open; });
+    return el("section", { class: "a4-today", "aria-labelledby": "a4-today-title" },
+      el("h2", { class: "a4-subtitle", id: "a4-today-title" }, tx("今日のタイムライン")),
+      day.anytime.length === 0 ? null : el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-row", "data-tone": tone(q), "data-hue": hue(q) }, el("div", { class: "a4-row-main" }, checkButton(q), rowText(q))))),
+      el("div", { class: "a4-today-panel" },
+        earlier.length === 0 ? null : fold,
+        timed.length === 0
+          ? el("p", { class: "a4-muted" }, tx("時刻の決まった予定はありません。"))
+          : el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(timed, true))));
+  }
+
   function planView(): HTMLElement {
     const today = port.today();
     const dayName = (date: string) => date === today ? tx("今日") : dayLabel.format(noon(date));
@@ -1058,25 +1169,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       return node;
     }));
 
-    // Timeline: tasks with a time, the current time, and free stretches worth noticing.
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    const free = gaps(day.timed);
-    let nowShown = planDate !== today;
-    const nowLine = () => el("li", { class: "a4-now-line" }, el("span", { class: "a4-slot-time" }, clock(nowMinutes)), el("span", { class: "a4-now-label" }, tx("いま")));
-    const slots: HTMLElement[] = [];
-    for (const quest of day.timed) {
-      const start = toMinutes(quest.scheduledTime), end = endOf(quest);
-      const gap = free.find(g => g.before === quest.id);
-      if (!nowShown && nowMinutes < start) { slots.push(nowLine()); nowShown = true; }
-      if (gap) slots.push(el("li", { class: "a4-gap" }, el("span", { class: "a4-slot-time" }), el("span", { class: "a4-muted" }, tx("空き {time}。ひと息つけます。", { time: minutesLabel(gap.minutes) }))));
-      slots.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-len: ${Math.min(end - start, 180)}` },
-        el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
-        el("span", { class: "a4-slot-pill", "aria-hidden": "true" }),
-        rowText(quest, false),
-        checkButton(quest)));
-    }
-    if (!nowShown && day.timed.length > 0) slots.push(nowLine());
+    const slots = timelineSlots(day.timed, planDate === today);
 
     // Undated work sits beside the day (below it on phones), one tap from being planned.
     const all = groups(quests(), today);
@@ -1556,7 +1649,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       }));
     const bloom = el("input", { type: "checkbox", checked: document.documentElement.hasAttribute("data-a4-palette") });
     bloom.addEventListener("change", () => {
-      if (bloom.checked) document.documentElement.setAttribute("data-a4-palette", "bloom"); else document.documentElement.removeAttribute("data-a4-palette");
+      if (bloom.checked) document.documentElement.setAttribute("data-a4-palette", "spine"); else document.documentElement.removeAttribute("data-a4-palette");
       store.set("a4-palette", bloom.checked ? null : "plain");
     });
     // Copy is resolved once at load, so a language change reloads the page.
@@ -1575,7 +1668,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("label", { class: "a4-option" }, cheerToggle, tx("完了したら紙吹雪でお祝いする")),
       el("label", { class: "a4-option" }, gameToggle, tx("ゲーム要素（レベル・XP）を表示する")),
       themes,
-      el("label", { class: "a4-option" }, bloom, tx("やわらかい色分け（背景のグラデーションとタスクごとの色）")),
+      el("label", { class: "a4-option" }, bloom, tx("やわらかい配色（タスクごとの色）")),
       mcpSection(),
       runtime ? el("section", { class: "a4-group" }, el("h2", { class: "a4-subtitle" }, tx("時間の記録")), embed(workUi.settings())) : null,
       el("p", {}, el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("Relay Forge（詳しい画面）を開く"))),

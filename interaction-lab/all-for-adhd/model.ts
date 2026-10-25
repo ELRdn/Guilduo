@@ -162,6 +162,25 @@ export function gaps(timed: readonly Quest[], min = 30): { start: number; minute
   return result;
 }
 
+/** Free stretches still ahead today: clipped to `now`, at least 15 minutes. */
+export function freeAhead(timed: readonly Quest[], now: number): { start: number; minutes: number; before: string }[] {
+  return gaps(timed, 1)
+    .map(gap => ({ ...gap, start: Math.max(gap.start, now), minutes: gap.start + gap.minutes - Math.max(gap.start, now) }))
+    .filter(gap => gap.minutes >= 15);
+}
+
+/**
+ * One inbox task worth offering for a free stretch: the person's own, undated, with an estimate that fits.
+ * Oldest first, so nothing lingers. Tasks without an estimate are never offered.
+ */
+export function fitForGap(quests: readonly Quest[], minutes: number, today: string): Quest | null {
+  const parents = new Set(quests.filter(isOpen).map(q => q.id));
+  return quests
+    .filter(q => isOpen(q) && q.kind !== "reward" && !isSettledRequest(q) && bucketOf(q, today) === "inbox" && !(q.parentQuestId && parents.has(q.parentQuestId))
+      && q.estimatedMinutes > 0 && q.estimatedMinutes <= minutes && blockers(q, quests).length === 0)
+    .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))[0] ?? null;
+}
+
 /** Monday-first week containing `date`. */
 export function weekOf(date: string): string[] {
   const weekday = (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7;
