@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Quest } from "../types/questforge.ts";
 import { setLocale } from "../i18n.ts";
-import { blockers, bucketOf, dayPlan, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes } from "../interaction-lab/all-for-adhd/model.ts";
+import { blockers, bucketOf, dayPlan, fitForGap, freeAhead, habitDays, proposalFor, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes, weekReview } from "../interaction-lab/all-for-adhd/model.ts";
 
 // The labels below are the Japanese source copy; CI runs in an English locale.
 setLocale("ja");
@@ -91,4 +91,60 @@ test("steps run in order: waiting steps and their parent are not offered as next
   assert.deepEqual(stepsOf(parent, list).map(q => q.id), ["first", "second"]);
   assert.deepEqual(nextCandidates(list, TODAY).map(q => q.id), ["first"]);
   assert.deepEqual(blockers(second, [parent, second, { ...first, done: true } as Quest]), []);
+});
+
+test("free stretches ahead are clipped to now and at least 15 minutes", () => {
+  const timed = [
+    quest("a", { scheduledDate: TODAY, scheduledTime: "09:00", estimatedMinutes: 30 }),
+    quest("b", { scheduledDate: TODAY, scheduledTime: "10:00", estimatedMinutes: 30 }),
+    quest("c", { scheduledDate: TODAY, scheduledTime: "10:40", estimatedMinutes: 20 }),
+    quest("d", { scheduledDate: TODAY, scheduledTime: "12:00", estimatedMinutes: 30 }),
+  ];
+  // 09:30–10:00 is past, 10:30–10:40 is too short, 11:00–12:00 starts at now (11:10).
+  assert.deepEqual(freeAhead(timed, 11 * 60 + 10), [{ start: 11 * 60 + 10, minutes: 50, before: "d" }]);
+});
+
+test("a free stretch is offered one undated task of mine that fits", () => {
+  const list = [
+    quest("too-long", { estimatedMinutes: 60 }),
+    quest("no-estimate"),
+    quest("agent", { owner: "agent", estimatedMinutes: 15 }),
+    quest("dated", { scheduledDate: TODAY, estimatedMinutes: 15 }),
+    quest("old", { estimatedMinutes: 15, createdAt: "2026-10-01T00:00:00Z" }),
+    quest("newer", { estimatedMinutes: 30, createdAt: "2026-10-05T00:00:00Z" }),
+    quest("due", { estimatedMinutes: 15, createdAt: "2026-09-01T00:00:00Z", dueDate: "2026-10-30" }),
+  ];
+  assert.equal(fitForGap(list.filter(q => q.id !== "old"), 30, TODAY)?.id, "newer");
+  assert.equal(fitForGap(list, 20, TODAY)?.id, "old");
+  assert.equal(fitForGap(list, 10, TODAY), null);
+});
+
+test("an Agent's proposal is offered only in the free stretch it fits", () => {
+  const proposal = (time: string, minutes: number, date = TODAY) => ({ agentId: "a", label: "Astra", date, time, minutes, note: "", createdAt: "" });
+  const fits = quest("fits", { proposal: proposal("14:00", 30) });
+  const gap = { start: 13 * 60 + 30, minutes: 150 };
+  assert.equal(proposalFor([fits], gap, TODAY), fits);
+  assert.equal(proposalFor([quest("long", { proposal: proposal("15:30", 60) })], gap, TODAY), null);
+  assert.equal(proposalFor([quest("early", { proposal: proposal("13:00", 15) })], gap, TODAY), null);
+  assert.equal(proposalFor([quest("tomorrow", { proposal: proposal("14:00", 30, "2026-10-19") })], gap, TODAY), null);
+  assert.equal(proposalFor([quest("done", { proposal: proposal("14:00", 30), done: true })], gap, TODAY), null);
+});
+
+test("habit dots fill the current streak ending on the last done day", () => {
+  const days = habitDays(quest("walk", { kind: "daily", lastCompletedDate: "2026-10-17", streak: 3 }), TODAY, 7);
+  assert.deepEqual(days, [false, false, false, true, true, true, false]);
+  assert.deepEqual(habitDays(quest("new", { kind: "daily" }), TODAY, 3), [false, false, false]);
+});
+
+test("the week review counts this week's finished, planned and moved work", () => {
+  // TODAY (2026-10-18) is a Sunday, so the week starts on 2026-10-12.
+  const review = weekReview([
+    quest("done", { done: true, completedAt: "2026-10-14T09:00:00Z", scheduledDate: "2026-10-14", estimatedMinutes: 30 }),
+    quest("old", { done: true, completedAt: "2026-10-05T09:00:00Z" }),
+    quest("daily", { kind: "daily", lastCompletedDate: TODAY, scheduledDate: "2026-10-01" }),
+    quest("planned", { scheduledDate: "2026-10-16", estimatedMinutes: 60 }),
+    quest("moved", { lastRolledOverDate: "2026-10-13" }),
+    quest("agent", { owner: "agent", done: true, completedAt: "2026-10-14T09:00:00Z" }),
+  ], TODAY);
+  assert.deepEqual(review, { done: 2, planned: 90, moved: 1 });
 });

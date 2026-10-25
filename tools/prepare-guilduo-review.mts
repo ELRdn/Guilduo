@@ -30,7 +30,7 @@ const scopeGroups: [string[], string[]][] = [
   [["agents:write"], ["link_agent", "unlink_agent"]],
   [["agents:read", "quests:write"], ["assign_quest_to_agent"]],
   [["quests:read"], ["list_today_quests", "list_quests", "list_human_requests", "get_quest", "get_quest_tree", "list_agent_handoffs"]],
-  [["quests:write"], ["request_human_review", "create_quest", "update_quest", "batch_update_quests", "batch_score_quests", "archive_quests", "link_external_record", "score_quest", "transition_quest_handoff"]],
+  [["quests:write"], ["request_human_review", "create_quest", "update_quest", "batch_update_quests", "batch_score_quests", "archive_quests", "link_external_record", "score_quest", "transition_quest_handoff", "propose_quest_slot"]],
   [["quests:read", "character:read"], ["get_daily_brief"]],
   [["quests:read", "events:read"], ["get_review_summary"]],
   [["character:read"], ["get_character_state"]],

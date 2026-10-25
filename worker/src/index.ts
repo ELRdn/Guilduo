@@ -20,6 +20,7 @@ import {
   listQuestPage,
   listQuests,
   patchQuest,
+  proposeQuestSlot,
   purgeManagedFocusLinks,
   scoreQuest,
   migrateState,
@@ -244,6 +245,7 @@ const QUEST_INPUT_PROPERTIES = {
   impact: { type: "string", enum: ["low", "medium", "high"] }, isBlockingOthers: { type: "boolean" },
   dependencyIds: { type: "array", items: { type: "string" }, maxItems: 20 },
   parentQuestId: { type: "string", maxLength: 120 },
+  icon: { type: "string", maxLength: 16, description: "One emoji shown before the title; empty string removes it. An Agent cannot replace an emoji the person chose." },
   handoff: {
     type: "object",
     properties: {
@@ -520,6 +522,7 @@ const MCP_TOOLS = [
   { name: "get_agent_link", title: "Get Agent Link", description: "Check whether the current OAuth MCP connection is linked to a Guilduo Agent and return safe connection metadata. Requires the agents:read OAuth scope.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "link_agent", title: "Link MCP Connection to Agent", description: "Link or intentionally relink the current OAuth MCP connection to one of the authenticated user's active Agents. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", required: ["agentId"], properties: { agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" } }, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "unlink_agent", title: "Unlink MCP Connection", description: "Remove the Agent association from the current OAuth MCP connection without deleting the Agent or revoking the OAuth client grant. Requires the agents:write OAuth scope; an agents:read-only grant must be re-authorized and is never escalated automatically.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, outputSchema: AGENT_LINK_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
+  { name: "propose_quest_slot", title: "Propose Quest Slot", description: "Preview or propose a time for one Quest. The person sees it in the matching free slot and accepts or declines; nothing is scheduled until then. Requires a linked Agent. Execution requires the Quest's current updatedAt value.", inputSchema: { type: "object", required: ["questId", "date", "time", "minutes"], properties: { questId: { type: "string" }, date: { type: "string", format: "date" }, time: QUEST_INPUT_PROPERTIES.scheduledTime, minutes: { type: "integer", minimum: 5, maximum: 1440 }, note: { type: "string", maxLength: 180 }, expectedUpdatedAt: { type: "string" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: AGENT_ASSIGNMENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "assign_quest_to_agent", title: "Assign Quest to Agent", description: "Preview or assign one Quest to a registered Agent. Execution requires the Quest's current updatedAt value.", inputSchema: { type: "object", required: ["questId", "agentId"], properties: { questId: { type: "string" }, agentId: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" }, expectedUpdatedAt: { type: "string" }, handoffState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: AGENT_ASSIGNMENT_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "transition_quest_handoff", title: "Transition Quest Handoff", description: "Preview or transition an agent-assigned Quest between none, ready, working, blocked, review_required, and accepted.", inputSchema: { type: "object", required: ["questId", "state"], properties: { questId: { type: "string" }, state: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, expectedState: { type: "string", enum: ["none", "ready", "working", "blocked", "review_required", "accepted"] }, note: { type: "string", maxLength: 500 }, blockedReason: { type: "string", maxLength: 500 }, artifactUrl: { type: "string", format: "uri" }, dryRun: { type: "boolean", default: true } }, additionalProperties: false }, outputSchema: HANDOFF_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate Guilduo activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
@@ -1757,6 +1760,15 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
       linked: false,
       unlinked: Boolean(previous && !previous.revokedAt),
     };
+  }
+  if (name === "propose_quest_slot") {
+    assertScope(identity.scopes, "quests:write");
+    if (!identity.agent) throw new DomainError(403, "agent_required", "Link this client to a registered Agent before proposing a time.");
+    const agent = { id: identity.agent.agentId, label: identity.agent.displayName };
+    const questId = requiredString(args.questId, "questId");
+    if (args.dryRun !== false) return { dryRun: true, ...asRecord(proposeQuestSlot(structuredClone(await stateFor(env, identity)), questId, asDomainInput(args), { source: "mcp", agent })) };
+    if (!args.expectedUpdatedAt) throw new DomainError(400, "expected_updated_at_required", "expectedUpdatedAt is required when executing a proposal.");
+    return { dryRun: false, ...await mutateAndNotify(env, identity, context, (state) => proposeQuestSlot(state, questId, asDomainInput(args), { source: "mcp", agent })) };
   }
   if (name === "assign_quest_to_agent") {
     assertScope(identity.scopes, "agents:read");

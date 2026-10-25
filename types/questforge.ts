@@ -14,6 +14,20 @@ export interface QuestRequester {
   label: string;
 }
 
+/** Who chose a Quest's emoji; an Agent may only replace one it or the dictionary chose. */
+export type QuestIconSource = "" | "auto" | "user" | "agent";
+
+/** An Agent's "how about this time?" for a Quest. Accepting moves it into the schedule and clears it. */
+export interface QuestProposal {
+  agentId: string;
+  label: string;
+  date: string;
+  time: string;
+  minutes: number;
+  note: string;
+  createdAt: string;
+}
+
 export interface HumanRequest {
   sourceQuestId: string;
   requestKey: string;
@@ -99,6 +113,9 @@ export interface Quest {
   done: boolean;
   requester?: QuestRequester | null;
   humanRequest?: HumanRequest | null;
+  icon?: string;
+  iconSource?: QuestIconSource;
+  proposal?: QuestProposal | null;
   negativeOnly?: boolean;
   assignee: QuestAssignee;
   handoff: HandoffDetails;

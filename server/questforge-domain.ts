@@ -17,6 +17,8 @@ import type {
   QuestForgeState,
   QuestKind,
   QuestRepeat,
+  QuestIconSource,
+  QuestProposal,
 } from "../types/questforge.ts";
 import { isQuestKind } from "../types/questforge.ts";
 import type { QuestRequester } from "../types/questforge.ts";
@@ -69,6 +71,9 @@ export interface DomainInput extends DomainRecord {
   isBlockingOthers?: boolean;
   dependencyIds?: string[];
   parentQuestId?: string;
+  icon?: string;
+  iconSource?: QuestIconSource;
+  proposal?: QuestProposal | null;
   assignee?: QuestAssignee;
   handoff?: DomainRecord | HandoffDetails;
   questIds?: string[];
@@ -201,6 +206,7 @@ const PLANNING_STATES = new Set(["scheduled", "backlog"]);
 const LIFECYCLE_STATES = new Set(["active", "completed", "archived"]);
 const PLANNING_MODES = new Set(["on_date", "until_due"]);
 const IMPACTS = new Set(["low", "medium", "high"]);
+const ICON_SOURCES = new Set(["", "auto", "user", "agent"]);
 const QUEST_VIEWS = new Set(["today", "week", "future", "backlog", "completed", "archive", "all"]);
 const ASSIGNEE_TYPES = new Set(["self", "human", "agent"]);
 const HANDOFF_STATES: ReadonlySet<string> = new Set(["none", "ready", "working", "blocked", "review_required", "accepted"]);
@@ -267,6 +273,20 @@ function validDate(value: string): boolean {
 
 function validTime(value: string): boolean {
   return !value || /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+/** One grapheme (an emoji with its modifiers) and at most 16 UTF-16 units. */
+function validIcon(value: string): boolean {
+  return value === "" || (value.length <= 16 && [...new Intl.Segmenter().segment(value)].length === 1 && !/[\p{L}\p{N}\s]/u.test(value));
+}
+
+function normalizeProposal(value: unknown): QuestProposal | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const date = String(raw.date || ""), time = String(raw.time || ""), minutes = nonNegativeInteger(raw.minutes);
+  if (!date || !validDate(date) || !validTime(time) || minutes < 5 || minutes > 1440 || !raw.agentId) return null;
+  return { agentId: String(raw.agentId).slice(0, 120), label: String(raw.label || raw.agentId).slice(0, 80), date, time, minutes,
+    note: String(raw.note || "").slice(0, 180), createdAt: String(raw.createdAt || "") };
 }
 
 function nonNegativeInteger(value: unknown, fallback = 0): number {
@@ -428,6 +448,9 @@ function normalizeQuest(task: RawQuest, index: number, previousVersion: number, 
     assignee: normalizeAssignee(task.assignee),
     requester: normalizeRequester(task.requester),
     humanRequest: normalizeHumanRequest(task.humanRequest),
+    icon: validIcon(String(task.icon || "")) ? String(task.icon || "") : "",
+    iconSource: validIcon(String(task.icon || "")) && task.icon ? setFromSet<QuestIconSource>(ICON_SOURCES, task.iconSource, "user") : "",
+    proposal: normalizeProposal(task.proposal),
     handoff: normalizeHandoff(task.handoff),
     assignmentReadyFor: String(task.assignmentReadyFor || "").slice(0, 240),
     createdAt,
@@ -655,6 +678,20 @@ function validateQuestInput(input: unknown, partial = false): ValidatedQuestInpu
     nextRecord[key === "actualMinutes" ? "manualActualMinutes" : key] = value;
   }
   if (Object.hasOwn(body, "isBlockingOthers")) next.isBlockingOthers = Boolean(body.isBlockingOthers);
+  if (Object.hasOwn(body, "icon")) {
+    const value = String(body.icon ?? "").trim();
+    if (!validIcon(value)) throw new DomainError(400, "invalid_icon", "icon must be one emoji (one grapheme, at most 16 UTF-16 units).");
+    next.icon = value;
+  }
+  if (Object.hasOwn(body, "iconSource")) {
+    if (typeof body.iconSource !== "string" || !ICON_SOURCES.has(body.iconSource)) throw new DomainError(400, "invalid_iconSource", "Unknown iconSource value.");
+    next.iconSource = body.iconSource as QuestIconSource;
+  }
+  // Proposals are written by propose_quest_slot; a client may only clear one (accept or decline).
+  if (Object.hasOwn(body, "proposal")) {
+    if (body.proposal !== null) throw new DomainError(400, "proposal_readonly", "Use propose_quest_slot to propose a time; proposal can only be cleared with null.");
+    next.proposal = null;
+  }
   if (Object.hasOwn(body, "assignee")) {
     if (!body.assignee || typeof body.assignee !== "object" || Array.isArray(body.assignee)) {
       throw new DomainError(400, "invalid_assignee", "assignee must be an object.");
@@ -944,6 +981,7 @@ export function createQuest(state: QuestForgeState, input: unknown, context: Dom
     completionCriteria: clean.completionCriteria || "", nextAction: clean.nextAction || "", impact: clean.impact || "medium",
     isBlockingOthers: Boolean(clean.isBlockingOthers), rolloverCount: 0, dependencyIds: clean.dependencyIds || [],
     parentQuestId: clean.parentQuestId || "",
+    icon: clean.icon || "", iconSource: clean.icon ? iconSourceFor(clean, context) : "", proposal: null,
     completedAt: "", archivedAt: "", externalLinks: [], createdAt: now, updatedAt: now,
     assignee: clean.assignee || { type: "self", id: "self", label: "自分", handoffState: "none" },
     requester: normalizeRequester(context.requester),
@@ -989,6 +1027,12 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
   if (clean.parentQuestId !== undefined) validateParentQuest(state, questId, clean.parentQuestId);
   if (clean.assignee) validateHandoffPatch(quest, clean.assignee);
   if (clean.handoff) clean.handoff = normalizeHandoff({ ...quest.handoff, ...(input as DomainInput).handoff });
+  if (clean.icon !== undefined) {
+    if (context.source === "mcp" && quest.iconSource === "user" && clean.icon !== quest.icon) {
+      throw new DomainError(409, "icon_set_by_user", "The person chose this emoji; an Agent cannot replace it.");
+    }
+    clean.iconSource = clean.icon ? iconSourceFor(clean, context) : "";
+  } else delete clean.iconSource;
   const previousScheduledDate = quest.scheduledDate;
   const previousAssignee = clone(quest.assignee);
   Object.assign(quest, clean);
@@ -1047,6 +1091,33 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
   const output = questOutput(quest, state);
   if (context.returnEvent) return { quest: output, event, events };
   return output;
+}
+
+/** Agents always write "agent"; the web says whether the dictionary or the person chose. */
+function iconSourceFor(clean: ValidatedQuestInput, context: DomainContext): QuestIconSource {
+  if (context.source === "mcp") return "agent";
+  return clean.iconSource === "auto" ? "auto" : "user";
+}
+
+/** An Agent proposes a slot for one Quest; the person accepts (schedules it) or declines (clears it). */
+export function proposeQuestSlot(state: QuestForgeState, questId: string, input: DomainInput, context: DomainContext & { agent: { id: string; label: string } }): QuestMutationResult {
+  ensureState(state);
+  const quest = state.tasks.find((item) => item.id === questId);
+  if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
+  assertQuestVersion(quest, input.expectedUpdatedAt);
+  const date = String(input.date || ""), time = String(input.time || "");
+  const minutes = Number(input.minutes);
+  if (!date || !validDate(date)) throw new DomainError(400, "invalid_date", "date must use YYYY-MM-DD.");
+  if (!time || !validTime(time)) throw new DomainError(400, "invalid_time", "time must use HH:MM.");
+  if (!Number.isInteger(minutes) || minutes < 5 || minutes > 1440) throw new DomainError(400, "invalid_minutes", "minutes must be an integer from 5 to 1440.");
+  const note = String(input.note || "");
+  if (note.length > 180) throw new DomainError(400, "invalid_note", "note must contain at most 180 characters.");
+  if (quest.lifecycleState !== "active" || quest.done) throw new DomainError(409, "quest_not_open", "Only an open Quest can receive a proposal.");
+  quest.proposal = { agentId: context.agent.id, label: context.agent.label, date, time, minutes, note, createdAt: new Date().toISOString() };
+  quest.updatedAt = nextQuestTimestamp(quest.updatedAt);
+  const event = appendEvent(state, "quest.updated", quest, { fields: ["proposal"] }, context.source || "mcp");
+  touch(state);
+  return { quest: questOutput(quest, state), event, events: [event] };
 }
 
 export function batchUpdateQuests(state: QuestForgeState, input: DomainInput, context: DomainContext = {}): BatchQuestResult {

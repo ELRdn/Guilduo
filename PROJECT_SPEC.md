@@ -161,6 +161,8 @@ flowchart LR
 - 保管済みQuestは削除しない。復元は`active`へ戻し、履歴を保持する。
 - 完了報酬、XP、Gem、MPは同一Questの同一回に一度だけ付与する。
 - メモの有無はBattle対象判定に使わない。`habit`、`daily`、`todo`のみが対象である。
+- `icon`は絵文字1つ（書記素1つ、16 UTF-16単位まで、文字・数字は不可）で、既定は空。`iconSource`は`auto`（辞書）/`user`（本人）/`agent`を記録する。MCPからの書き込みは常に`agent`になり、本人が選んだ絵文字（`user`）をAgentは置き換えられない（409 `icon_set_by_user`）。
+- `proposal`はAgentが置いた「この時間にどうですか」（Agent ID・表示名・日付・時刻・5〜1440分・一言）で、1Questに1件。作成はMCPの`propose_quest_slot`（dry-run既定、実行は`expectedUpdatedAt`とAgentの紐付けが必須）だけで行う。それだけでは予定に入れない。本人が受けると日付と時刻を予定へ移し、受けても断っても`null`に戻す。通常のPATCHは`null`への消去だけを受け付ける。
 
 ### 4.2 Quest Tree
 

@@ -179,7 +179,7 @@ function nameCategory(name: string): string {
   if (/^(get_party|create_party|invite_party_member|accept_party_invite|leave_party|remove_party_member)$/.test(name)) return "party";
   if (/^(get_character_state|buy_reward)$/.test(name)) return "character";
   if (/^(list_today_quests|list_quests|create_quest|update_quest|batch_.*_quests?|archive_quests|link_external_record|score_quest|get_quest(?:_tree)?|get_calendar_schedule|convert_calendar_event_to_quest)$/.test(name)) return "quest-management";
-  if (/^(list_agent_handoffs|list_registered_agents|get_current_agent_context|get_agent_link|link_agent|unlink_agent|assign_quest_to_agent|transition_quest_handoff)$/.test(name)) return "agent-relay";
+  if (/^(list_agent_handoffs|list_registered_agents|get_current_agent_context|get_agent_link|link_agent|unlink_agent|assign_quest_to_agent|transition_quest_handoff|propose_quest_slot)$/.test(name)) return "agent-relay";
   if (/^(list_integrations|.*toggl.*|preview_external_sync|sync_external_service)$/.test(name)) return "connections-sync";
   if (/^(get_my_profile|find_profile_by_handle|update_profile|list_friends|list_friend_requests|send_friend_request|respond_friend_request|remove_friend|get_party|create_party|invite_party_member|accept_party_invite|leave_party|remove_party_member)$/.test(name)) return "profile-social";
   if (/^(get_character_state|buy_reward|get_battle_session|battle_command)$/.test(name)) return "battle-rewards";

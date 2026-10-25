@@ -17,7 +17,9 @@ import { productivityWorkspace } from "../relay-forge/screens/productivity.ts";
 import { createBillingUi } from "../relay-forge/screens/billing.ts";
 import { createAnalyticsUi } from "../relay-forge/screens/analytics.ts";
 import { forgeScreens, type ForgeScreen } from "./forge.ts";
-import { addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, gaps, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
+import { parseCapture, isBig } from "./capture.ts";
+import { iconChoices, iconFor } from "./emoji.ts";
+import { addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, fitForGap, freeAhead, gaps, habitDays, proposalFor, weekReview, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
 
 export interface AllForAgent {
   readonly id: string;
@@ -103,6 +105,8 @@ const RELAY_FORGE_URL = location.pathname.startsWith("/interaction-lab/") ? "../
 const dayLabel = new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric", weekday: "short", timeZone: "UTC" });
 const weekdayLabel = new Intl.DateTimeFormat(LOCALE, { weekday: "short", timeZone: "UTC" });
 const monthLabel = new Intl.DateTimeFormat(LOCALE, { year: "numeric", month: "long", timeZone: "UTC" });
+const dateLabel = new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric", timeZone: "UTC" });
+const weekdayLong = new Intl.DateTimeFormat(LOCALE, { weekday: "long", timeZone: "UTC" });
 const shortDateLabel = new Intl.DateTimeFormat(LOCALE, { month: "numeric", day: "numeric", timeZone: "UTC" });
 const noon = (date: string) => new Date(`${date}T12:00:00Z`);
 const shortDate = (date: string) => shortDateLabel.format(noon(date));
@@ -147,7 +151,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let stepDraftFor: string | null = null;
   let estimateFor: string | null = null;
   let afterOpen = false;
+  let earlierOpen = false;
+  // Free stretches the person chose to rest in, and later stretches whose suggestions were opened (this session only).
+  const rested = new Set<string>();
+  const openGaps = new Set<string>();
   let workOpen = false;
+  // The Now card's task, for the S shortcut.
+  let focusQuest: Quest | null = null;
   // Relay Forge's detailed views live inside the tab they belong to.
   let allMode: "list" | "table" | "notes" = "list";
   let busy = false;
@@ -210,7 +220,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const nav = el("nav", { class: "a4-tabs", "aria-label": tx("画面") });
   const captureInput = el("input", { class: "a4-capture-input", type: "text", name: "title", placeholder: tx("思いついたら書く"), "aria-label": tx("やることを書き出す"), autocomplete: "off", enterkeyhint: "done", maxlength: 200 });
   const captureToday = el("button", { type: "button", class: "a4-chip", "aria-pressed": "false" }, tx("今日やる"));
-  const captureForm = el("form", { class: "a4-capture" }, captureInput, captureToday, el("button", { type: "submit", class: "a4-button" }, tx("追加")));
+  const captureParse = el("p", { class: "a4-parse", id: "a4-parse", "aria-live": "polite" });
+  captureInput.setAttribute("aria-describedby", "a4-parse");
+  const captureForm = el("form", { class: "a4-capture" }, captureInput, captureToday, el("button", { type: "submit", class: "a4-button" }, tx("追加")), captureParse);
   const header = el("header", { class: "a4-top" },
     el("span", { class: "a4-brand" }, "Guilduo"),
     captureForm,
@@ -220,26 +232,55 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   replaceChildren(root, el("div", { class: "a4-app" }, banner, header, main, dockHost, toast));
 
   captureToday.addEventListener("click", () => captureToday.setAttribute("aria-pressed", String(captureToday.getAttribute("aria-pressed") !== "true")));
+  // A dated line wins over the "今日やる" toggle; time alone means today.
+  const readCapture = () => {
+    const parsed = parseCapture(captureInput.value, port.today(), LOCALE);
+    const date = parsed.date || (parsed.time || captureToday.getAttribute("aria-pressed") === "true" ? port.today() : "");
+    return { ...parsed, date };
+  };
+  const paintParse = () => {
+    const parsed = readCapture();
+    const read = parsed.date !== (captureToday.getAttribute("aria-pressed") === "true" ? port.today() : "") || parsed.time || parsed.minutes || parsed.tags.length > 0;
+    if (!captureInput.value.trim() || !read) { captureParse.textContent = ""; return; }
+    const day = !parsed.date ? tx("受け箱") : parsed.date === port.today() ? tx("今日") : parsed.date === addDays(port.today(), 1) ? tx("明日") : dayLabel.format(noon(parsed.date));
+    const when = parsed.time ? `${parsed.time}${parsed.minutes ? `–${clock(toMinutes(parsed.time) + parsed.minutes)}` : ""}` : "";
+    replaceChildren(captureParse, iconFor(parsed.title) ? `${iconFor(parsed.title)} ` : "", el("b", {}, parsed.title), " · ",
+      [day, when, parsed.minutes ? tx("目安 {time}", { time: minutesLabel(parsed.minutes) }) : "", ...parsed.tags.map((tag: string) => `#${tag}`)].filter(Boolean).join(" · "));
+  };
+  captureInput.addEventListener("input", paintParse);
+  captureToday.addEventListener("click", paintParse);
   captureForm.addEventListener("submit", event => {
     event.preventDefault();
-    const title = captureInput.value.trim();
-    if (!title || busy) return;
-    const today = captureToday.getAttribute("aria-pressed") === "true";
+    if (!captureInput.value.trim() || busy) return;
+    const parsed = readCapture();
+    const icon = iconFor(parsed.title);
     void run(async () => {
-      await port.create({
-        kind: "todo", title, notes: "", difficulty: "medium", impact: "medium", lifecycleState: "active",
-        nextAction: "", estimatedMinutes: 0, dueDate: "",
-        scheduledDate: today ? port.today() : "", scheduledTime: "", planningMode: "on_date", planningState: today ? "scheduled" : "backlog",
+      const created = await port.create({
+        kind: "todo", title: parsed.title.slice(0, 80), notes: "", difficulty: "medium", impact: "medium", lifecycleState: "active",
+        nextAction: "", estimatedMinutes: parsed.minutes, dueDate: "", tags: parsed.tags, icon, iconSource: icon ? "auto" : "",
+        scheduledDate: parsed.date, scheduledTime: parsed.time, planningMode: "on_date", planningState: parsed.date ? "scheduled" : "backlog",
       });
       captureInput.value = "";
-      say(today ? tx("今日のやることに追加しました") : tx("受け箱に追加しました"));
+      paintParse();
+      const message = !parsed.date ? tx("受け箱に追加しました") : parsed.date === port.today() ? tx("今日のやることに追加しました") : tx("{day}に追加しました", { day: dayLabel.format(noon(parsed.date)) });
+      // Big work is easier to start in steps; one tap asks an Agent to split it through the usual handoff.
+      const agent = port.agents().find(item => item.active);
+      if (agent && isBig(parsed.title, parsed.minutes)) say(message, () => askToSplit(created, agent), tx("{name}にステップに分けてもらう", { name: agent.name }));
+      else say(message);
     }, tx("追加できませんでした。入力は残しています。"));
   });
 
-  function say(message: string, undo?: () => void): void {
+  function askToSplit(quest: Quest, agent: AllForAgent): void {
+    update(quest, {
+      assignee: { type: "agent", id: agent.id, label: agent.name, handoffState: agent.startState || "ready" },
+      handoff: { ...quest.handoff, note: tx("ステップに分けて、各ステップに目安と絵文字を付けてください。終わったら私に戻してください。") },
+    }, tx("{name} に渡しました", { name: agent.name }));
+  }
+
+  function say(message: string, undo?: () => void, actionLabel = tx("元に戻す")): void {
     window.clearTimeout(toastTimer);
     replaceChildren(toast, el("span", {}, message), undo ? (() => {
-      const button = el("button", { type: "button", class: "a4-link" }, tx("元に戻す"));
+      const button = el("button", { type: "button", class: "a4-link" }, actionLabel);
       button.addEventListener("click", () => { undo(); toast.hidden = true; });
       return button;
     })() : null);
@@ -261,6 +302,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       const saved = await port.update(quest, patch);
       say(message, revert ? () => { void run(async () => { await port.update(saved, revert); }, tx("元に戻せませんでした")); } : undefined);
     }, tx("保存できませんでした。もう一度試してください。"));
+  }
+
+  function acceptProposal(quest: Quest): void {
+    const proposal = quest.proposal;
+    if (!proposal) return;
+    update(quest, { scheduledDate: proposal.date, scheduledTime: proposal.time, estimatedMinutes: quest.estimatedMinutes || proposal.minutes, planningState: "scheduled", planningMode: "on_date", proposal: null, expectedUpdatedAt: quest.updatedAt },
+      tx("{time}に「{title}」を入れました", { time: proposal.time, title: quest.title }), previousPlan(quest));
   }
 
   function complete(quest: Quest): void {
@@ -397,6 +445,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     return isWorking(quest) ? "working" : "self";
   }
 
+  const recentIcons = () => (store.get("a4-icons") ?? "").split(" ").filter(Boolean);
+  /** The Quest's emoji in a pastel circle of its colour; without one the colour dot stands in. Decorative: the title is what is read. */
+  const iconCircle = (quest: Quest, size: "" | "lg" | "sm" = "") => el("span", { class: size ? `a4-emoji a4-emoji-${size}` : "a4-emoji",
+    "data-tone": tone(quest), "data-hue": hue(quest), "data-empty": String(!quest.icon), "aria-hidden": "true" }, quest.icon ?? "");
+
   function checkButton(quest: Quest): HTMLElement {
     if (isDone(quest)) return el("span", { class: "a4-check", "data-done": "true", role: "img", "aria-label": tx("完了") });
     // Only the person's own tasks can be ticked off here; others show no dead control.
@@ -407,7 +460,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   function titleButton(quest: Quest): HTMLElement {
-    const node = el("button", { type: "button", class: "a4-row-title", "aria-haspopup": "dialog", "data-done": String(isDone(quest)) }, quest.title);
+    const node = el("button", { type: "button", class: "a4-row-title", "aria-haspopup": "dialog", "data-done": String(isDone(quest)), "data-quest-id": quest.id }, quest.title);
     node.addEventListener("click", () => openSheet(quest));
     return node;
   }
@@ -432,7 +485,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       : bucket === "decision" ? button(tx("確認する"), () => { decisionId = quest.id; go("guild"); }, "link") : null;
     const steps = openSteps(quest);
     const next = steps.find(step => blockers(step, port.quests()).length === 0);
-    return el("li", { class: "a4-row", "data-bucket": bucket }, el("div", { class: "a4-row-main" }, checkButton(quest), rowText(quest), quick),
+    return el("li", { class: "a4-row", "data-bucket": bucket }, el("div", { class: "a4-row-main" }, checkButton(quest), iconCircle(quest), rowText(quest), quick),
       steps.length === 0 ? null : (() => {
         const fold = el("details", { class: "a4-row-steps", open: openFolds.has(quest.id) },
           el("summary", {}, (next ? tx("ステップ（残り {count}）· 次は「{title}」", { count: steps.length, title: shortTitle(next.title) }) : tx("ステップ（残り {count}）", { count: steps.length }))),
@@ -648,6 +701,25 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       return node;
     };
     const title = line({ class: "a4-sheet-title", name: "title", required: true, maxlength: 200, "aria-label": tx("やること") }, quest.title);
+    let icon = quest.icon ?? "";
+    let iconTouched = false;
+    const iconButton = el("button", { type: "button", class: "a4-emoji a4-emoji-lg a4-emoji-pick", "data-tone": tone(quest), "data-hue": hue(quest), "aria-expanded": "false", "aria-label": tx("絵文字を変える") });
+    const iconPane = el("div", { class: "a4-sheet-pane a4-icon-pane", role: "group", "aria-label": tx("絵文字"), hidden: true });
+    const showIcons = (open: boolean) => { iconPane.hidden = !open; iconButton.setAttribute("aria-expanded", String(open)); if (open) paintIcon(); };
+    const pickIcon = (value: string) => { icon = value; iconTouched = true; showIcons(false); paintIcon(); iconButton.focus(); };
+    function paintIcon(): void {
+      iconButton.textContent = icon;
+      iconButton.dataset.empty = String(!icon);
+      if (iconPane.hidden) return;
+      const choice = (value: string, label: string) => {
+        const node = el("button", { type: "button", class: value ? "a4-chip a4-icon-choice" : "a4-chip", "aria-pressed": String(value === icon) }, label);
+        node.addEventListener("click", () => pickIcon(value));
+        return node;
+      };
+      replaceChildren(iconPane, ...iconChoices(title.value, recentIcons()).map(value => choice(value, value)), choice("", tx("なし")));
+    }
+    iconButton.addEventListener("click", () => showIcons(iconPane.hidden === true));
+    paintIcon();
     const step = line({ class: "a4-sheet-next", name: "nextAction", placeholder: tx("次の一歩：最初の1分でできること"), "aria-label": tx("次の一歩"), maxlength: 180 }, quest.nextAction);
     const date = el("input", { class: "a4-input", type: "date", name: "scheduledDate", value: quest.scheduledDate, "aria-label": tx("日付") });
     const time = el("input", { class: "a4-input", type: "time", name: "scheduledTime", value: quest.scheduledTime, step: 300, "aria-label": tx("時刻") });
@@ -771,7 +843,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
     const relay = relayEditor(quest);
     const form = el("form", { class: "a4-sheet-form", id: "a4-sheet-form" },
-      title, step,
+      el("div", { class: "a4-sheet-titlerow" }, iconButton, title), iconPane, step,
       el("div", { class: "a4-chips a4-sheet-chips" }, chips.date, chips.time, chips.estimate, chips.due, doneChip, memoChip),
       ...Object.values(panes), done, memo);
 
@@ -800,6 +872,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("div", { class: "a4-sheet-head" },
         parent ? button(tx("← 「{title}」の一部", { title: shortTitle(parent.title) }), () => openSheet(parent), "link") : el("h2", { id: "a4-sheet-title", class: "a4-eyebrow" }, tx("詳しく")), close),
       form,
+      quest.proposal ? (proposal => el("section", { class: "a4-group a4-proposal" },
+        el("h3", { class: "a4-step-label" }, tx("{name}の提案", { name: proposal.label })),
+        el("p", { class: "a4-proposal-when" }, `${shortDay(proposal.date)} ${proposal.time}–${clock(toMinutes(proposal.time) + proposal.minutes)}`, proposal.note ? el("span", { class: "a4-meta" }, proposal.note) : null),
+        el("div", { class: "a4-actions" },
+          button(tx("この時間に入れる"), () => { dialog.close(); acceptProposal(quest); }),
+          button(tx("断る"), () => { dialog.close(); update(quest, { proposal: null, expectedUpdatedAt: quest.updatedAt }, tx("提案を断りました")); }, "link"))))(quest.proposal) : null,
       depList,
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, tx("担当")), relay.node),
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, tx("小さなステップ")), steps, mine ? stepForm : null),
@@ -823,6 +901,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       set("notes", notes.value);
       if ((current.completionCriteria ?? "") !== criteria.value.trim()) patch.completionCriteria = criteria.value.trim();
       set("estimatedMinutes", estimate);
+      if (iconTouched && icon !== (current.icon ?? "")) {
+        Object.assign(patch, { icon, iconSource: icon ? "user" : "" });
+        if (icon) store.set("a4-icons", [icon, ...recentIcons().filter(item => item !== icon)].slice(0, 8).join(" "));
+      }
       set("dueDate", due.value);
       const legs = relay.legs();
       const handOver = relay.changed();
@@ -869,29 +951,37 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const candidates = nextCandidates(quests(), today);
     const pinned = byId(focusId);
     const focus = pinned && !pending.has(pinned.id) && candidates.includes(pinned) ? pinned : candidates.find(q => !skipped.has(q.id)) ?? candidates[0] ?? null;
+    focusQuest = focus;
     const rest = candidates.filter(q => q !== focus).slice(0, 3);
     const agentBusy = quests().filter(q => q.assignee.type === "agent" && !needsDecision(q)).length;
+    const dateLine = el("p", { class: "a4-date" }, dateLabel.format(noon(today)), el("small", {}, weekdayLong.format(noon(today))));
+    const todays = (({ anytime, timed }) => [...anytime, ...timed])(dayPlan(port.quests(), today));
+    const summary = todays.length === 0 ? null : el("p", { class: "a4-summary" }, tx("今日 {done} / {total} 完了 · 予定 {time}", {
+      done: todays.filter(isDone).length, total: todays.length, time: minutesLabel(plannedMinutes(todays.filter(q => !isDone(q)))) }));
+    // The focus card and today's timeline share one screen: side by side on wide screens, stacked on phones.
+    const home = (...focusSide: (HTMLElement | null)[]) => el("div", { class: "a4-home" },
+      el("section", { class: "a4-view a4-now" }, el("div", {}, dateLine, summary), ...focusSide), todayTimeline());
     if (!focus) {
-      return el("section", { class: "a4-view a4-now" }, decisionNotice(),
+      return home(decisionNotice(),
         el("h1", { class: "a4-title", tabindex: -1 }, tx("今やることはありません")),
         el("p", { class: "a4-lead" }, tx("上の欄に、頭にあることを1つ書き出してみましょう。")));
     }
     const running = isWorking(focus);
     const actions = running
-      ? [button(tx("完了"), () => complete(focus), "primary"), button(tx("一時停止"), () => pause(focus))]
+      ? [timer(focus, true), button(tx("完了"), () => complete(focus), "primary"), button(tx("一時停止"), () => pause(focus), "link")]
       : [button(tx("始める"), () => start(focus), "primary"),
         candidates.length > 1 ? button(tx("別のにする"), () => { skipped.add(focus.id); if (skipped.size >= candidates.length) skipped.clear(); focusId = null; render(); }) : null,
         button(tx("明日にする"), () => update(focus, { ...plan(addDays(today, 1)), expectedUpdatedAt: focus.updatedAt }, tx("明日に移しました"), previousPlan(focus)), "link")];
-    return el("section", { class: "a4-view a4-now" },
+    return home(
       decisionNotice(),
       el("div", { class: "a4-focus", "data-running": String(running) },
-        el("p", { class: "a4-eyebrow" }, running ? tx("続きから") : tx("次はこれ")),
+        el("div", { class: "a4-focus-head" }, iconCircle(focus, "lg"), el("p", { class: "a4-eyebrow" }, running ? tx("続きから") : tx("次はこれ"))),
         el("h1", { class: "a4-focus-title", tabindex: -1 }, focus.title),
         stepDraftFor === focus.id ? stepEditor(focus)
-          : focus.nextAction ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("次の一歩")), focus.nextAction, " ", button(tx("変える"), () => { stepDraftFor = focus.id; render(); }, "link"))
+          : focus.nextAction ? el("p", { class: "a4-step a4-step-box" }, el("span", { class: "a4-step-label" }, tx("次の一歩")), el("span", {}, focus.nextAction), button(tx("変える"), () => { stepDraftFor = focus.id; render(); }, "link"))
             : button(tx("次の一歩を書く（小さくてOK）"), () => { stepDraftFor = focus.id; render(); }, "link"),
         stepList(focus),
-        running ? timer(focus)
+        running ? null
           // A set estimate collapses to one line so the start button stays the obvious next move.
           : focus.estimatedMinutes > 0 && estimateFor !== focus.id
             ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("目安")), minutesLabel(focus.estimatedMinutes), " ", button(tx("変える"), () => { estimateFor = focus.id; render(); }, "link"))
@@ -902,7 +992,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         const after = el("details", { class: "a4-after", open: afterOpen },
           el("summary", { class: "a4-subtitle" }, tx("このあと（{count}）", { count: rest.length })),
           el("ul", { class: "a4-list" }, ...rest.map(q => {
-            const pick = el("button", { type: "button", class: "a4-pick" }, el("span", {}, q.title), el("span", { class: "a4-meta" }, meta(q)));
+            const pick = el("button", { type: "button", class: "a4-pick" }, iconCircle(q, "sm"), el("span", { class: "a4-pick-text" }, el("span", {}, q.title), el("span", { class: "a4-meta" }, meta(q))));
             pick.addEventListener("click", () => { focusId = q.id; render(); });
             return el("li", {}, pick);
           })));
@@ -978,10 +1068,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         el("div", { class: "a4-wk-text" }, titleButton(quest), info ? el("span", { class: "a4-meta" }, info) : null),
         checkButton(quest));
     };
-    const head = days.map(date => {
-      const node = el("button", { type: "button", class: "a4-wk-day", "aria-pressed": String(date === planDate), "data-today": String(date === today), "aria-label": dayLabel.format(noon(date)) },
+    const head = days.map((date, index) => {
+      const total = plannedMinutes([...plans[index]!.anytime, ...plans[index]!.timed]);
+      const node = el("button", { type: "button", class: "a4-wk-day", "aria-pressed": String(date === planDate), "data-today": String(date === today),
+        "aria-label": total > 0 ? tx("{day} 予定 {time}", { day: dayLabel.format(noon(date)), time: minutesLabel(total) }) : dayLabel.format(noon(date)) },
         el("span", { class: "a4-day-name" }, weekdayLabel.format(noon(date))),
-        el("span", { class: "a4-day-num" }, String(Number(date.slice(8)))));
+        el("span", { class: "a4-day-num" }, String(Number(date.slice(8)))),
+        el("span", { class: "a4-day-total", "aria-hidden": "true" }, total > 0 ? minutesLabel(total) : ""));
       node.addEventListener("click", () => { planDate = date; render(); });
       return node;
     });
@@ -1031,6 +1124,105 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         ...columns));
   }
 
+  const nowMinutes = () => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); };
+  const nowLine = (at: number) => el("li", { class: "a4-now-line" }, el("span", { class: "a4-slot-time" }, clock(at)), el("span", { class: "a4-now-label" }, tx("いま")));
+
+  /** Timed tasks sized by duration, with the current time and free stretches worth noticing (the plan view). */
+  function timelineSlots(timed: readonly Quest[], isToday: boolean): HTMLElement[] {
+    const at = nowMinutes();
+    const free = gaps(timed);
+    let nowShown = !isToday;
+    const slots: HTMLElement[] = [];
+    for (const quest of timed) {
+      const start = toMinutes(quest.scheduledTime), end = endOf(quest);
+      const gap = free.find(g => g.before === quest.id);
+      if (!nowShown && at < start) { slots.push(nowLine(at)); nowShown = true; }
+      if (gap) slots.push(el("li", { class: "a4-gap" }, el("span", { class: "a4-slot-time" }), el("span", { class: "a4-muted" }, tx("空き {time}。ひと息つけます。", { time: minutesLabel(gap.minutes) }))));
+      slots.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-len: ${Math.min(end - start, 180)}` },
+        el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
+        el("span", { class: "a4-slot-pill", "aria-hidden": "true" }, quest.icon ?? ""),
+        el("div", { class: "a4-slot-card" }, rowText(quest, false), checkButton(quest))));
+    }
+    if (!nowShown && timed.length > 0) slots.push(nowLine(at));
+    return slots;
+  }
+
+  /**
+   * A free stretch ahead today, offered as a choice: one inbox task that fits, or a rest. Only the next
+   * stretch shows its choices; later ones open on request so the same suggestion is not repeated.
+   */
+  function freeRow(gap: { start: number; minutes: number }, first: boolean): HTMLElement {
+    const today = port.today();
+    const key = `${today}:${gap.start}`;
+    const time = el("span", { class: "a4-slot-time" }, clock(gap.start));
+    const pill = el("span", { class: "a4-slot-pill", "aria-hidden": "true" });
+    if (rested.has(key)) return el("li", { class: "a4-free", "data-rest": "" }, time, pill, el("p", { class: "a4-free-head" }, tx("休憩 {time}", { time: minutesLabel(gap.minutes) })));
+    const head = el("p", { class: "a4-free-head" }, tx("{time} 空いています", { time: minutesLabel(gap.minutes) }));
+    if (!first && !openGaps.has(key)) {
+      const more = button(tx("提案を見る"), () => { openGaps.add(key); render(); }, "link");
+      return el("li", { class: "a4-free" }, time, pill, el("div", {}, head, more));
+    }
+    const proposed = proposalFor(quests(), gap, today);
+    const fit = fitForGap(quests().filter(q => q !== proposed), gap.minutes, today);
+    const chip = (label: string, minutes: string, dot: HTMLElement | null, action: () => void) => {
+      const node = el("button", { type: "button", class: "a4-suggest", disabled: busy }, dot, el("span", {}, label), minutes ? el("small", {}, minutes) : null);
+      node.addEventListener("click", action);
+      return node;
+    };
+    return el("li", { class: "a4-free" }, time, pill,
+      el("div", {}, head,
+        el("div", { class: "a4-suggests", role: "group", "aria-label": tx("空き時間にすること") },
+          proposed?.proposal ? chip(proposed.title, `${minutesLabel(proposed.proposal.minutes)} · ${tx("{name}の提案", { name: proposed.proposal.label })}`, iconCircle(proposed, "sm"), () => acceptProposal(proposed)) : null,
+          fit ? chip(fit.title, minutesLabel(fit.estimatedMinutes), iconCircle(fit, "sm"), () =>
+            update(fit, { ...plan(today), scheduledTime: clock(gap.start), expectedUpdatedAt: fit.updatedAt }, tx("{time}に「{title}」を入れました", { time: clock(gap.start), title: fit.title }), previousPlan(fit))) : null,
+          chip(tx("休む"), "", null, () => {
+            rested.add(key);
+            say(tx("休憩にしました"), () => { rested.delete(key); render(); });
+            render();
+          }))));
+  }
+
+  /** Today's rows for the Now screen: evenly spaced cards; duration shows in the pill's height. */
+  function homeRows(timed: readonly Quest[], isToday: boolean): HTMLElement[] {
+    const at = nowMinutes();
+    const free = isToday ? freeAhead(timed, at) : [];
+    let nowShown = !isToday;
+    const rows: HTMLElement[] = [];
+    for (const quest of timed) {
+      const start = toMinutes(quest.scheduledTime), end = endOf(quest);
+      if (!nowShown && at < start) { rows.push(nowLine(at)); nowShown = true; }
+      const gap = free.find(g => g.before === quest.id);
+      if (gap) rows.push(freeRow(gap, gap === free[0]));
+      rows.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-cap: ${Math.round(Math.max(40, Math.min(96, 24 + (end - start) * 0.6)))}px` },
+        el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
+        el("span", { class: "a4-slot-pill", "aria-hidden": "true" }, quest.icon ?? ""),
+        el("div", { class: "a4-slot-card" }, rowText(quest, false), checkButton(quest))));
+    }
+    if (!nowShown && timed.length > 0) rows.push(nowLine(at));
+    return rows;
+  }
+
+  /** Today beside the focus card, with finished stretches more than an hour back folded away. */
+  function todayTimeline(): HTMLElement {
+    const today = port.today();
+    const day = dayPlan(port.quests(), today);
+    const cutoff = nowMinutes() - 60;
+    const earlier = day.timed.filter(q => isDone(q) && endOf(q) < cutoff);
+    const timed = day.timed.filter(q => !earlier.includes(q));
+    const fold = el("details", { class: "a4-earlier", open: earlierOpen },
+      el("summary", {}, tx("それより前（{count}）", { count: earlier.length })),
+      el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(earlier, false)));
+    fold.addEventListener("toggle", () => { earlierOpen = fold.open; });
+    return el("section", { class: "a4-today", "aria-labelledby": "a4-today-title" },
+      el("h2", { class: "a4-subtitle", id: "a4-today-title" }, tx("今日のタイムライン")),
+      day.anytime.length === 0 ? null : el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-row", "data-tone": tone(q), "data-hue": hue(q) }, el("div", { class: "a4-row-main" }, checkButton(q), iconCircle(q), rowText(q))))),
+      el("div", { class: "a4-today-panel" },
+        earlier.length === 0 ? null : fold,
+        timed.length === 0
+          ? el("p", { class: "a4-muted" }, tx("時刻の決まった予定はありません。"))
+          : el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(timed, true))));
+  }
+
   function planView(): HTMLElement {
     const today = port.today();
     const dayName = (date: string) => date === today ? tx("今日") : dayLabel.format(noon(date));
@@ -1058,25 +1250,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       return node;
     }));
 
-    // Timeline: tasks with a time, the current time, and free stretches worth noticing.
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    const free = gaps(day.timed);
-    let nowShown = planDate !== today;
-    const nowLine = () => el("li", { class: "a4-now-line" }, el("span", { class: "a4-slot-time" }, clock(nowMinutes)), el("span", { class: "a4-now-label" }, tx("いま")));
-    const slots: HTMLElement[] = [];
-    for (const quest of day.timed) {
-      const start = toMinutes(quest.scheduledTime), end = endOf(quest);
-      const gap = free.find(g => g.before === quest.id);
-      if (!nowShown && nowMinutes < start) { slots.push(nowLine()); nowShown = true; }
-      if (gap) slots.push(el("li", { class: "a4-gap" }, el("span", { class: "a4-slot-time" }), el("span", { class: "a4-muted" }, tx("空き {time}。ひと息つけます。", { time: minutesLabel(gap.minutes) }))));
-      slots.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-len: ${Math.min(end - start, 180)}` },
-        el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
-        el("span", { class: "a4-slot-pill", "aria-hidden": "true" }),
-        rowText(quest, false),
-        checkButton(quest)));
-    }
-    if (!nowShown && day.timed.length > 0) slots.push(nowLine());
+    const slots = timelineSlots(day.timed, planDate === today);
 
     // Undated work sits beside the day (below it on phones), one tap from being planned.
     const all = groups(quests(), today);
@@ -1097,16 +1271,16 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
             planDate === today ? null : button(tx("今日へ"), () => { planDate = today; render(); }, "link"),
             planMode === "month" ? shift("‹", -1, tx("前の月")) : shift("‹", -1, tx("前の週")),
             planMode === "month" ? shift("›", 1, tx("次の月")) : shift("›", 1, tx("次の週")))),
-        ...(planMode === "month" ? [monthGrid(list)] : planMode === "week" ? [weekGrid(list)] : [week,
+        ...(planMode === "month" ? [monthGrid(list)] : planMode === "week" ? [weekOf(planDate).includes(today) ? reviewStrip() : null, weekGrid(list)] : [week,
         el("p", { class: "a4-lead" }, day.timed.length + day.anytime.length === 0
           ? tx("この日の予定はありません。受け箱から＋で入れるか、上の欄に書き出しましょう。")
           : open.length === 0 ? tx("この日の分はすべて終わりました。") : tx("残り {count} 件 · 目安 {time}", { count: open.length, time: minutesLabel(plannedMinutes(open)) })),
         day.anytime.length === 0 ? null : el("section", { class: "a4-group" },
           el("h2", { class: "a4-subtitle" }, tx("いつでも")),
-          el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-row", "data-tone": tone(q), "data-hue": hue(q) }, el("div", { class: "a4-row-main" }, checkButton(q), rowText(q)))))),
+          el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-row", "data-tone": tone(q), "data-hue": hue(q) }, el("div", { class: "a4-row-main" }, checkButton(q), iconCircle(q), rowText(q)))))),
         slots.length === 0 ? null : el("section", { class: "a4-group" },
           el("h2", { class: "a4-subtitle" }, tx("時間で")),
-          el("ol", { class: "a4-timeline" }, ...slots))])),
+          el("div", { class: "a4-today-panel" }, el("ol", { class: "a4-timeline", "data-cards": "" }, ...slots)))])),
       el("aside", { class: "a4-plan-side", "aria-label": tx("日付のないもの") },
         el("h2", { class: "a4-subtitle" }, tx("受け箱（{count}）", { count: all.inbox.length })),
         all.inbox.length === 0 ? el("p", { class: "a4-muted" }, tx("受け箱は空です。")) : sideList(all.inbox),
@@ -1114,6 +1288,31 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
           el("h2", { class: "a4-subtitle" }, tx("日付を見直す（{count}）", { count: review.length })),
           el("p", { class: "a4-muted" }, tx("予定日を過ぎたものです。＋で今日に入れるか、タイトルから日付を変えます。")),
           sideList(review))));
+  }
+
+  /** Three numbers for this week (Spine's review): finished, planned time, moved later. */
+  function reviewStrip(): HTMLElement {
+    const review = weekReview(port.quests(), port.today());
+    const stat = (label: string, value: string) => el("div", { class: "a4-review-stat" }, el("dt", {}, label), el("dd", {}, value));
+    return el("section", { class: "a4-review", "aria-labelledby": "a4-review-title" },
+      el("h2", { class: "a4-subtitle", id: "a4-review-title" }, tx("今週のふりかえり")),
+      el("dl", {}, stat(tx("終えた"), tx("{count}件", { count: review.done })), stat(tx("予定した時間"), minutesLabel(review.planned)), stat(tx("先に延ばした"), tx("{count}件", { count: review.moved }))));
+  }
+
+  /** Dailies with the last two weeks as dots, filled on done days. */
+  function habitSection(): HTMLElement | null {
+    const today = port.today();
+    const habits = quests().filter(q => q.kind === "daily" && isOpen(q) && q.assignee.type === "self");
+    if (habits.length === 0) return null;
+    return el("section", { class: "a4-group" },
+      el("h2", { class: "a4-subtitle" }, tx("習慣（{count}）", { count: habits.length })),
+      el("p", { class: "a4-muted" }, tx("この2週間。埋まった点が、できた日です。")),
+      el("ul", { class: "a4-list a4-habits" }, ...habits.map(q => {
+        const days = habitDays(q, today);
+        return el("li", { class: "a4-row a4-habit" }, el("div", { class: "a4-row-main" }, iconCircle(q, "sm"), el("div", { class: "a4-row-text" }, titleButton(q)),
+          el("span", { class: "a4-habit-dots", role: "img", "data-tone": "self", "data-hue": hue(q), "aria-label": tx("この2週間で {count} 日", { count: days.filter(Boolean).length }) },
+            ...days.map(done => el("i", { "data-done": String(done) })))));
+      })));
   }
 
   function allView(): HTMLElement {
@@ -1145,6 +1344,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       empty ? el("p", { class: "a4-lead" }, tx("やることはありません。")) : null,
       section("decision", tx("あなたの判断待ち"), tx("Agentや他の人からの確認依頼です。「確認する」から内容を見て判断します。")),
       section("today", tx("今日")),
+      habitSection(),
       section("review", tx("日付を見直す")),
       section("inbox", tx("受け箱"), tx("日付のないものです。今日やるものだけ選べば十分です。")),
       section("later", tx("これから")),
@@ -1556,7 +1756,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       }));
     const bloom = el("input", { type: "checkbox", checked: document.documentElement.hasAttribute("data-a4-palette") });
     bloom.addEventListener("change", () => {
-      if (bloom.checked) document.documentElement.setAttribute("data-a4-palette", "bloom"); else document.documentElement.removeAttribute("data-a4-palette");
+      if (bloom.checked) document.documentElement.setAttribute("data-a4-palette", "spine"); else document.documentElement.removeAttribute("data-a4-palette");
       store.set("a4-palette", bloom.checked ? null : "plain");
     });
     // Copy is resolved once at load, so a language change reloads the page.
@@ -1575,7 +1775,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("label", { class: "a4-option" }, cheerToggle, tx("完了したら紙吹雪でお祝いする")),
       el("label", { class: "a4-option" }, gameToggle, tx("ゲーム要素（レベル・XP）を表示する")),
       themes,
-      el("label", { class: "a4-option" }, bloom, tx("やわらかい色分け（背景のグラデーションとタスクごとの色）")),
+      el("label", { class: "a4-option" }, bloom, tx("やわらかい配色（タスクごとの色）")),
+      el("p", { class: "a4-muted" }, tx("キーボード：N か / で書き出し、J と K で行を移動、X で完了、S で今のタスクを始める")),
       mcpSection(),
       runtime ? el("section", { class: "a4-group" }, el("h2", { class: "a4-subtitle" }, tx("時間の記録")), embed(workUi.settings())) : null,
       el("p", {}, el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("Relay Forge（詳しい画面）を開く"))),
@@ -1660,6 +1861,31 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     if (document.visibilityState === "visible" && !document.activeElement?.matches("input, textarea, select")) onFocus();
   }, 60_000);
   const onHash = () => { if (viewFromHash() !== view) go(viewFromHash()); };
+  const onKey = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.isComposing || sheet || disposed) return;
+    const key = event.key.toLowerCase();
+    if ((event.metaKey || event.ctrlKey) && key === "k") { event.preventDefault(); captureInput.focus(); return; }
+    if (event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement | null)?.matches?.("input, textarea, select, [contenteditable]")) return;
+    if (key === "n" || key === "/") { event.preventDefault(); captureInput.focus(); return; }
+    if (key === "j" || key === "k") {
+      const titles = [...main.querySelectorAll<HTMLElement>(".a4-row-title[data-quest-id]")].filter(node => node.offsetParent !== null);
+      const index = titles.indexOf(document.activeElement as HTMLElement);
+      const next = titles[index < 0 ? 0 : Math.min(titles.length - 1, Math.max(0, index + (key === "j" ? 1 : -1)))];
+      if (!next) return;
+      event.preventDefault();
+      next.focus();
+      next.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (key === "x") {
+      const quest = byId((document.activeElement as HTMLElement | null)?.dataset?.questId ?? null);
+      if (quest && quest.assignee.type === "self" && !isDone(quest) && !needsDecision(quest) && !busy) { event.preventDefault(); complete(quest); }
+      return;
+    }
+    if (key === "s" && view === "now" && focusQuest && !isWorking(focusQuest) && !busy) { event.preventDefault(); start(focusQuest); }
+  };
+  captureInput.addEventListener("keydown", event => { if (event.key === "Escape") captureInput.blur(); });
+  document.addEventListener("keydown", onKey);
   document.addEventListener("visibilitychange", onHide);
   root.addEventListener("pointerdown", onPointer, true);
   window.addEventListener("hashchange", onHash);
@@ -1677,6 +1903,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     window.clearInterval(poll);
     window.clearTimeout(toastTimer);
     document.removeEventListener("visibilitychange", onHide);
+    document.removeEventListener("keydown", onKey);
     root.removeEventListener("pointerdown", onPointer, true);
     window.removeEventListener("hashchange", onHash);
     window.removeEventListener("popstate", onHash);

@@ -23,10 +23,10 @@
         var stored = null;
         try { stored = window.localStorage.getItem("qf-relay-forge-theme"); } catch (error) { stored = null; }
         if (stored === "light" || stored === "dark") document.documentElement.setAttribute("data-theme", stored);
-        // Bloom is the default palette; "plain" keeps the Relay Forge tokens.
+        // Spine is the default palette; "plain" keeps the Relay Forge tokens.
         var palette = null;
         try { palette = window.localStorage.getItem("a4-palette"); } catch (error) { palette = null; }
-        if (palette !== "plain") document.documentElement.setAttribute("data-a4-palette", "bloom");
+        if (palette !== "plain") document.documentElement.setAttribute("data-a4-palette", "spine");
       })();
     </script>
   </head>

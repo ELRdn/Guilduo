@@ -231,7 +231,48 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .a4-now-line { min-height: 28px; align-items: center; }
 .a4-now-line::after { content: ""; grid-column: 2 / 5; grid-row: 1; height: 2px; background: var(--qf-color-accent); }
 .a4-now-line .a4-slot-time { color: var(--qf-color-accent); padding: 0; }
-.a4-now-label { grid-column: 3; grid-row: 1; justify-self: start; padding: 0 var(--qf-space-3); background: var(--qf-color-canvas); color: var(--qf-color-accent); font-size: 12px; font-weight: 600; z-index: 1; }
+/* Now screen: the focus card beside today's timeline (stacked below 1100px). */
+.a4-main[data-view="now"] { max-width: 1120px; }
+.a4-home { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--qf-space-9); align-items: start; }
+@media (min-width: 1100px) { .a4-home { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); } }
+.a4-date { margin: 0; font: 300 48px/1.1 var(--qf-font-sans); letter-spacing: -0.02em; color: var(--qf-color-fg-strong); }
+.a4-date small { margin-left: var(--qf-space-4); font: 400 16px/1 var(--qf-font-sans); letter-spacing: 0; color: var(--qf-color-fg-muted); }
+.a4-today { display: flex; flex-direction: column; gap: var(--qf-space-5); min-width: 0; }
+.a4-today .a4-subtitle { margin: 0; }
+.a4-earlier summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--qf-color-fg-muted); font-weight: 600; }
+.a4-summary { margin: var(--qf-space-3) 0 0; color: var(--qf-color-fg-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.a4-step-box { flex-direction: column; align-items: flex-start; gap: var(--qf-space-1); padding: var(--qf-space-4) var(--qf-space-5); background: var(--qf-color-inset); border-radius: var(--qf-radius-md); }
+.a4-step-box .a4-link { min-height: 32px; padding: 0; font-size: 14px; }
+.a4-today-panel .a4-now-label { background: var(--qf-color-surface); }
+.a4-today-panel { padding: var(--qf-space-5) var(--qf-space-5) var(--qf-space-5) var(--qf-space-3); background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-lg); box-shadow: var(--a4-card-shadow, none); }
+/* Evenly spaced cards (Now screen): duration shows in the pill's height, not the row's. */
+.a4-timeline[data-even] { gap: var(--qf-space-3); }
+.a4-timeline[data-even]::before { left: calc(52px + var(--qf-space-4) + 19px); }
+.a4-timeline[data-even] :is(.a4-slot, .a4-free, .a4-now-line) { grid-template-columns: 52px 40px minmax(0, 1fr); }
+.a4-timeline[data-even] .a4-slot { min-height: 0; padding: 0; }
+.a4-timeline[data-even] .a4-slot .a4-slot-pill { align-self: start; min-height: 0; height: var(--a4-cap); border: 2px solid var(--qf-color-surface); background: color-mix(in srgb, var(--a4-tone) 34%, var(--qf-color-surface)); z-index: 1; }
+.a4-timeline[data-even] .a4-slot-time { padding-top: var(--qf-space-4); }
+.a4-timeline[data-even] .a4-now-line::after { grid-column: 2 / -1; }
+.a4-slot-card { display: flex; align-items: flex-start; gap: var(--qf-space-4); min-width: 0; padding: var(--qf-space-3) var(--qf-space-3) var(--qf-space-3) var(--qf-space-5); border-radius: var(--qf-radius-lg); background: color-mix(in srgb, var(--a4-tone) var(--a4-pill-fill, 12%), var(--qf-color-surface)); box-shadow: inset 3px 0 0 var(--a4-tone); }
+.a4-slot-card .a4-row-text { flex: 1; min-width: 0; }
+.a4-slot[data-tone="working"] .a4-slot-card { box-shadow: inset 3px 0 0 var(--a4-tone), 0 0 0 2px var(--a4-tone); }
+.a4-slot[data-tone="done"] :is(.a4-slot-pill, .a4-slot-time, .a4-slot-card) { opacity: 0.55; }
+.a4-free { position: relative; display: grid; column-gap: var(--qf-space-4); align-items: start; }
+.a4-free .a4-slot-pill { justify-self: center; width: 28px; height: 28px; min-height: 0; margin-top: var(--qf-space-2); border-radius: var(--qf-radius-pill); background: var(--qf-color-surface); border: 2px dashed var(--qf-color-border-default); z-index: 1; }
+.a4-free > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--qf-space-2) var(--qf-space-4); padding-top: var(--qf-space-2); }
+.a4-free .a4-slot-time { padding-top: var(--qf-space-3); }
+.a4-free-head { margin: 0; color: var(--qf-color-fg-default); font-size: 14px; font-weight: 600; padding-top: var(--qf-space-2); }
+.a4-free[data-rest] .a4-free-head { color: var(--qf-color-fg-muted); font-weight: 400; }
+.a4-free .a4-link { min-height: 32px; font-size: 13px; }
+.a4-suggests { display: flex; flex-wrap: wrap; gap: var(--qf-space-3); flex-basis: 100%; }
+.a4-suggest { display: inline-flex; align-items: center; gap: var(--qf-space-3); min-height: 44px; max-width: 100%; padding: 0 var(--qf-space-6); background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-default); border-radius: var(--qf-radius-pill); cursor: pointer; font-size: 14px; color: var(--qf-color-fg-strong); }
+.a4-suggest:hover:not(:disabled) { border-color: var(--qf-color-border-strong); }
+.a4-suggest span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a4-suggest small { color: var(--qf-color-fg-muted); font: 12px var(--qf-font-mono); }
+.a4-suggest-dot { flex: none; width: 12px; height: 12px; border-radius: var(--qf-radius-pill); background: var(--a4-tone); }
+.a4-now-line::after { background: var(--a4-now, var(--qf-color-accent)); }
+.a4-now-line .a4-slot-time, .a4-now-label { color: var(--a4-now, var(--qf-color-accent)); }
+.a4-now-label { grid-column: 3; grid-row: 1; justify-self: start; padding: 0 var(--qf-space-3); background: var(--qf-color-canvas); color: var(--a4-now, var(--qf-color-accent)); font-size: 12px; font-weight: 600; z-index: 1; }
 .a4-add {
   flex: none; width: 44px; height: 44px; border-radius: var(--qf-radius-pill); cursor: pointer; font-size: 20px;
   background: transparent; color: var(--qf-color-accent); border: var(--qf-border-width) solid var(--qf-color-border-default);
@@ -343,6 +384,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
     background: var(--qf-color-canvas); border-top: var(--qf-border-width) solid var(--qf-color-border-subtle);
   }
   .a4-tab { padding: 0; min-height: 48px; }
+  .a4-date { font-size: 40px; }
   .a4-main { padding: var(--qf-space-7) var(--qf-space-6) calc(96px + env(safe-area-inset-bottom, 0px)); }
   .a4-title { font: var(--qf-text-page); }
   .a4-focus { padding: var(--qf-space-7) var(--qf-space-6); }
@@ -356,49 +398,60 @@ button, input, textarea, select { font: inherit; color: inherit; }
   .a4-app:has(.a4-dock) .a4-main { padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px)); }
   .a4-slot, .a4-gap, .a4-now-line { grid-template-columns: 44px 28px minmax(0, 1fr) 44px; column-gap: var(--qf-space-3); }
   .a4-timeline::before { left: calc(44px + var(--qf-space-3) + 13px); }
+  .a4-timeline[data-even] :is(.a4-slot, .a4-free, .a4-now-line) { grid-template-columns: 44px 32px minmax(0, 1fr); column-gap: var(--qf-space-3); }
+  .a4-timeline[data-even]::before { left: calc(44px + var(--qf-space-3) + 15px); }
+  .a4-today-panel { padding: var(--qf-space-4) var(--qf-space-3) var(--qf-space-4) var(--qf-space-2); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .a4-ring-value { transition: none; }
 }
 
-/* Bloom palette (owner choice 2026-10-18): light has a warm wash, about 7:3
- * orange-gold to sage with no red; dark is flat neutral charcoal (a glow read as
- * "AI") with solid task-colour pills, after Structured's dark mode.
- * Per-task colour slots in both. Brand core stays (Forge Teal accent, Antique Gold, Ivory,
- * Night Surface); no purple/blue AI gradients, no glass. `data-a4-palette="bloom"`
- * is the default; removing it falls back to the plain Relay Forge tokens. */
-:root[data-a4-palette="bloom"] {
-  --qf-color-canvas: #fdf8f1; --qf-color-field: #f9f1e7; --qf-color-surface: #ffffff; --qf-color-raised: #ffffff;
-  --qf-color-inset: #efe4d4; --qf-color-selected: #f5e3c9;
-  --qf-color-border-subtle: #ece0cf; --qf-color-border-default: #d6c6ae;
-  --a4-wash:
-    radial-gradient(140% 70% at 0% 0%, #f7d6a4 0%, rgba(247, 214, 164, 0) 66%),
-    radial-gradient(80% 45% at 100% 0%, #dfece1 0%, rgba(223, 236, 225, 0) 60%),
-    radial-gradient(120% 45% at 50% 115%, #e2ede3 0%, rgba(226, 237, 227, 0) 58%),
-    #fdf8f1;
-  --a4-card-shadow: 0 1px 2px rgba(80, 52, 20, 0.05), 0 4px 16px rgba(80, 52, 20, 0.06);
-  --a4-pill-fill: 30%;
-  --a4-hue-0: #c9914a; --a4-hue-1: #d4893a; --a4-hue-2: #b8963e; --a4-hue-3: #6f9f7c; --a4-hue-4: #5c9784;
-}
-:root[data-a4-palette="bloom"][data-theme="dark"] {
-  --qf-color-canvas: #121213; --qf-color-field: #1d1d1f; --qf-color-surface: #1d1d1f; --qf-color-raised: #252527;
-  --qf-color-inset: #0b0b0c; --qf-color-selected: #352c20;
-  --qf-color-border-subtle: #2b2b2e; --qf-color-border-default: #3d3d41;
+/* Spine palette (owner choice 2026-10-25, replaces Bloom; from the REA competitor research,
+ * docs/research/2026-10-25-rea-adoption-plan.md §4.7). Light is Spine's warm paper with a deep
+ * green primary and six low-saturation task hues. Dark keeps Spine's hues but sits on the Guilduo
+ * brand colours: Night Surface canvas, Forge Teal selection, Ivory text, Antique Gold primary
+ * (the owner did not want a green primary in dark). Flat canvas, no gradients, no glass.
+ * `data-a4-palette="spine"` is the default; removing it falls back to the plain Relay Forge tokens. */
+:root[data-a4-palette="spine"] {
+  --qf-color-canvas: #fbfaf7; --qf-color-field: #fbfaf7; --qf-color-surface: #ffffff; --qf-color-raised: #ffffff;
+  --qf-color-inset: #f3f1ec; --qf-color-selected: #f3f1ec;
+  --qf-color-border-subtle: #e6e2da; --qf-color-border-default: #d3cec4; --qf-color-border-strong: #a9a39a;
+  --qf-color-fg-strong: #17161a; --qf-color-fg-default: #5c5a63; --qf-color-fg-muted: #6f6c76;
+  --qf-color-accent: #2f5d50; --qf-color-accent-hover: #244a40; --qf-color-fg-on-accent: #ffffff;
+  --qf-color-human: #2f5d50; --qf-color-agent: #5a6b9b; --qf-color-review: #b4762a; --qf-color-success: #3e7c59;
   --a4-wash: var(--qf-color-canvas);
-  --a4-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
-  --a4-pill-fill: 100%;
-  --a4-hue-0: #ddb072; --a4-hue-1: #e6a35e; --a4-hue-2: #cfb06a; --a4-hue-3: #86c19c; --a4-hue-4: #78b39f;
+  --a4-now: #e2725b;
+  --a4-card-shadow: 0 1px 2px rgba(23, 22, 26, 0.06);
+  --a4-pill-fill: 16%;
+  --a4-hue-0: #c08573; --a4-hue-1: #c2a25a; --a4-hue-2: #8a5f7d; --a4-hue-3: #7c9a78; --a4-hue-4: #6e7b85;
+}
+:root[data-a4-palette="spine"][data-theme="dark"] {
+  --qf-color-canvas: #0f1418; --qf-color-field: #172026; --qf-color-surface: #172026; --qf-color-raised: #1d2830;
+  --qf-color-inset: #0b1013; --qf-color-selected: #13352f;
+  --qf-color-border-subtle: #26323a; --qf-color-border-default: #3a4850; --qf-color-border-strong: #5a6870;
+  --qf-color-fg-strong: #e7e3da; --qf-color-fg-default: #bdb8ae; --qf-color-fg-muted: #948f86;
+  --qf-color-accent: #b89a5e; --qf-color-accent-hover: #c9ad74; --qf-color-fg-on-accent: #0f1418;
+  --qf-color-human: #b89a5e; --qf-color-agent: #8f9ccc; --qf-color-review: #d6a560; --qf-color-success: #b89a5e;
+  --a4-wash: var(--qf-color-canvas);
+  --a4-now: #f0937d;
+  --a4-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --a4-pill-fill: 20%;
+  --a4-hue-0: #d9a090; --a4-hue-1: #d8bb78; --a4-hue-2: #b48aa7; --a4-hue-3: #9cba98; --a4-hue-4: #98a5ae;
 }
 @media (prefers-color-scheme: dark) {
-  :root[data-a4-palette="bloom"]:not([data-theme="light"]) {
-    --qf-color-canvas: #121213; --qf-color-field: #1d1d1f; --qf-color-surface: #1d1d1f; --qf-color-raised: #252527;
-    --qf-color-inset: #0b0b0c; --qf-color-selected: #352c20;
-    --qf-color-border-subtle: #2b2b2e; --qf-color-border-default: #3d3d41;
+  :root[data-a4-palette="spine"]:not([data-theme="light"]) {
+    --qf-color-canvas: #0f1418; --qf-color-field: #172026; --qf-color-surface: #172026; --qf-color-raised: #1d2830;
+    --qf-color-inset: #0b1013; --qf-color-selected: #13352f;
+    --qf-color-border-subtle: #26323a; --qf-color-border-default: #3a4850; --qf-color-border-strong: #5a6870;
+    --qf-color-fg-strong: #e7e3da; --qf-color-fg-default: #bdb8ae; --qf-color-fg-muted: #948f86;
+    --qf-color-accent: #b89a5e; --qf-color-accent-hover: #c9ad74; --qf-color-fg-on-accent: #0f1418;
+    --qf-color-human: #b89a5e; --qf-color-agent: #8f9ccc; --qf-color-review: #d6a560; --qf-color-success: #b89a5e;
     --a4-wash: var(--qf-color-canvas);
-    --a4-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
-    --a4-pill-fill: 100%;
-    --a4-hue-0: #ddb072; --a4-hue-1: #e6a35e; --a4-hue-2: #cfb06a; --a4-hue-3: #86c19c; --a4-hue-4: #78b39f;
+    --a4-now: #f0937d;
+    --a4-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --a4-pill-fill: 20%;
+    --a4-hue-0: #d9a090; --a4-hue-1: #d8bb78; --a4-hue-2: #b48aa7; --a4-hue-3: #9cba98; --a4-hue-4: #98a5ae;
   }
 }
 /* The wash is fixed to the viewport, so sticky bars painted with it line up seamlessly. */
@@ -409,7 +462,7 @@ body { min-height: 100vh; background-repeat: no-repeat; background-color: var(--
 .a4-row, .a4-focus, .a4-pick, .a4-dock { box-shadow: var(--a4-card-shadow, none); }
 .a4-slot[data-tone="self"] .a4-slot-pill { background: color-mix(in srgb, var(--a4-tone) var(--a4-pill-fill, 0%), var(--qf-color-surface)); }
 /* Open checks take the task's colour so each row reads as one coloured thing. */
-:root[data-a4-palette] [data-tone] > .a4-check:not([data-done]), :root[data-a4-palette] [data-tone] .a4-row-main > .a4-check:not([data-done]) { border-color: var(--a4-tone); }
+:root[data-a4-palette] [data-tone] > .a4-check:not([data-done]), :root[data-a4-palette] [data-tone] :is(.a4-row-main, .a4-slot-card) > .a4-check:not([data-done]) { border-color: var(--a4-tone); }
 :is([data-tone="self"], [data-tone="working"])[data-hue="0"] { --a4-tone: var(--a4-hue-0, var(--qf-color-human)); }
 :is([data-tone="self"], [data-tone="working"])[data-hue="1"] { --a4-tone: var(--a4-hue-1, var(--qf-color-human)); }
 :is([data-tone="self"], [data-tone="working"])[data-hue="2"] { --a4-tone: var(--a4-hue-2, var(--qf-color-human)); }
@@ -623,3 +676,55 @@ body { word-break: auto-phrase; }
 .a4-embed .rf-screen-header:not(:has(> :not(.rf-screen-heading))) { display: none; }
 .a4-main:has(> .a4-wide) { max-width: 1280px; }
 .a4-wide { gap: var(--qf-space-7); }
+
+/* Capture: what the line will become, read before it is added (plan §4.4). */
+.a4-capture { flex-wrap: wrap; }
+.a4-parse { flex-basis: 100%; margin: calc(var(--qf-space-2) * -1) 0 0; font-size: 13px; color: var(--qf-color-fg-muted); overflow-wrap: anywhere; }
+.a4-parse:empty { display: none; }
+.a4-parse b { color: var(--qf-color-fg-strong); font-weight: 600; }
+
+/* Emoji circles (plan §4.3): the task colour at 26% behind its emoji; the colour dot stands in when there is none. */
+.a4-emoji { flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--qf-radius-pill); background: color-mix(in srgb, var(--a4-tone) 26%, var(--qf-color-surface)); font-size: 19px; line-height: 1; }
+.a4-emoji-lg { width: 56px; height: 56px; font-size: 30px; }
+.a4-emoji-sm { width: 28px; height: 28px; font-size: 15px; }
+.a4-emoji[data-empty="true"]::after { content: ""; width: 10px; height: 10px; border-radius: var(--qf-radius-pill); background: var(--a4-tone); }
+.a4-emoji[data-tone="done"] { opacity: 0.55; }
+button.a4-emoji { padding: 0; border: 0; cursor: pointer; color: inherit; }
+.a4-focus-head { display: flex; align-items: center; gap: var(--qf-space-4); }
+.a4-focus-head .a4-eyebrow { margin: 0; }
+.a4-pick { flex-direction: row; align-items: center; justify-content: flex-start; gap: var(--qf-space-4); }
+.a4-pick-text { display: flex; flex-direction: column; gap: var(--qf-space-1); min-width: 0; }
+.a4-sheet-titlerow { display: flex; align-items: flex-start; gap: var(--qf-space-4); }
+.a4-sheet-titlerow .a4-sheet-title { flex: 1; min-width: 0; }
+.a4-icon-pane { flex-wrap: wrap; }
+.a4-icon-choice { min-width: 44px; justify-content: center; font-size: 20px; }
+.a4-slot-pill { display: grid; justify-items: center; align-content: start; padding-top: 7px; font-size: 18px; line-height: 1; }
+
+/* 予定 day view: the same filled cards as 今, still sized by duration. */
+.a4-timeline[data-cards] { gap: var(--qf-space-2); }
+.a4-timeline[data-cards] :is(.a4-slot, .a4-gap, .a4-now-line) { grid-template-columns: 52px 36px minmax(0, 1fr); }
+.a4-timeline[data-cards] .a4-gap .a4-muted { grid-column: 3; }
+.a4-timeline[data-cards] .a4-now-line::after { grid-column: 2 / -1; }
+.a4-timeline[data-cards] .a4-slot-card { align-self: stretch; }
+.a4-timeline[data-cards] .a4-slot:not([data-run-start]) .a4-slot-pill { border: 2px solid var(--qf-color-surface); background: color-mix(in srgb, var(--a4-tone) 34%, var(--qf-color-surface)); z-index: 1; }
+@media (max-width: 760px) {
+  .a4-timeline[data-cards] :is(.a4-slot, .a4-gap, .a4-now-line) { grid-template-columns: 44px 28px minmax(0, 1fr); }
+}
+
+/* An Agent's proposed slot, in the sheet. */
+.a4-proposal { padding: var(--qf-space-4) var(--qf-space-5); background: color-mix(in srgb, var(--qf-color-agent) 10%, var(--qf-color-surface)); border-radius: var(--qf-radius-md); }
+.a4-proposal-when { margin: 0; display: flex; flex-direction: column; gap: var(--qf-space-1); font-variant-numeric: tabular-nums; }
+
+/* Week view: planned hours per day and three numbers for the week. */
+.a4-day-total { min-height: 16px; font: 12px/1.3 var(--qf-font-mono); color: var(--qf-color-fg-muted); font-variant-numeric: tabular-nums; }
+.a4-review { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+.a4-review dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--qf-space-4); margin: 0; }
+.a4-review-stat { padding: var(--qf-space-4) var(--qf-space-5); background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-md); }
+.a4-review dt { font-size: 13px; color: var(--qf-color-fg-muted); }
+.a4-review dd { margin: 0; font: 300 28px/1.2 var(--qf-font-sans); color: var(--qf-color-fg-strong); font-variant-numeric: tabular-nums; }
+
+/* Habits: two weeks of dots, filled on done days. */
+.a4-habit .a4-row-main { flex-wrap: wrap; }
+.a4-habit-dots { display: flex; gap: 4px; margin-left: auto; }
+.a4-habit-dots i { width: 10px; height: 10px; border-radius: var(--qf-radius-pill); border: 1.5px solid var(--a4-tone); }
+.a4-habit-dots i[data-done="true"] { background: var(--a4-tone); }

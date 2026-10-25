@@ -162,8 +162,62 @@ export function gaps(timed: readonly Quest[], min = 30): { start: number; minute
   return result;
 }
 
+/** Free stretches still ahead today: clipped to `now`, at least 15 minutes. */
+export function freeAhead(timed: readonly Quest[], now: number): { start: number; minutes: number; before: string }[] {
+  return gaps(timed, 1)
+    .map(gap => ({ ...gap, start: Math.max(gap.start, now), minutes: gap.start + gap.minutes - Math.max(gap.start, now) }))
+    .filter(gap => gap.minutes >= 15);
+}
+
+/**
+ * One inbox task worth offering for a free stretch: the person's own, undated, with an estimate that fits.
+ * Oldest first, so nothing lingers. Tasks without an estimate are never offered.
+ */
+export function fitForGap(quests: readonly Quest[], minutes: number, today: string): Quest | null {
+  const parents = new Set(quests.filter(isOpen).map(q => q.id));
+  return quests
+    .filter(q => isOpen(q) && q.kind !== "reward" && !isSettledRequest(q) && bucketOf(q, today) === "inbox" && !(q.parentQuestId && parents.has(q.parentQuestId))
+      && q.estimatedMinutes > 0 && q.estimatedMinutes <= minutes && blockers(q, quests).length === 0)
+    .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))[0] ?? null;
+}
+
 /** Monday-first week containing `date`. */
 export function weekOf(date: string): string[] {
   const weekday = (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7;
   return Array.from({ length: 7 }, (_, i) => addDays(date, i - weekday));
+}
+
+/** An Agent's proposal that fits a free stretch today: it starts inside the stretch and ends by its close. */
+export function proposalFor(quests: readonly Quest[], gap: { start: number; minutes: number }, today: string): Quest | null {
+  return quests.find(q => {
+    const proposal = q.proposal;
+    if (!proposal || !isOpen(q) || proposal.date !== today) return false;
+    const start = toMinutes(proposal.time);
+    return start >= gap.start && start + proposal.minutes <= gap.start + gap.minutes;
+  }) ?? null;
+}
+
+/**
+ * The last `days` days of a daily, oldest first: true where it was done. Only the current streak is
+ * stored, so earlier gaps read as "not done" even when the history had them done.
+ */
+export function habitDays(quest: Quest, today: string, days = 14): boolean[] {
+  const last = quest.lastCompletedDate ?? "";
+  const streak = Math.max(last ? 1 : 0, Number(quest.streak) || 0);
+  return Array.from({ length: days }, (_, i) => {
+    const date = addDays(today, i - days + 1);
+    return last !== "" && date <= last && date > addDays(last, -streak);
+  });
+}
+
+/** Three numbers for the week so far (Monday to `today`): finished, planned time, and moved later. */
+export function weekReview(quests: readonly Quest[], today: string): { done: number; planned: number; moved: number } {
+  const from = weekOf(today)[0]!;
+  const inWeek = (value: string | undefined) => { const day = (value ?? "").slice(0, 10); return day >= from && day <= today; };
+  const mine = quests.filter(q => q.kind !== "reward" && q.assignee.type === "self");
+  return {
+    done: mine.filter(q => isDaily(q) ? inWeek(q.lastCompletedDate) : q.done && inWeek(q.completedAt)).length,
+    planned: plannedMinutes(mine.filter(q => inWeek(q.scheduledDate))),
+    moved: mine.filter(q => inWeek(q.lastRolledOverDate)).length,
+  };
 }
