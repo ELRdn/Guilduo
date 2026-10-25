@@ -134,6 +134,7 @@ interface ValidatedQuestInput extends DomainInput {
   kind?: QuestKind;
   assignee?: QuestAssignee;
   handoff?: HandoffDetails;
+  reminders?: number[] | null;
 }
 
 interface QuestTreeNode {
@@ -278,6 +279,10 @@ function validTime(value: string): boolean {
 /** One grapheme (an emoji with its modifiers) and at most 16 UTF-16 units. */
 function validIcon(value: string): boolean {
   return value === "" || (value.length <= 16 && [...new Intl.Segmenter().segment(value)].length === 1 && !/[\p{L}\p{N}\s]/u.test(value));
+}
+
+function validReminders(value: unknown): value is number[] {
+  return Array.isArray(value) && value.length <= 3 && value.every(minutes => Number.isInteger(minutes) && minutes >= 0 && minutes <= 1440);
 }
 
 function normalizeProposal(value: unknown): QuestProposal | null {
@@ -451,6 +456,7 @@ function normalizeQuest(task: RawQuest, index: number, previousVersion: number, 
     icon: validIcon(String(task.icon || "")) ? String(task.icon || "") : "",
     iconSource: validIcon(String(task.icon || "")) && task.icon ? setFromSet<QuestIconSource>(ICON_SOURCES, task.iconSource, "user") : "",
     proposal: normalizeProposal(task.proposal),
+    ...(validReminders(task.reminders) ? { reminders: [...task.reminders] } : {}),
     handoff: normalizeHandoff(task.handoff),
     assignmentReadyFor: String(task.assignmentReadyFor || "").slice(0, 240),
     createdAt,
@@ -686,6 +692,11 @@ function validateQuestInput(input: unknown, partial = false): ValidatedQuestInpu
   if (Object.hasOwn(body, "iconSource")) {
     if (typeof body.iconSource !== "string" || !ICON_SOURCES.has(body.iconSource)) throw new DomainError(400, "invalid_iconSource", "Unknown iconSource value.");
     next.iconSource = body.iconSource as QuestIconSource;
+  }
+  // null returns the Quest to the person's notification settings.
+  if (Object.hasOwn(body, "reminders")) {
+    if (body.reminders !== null && !validReminders(body.reminders)) throw new DomainError(400, "invalid_reminders", "reminders must be null or up to 3 distinct whole minutes from 0 to 1440.");
+    next.reminders = body.reminders === null ? null : [...new Set(body.reminders as number[])].sort((a, b) => b - a);
   }
   // Proposals are written by propose_quest_slot; a client may only clear one (accept or decline).
   if (Object.hasOwn(body, "proposal")) {
@@ -982,6 +993,7 @@ export function createQuest(state: QuestForgeState, input: unknown, context: Dom
     isBlockingOthers: Boolean(clean.isBlockingOthers), rolloverCount: 0, dependencyIds: clean.dependencyIds || [],
     parentQuestId: clean.parentQuestId || "",
     icon: clean.icon || "", iconSource: clean.icon ? iconSourceFor(clean, context) : "", proposal: null,
+    ...(clean.reminders ? { reminders: clean.reminders } : {}),
     completedAt: "", archivedAt: "", externalLinks: [], createdAt: now, updatedAt: now,
     assignee: clean.assignee || { type: "self", id: "self", label: "自分", handoffState: "none" },
     requester: normalizeRequester(context.requester),
@@ -1036,6 +1048,7 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
   const previousScheduledDate = quest.scheduledDate;
   const previousAssignee = clone(quest.assignee);
   Object.assign(quest, clean);
+  if (quest.reminders === null) delete quest.reminders;
   if (quest.planningState === "backlog") {
     quest.scheduledDate = "";
     quest.scheduledTime = "";

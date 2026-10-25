@@ -25,7 +25,7 @@
   "routes": [{ "pattern": "mcp.guilduo.com", "custom_domain": true }],
   // APPWRITE_API_KEY is a secret, not a var — set it with
   // `wrangler secret put APPWRITE_API_KEY`, never here in plaintext.
-  "triggers": { "crons": ["*/15 * * * *"] },
+  "triggers": { "crons": ["*/15 * * * *", "* * * * *"] },
   "d1_databases": [
     { "binding": "QUESTFORGE_DB", "database_name": "questforge-data", "database_id": "your-d1-database-id" }
   ],

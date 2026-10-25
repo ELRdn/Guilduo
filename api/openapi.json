@@ -4676,6 +4676,19 @@
           "proposal": {
             "type": "null",
             "description": "Clears an Agent's proposed slot (accept or decline). Proposals are created only through the propose_quest_slot MCP tool."
+          },
+          "reminders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 3,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1440
+            },
+            "description": "Minutes before the scheduled time to remind the person (0 = at the start). null follows their notification settings; [] turns reminders off."
           }
         }
       },
@@ -4758,6 +4771,12 @@
               },
               "proposal": {
                 "$ref": "#/components/schemas/QuestProposal"
+              },
+              "reminders": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
               }
             }
           }
@@ -6147,6 +6166,19 @@
           "proposal": {
             "type": "null",
             "description": "Clears an Agent's proposed slot (accept or decline). Proposals are created only through the propose_quest_slot MCP tool."
+          },
+          "reminders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 3,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1440
+            },
+            "description": "Minutes before the scheduled time to remind the person (0 = at the start). null follows their notification settings; [] turns reminders off."
           },
           "expectedUpdatedAt": {
             "type": "string",

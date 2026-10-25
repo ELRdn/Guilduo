@@ -25,7 +25,7 @@ import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { requireElement } from "../relay-forge/primitives/dom.ts";
 import { observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
 import { QuestForgeRepository } from "../repository.ts";
-import { mountAllFor, type AllForActivity, type AllForAgent, type AllForConnection, type AllForPort, type Relay } from "./app.ts";
+import { mountAllFor, type AllForActivity, type AllForAgent, type AllForConnection, type AllForPort, type NotifySettings, type Relay } from "./app.ts";
 
 const root = requireElement<HTMLElement>(document, "#a4-root");
 document.documentElement.lang = getLocale();
@@ -130,6 +130,8 @@ async function showDemo(): Promise<void> {
     [95, "quest.handoff.transitioned", fixtureRawQuests[0]?.id ?? "", "mcp", { to: "working" }],
     [40, "quest.scored", "demo-morning", "app", {}],
   ] as const) events.push({ id: `seed-${minutes}`, at: ago(minutes), type, questId: id, source, details });
+  let pushSettings: NotifySettings = { before: 10, atStart: true, summary: "08:00", review: true, proposal: true, report: true };
+  let pushOn = false;
   let connections: AllForConnection[] = [
     { clientId: "demo-claude", clientName: "Claude Code", lastUsedAt: ago(30), authorized: true, agentIds: ["a-scribe"] },
     { clientId: "demo-codex", clientName: "Codex", lastUsedAt: ago(60 * 26), authorized: true, agentIds: [] },
@@ -197,6 +199,15 @@ async function showDemo(): Promise<void> {
       link: async (connection, agentIds) => { connections = connections.map(item => item.clientId === connection.clientId ? { ...item, agentIds: [...agentIds] } : item); },
       revoke: async connection => { connections = connections.filter(item => item.clientId !== connection.clientId); },
     },
+    // The demo keeps settings in memory and shows the test locally; nothing is subscribed.
+    notifications: {
+      load: async () => ({ settings: pushSettings, devices: pushOn ? 1 : 0 }),
+      save: async settings => (pushSettings = settings),
+      device: async () => pushOn,
+      enable: async settings => { pushOn = true; return (pushSettings = settings); },
+      disable: async () => { pushOn = false; },
+      test: async () => { new Notification(tx("通知はこう届きます"), { body: tx("Guilduo からのテスト通知です") }); return 1; },
+    },
     self: () => ({ id: "admin", label: "admin" }),
     agents: () => agents,
     members: () => members,
@@ -227,6 +238,37 @@ async function showDemo(): Promise<void> {
   };
   unmount?.();
   unmount = mountAllFor(root, port);
+}
+
+/** Web Push through the gateway. The root service worker (scope "/") shows the notifications. */
+function pushNotifications(repository: QuestForgeRepository): AllForPort["notifications"] {
+  // The server schedules in the person's zone and writes in their language.
+  const where = () => ({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, locale: getLocale() });
+  const settingsOf = (response: { settings?: unknown }) => response.settings as NotifySettings;
+  const subscription = async () => (await navigator.serviceWorker?.getRegistration("/"))?.pushManager.getSubscription() ?? null;
+  return {
+    load: async () => {
+      const response = await repository.request<{ settings: NotifySettings; devices: number }>("/v1/notifications");
+      return { settings: response.settings, devices: Number(response.devices) || 0 };
+    },
+    save: async settings => settingsOf(await repository.request("/v1/notifications/settings", { method: "PUT", body: JSON.stringify({ ...settings, ...where() }) })),
+    device: async () => Boolean(await subscription()),
+    enable: async settings => {
+      const { publicKey } = await repository.request<{ publicKey: string }>("/v1/notifications");
+      const registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/", updateViaCache: "none" });
+      await navigator.serviceWorker.ready;
+      const key = Uint8Array.from(atob(publicKey.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
+      const push = await registration.pushManager.getSubscription() ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      return settingsOf(await repository.request("/v1/notifications/subscriptions", { method: "POST", body: JSON.stringify({ ...push.toJSON(), settings: { ...settings, ...where() } }) }));
+    },
+    disable: async () => {
+      const push = await subscription();
+      if (!push) return;
+      await repository.request("/v1/notifications/subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint: push.endpoint }) });
+      await push.unsubscribe();
+    },
+    test: async () => Number((await repository.request<{ sent: number }>("/v1/notifications/test", { method: "POST", body: "{}" })).sent) || 0,
+  };
 }
 
 async function showProduction(uid: string, email: string): Promise<void> {
@@ -296,6 +338,7 @@ async function showProduction(uid: string, email: string): Promise<void> {
         },
         revoke: async connection => { await runtime.agentConnectionPort.revokeMcpConnection(connection.clientId); },
       },
+      notifications: pushNotifications(repository),
       today: localToday,
       quests: () => quests,
       create: async input => replace(questOf(await runtime.questPort.createQuest(input))),

@@ -123,3 +123,31 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+// Web Push from the gateway: { title, body, tag, url }. A tap focuses an open
+// Guilduo window on that screen, or opens one.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || "Guilduo", {
+    body: data.body || "",
+    tag: data.tag || undefined,
+    icon: "/assets/icons/icon-192.png",
+    badge: "/assets/icons/favicon-48.png",
+    data: { url: data.url || "/next/all-for-adhd/" },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/next/all-for-adhd/", self.location.origin);
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const open = windows.find((client) => new URL(client.url).pathname === target.pathname);
+    if (open) {
+      await open.focus();
+      return open.navigate(target.href).catch(() => undefined);
+    }
+    return self.clients.openWindow(target.href);
+  })());
+});

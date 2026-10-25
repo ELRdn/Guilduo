@@ -30,6 +30,7 @@ import {
 import type { DomainInput, DomainRecord } from "../../server/questforge-domain.ts";
 import { listHumanRequests, preserveRelayState, requestHumanReview, respondHumanReview, type RelayContext } from "../../server/human-requests.ts";
 import { mutateState, prepareStateTransaction, readState, writeState } from "./appwrite-store.ts";
+import { handleNotifications, onStateWritten, sendDueNotifications } from "./notifications.ts";
 import { authenticateRequest } from "./security.ts";
 import { MCP_PROTOCOL_VERSION, mcpPingResponse, negotiateMcpProtocolVersion, validateMcpEnvelope, validateMcpHttpRequest, validateMcpToolInput } from "./mcp-transport.ts";
 import {
@@ -245,6 +246,7 @@ const QUEST_INPUT_PROPERTIES = {
   impact: { type: "string", enum: ["low", "medium", "high"] }, isBlockingOthers: { type: "boolean" },
   dependencyIds: { type: "array", items: { type: "string" }, maxItems: 20 },
   parentQuestId: { type: "string", maxLength: 120 },
+  reminders: { type: ["array", "null"], maxItems: 3, items: { type: "integer", minimum: 0, maximum: 1440 }, description: "Minutes before the scheduled time to remind the person (0 = at the start). null follows their notification settings; [] turns reminders off." },
   icon: { type: "string", maxLength: 16, description: "One emoji shown before the title; empty string removes it. An Agent cannot replace an emoji the person chose." },
   handoff: {
     type: "object",
@@ -1032,6 +1034,9 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     return productivityRoute(request, env, identity.uid, state?.tasks ?? [], existing, input);
   }
   if (path === "/v1/analytics/consent") return handleAnalyticsOwner(request, env, identity);
+  if (path === "/v1/notifications" || path.startsWith("/v1/notifications/")) {
+    return handleNotifications(request, env, identity, async uid => (await readState(env, uid)).payload.state ?? null);
+  }
   if (path.startsWith("/v1/billing") || path.startsWith("/v1/decisions")) {
     assertAgentRegistryWebMutation(request, env, identity);
     return routeBilling(request, env, context, identity, path);
@@ -1090,6 +1095,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     if (!await writeState(env, identity, payload, current.etag)) {
       throw new DomainError(409, "state_conflict", "The Guilduo state changed on another device.");
     }
+    context.waitUntil(onStateWritten(env, identity.uid, current.payload.state || null, payload.state));
     return json(payload);
   }
   if (path === "/v1/agents" && method === "GET") {
@@ -2089,7 +2095,13 @@ export default {
     if (path.startsWith("/api/v1/") || path.startsWith("/v1/billing") || path.startsWith("/v1/decisions") || path.includes("/analytics/")) response.headers.set("cache-control", "no-store");
     return response;
   },
-  async scheduled(_controller: unknown, env: WorkerEnv, context: WorkerContext): Promise<void> {
+  async scheduled(controller: { cron?: string } | undefined, env: WorkerEnv, context: WorkerContext): Promise<void> {
+    // The per-minute trigger only sends notifications; everything else keeps its 15-minute pace.
+    if (controller?.cron === "* * * * *") {
+      context.waitUntil(sendDueNotifications(env, async uid => (await readState(env, uid)).payload.state ?? null)
+        .catch(error => console.error("notifications_cron_failed", { message: error instanceof Error ? error.message : String(error) })));
+      return;
+    }
     context.waitUntil(retryDeliveries(env));
     context.waitUntil(runScheduledIntegrations(env));
     context.waitUntil(purgeTelemetry(env));
