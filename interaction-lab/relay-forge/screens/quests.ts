@@ -352,7 +352,8 @@ function detailRail(
       bucketChip(row.bucket),
       row.overdue ? stateChip({ tone: "danger", label: t("task.summary.overdue"), mark: "!!" }) : null,
     ),
-    el("h3", { class: "rf-q-detail-title" }, row.title),
+    el("h3", { class: "rf-q-detail-title" }, row.icon ? `${row.icon} ${row.title}` : row.title),
+    row.proposal ? el("p", { class: "rf-q-detail-next" }, el("b", { class: "rf-inline-label" }, `${relayText("agentProposal")} `), `${row.proposal.label} · ${row.proposal.date} ${row.proposal.time} · ${row.proposal.minutes}′${row.proposal.note ? ` · ${row.proposal.note}` : ""}`) : null,
     el("p", {}, `${workText("time")}: ${callbacks.workTime?.(row.id) ?? row.actualMinutes} · ${relayText("minutesEstimate")}: ${row.estimatedMinutes}`),
     callbacks.relatedNotes?.(row.id) ?? null,
     row.nextAction === "" ? null : el("p", { class: "rf-q-detail-next" }, el("b", { class: "rf-inline-label" }, `${t("ui.nextAction")} `), row.nextAction),
@@ -486,7 +487,7 @@ function portfolioRow(
     el(
       "span",
       { class: "rf-q-cell rf-q-cell-title", role: "cell" },
-      el("span", { class: "rf-srow-title rf-q-title", title: row.title }, row.title),
+      el("span", { class: "rf-srow-title rf-q-title", title: row.title }, row.icon ? `${row.icon} ${row.title}` : row.title),
       el("small", { class: "rf-q-times" }, `${relayText("minutesEstimate")}: ${row.estimatedMinutes} · ${workText("time")}: ${row.workTime ?? row.actualMinutes}`),
       el(
         "span",

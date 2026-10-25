@@ -472,6 +472,11 @@
             "type": "string",
             "maxLength": 120
           },
+          "icon": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "One emoji shown before the title; empty string removes it. An Agent cannot replace an emoji the person chose."
+          },
           "handoff": {
             "type": "object",
             "properties": {
@@ -710,6 +715,11 @@
           "parentQuestId": {
             "type": "string",
             "maxLength": 120
+          },
+          "icon": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "One emoji shown before the title; empty string removes it. An Agent cannot replace an emoji the person chose."
           },
           "handoff": {
             "type": "object",
@@ -962,6 +972,11 @@
               "parentQuestId": {
                 "type": "string",
                 "maxLength": 120
+              },
+              "icon": {
+                "type": "string",
+                "maxLength": 16,
+                "description": "One emoji shown before the title; empty string removes it. An Agent cannot replace an emoji the person chose."
               },
               "handoff": {
                 "type": "object",
@@ -3971,6 +3986,83 @@
                 "type": "null"
               }
             ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "propose_quest_slot",
+      "title": "Propose Quest Slot",
+      "description": "Preview or propose a time for one Quest. The person sees it in the matching free slot and accepts or declines; nothing is scheduled until then. Requires a linked Agent. Execution requires the Quest's current updatedAt value.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "questId",
+          "date",
+          "time",
+          "minutes"
+        ],
+        "properties": {
+          "questId": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "time": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 1440
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "expectedUpdatedAt": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          },
+          "actingAgentId": {
+            "type": "string",
+            "maxLength": 80,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+            "description": "Agent acting on this call. Required for a shared connection. Read get_current_agent_context for allowed IDs; this never changes another caller's Agent."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "quest": {
+            "type": "object"
+          },
+          "event": {
+            "type": "object"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
           }
         },
         "additionalProperties": false

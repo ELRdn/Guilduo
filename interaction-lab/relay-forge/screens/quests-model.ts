@@ -41,6 +41,10 @@ export interface QuestRow {
   readonly id: string;
   readonly ref: string;
   readonly title: string;
+  /** The Quest's emoji, shown before the title. */
+  readonly icon: string;
+  /** An Agent's proposed slot, read-only here; All for ADHD accepts or declines it. */
+  readonly proposal: Quest["proposal"];
   readonly bucket: PortfolioBucket;
   readonly archived: boolean;
   readonly nextAction: string;
@@ -201,6 +205,8 @@ export function normalizeQuestsModel(options: NormalizeQuestsOptions): QuestsMod
       humanRequest: Boolean(quest.humanRequest),
       ref: questRef(quest.id),
       title: quest.title,
+      icon: quest.icon ?? "",
+      proposal: quest.proposal ?? null,
       bucket,
       archived: quest.lifecycleState === "archived",
       nextAction: quest.nextAction,

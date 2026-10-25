@@ -4,6 +4,7 @@
  */
 
 import { tx } from "./copy.ts";
+import { iconFor } from "./emoji.ts";
 import { getLocale } from "../../i18n.ts";
 import "../../runtime-config.js";
 import "../relay-forge/tokens.css";
@@ -91,8 +92,9 @@ async function showDemo(): Promise<void> {
   // The Relay fixtures are Agent-heavy; a few personal tasks make the demo representative.
   const mine = (id: string, title: string, patch: Partial<Quest>): Quest => ({
     ...(fixtureRawQuests[0] as Quest), id, title, nextAction: "", estimatedMinutes: 0, dueDate: "", scheduledDate: "", scheduledTime: "",
-    planningMode: "on_date", planningState: "backlog", lifecycleState: "active", done: false, humanRequest: null, parentQuestId: "", notes: "",
-    assignee: { type: "self", id: "self", label: "", handoffState: "none" }, createdAt: stamp(), updatedAt: stamp(), ...patch,
+    planningMode: "on_date", planningState: "backlog", lifecycleState: "active", done: false, humanRequest: null, parentQuestId: "", notes: "", dependencyIds: [],
+    assignee: { type: "self", id: "self", label: "", handoffState: "none" }, icon: iconFor(title), iconSource: iconFor(title) ? "auto" : "", proposal: null,
+    createdAt: stamp(), updatedAt: stamp(), ...patch,
   } as Quest);
   const day = (offset: number) => { const at = new Date(`${FIXTURE_TODAY}T12:00:00Z`); at.setUTCDate(at.getUTCDate() + offset); return at.toISOString().slice(0, 10); };
   let quests: Quest[] = [
@@ -110,8 +112,9 @@ async function showDemo(): Promise<void> {
     }),
     mine("demo-gym", tx("ジムに行く"), { scheduledDate: day(1), scheduledTime: "19:00", planningState: "scheduled", estimatedMinutes: 60 }),
     mine("demo-tax", tx("確定申告の書類を集める"), { dueDate: day(-3), planningState: "scheduled" }),
-    mine("demo-dentist", tx("歯医者を予約する"), {}),
-    mine("demo-book", tx("借りた本を返す"), {}),
+    mine("demo-dentist", tx("歯医者を予約する"), { estimatedMinutes: 15 }),
+    mine("demo-book", tx("借りた本を返す"), { proposal: { agentId: "a-scribe", label: "Scribe", date: FIXTURE_TODAY, time: "14:00", minutes: 30, note: tx("図書館は14時台が空いています"), createdAt: stamp() } }),
+    mine("demo-pill", tx("薬を飲む"), { kind: "daily", repeat: "daily", scheduledDate: day(-30), planningState: "scheduled", streak: 4, lastCompletedDate: day(-1) }),
     mine("demo-plan", tx("旅行の候補を3つ挙げる"), { scheduledDate: day(2), planningState: "scheduled" }),
     ...fixtureRawQuests.map(q => ({ ...q })),
   ];

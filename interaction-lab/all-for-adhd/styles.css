@@ -676,3 +676,55 @@ body { word-break: auto-phrase; }
 .a4-embed .rf-screen-header:not(:has(> :not(.rf-screen-heading))) { display: none; }
 .a4-main:has(> .a4-wide) { max-width: 1280px; }
 .a4-wide { gap: var(--qf-space-7); }
+
+/* Capture: what the line will become, read before it is added (plan §4.4). */
+.a4-capture { flex-wrap: wrap; }
+.a4-parse { flex-basis: 100%; margin: calc(var(--qf-space-2) * -1) 0 0; font-size: 13px; color: var(--qf-color-fg-muted); overflow-wrap: anywhere; }
+.a4-parse:empty { display: none; }
+.a4-parse b { color: var(--qf-color-fg-strong); font-weight: 600; }
+
+/* Emoji circles (plan §4.3): the task colour at 26% behind its emoji; the colour dot stands in when there is none. */
+.a4-emoji { flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--qf-radius-pill); background: color-mix(in srgb, var(--a4-tone) 26%, var(--qf-color-surface)); font-size: 19px; line-height: 1; }
+.a4-emoji-lg { width: 56px; height: 56px; font-size: 30px; }
+.a4-emoji-sm { width: 28px; height: 28px; font-size: 15px; }
+.a4-emoji[data-empty="true"]::after { content: ""; width: 10px; height: 10px; border-radius: var(--qf-radius-pill); background: var(--a4-tone); }
+.a4-emoji[data-tone="done"] { opacity: 0.55; }
+button.a4-emoji { padding: 0; border: 0; cursor: pointer; color: inherit; }
+.a4-focus-head { display: flex; align-items: center; gap: var(--qf-space-4); }
+.a4-focus-head .a4-eyebrow { margin: 0; }
+.a4-pick { flex-direction: row; align-items: center; justify-content: flex-start; gap: var(--qf-space-4); }
+.a4-pick-text { display: flex; flex-direction: column; gap: var(--qf-space-1); min-width: 0; }
+.a4-sheet-titlerow { display: flex; align-items: flex-start; gap: var(--qf-space-4); }
+.a4-sheet-titlerow .a4-sheet-title { flex: 1; min-width: 0; }
+.a4-icon-pane { flex-wrap: wrap; }
+.a4-icon-choice { min-width: 44px; justify-content: center; font-size: 20px; }
+.a4-slot-pill { display: grid; justify-items: center; align-content: start; padding-top: 7px; font-size: 18px; line-height: 1; }
+
+/* 予定 day view: the same filled cards as 今, still sized by duration. */
+.a4-timeline[data-cards] { gap: var(--qf-space-2); }
+.a4-timeline[data-cards] :is(.a4-slot, .a4-gap, .a4-now-line) { grid-template-columns: 52px 36px minmax(0, 1fr); }
+.a4-timeline[data-cards] .a4-gap .a4-muted { grid-column: 3; }
+.a4-timeline[data-cards] .a4-now-line::after { grid-column: 2 / -1; }
+.a4-timeline[data-cards] .a4-slot-card { align-self: stretch; }
+.a4-timeline[data-cards] .a4-slot:not([data-run-start]) .a4-slot-pill { border: 2px solid var(--qf-color-surface); background: color-mix(in srgb, var(--a4-tone) 34%, var(--qf-color-surface)); z-index: 1; }
+@media (max-width: 760px) {
+  .a4-timeline[data-cards] :is(.a4-slot, .a4-gap, .a4-now-line) { grid-template-columns: 44px 28px minmax(0, 1fr); }
+}
+
+/* An Agent's proposed slot, in the sheet. */
+.a4-proposal { padding: var(--qf-space-4) var(--qf-space-5); background: color-mix(in srgb, var(--qf-color-agent) 10%, var(--qf-color-surface)); border-radius: var(--qf-radius-md); }
+.a4-proposal-when { margin: 0; display: flex; flex-direction: column; gap: var(--qf-space-1); font-variant-numeric: tabular-nums; }
+
+/* Week view: planned hours per day and three numbers for the week. */
+.a4-day-total { min-height: 16px; font: 12px/1.3 var(--qf-font-mono); color: var(--qf-color-fg-muted); font-variant-numeric: tabular-nums; }
+.a4-review { display: flex; flex-direction: column; gap: var(--qf-space-3); }
+.a4-review dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--qf-space-4); margin: 0; }
+.a4-review-stat { padding: var(--qf-space-4) var(--qf-space-5); background: var(--qf-color-surface); border: var(--qf-border-width) solid var(--qf-color-border-subtle); border-radius: var(--qf-radius-md); }
+.a4-review dt { font-size: 13px; color: var(--qf-color-fg-muted); }
+.a4-review dd { margin: 0; font: 300 28px/1.2 var(--qf-font-sans); color: var(--qf-color-fg-strong); font-variant-numeric: tabular-nums; }
+
+/* Habits: two weeks of dots, filled on done days. */
+.a4-habit .a4-row-main { flex-wrap: wrap; }
+.a4-habit-dots { display: flex; gap: 4px; margin-left: auto; }
+.a4-habit-dots i { width: 10px; height: 10px; border-radius: var(--qf-radius-pill); border: 1.5px solid var(--a4-tone); }
+.a4-habit-dots i[data-done="true"] { background: var(--a4-tone); }

@@ -4657,6 +4657,25 @@
           },
           "handoff": {
             "$ref": "#/components/schemas/Handoff"
+          },
+          "icon": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "One emoji (one grapheme) shown before the title; empty string removes it."
+          },
+          "iconSource": {
+            "type": "string",
+            "enum": [
+              "",
+              "auto",
+              "user",
+              "agent"
+            ],
+            "description": "auto = picked from the title dictionary, user = chosen by the person. MCP writes always record agent."
+          },
+          "proposal": {
+            "type": "null",
+            "description": "Clears an Agent's proposed slot (accept or decline). Proposals are created only through the propose_quest_slot MCP tool."
           }
         }
       },
@@ -4724,6 +4743,21 @@
               },
               "humanRequest": {
                 "$ref": "#/components/schemas/HumanRequest"
+              },
+              "icon": {
+                "type": "string"
+              },
+              "iconSource": {
+                "type": "string",
+                "enum": [
+                  "",
+                  "auto",
+                  "user",
+                  "agent"
+                ]
+              },
+              "proposal": {
+                "$ref": "#/components/schemas/QuestProposal"
               }
             }
           }
@@ -6095,6 +6129,25 @@
           "handoff": {
             "$ref": "#/components/schemas/Handoff"
           },
+          "icon": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "One emoji (one grapheme) shown before the title; empty string removes it."
+          },
+          "iconSource": {
+            "type": "string",
+            "enum": [
+              "",
+              "auto",
+              "user",
+              "agent"
+            ],
+            "description": "auto = picked from the title dictionary, user = chosen by the person. MCP writes always record agent."
+          },
+          "proposal": {
+            "type": "null",
+            "description": "Clears an Agent's proposed slot (accept or decline). Proposals are created only through the propose_quest_slot MCP tool."
+          },
           "expectedUpdatedAt": {
             "type": "string",
             "format": "date-time",
@@ -6169,6 +6222,50 @@
             "format": "date-time"
           }
         }
+      },
+      "QuestProposal": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "readOnly": true,
+        "required": [
+          "agentId",
+          "label",
+          "date",
+          "time",
+          "minutes",
+          "note",
+          "createdAt"
+        ],
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "time": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 1440
+          },
+          "note": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A registered Agent's proposed slot. Accepting copies date and time into the schedule and clears it."
       }
     }
   }
