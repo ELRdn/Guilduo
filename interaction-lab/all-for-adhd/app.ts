@@ -39,6 +39,7 @@ export interface Relay { readonly legs: readonly RelayLeg[]; readonly at: number
 /** A Guilduo activity event (`/v1/events`); `source` is "mcp" when an Agent acted. */
 export interface AllForActivity { readonly id: string; readonly at: string; readonly type: string; readonly questId: string; readonly source: string; readonly details: Record<string, unknown> }
 export interface AllForConnection { readonly clientId: string; readonly clientName: string; readonly lastUsedAt: string; readonly authorized: boolean; readonly agentIds: readonly string[] }
+export interface NotifySettings { readonly before: number; readonly atStart: boolean; readonly summary: string; readonly review: boolean; readonly proposal: boolean; readonly report: boolean }
 export interface AgentDraft { readonly agentId: string; readonly displayName: string; readonly role: string; readonly instructions: string; readonly allowedScopes: readonly string[]; readonly reviewRequired: boolean }
 
 export interface AllForPort {
@@ -65,6 +66,17 @@ export interface AllForPort {
     link(connection: AllForConnection, agentIds: readonly string[]): Promise<void>;
     /** Signs the client out of Guilduo; it must authorize again to reconnect. */
     revoke(connection: AllForConnection): Promise<void>;
+  };
+  /** Web Push: what to hear about, and whether this browser receives it. */
+  readonly notifications: {
+    load(): Promise<{ readonly settings: NotifySettings; readonly devices: number }>;
+    save(settings: NotifySettings): Promise<NotifySettings>;
+    device(): Promise<boolean>;
+    /** Subscribes this browser (permission already granted) and stores the settings with it. */
+    enable(settings: NotifySettings): Promise<NotifySettings>;
+    disable(): Promise<void>;
+    /** Sends a test notification to every device; the count of devices it reached. */
+    test(): Promise<number>;
   };
   readonly today: () => string;
   readonly quests: () => readonly Quest[];
@@ -135,6 +147,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let activityLoading = false, activityError = false;
   let connections: readonly AllForConnection[] | null = null;
   let connectionsLoading = false, connectionsError = false;
+  let notify: { settings: NotifySettings; device: boolean } | null = null;
+  let notifyLoading = false, notifyError = false;
   const linkDrafts = new Map<string, string[]>();
   let removingAgent: string | null = null;
   let revokingClient: string | null = null;
@@ -800,13 +814,23 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       queueMicrotask(() => { if (target) slots.scrollTop = target.offsetTop - slots.offsetTop - 8; });
     }
     for (const input of [time, end]) input.addEventListener("focus", () => { if (slotFor !== input) { slotFor = input; paintSlots(); } });
+    // A task's own reminder overrides the notification settings; "default" follows them.
+    const reminderValue = (list: readonly number[] | undefined) => list === undefined ? "default" : JSON.stringify(list);
+    const reminderChoices: [string, string][] = [["default", tx("いつもの通知設定")], ["[]", tx("知らせない")], ["[0]", tx("始まる時刻")],
+      ...[5, 10, 15, 30, 60].map(n => [`[${n}]`, tx("{n}分前", { n })] as [string, string])];
+    const currentReminder = reminderValue(quest.reminders);
+    if (!reminderChoices.some(([value]) => value === currentReminder)) {
+      reminderChoices.push([currentReminder, (quest.reminders ?? []).map(n => n ? tx("{n}分前", { n }) : tx("始まる時刻")).join(" · ")]);
+    }
+    const reminder = el("select", { class: "a4-input" }, ...reminderChoices.map(([value, label]) => el("option", { value, selected: value === currentReminder }, label)));
     const panes = {
       date: el("div", { class: "a4-sheet-pane", hidden: true }, date, quick(tx("今日"), () => { date.value = today; }), quick(tx("明日"), () => { date.value = addDays(today, 1); }), quick(tx("なし"), () => { date.value = ""; time.value = ""; setEstimate(estimate); })),
       time: el("div", { class: "a4-sheet-pane", hidden: true },
         el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, tx("始まり")), time),
         el("span", { class: "a4-meta", "aria-hidden": "true" }, "〜"),
         el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, tx("終わり")), end),
-        quick(tx("なし"), () => { time.value = ""; setEstimate(estimate); paintSlots(); }), slots),
+        quick(tx("なし"), () => { time.value = ""; setEstimate(estimate); paintSlots(); }), slots,
+        el("label", { class: "a4-pane-field" }, el("span", { class: "a4-step-label" }, tx("リマインド")), reminder)),
       estimate: el("div", { class: "a4-sheet-pane", hidden: true }, estimateChips,
         el("div", { class: "a4-pane-free" }, el("span", { class: "a4-step-label" }, tx("自由に")), hours, el("span", {}, tx("時間")), mins, el("span", {}, tx("分")))),
       due: el("div", { class: "a4-sheet-pane", hidden: true }, due, quick(tx("なし"), () => { due.value = ""; })),
@@ -921,6 +945,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         if (icon) store.set("a4-icons", [icon, ...recentIcons().filter(item => item !== icon)].slice(0, 8).join(" "));
       }
       set("dueDate", due.value);
+      if (reminder.value !== reminderValue(current.reminders)) patch.reminders = reminder.value === "default" ? null : JSON.parse(reminder.value);
       const legs = relay.legs();
       const handOver = relay.changed();
       // Without relay support the chain is the assignee: one Agent, or yourself.
@@ -1589,6 +1614,76 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     name.focus();
   }
 
+  /* ------------------------------ settings: notifications ------------------------------ */
+
+  // iPhone and iPad only expose Web Push to a site added to the Home Screen.
+  const pushSupport = (): "ok" | "unsupported" | "denied" =>
+    !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window) ? "unsupported" : Notification.permission === "denied" ? "denied" : "ok";
+
+  function loadNotify(): void {
+    if (notifyLoading) return;
+    notifyLoading = true;
+    void Promise.all([port.notifications.load(), pushSupport() === "ok" ? port.notifications.device().catch(() => false) : false])
+      .then(([loaded, device]) => { notify = { settings: loaded.settings, device: device && Notification.permission === "granted" }; notifyError = false; }, () => { notifyError = true; })
+      .finally(() => { notifyLoading = false; if (!disposed) render(); });
+  }
+
+  function notifySection(): HTMLElement {
+    if (notify === null && !notifyLoading && !notifyError) loadNotify();
+    const head = el("h2", { class: "a4-subtitle" }, tx("通知"));
+    if (notify === null) {
+      return el("section", { class: "a4-group" }, head, notifyError
+        ? el("p", { class: "a4-muted" }, tx("通知の設定を読み込めませんでした。"), button(tx("もう一度"), loadNotify, "link"))
+        : el("p", { class: "a4-muted" }, tx("通知の設定を読み込んでいます…")));
+    }
+    const state = notify;
+    const save = (patch: Partial<NotifySettings>) => {
+      const next = { ...state.settings, ...patch };
+      state.settings = next;
+      void run(async () => { state.settings = await port.notifications.save(next); say(tx("通知の設定を保存しました")); }, tx("通知の設定を保存できませんでした。"));
+    };
+    const support = pushSupport();
+    const enable = async () => {
+      if (await Notification.requestPermission() !== "granted") { render(); return; }
+      void run(async () => {
+        state.settings = await port.notifications.enable(state.settings);
+        state.device = true;
+        say(tx("この端末で通知を受け取ります"));
+      }, tx("通知をオンにできませんでした。もう一度試してください。"));
+    };
+    const device = support === "unsupported"
+      ? el("p", { class: "a4-muted" }, tx("このブラウザは通知に対応していません。iPhone と iPad では、共有メニューの「ホーム画面に追加」から開くと使えます。"))
+      : support === "denied"
+        ? el("p", { class: "a4-muted" }, tx("このサイトの通知がブラウザでブロックされています。サイトの設定で通知を許可してください。"))
+        : state.device
+          ? el("div", { class: "a4-actions" }, el("span", { class: "a4-meta" }, tx("この端末で受け取っています")),
+            button(tx("テスト通知を送る"), () => { void run(async () => { const sent = await port.notifications.test(); say(sent > 0 ? tx("テスト通知を送りました") : tx("届けられる端末がありませんでした。もう一度オンにしてください。")); }, tx("テスト通知を送れませんでした。")); }, "link"),
+            button(tx("この端末では止める"), () => { void run(async () => { await port.notifications.disable(); state.device = false; say(tx("この端末の通知を止めました")); }, tx("通知を止められませんでした。")); }, "link"))
+          : el("div", { class: "a4-actions" }, button(tx("この端末で通知を受け取る"), () => { void enable(); }, "primary"));
+    const check = (key: "atStart" | "review" | "proposal" | "report", text: string) => {
+      const input = el("input", { type: "checkbox", checked: state.settings[key] });
+      input.addEventListener("change", () => save({ [key]: input.checked }));
+      return el("label", { class: "a4-option" }, input, text);
+    };
+    const before = el("select", { class: "a4-input", "aria-label": tx("始まる前のリマインド") },
+      ...[0, 5, 10, 15, 30, 60].map(minutes => el("option", { value: String(minutes), selected: state.settings.before === minutes }, minutes ? tx("{n}分前", { n: minutes }) : tx("知らせない"))));
+    before.addEventListener("change", () => save({ before: Number(before.value) }));
+    const summaryOn = el("input", { type: "checkbox", checked: state.settings.summary !== "" });
+    const summaryAt = el("input", { type: "time", class: "a4-input", value: state.settings.summary || "08:00", disabled: state.settings.summary === "", "aria-label": tx("朝のまとめの時刻") });
+    summaryOn.addEventListener("change", () => { summaryAt.disabled = !summaryOn.checked; save({ summary: summaryOn.checked ? summaryAt.value || "08:00" : "" }); });
+    summaryAt.addEventListener("change", () => { if (summaryAt.value) save({ summary: summaryAt.value }); });
+    return el("section", { class: "a4-group" }, head,
+      el("p", { class: "a4-muted" }, tx("アプリを閉じていても、この端末に届きます。")), device,
+      el("h3", { class: "a4-step-label" }, tx("タスク")),
+      el("label", { class: "a4-field-row" }, el("span", { class: "a4-meta" }, tx("始まる前")), before),
+      check("atStart", tx("始まる時刻ちょうどに知らせる")),
+      el("div", { class: "a4-field-row" }, el("label", { class: "a4-option" }, summaryOn, tx("朝のまとめ")), summaryAt),
+      el("h3", { class: "a4-step-label" }, tx("Agent")),
+      check("review", tx("確認を頼まれたとき")),
+      check("proposal", tx("時間を提案されたとき")),
+      check("report", tx("作業を終えた・止まったとき")));
+  }
+
   /* ------------------------------ settings: MCP ------------------------------ */
 
   function loadConnections(): void {
@@ -1792,6 +1887,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       themes,
       el("label", { class: "a4-option" }, bloom, tx("やわらかい配色（タスクごとの色）")),
       el("p", { class: "a4-muted" }, tx("キーボード：N か / で書き出し、J と K で行を移動、X で完了、S で今のタスクを始める")),
+      notifySection(),
       mcpSection(),
       runtime ? el("section", { class: "a4-group" }, el("h2", { class: "a4-subtitle" }, tx("時間の記録")), embed(workUi.settings())) : null,
       el("p", {}, el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("Relay Forge（詳しい画面）を開く"))),
@@ -1824,7 +1920,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       void workUi.load();
     }
     if (next === "guild" && view !== "guild") { activity = null; activityError = false; }
-    if (next === "settings" && view !== "settings") { connections = null; connectionsError = false; }
+    if (next === "settings" && view !== "settings") { connections = null; connectionsError = false; notify = null; notifyError = false; }
     view = next;
     stepDraftFor = null;
     if (location.hash !== `#${next}`) history.pushState(null, "", `#${next}`);

@@ -116,6 +116,8 @@ export interface Quest {
   icon?: string;
   iconSource?: QuestIconSource;
   proposal?: QuestProposal | null;
+  /** Minutes before the start to remind; absent follows the notification settings, [] turns reminders off. */
+  reminders?: number[];
   negativeOnly?: boolean;
   assignee: QuestAssignee;
   handoff: HandoffDetails;

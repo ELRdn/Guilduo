@@ -109,7 +109,7 @@ const wrangler = {
     JEV_BUDGET_SCOPE: process.env.JEV_BUDGET_SCOPE || "evaluation",
     ...(process.env.JEV_COMMERCIAL_CONFIG ? { JEV_COMMERCIAL_CONFIG: process.env.JEV_COMMERCIAL_CONFIG } : {}),
   },
-  triggers: { crons: ["*/15 * * * *"] },
+  triggers: { crons: ["*/15 * * * *", "* * * * *"] },
   d1_databases: [{ binding: "QUESTFORGE_DB", database_name: process.env.D1_DATABASE_NAME, database_id: process.env.D1_DATABASE_ID }],
   kv_namespaces: [{ binding: "QUESTFORGE_KV", id: process.env.KV_NAMESPACE_ID, remote: true }],
   // Agent avatar image bytes (worker/src/agent-avatar-store.ts). The bucket

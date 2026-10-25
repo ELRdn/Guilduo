@@ -163,6 +163,8 @@ flowchart LR
 - メモの有無はBattle対象判定に使わない。`habit`、`daily`、`todo`のみが対象である。
 - `icon`は絵文字1つ（書記素1つ、16 UTF-16単位まで、文字・数字は不可）で、既定は空。`iconSource`は`auto`（辞書）/`user`（本人）/`agent`を記録する。MCPからの書き込みは常に`agent`になり、本人が選んだ絵文字（`user`）をAgentは置き換えられない（409 `icon_set_by_user`）。
 - `proposal`はAgentが置いた「この時間にどうですか」（Agent ID・表示名・日付・時刻・5〜1440分・一言）で、1Questに1件。作成はMCPの`propose_quest_slot`（dry-run既定、実行は`expectedUpdatedAt`とAgentの紐付けが必須）だけで行う。それだけでは予定に入れない。本人が受けると日付と時刻を予定へ移し、受けても断っても`null`に戻す。通常のPATCHは`null`への消去だけを受け付ける。
+- `reminders`は開始の何分前に知らせるか（0〜1440の整数を最大3つ、0は開始時刻）。無いときは本人の通知設定に従い、`[]`はこのQuestだけ知らせない。PATCHの`null`で設定に戻す。
+- 通知（2026-10-25）はWeb Pushで届ける。VAPID鍵はGatewayがD1に1組だけ作って保持する（作り直すと全端末の購読が切れる）。端末・設定・送信待ちはD1（`push_subscriptions`・`notification_settings`・`notification_jobs`）に置く。購読先は既知のPushサービス（FCM・Mozilla・Apple・Windows）だけを受け付ける。`/v1/notifications/*`はWeb専用でOAuth（MCP）からは使えない。状態を書き込むたび、通知を有効にした人について今後48時間の自分の時刻つきTo Doのリマインドを組み直し、Agentの出来事（判断待ちになった・時間の提案・Agent担当の完了/停止）を送信待ちに積む。毎分のcronが期限の来たものを一度だけ送り、30分以上遅れたリマインドは捨てる。毎日1回（朝のまとめの時刻、オフなら03:00、本人のタイムゾーン）に状態を読み直し、まとめを送ってリマインドを補充する。410/404を返した端末は消す。
 
 ### 4.2 Quest Tree
 

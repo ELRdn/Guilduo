@@ -472,6 +472,19 @@
             "type": "string",
             "maxLength": 120
           },
+          "reminders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 3,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1440
+            },
+            "description": "Minutes before the scheduled time to remind the person (0 = at the start). null follows their notification settings; [] turns reminders off."
+          },
           "icon": {
             "type": "string",
             "maxLength": 16,
@@ -715,6 +728,19 @@
           "parentQuestId": {
             "type": "string",
             "maxLength": 120
+          },
+          "reminders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 3,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1440
+            },
+            "description": "Minutes before the scheduled time to remind the person (0 = at the start). null follows their notification settings; [] turns reminders off."
           },
           "icon": {
             "type": "string",
@@ -972,6 +998,19 @@
               "parentQuestId": {
                 "type": "string",
                 "maxLength": 120
+              },
+              "reminders": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "maxItems": 3,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1440
+                },
+                "description": "Minutes before the scheduled time to remind the person (0 = at the start). null follows their notification settings; [] turns reminders off."
               },
               "icon": {
                 "type": "string",

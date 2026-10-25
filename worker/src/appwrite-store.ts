@@ -4,6 +4,7 @@ import { sha256 } from "./security.ts";
 import type { JsonRecord, WorkerEnv } from "./worker-types.ts";
 import type { QuestForgeState } from "../../types/questforge.ts";
 import { PreparedTransaction } from "./prepared-transaction.ts";
+import { onStateWritten } from "./notifications.ts";
 
 type Identity = string | Pick<AuthIdentity, "uid"> & Partial<Pick<AuthIdentity, "email">>;
 type StatePayload = JsonRecord & { schemaVersion?: number; clientUpdatedAt?: string; state?: QuestForgeState | null };
@@ -306,6 +307,7 @@ export async function mutateState(env: WorkerEnv, identity: Identity, mutator: S
       const nextPayload: StatePayload = { ...payload, schemaVersion: nextState.schemaVersion || 3, clientUpdatedAt: nextState.updatedAt || new Date().toISOString(), deviceId: "guilduo-worker", state: nextState };
       if (await writeState(env, identity, nextPayload, etag, transactionId)) {
         committed = true;
+        await onStateWritten(env, uidOf(identity), state, nextState);
         return { state: nextState, result };
       }
     } finally {
