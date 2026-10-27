@@ -88,7 +88,7 @@ export function nextCandidates(quests: readonly Quest[], today: string): Quest[]
   // A parent with open steps is a container: its steps are offered instead. Waiting steps are not offered yet.
   const containers = new Set(quests.filter(q => q.parentQuestId && isOpen(q)).map(q => q.parentQuestId));
   const mine = quests.filter(q => isOpen(q) && !needsDecision(q) && !isSettledRequest(q) && q.assignee.type === "self"
-    && !containers.has(q.id) && blockers(q, quests).length === 0);
+    && (!containers.has(q.id) || isWorking(q)) && blockers(q, quests).length === 0);
   const of = (bucket: Bucket) => mine.filter(q => !isWorking(q) && (bucketOf(q, today) === bucket ||
     (bucket === "today" && !q.scheduledDate && !q.dueDate && q.parentQuestId && quests.some(parent => parent.id === q.parentQuestId && isOpen(parent) && bucketOf(parent, today) === "today"))));
   return [

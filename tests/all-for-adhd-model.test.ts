@@ -198,3 +198,9 @@ test("the calendar keeps scored one-off completions but excludes manually archiv
   const putAway = quest("put-away", { scheduledDate: TODAY, done: true, lifecycleState: "archived", lastCompletedDate: "" });
   assert.deepEqual(dayPlan([scored, putAway], TODAY).anytime.map(q => q.id), ["scored"]);
 });
+
+test("explicitly running parent work stays first even when its steps or date are elsewhere", () => {
+  const parent = quest("parent", { scheduledDate: "2026-10-20", state: "working" });
+  const child = quest("child", { parentQuestId: parent.id });
+  assert.equal(nextCandidates([parent, child], TODAY)[0]?.id, parent.id);
+});
