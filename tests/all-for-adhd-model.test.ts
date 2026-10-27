@@ -204,3 +204,10 @@ test("explicitly running parent work stays first even when its steps or date are
   const child = quest("child", { parentQuestId: parent.id });
   assert.equal(nextCandidates([parent, child], TODAY)[0]?.id, parent.id);
 });
+
+test("a daily keeps a new handoff and a start recorded today", () => {
+  const daily = quest("daily", { kind: "daily", done: true, lastCompletedDate: "2026-10-17", owner: "agent", state: "ready" });
+  assert.equal(forDay(daily, TODAY).assignee.handoffState, "ready");
+  const started = { ...daily, assignee: { ...daily.assignee, type: "self", handoffState: "working" }, handoff: { startedAt: TODAY + "T12:00:00" } } as Quest;
+  assert.equal(isWorking(forDay(started, TODAY)), true);
+});

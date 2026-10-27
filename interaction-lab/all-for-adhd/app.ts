@@ -900,7 +900,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("div", { class: "a4-chips a4-sheet-chips" }, chips.date, chips.time, chips.estimate, chips.due, doneChip, memoChip),
       ...Object.values(panes), done, memo);
 
-    const mine = quest.assignee.type === "self" && !isDone(quest);
+    const mine = quest.assignee.type === "self" && !isDone(forDay(quest, today));
     const steps = el("div", { class: "a4-sheet-steps" });
     const drafts = children(quest).map(q => ({ quest: q as Quest | null, title: q.title, done: isDone(forDay(q, today)), removed: false }));
     const stepInput = el("input", { class: "a4-input", placeholder: tx("ステップを追加"), "aria-label": tx("小さなステップを追加"), maxlength: 200, enterkeyhint: "done" });
