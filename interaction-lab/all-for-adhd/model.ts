@@ -1,6 +1,24 @@
 import { tx } from "./copy.ts";
 import type { Quest } from "../../types/questforge.ts";
 
+/** Resolve recurring completion before filtering; never revive archived work. */
+export function forDay(quest: Quest, date: string): Quest {
+  if (quest.kind !== "daily" || quest.lifecycleState === "archived") return quest;
+  const done = quest.lastCompletedDate === date;
+  return { ...quest, done, lifecycleState: done ? "completed" : "active",
+    assignee: !done && quest.assignee.handoffState === "working" && quest.lastCompletedDate && !(quest.handoff?.startedAt && Date.parse(quest.handoff.startedAt) >= Date.parse(date + "T00:00:00")) ? { ...quest.assignee, handoffState: "none" } : quest.assignee };
+}
+
+/** Active Agent work, with ownership kept separate from actual execution. */
+export function agentSummary(quests: readonly Quest[], today: string) {
+  const active = quests.map(q => forDay(q, today)).filter(q => isOpen(q) && q.assignee.type === "agent");
+  const review = active.filter(needsDecision);
+  const blocked = active.filter(q => !needsDecision(q) && q.assignee.handoffState === "blocked");
+  const working = active.filter(q => !needsDecision(q) && q.assignee.handoffState === "working");
+  return { review, blocked, working, ready: active.filter(q => q.assignee.handoffState === "ready"),
+    visible: [...review, ...blocked, ...working].slice(0, 5) };
+}
+
 /** Where a Quest belongs on the All for ADHD surface. */
 export type Bucket = "review" | "today" | "later" | "inbox" | "agent" | "decision";
 
@@ -47,7 +65,7 @@ export function stepsOf(parent: Quest, quests: readonly Quest[]): Quest[] {
 export function bucketOf(quest: Quest, today: string): Bucket {
   if (needsDecision(quest)) return "decision";
   if (quest.assignee.type !== "self") return "agent";
-  if (isDaily(quest)) return "today";
+  if (isDaily(quest)) return onDay(quest, today) ? "today" : "later";
   const start = quest.scheduledDate || quest.dueDate;
   if (!start) return "inbox";
   // "until due" work stays on today from its start until the due date.
@@ -62,25 +80,25 @@ const byRecent = (a: Quest, b: Quest) => b.updatedAt.localeCompare(a.updatedAt);
 
 /**
  * The order in which the Now screen offers work: what is already running,
- * then today's plan, then things to review, then the inbox, then later work.
+ * then today's actionable plan. Other dates require an explicit choice.
  * Only the person's own open tasks are offered; Agent work is never "next".
  */
 export function nextCandidates(quests: readonly Quest[], today: string): Quest[] {
+  quests = quests.map(q => forDay(q, today));
   // A parent with open steps is a container: its steps are offered instead. Waiting steps are not offered yet.
   const containers = new Set(quests.filter(q => q.parentQuestId && isOpen(q)).map(q => q.parentQuestId));
   const mine = quests.filter(q => isOpen(q) && !needsDecision(q) && !isSettledRequest(q) && q.assignee.type === "self"
-    && !containers.has(q.id) && blockers(q, quests).length === 0);
-  const of = (bucket: Bucket) => mine.filter(q => !isWorking(q) && bucketOf(q, today) === bucket);
+    && (!containers.has(q.id) || isWorking(q)) && blockers(q, quests).length === 0);
+  const of = (bucket: Bucket) => mine.filter(q => !isWorking(q) && (bucketOf(q, today) === bucket ||
+    (bucket === "today" && !q.scheduledDate && !q.dueDate && q.parentQuestId && quests.some(parent => parent.id === q.parentQuestId && isOpen(parent) && bucketOf(parent, today) === "today"))));
   return [
     ...mine.filter(isWorking),
-    ...of("today").sort(byTime),
-    ...of("review").sort(byDate),
-    ...of("inbox").sort(byRecent),
-    ...of("later").sort(byDate),
+    ...of("today").sort((a, b) => (a.scheduledTime || quests.find(q => q.id === a.parentQuestId)?.scheduledTime || "99:99").localeCompare(b.scheduledTime || quests.find(q => q.id === b.parentQuestId)?.scheduledTime || "99:99")),
   ];
 }
 
 export function groups(quests: readonly Quest[], today: string): Record<Bucket, Quest[]> {
+  quests = quests.map(q => forDay(q, today));
   const result: Record<Bucket, Quest[]> = { decision: [], review: [], today: [], later: [], inbox: [], agent: [] };
   // Undated steps are shown under their open parent, not again in the inbox.
   const parents = new Set(quests.filter(isOpen).map(q => q.id));
@@ -141,11 +159,13 @@ export interface DayPlan {
 
 /** One day of the timeline. Completed Quests stay visible (ticked) on the day they were planned for. */
 export function dayPlan(quests: readonly Quest[], date: string): DayPlan {
-  const visible = quests.filter(q => q.kind !== "reward" && q.lifecycleState !== "archived" && (isOpen(q) || q.done) && onDay(q, date))
-    .map(q => isDaily(q) ? { ...q, done: q.lastCompletedDate === date } as Quest : q);
-  const timed = visible.filter(q => q.scheduledTime && q.scheduledDate === date);
+  const visible = quests.map(q => forDay(q, date)).filter(q => q.kind !== "reward" && (q.lifecycleState !== "archived" || (q.done && q.lastCompletedDate === date)) && (isOpen(q) || q.done) && !isSettledRequest(q) && onDay(q, date));
+  const carried = quests.filter(q => q.kind !== "daily" && q.kind !== "reward" && q.lifecycleState !== "archived" && !isSettledRequest(q)
+    && q.scheduledDate === addDays(date, -1) && q.scheduledTime && endOf(q) > 1440)
+    .map(q => ({ ...q, scheduledDate: date, scheduledTime: "00:00", estimatedMinutes: endOf(q) - 1440 }));
+  const timed = [...visible.filter(q => q.scheduledTime && q.scheduledDate === date), ...carried];
   return {
-    anytime: visible.filter(q => !timed.includes(q)).sort((a, b) => Number(a.done) - Number(b.done)),
+    anytime: visible.filter(q => !timed.some(item => item.id === q.id)).sort((a, b) => Number(a.done) - Number(b.done)),
     timed: timed.sort(byTime),
   };
 }

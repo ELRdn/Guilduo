@@ -7,6 +7,7 @@
  * window instead of a confirmation dialog. Japanese-only while prototyping.
  */
 
+import { createElement, Sun, Moon, CalendarDays, ListTodo, Users, Settings, Plus, Play, Clock3, ArrowRight, MoreHorizontal, Flag, type IconNode } from "lucide";
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { el, replaceChildren, svg } from "../relay-forge/primitives/dom.ts";
 import { celebrate } from "./celebrate.ts";
@@ -19,7 +20,7 @@ import { createAnalyticsUi } from "../relay-forge/screens/analytics.ts";
 import { forgeScreens, type ForgeScreen } from "./forge.ts";
 import { parseCapture, isBig } from "./capture.ts";
 import { iconChoices, iconFor } from "./emoji.ts";
-import { addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, fitForGap, freeAhead, gaps, habitDays, proposalFor, weekReview, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
+import { forDay, agentSummary, addDays, AGENT_STATE, blockers, stepsOf, AGENT_STATE_ORDER, clock, dayPlan, DEFAULT_BLOCK, endOf, ESTIMATES, fitForGap, freeAhead, habitDays, proposalFor, groups, onDay, isOpen, isWorking, minutesLabel, needsDecision, nextCandidates, plannedMinutes, toMinutes, weekOf, type Bucket } from "./model.ts";
 
 export interface AllForAgent {
   readonly id: string;
@@ -92,9 +93,9 @@ export interface AllForPort {
 type Extra = "profile" | "billing" | Exclude<ForgeScreen, "list">;
 type View = "now" | "plan" | "all" | "guild" | "settings" | Extra;
 const VIEWS: readonly { id: View; label: string }[] = [
-  { id: "now", label: tx("今") },
-  { id: "plan", label: tx("予定") },
-  { id: "all", label: tx("やること") },
+  { id: "now", label: tx("今日") },
+  { id: "plan", label: tx("カレンダー") },
+  { id: "all", label: tx("タスク") },
   { id: "guild", label: tx("ギルド") },
   { id: "settings", label: tx("設定") },
 ];
@@ -123,7 +124,7 @@ const shortDateLabel = new Intl.DateTimeFormat(LOCALE, { month: "numeric", day: 
 const noon = (date: string) => new Date(`${date}T12:00:00Z`);
 const shortDate = (date: string) => shortDateLabel.format(noon(date));
 /** Week grid scale: pixels per minute. */
-const GRID_PX = 1.4;
+const GRID_PX = 1.6;
 /** Side-by-side cards per overlap in the week grid before the rest fold away. */
 const MAX_LANES = 2;
 const MONTH_PILLS = 3;
@@ -137,7 +138,6 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const viewFromHash = (): View => location.hash === "#today" ? "plan" : [...VIEWS, ...EXTRAS].find(v => location.hash === `#${v.id}`)?.id ?? "now";
   let view: View = viewFromHash();
   let focusId: string | null = null;
-  const skipped = new Set<string>();
   let planDate = port.today();
   // Guild: which decision is shown, whether "please fix" is open, and what was typed.
   let decisionId: string | null = null;
@@ -161,11 +161,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const storedPlanMode = store.get("a4-plan-mode");
   let planMode: PlanMode = storedPlanMode === "week" || storedPlanMode === "month" ? storedPlanMode : "day";
   let sheet: HTMLDialogElement | null = null;
+  let closeSheet: ((after?: () => void) => void) | null = null;
+  let sheetDirty: (() => boolean) | null = null;
+  let refreshError = false;
   let repaintSheet: (() => void) | null = null;
-  let stepDraftFor: string | null = null;
-  let estimateFor: string | null = null;
-  let afterOpen = false;
-  let earlierOpen = false;
   // Free stretches the person chose to rest in, and later stretches whose suggestions were opened (this session only).
   const rested = new Set<string>();
   const openGaps = new Set<string>();
@@ -186,7 +185,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const pending = new Map<string, number>();
   let toastTimer = 0;
 
-  const quests = () => port.quests().filter(q => !pending.has(q.id));
+  const quests = () => port.quests().filter(q => !pending.has(q.id)).map(q => forDay(q, port.today()));
+  const displayQuests = () => port.quests().map(q => pending.has(q.id) ? { ...q, done: true, lastCompletedDate: port.today() } : q);
+  const glyph = (icon: IconNode) => createElement(icon, { width: 18, height: 18, "stroke-width": 1.75, "aria-hidden": "true" });
 
   // Relay Forge's own calendar, notes, time and plan modules, so nothing is lost by switching.
   const runtime = port.runtime;
@@ -238,13 +239,45 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const captureParse = el("p", { class: "a4-parse", id: "a4-parse", "aria-live": "polite" });
   captureInput.setAttribute("aria-describedby", "a4-parse");
   const captureForm = el("form", { class: "a4-capture" }, captureInput, captureToday, el("button", { type: "submit", class: "a4-button" }, tx("追加")), captureParse);
-  const header = el("header", { class: "a4-top" },
-    el("span", { class: "a4-brand" }, "Guilduo"),
-    captureForm,
-    nav,
-  );
+  const addButton = el("button", { type: "button", class: "a4-button a4-top-add" }, glyph(Plus), tx("タスクを追加"));
+  const mobileAdd = el("button", { type: "button", class: "a4-mobile-add", "aria-label": tx("タスクを追加") }, glyph(Plus));
+  const themeButton = el("button", { type: "button", class: "a4-icon-button", "aria-label": tx("表示テーマ") }, glyph(Moon));
+  themeButton.addEventListener("click", () => {
+    const dark = document.documentElement.dataset.theme === "dark" || (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "light" : "dark";
+    store.set("qf-relay-forge-theme", dark ? "light" : "dark");
+    replaceChildren(themeButton, glyph(dark ? Moon : Sun));
+    paintThemeColor();
+  });
+  const breadcrumb = el("span", { class: "a4-breadcrumb" });
+  const header = el("header", { class: "a4-top" }, breadcrumb, el("div", { class: "a4-top-actions" }, themeButton, addButton));
+  const brand = el("a", { class: "a4-brand", href: "#now" },
+    el("img", { src: "/assets/brand/guilduo-mark-ink.svg", class: "a4-brand-light", alt: "", width: 19, height: 26 }),
+    el("img", { src: "/assets/brand/guilduo-mark-gold.svg", class: "a4-brand-dark", alt: "", width: 19, height: 26 }), "Guilduo");
+  brand.addEventListener("click", event => { event.preventDefault(); go("now"); });
+  const rail = el("aside", { class: "a4-rail" }, brand, nav,
+    el("div", { class: "a4-profile" }, el("span", { class: "a4-avatar", "aria-hidden": "true" }, port.self().label.slice(0, 2)),
+      el("span", {}, port.self().label)));
   const banner = port.demo ? el("p", { class: "a4-demo" }, tx("デモ（保存されません） "), el("a", { href: location.pathname }, tx("サインイン"))) : null;
-  replaceChildren(root, el("div", { class: "a4-app" }, banner, header, main, dockHost, toast));
+  replaceChildren(root, el("div", { class: "a4-app" }, banner, rail, header, main, mobileAdd, dockHost, toast));
+  let captureDialog: HTMLDialogElement | null = null;
+  function openCapture(): void {
+    if (sheet) { closeSheet?.(openCapture); return; }
+    if (captureDialog?.open) { captureInput.focus(); return; }
+    const opener = document.activeElement;
+    const close = el("button", { type: "button", class: "a4-button" }, tx("閉じる"));
+    const dialog = el("dialog", { class: "a4-capture-dialog", "aria-label": tx("タスクを追加") },
+      el("div", { class: "a4-sheet-head" }, el("h2", { class: "a4-subtitle" }, tx("タスクを追加")), close), captureForm);
+    close.addEventListener("click", () => { if (!busy) dialog.close(); });
+    dialog.addEventListener("cancel", event => { if (busy) event.preventDefault(); });
+    dialog.addEventListener("close", () => { dialog.remove(); captureDialog = null; if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); });
+    captureDialog = dialog;
+    document.body.append(dialog);
+    dialog.showModal();
+    captureInput.focus();
+  }
+  addButton.addEventListener("click", openCapture);
+  mobileAdd.addEventListener("click", openCapture);
 
   captureToday.addEventListener("click", () => captureToday.setAttribute("aria-pressed", String(captureToday.getAttribute("aria-pressed") !== "true")));
   // A dated line wins over the "今日やる" toggle; time alone means today.
@@ -276,6 +309,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         scheduledDate: parsed.date, scheduledTime: parsed.time, planningMode: "on_date", planningState: parsed.date ? "scheduled" : "backlog",
       });
       captureInput.value = "";
+      captureDialog?.close();
       paintParse();
       const message = !parsed.date ? tx("受け箱に追加しました") : parsed.date === port.today() ? tx("今日のやることに追加しました") : tx("{day}に追加しました", { day: dayLabel.format(noon(parsed.date)) });
       // Big work is easier to start in steps; one tap asks an Agent to split it through the usual handoff.
@@ -383,7 +417,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     // Starting also records time, so there is one start button, not two. Track before saving:
     // the save marks the app busy, and the time recorder refuses writes while it is busy.
     if (runtime) workUi.track(quest.id);
-    update(quest, { assignee: { ...quest.assignee, handoffState: "working" }, handoff: { ...quest.handoff, startedAt: quest.handoff?.startedAt || new Date().toISOString() } }, tx("始めました。まずは次の一歩だけ。"));
+    update(quest, { assignee: { ...quest.assignee, handoffState: "working" }, handoff: { ...quest.handoff, startedAt: new Date().toISOString() } }, tx("始めました。まずは次の一歩だけ。"));
   }
 
   const stopTracking = (quest: Quest) => { if (runtime && workUi.trackedQuest() === quest.id) workUi.track(null); };
@@ -403,29 +437,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     return node;
   };
 
-  function estimateChips(quest: Quest): HTMLElement {
-    return el("div", { class: "a4-chips", role: "group", "aria-label": tx("目安の時間") },
-      ...ESTIMATES.map(minutes => {
-        const chip = button(minutesLabel(minutes), () => {
-          estimateFor = null;
-          update(quest, { estimatedMinutes: quest.estimatedMinutes === minutes ? 0 : minutes, expectedUpdatedAt: quest.updatedAt }, tx("目安を{time}にしました", { time: minutesLabel(minutes) }));
-        });
-        chip.className = "a4-chip";
-        chip.setAttribute("aria-pressed", String(quest.estimatedMinutes === minutes));
-        return chip;
-      }));
-  }
-
-  function stepEditor(quest: Quest): HTMLElement {
-    const input = el("input", { class: "a4-input", type: "text", value: quest.nextAction, "aria-label": tx("次の一歩"), placeholder: tx("例：ファイルを開くだけ"), maxlength: 180 });
-    const form = el("form", { class: "a4-step-form" }, input, el("button", { type: "submit", class: "a4-button", disabled: busy }, tx("保存")));
-    form.addEventListener("submit", event => { event.preventDefault(); stepDraftFor = null; update(quest, { nextAction: input.value.trim(), expectedUpdatedAt: quest.updatedAt }, tx("次の一歩を保存しました")); });
-    queueMicrotask(() => input.focus());
-    return form;
-  }
-
   const startedAtOf = (quest: Quest) => Number(store.get(`a4-start:${quest.id}`)) || Date.parse(quest.handoff?.startedAt ?? "") || Date.now();
-  /** A running task's bar fills as time passes; the tick moves `--a4-progress`. */
   const running = (quest: Quest, minutes: number) => isWorking(quest)
     ? { "data-run-start": String(startedAtOf(quest)), "data-run-goal": String((quest.estimatedMinutes > 0 ? quest.estimatedMinutes : minutes) * 60) } : {};
   function paintProgress(): void {
@@ -454,9 +466,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   function decisionNotice(): HTMLElement | null {
+    const ai = agentSummary(quests(), port.today());
     const count = quests().filter(needsDecision).length;
-    if (count === 0) return null;
-    const link = el("a", { class: "a4-notice", href: "#guild" }, tx("あなたの判断待ちが {count} 件あります", { count }), el("span", { "aria-hidden": "true" }, " →"));
+    if (count === 0 && ai.blocked.length === 0) return null;
+    const link = el("a", { class: "a4-notice", href: "#guild" }, tx("確認 {review}件 · 停止 {blocked}件", { review: count, blocked: ai.blocked.length }), el("span", { "aria-hidden": "true" }, " →"));
     link.addEventListener("click", event => { event.preventDefault(); go("guild"); });
     return link;
   }
@@ -464,14 +477,14 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const isDone = (quest: Quest) => quest.done || pending.has(quest.id);
   const children = (quest: Quest) => port.quests().filter(q => q.parentQuestId === quest.id && q.lifecycleState !== "archived");
 
-  // A stable colour slot per task; only palettes that define hues use it.
-  const hue = (quest: Quest) => String([...quest.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % 5);
+  const hue = (_quest: Quest) => "";
 
   function tone(quest: Quest): string {
     if (isDone(quest)) return "done";
     if (needsDecision(quest)) return "decision";
     if (quest.assignee.type !== "self") return "agent";
-    return isWorking(quest) ? "working" : "self";
+    if (view === "now" && (quest.id === focusQuest?.id || quest.id === focusQuest?.parentQuestId)) return "focus";
+    return isWorking(quest) ? "working" : quest.kind === "daily" ? "daily" : "self";
   }
 
   const recentIcons = () => (store.get("a4-icons") ?? "").split(" ").filter(Boolean);
@@ -479,11 +492,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const iconCircle = (quest: Quest, size: "" | "lg" | "sm" = "") => el("span", { class: size ? `a4-emoji a4-emoji-${size}` : "a4-emoji",
     "data-tone": tone(quest), "data-hue": hue(quest), "data-empty": String(!quest.icon), "aria-hidden": "true" }, quest.icon ?? "");
 
-  function checkButton(quest: Quest): HTMLElement {
+  function checkButton(quest: Quest, date = port.today()): HTMLElement {
     if (isDone(quest)) return el("span", { class: "a4-check", "data-done": "true", role: "img", "aria-label": tx("完了") });
     // Only the person's own tasks can be ticked off here; others show no dead control.
     if (quest.assignee.type !== "self" || needsDecision(quest)) return el("span", { class: "a4-check-space", "aria-hidden": "true" });
-    const node = el("button", { type: "button", class: "a4-check", "aria-label": tx("{title} を完了", { title: quest.title }), disabled: busy });
+    const node = el("button", { type: "button", class: "a4-check", "aria-label": tx("{title} を完了", { title: quest.title }), disabled: busy || (quest.kind === "daily" && date !== port.today()) });
     node.addEventListener("click", () => complete(quest));
     return node;
   }
@@ -716,7 +729,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   function openSheet(quest: Quest): void {
-    sheet?.close();
+    if (sheet) { closeSheet?.(() => openSheet(quest)); return; }
+    quest = byId(quest.id) ?? quest;
     const today = port.today();
     // Single-line values that wrap so long titles stay readable; Enter never adds a line break.
     const line = (attrs: Record<string, string | number | boolean>, value: string) => {
@@ -737,7 +751,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const showIcons = (open: boolean) => { iconPane.hidden = !open; iconButton.setAttribute("aria-expanded", String(open)); if (open) paintIcon(); };
     const pickIcon = (value: string) => { icon = value; iconTouched = true; showIcons(false); paintIcon(); iconButton.focus(); };
     function paintIcon(): void {
-      iconButton.textContent = icon;
+      iconButton.textContent = icon || tx("絵文字");
       iconButton.dataset.empty = String(!icon);
       if (iconPane.hidden) return;
       const choice = (value: string, label: string) => {
@@ -886,24 +900,30 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("div", { class: "a4-chips a4-sheet-chips" }, chips.date, chips.time, chips.estimate, chips.due, doneChip, memoChip),
       ...Object.values(panes), done, memo);
 
-    const mine = quest.assignee.type === "self" && !isDone(quest);
+    const mine = quest.assignee.type === "self" && !isDone(forDay(quest, today));
     const steps = el("div", { class: "a4-sheet-steps" });
+    const drafts = children(quest).map(q => ({ quest: q as Quest | null, title: q.title, done: isDone(forDay(q, today)), removed: false }));
     const stepInput = el("input", { class: "a4-input", placeholder: tx("ステップを追加"), "aria-label": tx("小さなステップを追加"), maxlength: 200, enterkeyhint: "done" });
     const stepForm = el("form", { class: "a4-step-form" }, stepInput, el("button", { type: "submit", class: "a4-button" }, tx("追加")));
+    const paintSteps = () => replaceChildren(steps, ...drafts.filter(d => !d.removed).map(draft => {
+      const check = el("input", { type: "checkbox", checked: draft.done, disabled: busy || (draft.quest != null && (draft.quest.assignee.type !== "self" || (draft.quest.kind === "daily" && draft.done))), "aria-label": draft.title });
+      check.addEventListener("change", () => { draft.done = check.checked; });
+      return el("div", { class: "a4-step-draft" }, el("label", { class: "a4-option" }, check, draft.title),
+        button(tx("しまう"), () => { draft.removed = true; paintSteps(); }, "link"));
+    }));
     stepForm.addEventListener("submit", event => {
       event.preventDefault();
       const value = stepInput.value.trim();
-      if (!value) return;
-      void run(async () => {
-        await port.create({ kind: "todo", title: value, notes: "", difficulty: "easy", impact: "medium", lifecycleState: "active", nextAction: "", estimatedMinutes: 0, dueDate: "",
-          scheduledDate: "", scheduledTime: "", planningMode: "on_date", planningState: "backlog", parentQuestId: quest.id });
-        stepInput.value = "";
-        stepInput.focus();
-      }, tx("ステップを追加できませんでした。"));
+      if (!value || busy) return;
+      drafts.push({ quest: null, title: value, done: false, removed: false });
+      stepInput.value = ""; paintSteps(); stepInput.focus();
     });
     repaintSheet = () => {
-      replaceChildren(steps, stepList(quest) ?? el("p", { class: "a4-muted" }, tx("大きいときは、ステップに分けると始めやすくなります。")));
-      if (!relay.node.contains(document.activeElement)) relay.paint();
+      // Keep the draft and cursor intact when the workspace refreshes.
+      for (const control of dialog.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement | HTMLSelectElement>("button,input,textarea,select")) {
+        if (busy) { if (!control.disabled) { control.dataset.savingDisabled = ""; control.disabled = true; } }
+        else if (control.hasAttribute("data-saving-disabled")) { control.disabled = false; delete control.dataset.savingDisabled; }
+      }
     };
 
     const close = el("button", { type: "button", class: "a4-button" }, tx("閉じる"));
@@ -915,24 +935,55 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         el("h3", { class: "a4-step-label" }, tx("{name}の提案", { name: proposal.label })),
         el("p", { class: "a4-proposal-when" }, `${shortDay(proposal.date)} ${proposal.time}–${clock(toMinutes(proposal.time) + proposal.minutes)}`, proposal.note ? el("span", { class: "a4-meta" }, proposal.note) : null),
         el("div", { class: "a4-actions" },
-          button(tx("この時間に入れる"), () => { dialog.close(); acceptProposal(quest); }),
-          button(tx("断る"), () => { dialog.close(); update(quest, { proposal: null, expectedUpdatedAt: quest.updatedAt }, tx("提案を断りました")); }, "link"))))(quest.proposal) : null,
+          button(tx("この時間に入れる"), () => requestClose(() => acceptProposal(quest))),
+          button(tx("断る"), () => requestClose(() => update(quest, { proposal: null, expectedUpdatedAt: quest.updatedAt }, tx("提案を断りました"))), "link"))))(quest.proposal) : null,
       depList,
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, tx("担当")), relay.node),
       el("section", { class: "a4-group" }, el("h3", { class: "a4-step-label" }, tx("小さなステップ")), steps, mine ? stepForm : null),
       el("div", { class: "a4-actions a4-sheet-foot" },
         el("button", { type: "submit", class: "a4-button a4-primary", form: "a4-sheet-form" }, tx("保存")),
-        mine ? button(tx("今やる"), () => { dialog.close(); focusId = quest.id; skipped.delete(quest.id); go("now"); }) : null,
+        mine ? button(tx("今やる"), () => requestClose(() => { start(forDay(quest, port.today())); go("now"); })) : null,
         // Putting away is reversible from search and the toast, so it needs no confirm step.
         quest.lifecycleState === "archived"
-          ? button(tx("戻す"), () => { dialog.close(); update(quest, { lifecycleState: "active" }, tx("やることに戻しました"), { lifecycleState: "archived" }); }, "link")
-          : button(tx("しまう"), () => { dialog.close(); update(quest, { lifecycleState: "archived" }, tx("しまいました。「やること」の検索から戻せます。"), { lifecycleState: quest.lifecycleState }); }, "link"),
+          ? button(tx("戻す"), () => requestClose(() => update(quest, { lifecycleState: "active" }, tx("やることに戻しました"), { lifecycleState: "archived" })), "link")
+          : button(tx("しまう"), () => requestClose(() => update(quest, { lifecycleState: "archived" }, tx("しまいました。「やること」の検索から戻せます。"), { lifecycleState: quest.lifecycleState })), "link"),
         el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("詳しい画面で開く"))));
-    repaintSheet();
-    close.addEventListener("click", () => dialog.close());
+    const error = el("p", { class: "a4-save-error", role: "alert", hidden: true });
+    form.append(error);
+    const body = el("div", { class: "a4-sheet-body" });
+    const contents = [...dialog.children].filter(node => !node.classList.contains("a4-sheet-head") && !node.classList.contains("a4-sheet-foot"));
+    body.append(...contents);
+    dialog.querySelector(".a4-sheet-foot")!.before(body);
+    paintSteps();
+    const snapshot = () => JSON.stringify([title.value, step.value, date.value, time.value, due.value, notes.value, criteria.value, estimate, icon, reminder.value, relay.legs(), drafts.map(d => [d.title, d.done, d.removed]), stepInput.value]);
+    const original = snapshot();
+    sheetDirty = () => snapshot() !== original;
+    let saving = false;
+    const requestClose = (after?: () => void) => {
+      if (saving || busy) return;
+      const finish = () => {
+        sheet = null; closeSheet = null; sheetDirty = null; repaintSheet = null;
+        dialog.close(); after?.();
+      };
+      if (snapshot() === original) { finish(); return; }
+      if (document.querySelector(".a4-discard-dialog")) return;
+      const confirmation = el("dialog", { class: "a4-capture-dialog a4-discard-dialog", "aria-label": tx("保存していない変更を破棄しますか？") },
+        el("h2", { class: "a4-subtitle" }, tx("保存していない変更を破棄しますか？")),
+        el("div", { class: "a4-actions" },
+          button(tx("編集を続ける"), () => confirmation.close(), "primary"),
+          button(tx("破棄する"), () => { confirmation.close(); finish(); })));
+      confirmation.addEventListener("close", () => confirmation.remove());
+      document.body.append(confirmation); confirmation.showModal();
+    };
+    closeSheet = requestClose;
+    close.addEventListener("click", () => requestClose());
+    dialog.addEventListener("cancel", event => { event.preventDefault(); requestClose(); });
+    const resizeFields = () => { for (const node of [title, step]) { node.style.height = "auto"; node.style.height = node.scrollHeight + "px"; } };
+    window.addEventListener("resize", resizeFields);
     form.addEventListener("submit", event => {
       event.preventDefault();
-      const current = byId(quest.id) ?? quest;
+      if (busy || saving) return;
+      const current = quest;
       const patch: Record<string, unknown> = {};
       const set = (key: keyof Quest, value: unknown) => { if (current[key] !== value) patch[key] = value; };
       set("title", title.value.trim() || current.title);
@@ -961,22 +1012,48 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       if (day !== current.scheduledDate || at !== current.scheduledTime) {
         Object.assign(patch, { scheduledDate: day, scheduledTime: at, planningState: day ? "scheduled" : "backlog", ...(day ? {} : { planningMode: "on_date" }) });
       }
-      dialog.close();
       const relayWrite = handOver && port.relay ? port.relay : null;
-      if (Object.keys(patch).length === 0 && !relayWrite) return;
+
       const firstHand = handOver && current.assignee.type !== "agent" && legs.length > 0;
+      saving = true; error.hidden = true;
+      const saveButton = dialog.querySelector<HTMLButtonElement>('button[form="a4-sheet-form"]')!;
+      saveButton.textContent = tx("保存中…");
       void run(async () => {
+        try {
         let saved = current;
         if (Object.keys(patch).length > 0) saved = await port.update(current, { ...patch, expectedUpdatedAt: current.updatedAt });
-        if (relayWrite) await relayWrite.set(saved, legs);
+        quest = saved;
+        if (relayWrite) quest = await relayWrite.set(saved, legs);
+        if (stepInput.value.trim()) {
+          drafts.push({ quest: null, title: stepInput.value.trim(), done: false, removed: false }); stepInput.value = "";
+        }
+        for (const draft of drafts) {
+          if (draft.removed) {
+            if (draft.quest && draft.quest.lifecycleState !== "archived")
+              draft.quest = await port.update(draft.quest, { lifecycleState: "archived", expectedUpdatedAt: draft.quest.updatedAt });
+            continue;
+          }
+          if (!draft.quest) draft.quest = await port.create({ kind: "todo", title: draft.title, notes: "", difficulty: "easy", impact: "medium", lifecycleState: "active", nextAction: "", estimatedMinutes: 0, dueDate: "",
+            scheduledDate: "", scheduledTime: "", planningMode: "on_date", planningState: "backlog", parentQuestId: quest.id });
+          if (draft.done !== forDay(draft.quest, today).done) {
+            draft.quest = draft.done ? (await port.complete(draft.quest)).quest : await port.update(draft.quest, { lifecycleState: "active", expectedUpdatedAt: draft.quest.updatedAt });
+          }
+        }
+        dialog.close();
         say(firstHand ? tx("{name} に渡しました", { name: relay.nameOf(legs[0]!.agentId) }) : tx("保存しました"));
+        } catch (cause) {
+          error.textContent = tx("保存できませんでした。入力を残しています。最新の状態を確認してから再試行してください。");
+          error.hidden = false; throw cause;
+        } finally { saving = false; saveButton.textContent = tx("保存"); }
       }, tx("保存できませんでした。もう一度試してください。"));
     });
     const opener = document.activeElement;
     dialog.addEventListener("close", () => {
+      window.removeEventListener("resize", resizeFields);
       dialog.remove();
-      if (sheet === dialog) { sheet = null; repaintSheet = null; }
+      if (sheet === dialog) { sheet = null; closeSheet = null; sheetDirty = null; repaintSheet = null; }
       if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      else main.querySelector<HTMLElement>('[data-quest-id="' + CSS.escape(quest.id) + '"]')?.focus({ preventScroll: true });
     });
     sheet = dialog;
     document.body.append(dialog);
@@ -986,60 +1063,77 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   /* ------------------------------ screens ------------------------------ */
 
+  function chooseTask(): void {
+    if (sheet) { closeSheet?.(chooseTask); return; }
+    const candidates = nextCandidates(quests(), port.today());
+    const close = button(tx("閉じる"), () => dialog.close());
+    const dialog = el("dialog", { class: "a4-capture-dialog", "aria-label": tx("別のタスク") },
+      el("div", { class: "a4-sheet-head" }, el("h2", { class: "a4-subtitle" }, tx("別のタスク")), close),
+      el("ul", { class: "a4-list" }, ...candidates.map(q => {
+        const pick = button(q.title, () => { focusId = q.id; dialog.close(); render(); });
+        return el("li", {}, pick);
+      })), button(tx("タスク"), () => { dialog.close(); go("all"); }, "link"));
+    const opener = document.activeElement;
+    dialog.addEventListener("close", () => { dialog.remove(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); });
+    document.body.append(dialog); dialog.showModal();
+  }
+
+  function aiRail(): HTMLElement {
+    const ai = agentSummary(quests(), port.today());
+    return el("aside", { class: "a4-ai", "aria-label": tx("AIの状況") },
+      el("div", { class: "a4-group-head" }, el("h2", { class: "a4-subtitle" }, tx("AIの状況")), button(tx("ギルド"), () => go("guild"), "link")),
+      el("div", { class: "a4-ai-counts" }, ...[[tx("確認待ち"), ai.review.length], [tx("止まっている"), ai.blocked.length], [tx("作業中"), ai.working.length]].map(([label, count]) =>
+        el("div", {}, el("strong", {}, String(count)), el("span", {}, String(label))))),
+      ...ai.visible.map(q => {
+        const item = button("", () => { if (needsDecision(q)) { decisionId = q.id; go("guild"); } else openSheet(q); });
+        item.className = "a4-ai-row";
+        const state = needsDecision(q) ? tx("確認待ち") : AGENT_STATE[q.assignee.handoffState] ?? tx("担当");
+        item.append(el("span", { class: "a4-avatar a4-avatar-agent", "aria-hidden": "true" }, (q.assignee.label || "AI").slice(0, 2)),
+          el("span", { class: "a4-ai-copy" }, el("small", {}, q.assignee.label || "Agent", " · ", state), el("strong", {}, q.title)));
+        return item;
+      }),
+      ai.visible.length ? null : el("p", { class: "a4-muted" }, tx("いま、あなたの判断を待っているものはありません。")),
+      ai.ready.length ? el("p", { class: "a4-muted" }, tx("受け取り待ち {count}件", { count: ai.ready.length })) : null,
+      button(tx("ギルドを開く"), () => go("guild"), "link"));
+  }
+
   function nowView(): HTMLElement {
     const today = port.today();
     const candidates = nextCandidates(quests(), today);
-    const pinned = byId(focusId);
-    const focus = pinned && !pending.has(pinned.id) && candidates.includes(pinned) ? pinned : candidates.find(q => !skipped.has(q.id)) ?? candidates[0] ?? null;
+    const focus = candidates.find(isWorking) ?? candidates.find(q => q.id === focusId) ?? candidates[0] ?? null;
     focusQuest = focus;
-    const rest = candidates.filter(q => q !== focus).slice(0, 3);
-    const agentBusy = quests().filter(q => q.assignee.type === "agent" && !needsDecision(q)).length;
-    const dateLine = el("p", { class: "a4-date" }, dateLabel.format(noon(today)), el("small", {}, weekdayLong.format(noon(today))));
-    const todays = (({ anytime, timed }) => [...anytime, ...timed])(dayPlan(port.quests(), today));
-    const summary = todays.length === 0 ? null : el("p", { class: "a4-summary" }, tx("今日 {done} / {total} 完了 · 予定 {time}", {
+    const focusParent = focus?.parentQuestId ? byId(focus.parentQuestId) : null;
+    const focusDisplay = focusParent ?? focus;
+    const { anytime, timed } = dayPlan(displayQuests(), today);
+    const todays = [...anytime, ...timed];
+    const next = timed.find(q => !isDone(q) && q.id !== focus?.id && q.id !== focusParent?.id && toMinutes(q.scheduledTime) > nowMinutes());
+    const summary = el("p", { class: "a4-summary" }, tx("今日 {done} / {total} 完了 · 予定 {time}", {
       done: todays.filter(isDone).length, total: todays.length, time: minutesLabel(plannedMinutes(todays.filter(q => !isDone(q)))) }));
-    // The focus card and today's timeline share one screen: side by side on wide screens, stacked on phones.
-    const home = (...focusSide: (HTMLElement | null)[]) => el("div", { class: "a4-home" },
-      el("section", { class: "a4-view a4-now" }, el("div", {}, dateLine, summary), ...focusSide), todayTimeline());
-    if (!focus) {
-      return home(decisionNotice(),
-        el("h1", { class: "a4-title", tabindex: -1 }, tx("今やることはありません")),
-        el("p", { class: "a4-lead" }, tx("上の欄に、頭にあることを1つ書き出してみましょう。")));
-    }
-    const running = isWorking(focus);
-    const actions = running
-      ? [timer(focus, true), button(tx("完了"), () => complete(focus), "primary"), button(tx("一時停止"), () => pause(focus), "link")]
-      : [button(tx("始める"), () => start(focus), "primary"),
-        candidates.length > 1 ? button(tx("別のにする"), () => { skipped.add(focus.id); if (skipped.size >= candidates.length) skipped.clear(); focusId = null; render(); }) : null,
-        button(tx("明日にする"), () => update(focus, { ...plan(addDays(today, 1)), expectedUpdatedAt: focus.updatedAt }, tx("明日に移しました"), previousPlan(focus)), "link")];
-    return home(
-      decisionNotice(),
-      el("div", { class: "a4-focus", "data-running": String(running) },
-        el("div", { class: "a4-focus-head" }, iconCircle(focus, "lg"), el("p", { class: "a4-eyebrow" }, running ? tx("続きから") : tx("次はこれ"))),
-        el("h1", { class: "a4-focus-title", tabindex: -1 }, focus.title),
-        stepDraftFor === focus.id ? stepEditor(focus)
-          : focus.nextAction ? el("p", { class: "a4-step a4-step-box" }, el("span", { class: "a4-step-label" }, tx("次の一歩")), el("span", {}, focus.nextAction), button(tx("変える"), () => { stepDraftFor = focus.id; render(); }, "link"))
-            : button(tx("次の一歩を書く（小さくてOK）"), () => { stepDraftFor = focus.id; render(); }, "link"),
-        stepList(focus),
-        running ? null
-          // A set estimate collapses to one line so the start button stays the obvious next move.
-          : focus.estimatedMinutes > 0 && estimateFor !== focus.id
-            ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("目安")), minutesLabel(focus.estimatedMinutes), " ", button(tx("変える"), () => { estimateFor = focus.id; render(); }, "link"))
-            : el("div", { class: "a4-estimate" }, el("span", { class: "a4-step-label" }, tx("どのくらい？")), estimateChips(focus)),
-        el("div", { class: "a4-actions" }, ...actions)),
-      runtime ? workFold(focus) : null,
-      rest.length === 0 ? null : (() => {
-        const after = el("details", { class: "a4-after", open: afterOpen },
-          el("summary", { class: "a4-subtitle" }, tx("このあと（{count}）", { count: rest.length })),
-          el("ul", { class: "a4-list" }, ...rest.map(q => {
-            const pick = el("button", { type: "button", class: "a4-pick" }, iconCircle(q, "sm"), el("span", { class: "a4-pick-text" }, el("span", {}, q.title), el("span", { class: "a4-meta" }, meta(q))));
-            pick.addEventListener("click", () => { focusId = q.id; render(); });
-            return el("li", {}, pick);
-          })));
-        after.addEventListener("toggle", () => { afterOpen = after.open; });
-        return after;
-      })(),
-      agentBusy === 0 ? null : el("p", { class: "a4-muted" }, tx("Agentが {count} 件を進めています。", { count: agentBusy })));
+    const heading = el("div", { class: "a4-page-heading" },
+      el("h1", { class: "a4-date", tabindex: -1 }, dateLabel.format(noon(today)), el("small", {}, weekdayLong.format(noon(today)))), summary);
+    const running = focus && isWorking(focus);
+    const card = focus ? el("article", { class: "a4-focus", "data-running": String(running) },
+      el("div", { class: "a4-focus-head" }, el("span", { class: "a4-focus-label" }, glyph(running ? Play : Flag), running ? tx("作業中") : tx("今の1件")),
+        (() => { const more = button("", () => openSheet(focus)); more.className = "a4-icon-button"; more.setAttribute("aria-label", tx("詳しく")); more.append(glyph(MoreHorizontal)); return more; })()),
+      el("div", { class: "a4-focus-title" }, iconCircle(focusDisplay!, "sm"), titleButton(focusDisplay!)),
+      el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, tx("次の一歩")), el("span", {}, focus.nextAction || (focusParent ? focus.title : tx("まずは、できるところから。")))),
+      el("div", { class: "a4-actions" },
+        button(running ? tx("完了") : tx("始める"), () => running ? complete(focus) : start(focus), "primary"),
+        running ? timer(focus, true) : focus.estimatedMinutes ? el("span", { class: "a4-focus-time" }, glyph(Clock3), minutesLabel(focus.estimatedMinutes)) : button(tx("＋目安"), () => openSheet(focus), "link"),
+        button(running ? tx("一時停止") : tx("別のタスク"), () => running ? pause(focus) : chooseTask(), "link")))
+      : el("div", { class: "a4-empty" }, el("h2", { class: "a4-subtitle" }, tx("今日の1件を、ここから。")),
+        el("p", { class: "a4-muted" }, tx("タスクから今日やるものを選びましょう。")), button(tx("タスクを追加"), openCapture, "primary"), button(tx("タスク"), () => go("all"), "link"));
+    const nextRow = next ? button("", () => openSheet(next), "link") : el("p", { class: "a4-next-preview a4-muted" });
+    nextRow.className = "a4-next-preview";
+    nextRow.append(el("span", { class: "a4-step-label" }, tx("次の予定")));
+    if (next) nextRow.append(el("strong", {}, next.scheduledTime), el("span", { class: "a4-next-title" }, next.title), glyph(ArrowRight));
+    else nextRow.append(el("span", {}, tx("時刻の決まった予定はありません。")));
+    return el("div", { class: "a4-today-page" }, heading,
+      refreshError ? el("p", { class: "a4-refresh-error", role: "status" }, tx("再取得できませんでした。表示中の内容を残しています。"), button(tx("もう一度"), onFocus, "link")) : null,
+      el("div", { class: "a4-today-grid" },
+        el("section", { class: "a4-home" }, decisionNotice(), el("div", { class: "a4-now" }, card, nextRow),
+          el("div", { class: "a4-today-flow" }, todayTimeline(), runtime && focus ? workFold(focus) : null)),
+        aiRail()));
   }
 
   /** Month at a glance in the week grid's language: Monday-first weeks, a few pills per day, "+N件" opens the day. */
@@ -1055,9 +1149,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       const items = [...timed, ...anytime];
       const shown = items.slice(0, items.length > MONTH_PILLS ? MONTH_PILLS - 1 : MONTH_PILLS);
       const head = el("button", { type: "button", class: "a4-wk-day a4-mo-day", "aria-pressed": String(date === planDate), "data-today": String(date === today),
-        "aria-label": tx("{day} {count}件", { day: dayLabel.format(noon(date)), count: items.length }) },
+        "aria-label": calendarLabel(date, items) },
         el("span", { class: "a4-day-num" }, String(Number(date.slice(8)))),
-        el("span", { class: "a4-dots", "aria-hidden": "true" }, ...items.slice(0, 4).map(q => el("i", { "data-tone": tone(q), "data-hue": hue(q) }))));
+        dayDots(items));
       // Phones show dots only, so a tap opens the day itself.
       head.addEventListener("click", () => { if (matchMedia("(max-width: 760px)").matches) openDay(date); else { planDate = date; render(); } });
       const hidden = items.length - shown.length;
@@ -1097,25 +1191,27 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const plans = days.map(date => dayPlan(list, date));
     const timed = plans.flatMap(p => p.timed);
     const first = Math.min(8, ...timed.map(q => Math.floor(toMinutes(q.scheduledTime) / 60)));
-    const last = Math.max(20, ...timed.map(q => Math.ceil(endOf(q) / 60)));
+    const last = Math.min(24, Math.max(20, ...timed.map(q => Math.ceil(endOf(q) / 60))));
     const top = (minutes: number) => `${(minutes - first * 60) * GRID_PX}px`;
-    const card = (quest: Quest, extra: Record<string, unknown> = {}) => {
+    const card = (quest: Quest, date: string, extra: Record<string, unknown> = {}) => {
       const steps = children(quest);
       const length = quest.scheduledTime ? endOf(quest) - toMinutes(quest.scheduledTime) : 0;
       const info = [quest.scheduledTime ? `${quest.scheduledTime}–${clock(endOf(quest))}` : "", length >= 30 || !quest.scheduledTime ? (quest.estimatedMinutes > 0 ? minutesLabel(quest.estimatedMinutes) : "") : "",
         steps.length > 0 ? `${steps.filter(isDone).length}/${steps.length}` : ""].filter(Boolean).join(" · ");
-      return el("div", { class: "a4-wk-item", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, length || DEFAULT_BLOCK), ...extra },
-        el("div", { class: "a4-wk-text" }, titleButton(quest), info ? el("span", { class: "a4-meta" }, info) : null),
-        checkButton(quest));
+      const node = el("button", { type: "button", class: "a4-wk-item", "data-tone": tone(quest), "data-quest-id": quest.id, "aria-label": quest.title + " · " + date + " · " + info, ...extra },
+        el("span", { class: "a4-wk-text" }, el("span", { class: "a4-wk-title" }, quest.icon ? quest.icon + " " : "", quest.title), info ? el("span", { class: "a4-meta" }, info) : null));
+      node.addEventListener("click", () => openSheet(quest));
+      return node;
     };
     const head = days.map((date, index) => {
       const total = plannedMinutes([...plans[index]!.anytime, ...plans[index]!.timed]);
       const node = el("button", { type: "button", class: "a4-wk-day", "aria-pressed": String(date === planDate), "data-today": String(date === today),
-        "aria-label": total > 0 ? tx("{day} 予定 {time}", { day: dayLabel.format(noon(date)), time: minutesLabel(total) }) : dayLabel.format(noon(date)) },
+        "aria-label": calendarLabel(date, [...plans[index]!.anytime, ...plans[index]!.timed]) },
         el("span", { class: "a4-day-name" }, weekdayLabel.format(noon(date))),
         el("span", { class: "a4-day-num" }, String(Number(date.slice(8)))),
+        dayDots([...plans[index]!.anytime, ...plans[index]!.timed]),
         el("span", { class: "a4-day-total", "aria-hidden": "true" }, total > 0 ? minutesLabel(total) : ""));
-      node.addEventListener("click", () => { planDate = date; render(); });
+      node.addEventListener("click", () => { planDate = date; render(); window.scrollTo(0, 0); });
       return node;
     });
     const now = new Date();
@@ -1125,7 +1221,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       const clusters: { start: number; end: number; items: { quest: Quest; lane: number }[]; lanes: number }[] = [];
       let laneEnds: number[] = [];
       for (const quest of plans[index]!.timed) {
-        const start = toMinutes(quest.scheduledTime), end = endOf(quest);
+        const start = toMinutes(quest.scheduledTime), end = Math.max(Math.min(1440, endOf(quest)), start + 48 / GRID_PX);
         let current = clusters[clusters.length - 1];
         if (!current || start >= current.end) { current = { start, end, items: [], lanes: 0 }; clusters.push(current); laneEnds = []; }
         let lane = laneEnds.findIndex(laneEnd => laneEnd <= start);
@@ -1141,13 +1237,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         const shown = folded ? cluster.items.filter(item => item.lane < MAX_LANES - 1) : cluster.items;
         const place = (lane: number) => `left: calc(${(lane / lanes) * 100}% + 3px); width: calc(${100 / lanes}% - 6px)`;
         const cards = shown.map(({ quest, lane }) => {
-          const start = toMinutes(quest.scheduledTime), height = Math.max(40, (endOf(quest) - start) * GRID_PX - 4);
-          return card(quest, { "data-short": String(height < 60), "data-narrow": String(lanes > 1), style: `top: ${top(start)}; height: ${height}px; ${place(lane)}` });
+          const start = toMinutes(quest.scheduledTime), height = Math.max(44, (Math.min(1440, endOf(quest)) - start) * GRID_PX - 4);
+          return card(quest, date, { "data-short": String(height < 60), "data-narrow": String(lanes > 1), style: `top: ${top(start)}; height: ${height}px; ${place(lane)}` });
         });
         if (!folded) return cards;
         const hidden = cluster.items.length - shown.length;
         const more = el("button", { type: "button", class: "a4-wk-more", "aria-label": tx("{day} ほか{count}件を日表示で見る", { day: dayLabel.format(noon(date)), count: hidden }),
-          style: `top: ${top(cluster.start)}; height: ${Math.max(40, (cluster.end - cluster.start) * GRID_PX - 4)}px; ${place(MAX_LANES - 1)}` }, tx("+{count}件", { count: hidden }));
+          style: `top: ${top(cluster.start)}; height: ${Math.max(44, (cluster.end - cluster.start) * GRID_PX - 4)}px; ${place(MAX_LANES - 1)}` }, tx("+{count}件", { count: hidden }));
         more.addEventListener("click", () => { planDate = date; planMode = "day"; store.set("a4-plan-mode", null); render(); });
         return [...cards, more];
       });
@@ -1155,11 +1251,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       return el("div", { class: "a4-wk-col", "data-selected": String(date === planDate) }, nowLine, ...items);
     });
     const hours = Array.from({ length: last - first }, (_, i) => el("span", { style: `top: ${top((first + i) * 60)}` }, clock((first + i) * 60)));
-    return el("div", { class: "a4-wk-scroll" },
-      el("div", { class: "a4-wk", style: `--a4-wk-height: ${(last - first) * 60 * GRID_PX}px; --a4-wk-hour: ${60 * GRID_PX}px` },
+    return el("div", { class: "a4-wk-scroll", tabindex: 0, role: "region", "aria-label": tx("この週") },
+      el("div", { class: "a4-wk", style: `--a4-wk-height: ${(last - first) * 60 * GRID_PX + 44}px; --a4-wk-hour: ${60 * GRID_PX}px` },
         el("span", { class: "a4-wk-corner" }), ...head,
         el("span", { class: "a4-wk-label" }, tx("いつでも")),
-        ...plans.map((plan, index) => el("div", { class: "a4-wk-allday", "data-selected": String(days[index] === planDate) }, ...plan.anytime.map(q => card(q)))),
+        ...plans.map((plan, index) => el("div", { class: "a4-wk-allday", "data-selected": String(days[index] === planDate) }, ...plan.anytime.map(q => card(q, days[index]!)))),
         el("div", { class: "a4-wk-hours", "aria-hidden": "true" }, ...hours),
         ...columns));
   }
@@ -1168,37 +1264,18 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const nowLine = (at: number) => el("li", { class: "a4-now-line" }, el("span", { class: "a4-slot-time" }, clock(at)), el("span", { class: "a4-now-label" }, tx("いま")));
 
   /** Timed tasks sized by duration, with the current time and free stretches worth noticing (the plan view). */
-  function timelineSlots(timed: readonly Quest[], isToday: boolean): HTMLElement[] {
-    const at = nowMinutes();
-    const free = gaps(timed);
-    let nowShown = !isToday;
-    const slots: HTMLElement[] = [];
-    for (const quest of timed) {
-      const start = toMinutes(quest.scheduledTime), end = endOf(quest);
-      const gap = free.find(g => g.before === quest.id);
-      if (!nowShown && at < start) { slots.push(nowLine(at)); nowShown = true; }
-      if (gap) slots.push(el("li", { class: "a4-gap" }, el("span", { class: "a4-slot-time" }), el("span", { class: "a4-muted" }, tx("空き {time}。ひと息つけます。", { time: minutesLabel(gap.minutes) }))));
-      slots.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-len: ${Math.min(end - start, 180)}` },
-        el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
-        el("span", { class: "a4-slot-pill", "aria-hidden": "true" }, quest.icon ?? ""),
-        el("div", { class: "a4-slot-card" }, rowText(quest, false), checkButton(quest))));
-    }
-    if (!nowShown && timed.length > 0) slots.push(nowLine(at));
-    return slots;
-  }
-
   /**
    * A free stretch ahead today, offered as a choice: one inbox task that fits, or a rest. Only the next
    * stretch shows its choices; later ones open on request so the same suggestion is not repeated.
    */
-  function freeRow(gap: { start: number; minutes: number }, first: boolean): HTMLElement {
+  function freeRow(gap: { start: number; minutes: number }): HTMLElement {
     const today = port.today();
     const key = `${today}:${gap.start}`;
     const time = el("span", { class: "a4-slot-time" }, clock(gap.start));
     const pill = el("span", { class: "a4-slot-pill", "aria-hidden": "true" });
     if (rested.has(key)) return el("li", { class: "a4-free", "data-rest": "" }, time, pill, el("p", { class: "a4-free-head" }, tx("休憩 {time}", { time: minutesLabel(gap.minutes) })));
     const head = el("p", { class: "a4-free-head" }, tx("{time} 空いています", { time: minutesLabel(gap.minutes) }));
-    if (!first && !openGaps.has(key)) {
+    if (!openGaps.has(key)) {
       const more = button(tx("提案を見る"), () => { openGaps.add(key); render(); }, "link");
       return el("li", { class: "a4-free" }, time, pill, el("div", {}, head, more));
     }
@@ -1223,7 +1300,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   /** Today's rows for the Now screen: evenly spaced cards; duration shows in the pill's height. */
-  function homeRows(timed: readonly Quest[], isToday: boolean): HTMLElement[] {
+  function homeRows(timed: readonly Quest[], isToday: boolean, date = port.today()): HTMLElement[] {
     const at = nowMinutes();
     const free = isToday ? freeAhead(timed, at) : [];
     let nowShown = !isToday;
@@ -1232,41 +1309,56 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       const start = toMinutes(quest.scheduledTime), end = endOf(quest);
       if (!nowShown && at < start) { rows.push(nowLine(at)); nowShown = true; }
       const gap = free.find(g => g.before === quest.id);
-      if (gap) rows.push(freeRow(gap, gap === free[0]));
+      if (gap) rows.push(freeRow(gap));
       rows.push(el("li", { class: "a4-slot", "data-tone": tone(quest), "data-hue": hue(quest), ...running(quest, end - start), style: `--a4-cap: ${Math.round(Math.max(40, Math.min(96, 24 + (end - start) * 0.6)))}px` },
         el("span", { class: "a4-slot-time" }, quest.scheduledTime, el("small", {}, clock(end))),
         el("span", { class: "a4-slot-pill", "aria-hidden": "true" }, quest.icon ?? ""),
-        el("div", { class: "a4-slot-card" }, rowText(quest, false), checkButton(quest))));
+        el("div", { class: "a4-slot-card" }, rowText(quest, false), checkButton(quest, date))));
     }
     if (!nowShown && timed.length > 0) rows.push(nowLine(at));
     return rows;
   }
 
   /** Today beside the focus card, with finished stretches more than an hour back folded away. */
-  function todayTimeline(): HTMLElement {
+  function dayTimeline(date: string): HTMLElement {
     const today = port.today();
-    const day = dayPlan(port.quests(), today);
-    const cutoff = nowMinutes() - 60;
-    const earlier = day.timed.filter(q => isDone(q) && endOf(q) < cutoff);
+    const day = dayPlan(displayQuests(), date);
+    const earlier = date === today ? day.timed.filter(q => !isWorking(q) && endOf(q) <= nowMinutes()) : [];
     const timed = day.timed.filter(q => !earlier.includes(q));
-    const fold = el("details", { class: "a4-earlier", open: earlierOpen },
+    const fold = el("details", { class: "a4-earlier", open: openFolds.has("past:" + date), "data-fold": "past:" + date },
       el("summary", {}, tx("それより前（{count}）", { count: earlier.length })),
-      el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(earlier, false)));
-    fold.addEventListener("toggle", () => { earlierOpen = fold.open; });
-    return el("section", { class: "a4-today", "aria-labelledby": "a4-today-title" },
-      el("h2", { class: "a4-subtitle", id: "a4-today-title" }, tx("今日のタイムライン")),
-      day.anytime.length === 0 ? null : el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-row", "data-tone": tone(q), "data-hue": hue(q) }, el("div", { class: "a4-row-main" }, checkButton(q), iconCircle(q), rowText(q))))),
+      el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(earlier, false, date)));
+    fold.addEventListener("toggle", () => { if (fold.open) openFolds.add("past:" + date); else openFolds.delete("past:" + date); });
+    return el("div", { class: "a4-day-flow" },
+      day.anytime.length ? el("section", { class: "a4-anytime" }, el("h3", { class: "a4-step-label" }, tx("いつでも")),
+        el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-anytime-row", "data-tone": tone(q) },
+          iconCircle(q, "sm"), rowText(q), checkButton(q, date))))) : null,
+      earlier.length ? fold : null,
       el("div", { class: "a4-today-panel" },
-        earlier.length === 0 ? null : fold,
-        timed.length === 0
-          ? el("p", { class: "a4-muted" }, tx("時刻の決まった予定はありません。"))
-          : el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(timed, true))));
+        timed.length ? el("ol", { class: "a4-timeline", "data-even": "" }, ...homeRows(timed, date === today, date))
+          : el("p", { class: "a4-muted" }, tx("時刻の決まった予定はありません。"))));
+  }
+
+  function todayTimeline(): HTMLElement {
+    return el("section", { class: "a4-today", "aria-labelledby": "a4-today-title" },
+      el("div", { class: "a4-group-head" }, el("h2", { class: "a4-subtitle", id: "a4-today-title" }, tx("今日のタイムライン")),
+        button(tx("カレンダー"), () => go("plan"), "link")), dayTimeline(port.today()));
+  }
+
+  function calendarLabel(date: string, items: readonly Quest[]): string {
+    return tx("{day} {count}件、完了 {done}件、作業中 {working}件", { day: dayLabel.format(noon(date)), count: items.length, done: items.filter(isDone).length, working: items.filter(isWorking).length });
+  }
+
+  function dayDots(items: readonly Quest[]): HTMLElement {
+    return el("span", { class: "a4-dots", "aria-hidden": "true" },
+      ...items.slice(0, 3).map(q => el("i", { "data-tone": tone(q) })),
+      items.length > 3 ? el("small", {}, "+" + (items.length - 3)) : null);
   }
 
   function planView(): HTMLElement {
     const today = port.today();
     const dayName = (date: string) => date === today ? tx("今日") : dayLabel.format(noon(date));
-    const list = port.quests();
+    const list = displayQuests();
     const day = dayPlan(list, planDate);
     const open = [...day.anytime, ...day.timed].filter(q => !isDone(q));
 
@@ -1282,15 +1374,14 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     };
     const week = el("div", { class: "a4-week", role: "group", "aria-label": tx("この週") }, ...weekOf(planDate).map(date => {
       const items = (({ anytime, timed }) => [...anytime, ...timed])(dayPlan(list, date));
-      const node = el("button", { type: "button", class: "a4-day", "aria-pressed": String(date === planDate), "data-today": String(date === today), "aria-label": tx("{day} {count}件", { day: dayLabel.format(noon(date)), count: items.length }) },
+      const node = el("button", { type: "button", class: "a4-day", "aria-pressed": String(date === planDate), "data-today": String(date === today), "aria-label": calendarLabel(date, items) },
         el("span", { class: "a4-day-name" }, weekdayLabel.format(noon(date))),
         el("span", { class: "a4-day-num" }, String(Number(date.slice(8)))),
-        el("span", { class: "a4-dots", "aria-hidden": "true" }, ...items.slice(0, 4).map(q => el("i", { "data-tone": tone(q), "data-hue": hue(q) }))));
-      node.addEventListener("click", () => { planDate = date; render(); });
+        dayDots(items));
+      node.addEventListener("click", () => { planDate = date; render(); window.scrollTo(0, 0); });
       return node;
     }));
 
-    const slots = timelineSlots(day.timed, planDate === today);
 
     // Undated work sits beside the day (below it on phones), one tap from being planned.
     const all = groups(quests(), today);
@@ -1311,16 +1402,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
             planDate === today ? null : button(tx("今日へ"), () => { planDate = today; render(); }, "link"),
             planMode === "month" ? shift("‹", -1, tx("前の月")) : shift("‹", -1, tx("前の週")),
             planMode === "month" ? shift("›", 1, tx("次の月")) : shift("›", 1, tx("次の週")))),
-        ...(planMode === "month" ? [monthGrid(list)] : planMode === "week" ? [weekOf(planDate).includes(today) ? reviewStrip() : null, weekGrid(list)] : [week,
+        ...(planMode === "month" ? [monthGrid(list)] : planMode === "week" ? [reviewStrip(), weekGrid(list)] : [week,
         el("p", { class: "a4-lead" }, day.timed.length + day.anytime.length === 0
           ? tx("この日の予定はありません。受け箱から＋で入れるか、上の欄に書き出しましょう。")
           : open.length === 0 ? tx("この日の分はすべて終わりました。") : tx("残り {count} 件 · 目安 {time}", { count: open.length, time: minutesLabel(plannedMinutes(open)) })),
-        day.anytime.length === 0 ? null : el("section", { class: "a4-group" },
-          el("h2", { class: "a4-subtitle" }, tx("いつでも")),
-          el("ul", { class: "a4-list" }, ...day.anytime.map(q => el("li", { class: "a4-row", "data-tone": tone(q), "data-hue": hue(q) }, el("div", { class: "a4-row-main" }, checkButton(q), iconCircle(q), rowText(q)))))),
-        slots.length === 0 ? null : el("section", { class: "a4-group" },
-          el("h2", { class: "a4-subtitle" }, tx("時間で")),
-          el("div", { class: "a4-today-panel" }, el("ol", { class: "a4-timeline", "data-cards": "" }, ...slots)))])),
+        dayTimeline(planDate)])),
+
       el("aside", { class: "a4-plan-side", "aria-label": tx("日付のないもの") },
         el("h2", { class: "a4-subtitle" }, tx("受け箱（{count}）", { count: all.inbox.length })),
         all.inbox.length === 0 ? el("p", { class: "a4-muted" }, tx("受け箱は空です。")) : sideList(all.inbox),
@@ -1332,11 +1419,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   /** Three numbers for this week (Spine's review): finished, planned time, moved later. */
   function reviewStrip(): HTMLElement {
-    const review = weekReview(port.quests(), port.today());
+    const items = weekOf(planDate).flatMap(date => { const day = dayPlan(displayQuests(), date); return [...day.anytime, ...day.timed]; });
     const stat = (label: string, value: string) => el("div", { class: "a4-review-stat" }, el("dt", {}, label), el("dd", {}, value));
     return el("section", { class: "a4-review", "aria-labelledby": "a4-review-title" },
       el("h2", { class: "a4-subtitle", id: "a4-review-title" }, tx("今週のふりかえり")),
-      el("dl", {}, stat(tx("終えた"), tx("{count}件", { count: review.done })), stat(tx("予定した時間"), minutesLabel(review.planned)), stat(tx("先に延ばした"), tx("{count}件", { count: review.moved }))));
+      el("dl", {}, stat(tx("タスク"), tx("{count}件", { count: items.length })), stat(tx("予定した時間"), minutesLabel(plannedMinutes(items))), stat(tx("終えた"), tx("{count}件", { count: items.filter(isDone).length }))));
   }
 
   /** Dailies with the last two weeks as dots, filled on done days. */
@@ -1357,10 +1444,18 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   function allView(): HTMLElement {
     const all = groups(quests(), port.today());
-    const section = (bucket: Bucket, title: string, hint = "") => all[bucket].length === 0 ? null : el("section", { class: "a4-group" },
-      el("h2", { class: "a4-subtitle" }, tx("{title}（{count}）", { title, count: all[bucket].length })),
-      hint ? el("p", { class: "a4-muted" }, hint) : null,
-      el("ul", { class: "a4-list" }, ...all[bucket].map(q => row(q, bucket))));
+    const section = (bucket: Bucket, title: string, hint = "") => {
+      if (!all[bucket].length) return null;
+      const label = tx("{title}（{count}）", { title, count: all[bucket].length });
+      const list = el("ul", { class: "a4-list" }, ...all[bucket].map(q => row(q, bucket)));
+      if (["review", "later", "agent"].includes(bucket)) {
+        const key = "group:" + bucket;
+        const fold = el("details", { class: "a4-group-fold", open: openFolds.has(key) }, el("summary", {}, label), hint ? el("p", { class: "a4-muted" }, hint) : null, list);
+        fold.addEventListener("toggle", () => { if (fold.open) openFolds.add(key); else openFolds.delete(key); });
+        return fold;
+      }
+      return el("section", { class: "a4-group" }, el("h2", { class: "a4-subtitle" }, label), hint ? el("p", { class: "a4-muted" }, hint) : null, list);
+    };
     const empty = Object.values(all).every(list => list.length === 0);
     // Search covers finished and put-away tasks too, so nothing is lost; typing repaints only the results.
     const results = el("div", { "aria-live": "polite" });
@@ -1390,7 +1485,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       section("later", tx("これから")),
       section("agent", tx("Agentが担当")));
     paintSearch();
-    const head = el("div", { class: "a4-plan-head" }, el("h1", { class: "a4-title", tabindex: -1 }, tx("やること")),
+    const head = el("div", { class: "a4-plan-head" }, el("h1", { class: "a4-title", tabindex: -1 }, tx("タスク")),
       runtime ? modeSwitch([["list", tx("まとめ")], ["table", tx("表・ボード・ガント")], ["notes", tx("メモ")]], allMode, mode => { allMode = mode; }) : null);
     if (allMode !== "list" && runtime) {
       return el("section", { class: "a4-view a4-wide" }, head,
@@ -1799,7 +1894,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         el("h2", { class: "a4-subtitle" }, tx("最近の活動")),
         activity === null ? el("p", { class: "a4-muted" }, activityError ? tx("活動を読み込めませんでした。") : tx("読み込んでいます…"), activityError ? button(tx("もう一度"), loadActivity, "link") : null)
           : activity.length === 0 ? el("p", { class: "a4-muted" }, tx("まだ活動はありません。"))
-          : el("ul", { class: "a4-activity-list" }, ...activity.slice(0, 10).map(activityLine))));
+          : el("ul", { class: "a4-activity-list" }, ...activity.slice(0, 10).map(activityLine))),
+      extraLinks(EXTRAS.filter(item => ["network", "battle", "skills"].includes(item.id))));
   }
 
   /** Same fields and limits as Relay Forge's profile form; the server re-validates. */
@@ -1831,7 +1927,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   /** Relay Forge modules keep their own heading; this adds only the way back. */
   function extraView(id: Extra): HTMLElement {
-    const back = button(tx("← 設定"), () => go("settings"), "link");
+    const back = button(["network", "battle", "skills"].includes(id) ? tx("← ギルド") : tx("← 設定"), () => go(["network", "battle", "skills"].includes(id) ? "guild" : "settings"), "link");
     if (!runtime) {
       return el("section", { class: "a4-view" }, back,
         el("h1", { class: "a4-title", tabindex: -1 }, EXTRAS.find(item => item.id === id)!.label),
@@ -1846,6 +1942,14 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     // Relay Forge titles are English destination names; AFA names the screen in the reader's language.
     screen.querySelector(".rf-screen-title")?.replaceChildren(EXTRAS.find(item => item.id === id)!.label);
     return el("section", { class: "a4-view a4-extra" }, back, screen);
+  }
+
+  function extraLinks(items: readonly (typeof EXTRAS)[number][]): HTMLElement {
+    return el("nav", { class: "a4-group" }, el("ul", { class: "a4-list a4-extras" }, ...items.map(item => {
+      const open = el("a", { class: "a4-row-title", href: "#" + item.id }, item.label);
+      open.addEventListener("click", event => { event.preventDefault(); go(item.id); });
+      return el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, el("div", { class: "a4-row-text" }, open, el("span", { class: "a4-meta" }, item.hint))));
+    })));
   }
 
   function settingsView(): HTMLElement {
@@ -1864,32 +1968,22 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         });
         return el("label", { class: "a4-option" }, input, label!);
       }));
-    const bloom = el("input", { type: "checkbox", checked: document.documentElement.hasAttribute("data-a4-palette") });
-    bloom.addEventListener("change", () => {
-      if (bloom.checked) document.documentElement.setAttribute("data-a4-palette", "spine"); else document.documentElement.removeAttribute("data-a4-palette");
-      store.set("a4-palette", bloom.checked ? null : "plain");
-    });
     // Copy is resolved once at load, so a language change reloads the page.
     const language = el("select", { class: "a4-input", "aria-label": tx("言語") },
       ...SUPPORTED_LOCALES.map(code => el("option", { value: code, selected: code === LOCALE, lang: code }, LOCALE_METADATA[code].label)));
     language.addEventListener("change", () => { setLocale(language.value); location.reload(); });
     return el("section", { class: "a4-view" },
       el("h1", { class: "a4-title", tabindex: -1 }, tx("設定")),
-      el("nav", { class: "a4-group", "aria-labelledby": "a4-extras" }, el("h2", { id: "a4-extras", class: "a4-subtitle" }, tx("ほかの機能")),
-        el("ul", { class: "a4-list a4-extras" }, ...EXTRAS.map(item => {
-          const open = el("a", { class: "a4-row-title", href: `#${item.id}` }, item.label);
-          open.addEventListener("click", event => { event.preventDefault(); go(item.id); });
-          return el("li", { class: "a4-row" }, el("div", { class: "a4-row-main" }, el("div", { class: "a4-row-text" }, open, el("span", { class: "a4-meta" }, item.hint))));
-        }))),
       el("label", { class: "a4-field-row" }, el("span", { class: "a4-meta" }, tx("言語")), language),
       el("label", { class: "a4-option" }, cheerToggle, tx("完了したら紙吹雪でお祝いする")),
       el("label", { class: "a4-option" }, gameToggle, tx("ゲーム要素（レベル・XP）を表示する")),
       themes,
-      el("label", { class: "a4-option" }, bloom, tx("やわらかい配色（タスクごとの色）")),
       el("p", { class: "a4-muted" }, tx("キーボード：N か / で書き出し、J と K で行を移動、X で完了、S で今のタスクを始める")),
       notifySection(),
+      extraLinks(EXTRAS.filter(item => item.id === "connections")),
       mcpSection(),
       runtime ? el("section", { class: "a4-group" }, el("h2", { class: "a4-subtitle" }, tx("時間の記録")), embed(workUi.settings())) : null,
+      extraLinks(EXTRAS.filter(item => item.id === "profile" || item.id === "billing")),
       el("p", {}, el("a", { class: "a4-link", href: RELAY_FORGE_URL }, tx("Relay Forge（詳しい画面）を開く"))),
       port.signOut ? button(tx("サインアウト"), () => { void port.signOut?.(); }, "link") : null);
   }
@@ -1908,6 +2002,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   /* ------------------------------ shell ------------------------------ */
 
   function go(next: View): void {
+    if (sheet) { closeSheet?.(() => go(next)); return; }
     // An unsaved note asks before it is left behind.
     if (workUi.dirty() && next !== view) { workUi.guard(() => { workUi.clearCalendar(); leave(next); }); return; }
     leave(next);
@@ -1922,7 +2017,6 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     if (next === "guild" && view !== "guild") { activity = null; activityError = false; }
     if (next === "settings" && view !== "settings") { connections = null; connectionsError = false; notify = null; notifyError = false; }
     view = next;
-    stepDraftFor = null;
     if (location.hash !== `#${next}`) history.pushState(null, "", `#${next}`);
     render();
     main.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
@@ -1937,10 +2031,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function render(): void {
     if (disposed) return;
     const active = document.activeElement;
+    const scroll = window.scrollY;
+    const weekScroll = main.querySelector(".a4-wk-scroll")?.scrollLeft ?? 0;
+    const focusTaskId = active instanceof HTMLElement ? active.dataset.questId : undefined;
     const keepFocus = active instanceof HTMLElement && main.contains(active) && active.matches("input") ? null : active instanceof HTMLElement && main.contains(active) ? active.textContent : null;
     replaceChildren(nav, ...VIEWS.map(item => {
       const waiting = item.id === "guild" ? quests().filter(needsDecision).length : 0;
-      const tab = el("a", { class: "a4-tab", href: `#${item.id}`, "aria-current": view === item.id || (item.id === "settings" && isExtra(view)) ? "page" : null, "data-view": item.id }, item.label,
+      const tab = el("a", { class: "a4-tab", href: `#${item.id}`, "aria-current": view === item.id || (item.id === (["network", "battle", "skills"].includes(view) ? "guild" : "settings") && isExtra(view)) ? "page" : null, "data-view": item.id }, glyph(({ now: Sun, plan: CalendarDays, all: ListTodo, guild: Users, settings: Settings } as Record<string, IconNode>)[item.id]!), el("span", {}, item.label),
         waiting > 0 ? el("span", { class: "a4-badge", "aria-label": tx("判断待ち {count} 件", { count: waiting }) }, String(waiting)) : null);
       tab.addEventListener("click", event => { event.preventDefault(); go(item.id); });
       return tab;
@@ -1948,6 +2045,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     root.querySelector(".a4-app")?.setAttribute("data-busy", String(busy));
     main.setAttribute("data-view", view);
     document.title = `${[...VIEWS, ...EXTRAS].find(item => item.id === view)?.label} — Guilduo`;
+    breadcrumb.textContent = [...VIEWS, ...EXTRAS].find(item => item.id === view)?.label ?? "";
     paintThemeColor();
     workUi.clearCalendar();
     replaceChildren(main, view === "now" ? nowView() : view === "plan" ? planView() : view === "all" ? allView() : view === "guild" ? guildView() : isExtra(view) ? extraView(view) : settingsView());
@@ -1955,7 +2053,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     repaintSheet?.();
     paintProgress();
     // Keep keyboard users on the control they used when it survives the rerender.
-    if (keepFocus) [...main.querySelectorAll<HTMLElement>("button")].find(node => node.textContent === keepFocus)?.focus({ preventScroll: true });
+    if (keepFocus) [...main.querySelectorAll<HTMLElement>("button")].find(node => focusTaskId ? node.dataset.questId === focusTaskId : node.textContent === keepFocus)?.focus({ preventScroll: true });
+    const weekRegion = main.querySelector(".a4-wk-scroll");
+    if (weekRegion) weekRegion.scrollLeft = weekScroll;
+    window.scrollTo(0, scroll);
     // A background refresh must not take the search box away mid-typing.
     if (active instanceof HTMLInputElement && active.type === "search" && !main.contains(active)) {
       const field = main.querySelector<HTMLInputElement>('input[type="search"]');
@@ -1965,19 +2066,19 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   const tick = window.setInterval(() => { for (const node of root.querySelectorAll<HTMLElement & { a4Paint?: () => void }>(".a4-ring")) node.a4Paint?.(); paintProgress(); }, 1000);
-  const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet) void port.refresh().then(render, () => undefined); };
+  const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet && !captureDialog) void port.refresh().then(() => { refreshError = false; render(); }, () => { refreshError = true; say(tx("再取得できませんでした。表示中の内容を残しています。")); render(); }); };
   const onHide = () => { if (document.visibilityState === "hidden") flushPending(); else onFocus(); };
   // Agents move work while the page sits open; pick that up unless someone is typing.
   const poll = window.setInterval(() => {
     if (document.visibilityState === "visible" && !document.activeElement?.matches("input, textarea, select")) onFocus();
   }, 60_000);
-  const onHash = () => { if (viewFromHash() !== view) go(viewFromHash()); };
+  const onHash = () => { const next = viewFromHash(); if (next !== view) { if (sheet) history.replaceState(null, "", "#" + view); go(next); } };
   const onKey = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || sheet || disposed) return;
     const key = event.key.toLowerCase();
-    if ((event.metaKey || event.ctrlKey) && key === "k") { event.preventDefault(); captureInput.focus(); return; }
+    if ((event.metaKey || event.ctrlKey) && key === "k") { event.preventDefault(); openCapture(); return; }
     if (event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement | null)?.matches?.("input, textarea, select, [contenteditable]")) return;
-    if (key === "n" || key === "/") { event.preventDefault(); captureInput.focus(); return; }
+    if (key === "n" || key === "/") { event.preventDefault(); openCapture(); return; }
     if (key === "j" || key === "k") {
       const titles = [...main.querySelectorAll<HTMLElement>(".a4-row-title[data-quest-id]")].filter(node => node.offsetParent !== null);
       const index = titles.indexOf(document.activeElement as HTMLElement);
@@ -1995,7 +2096,9 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     }
     if (key === "s" && view === "now" && focusQuest && !isWorking(focusQuest) && !busy) { event.preventDefault(); start(focusQuest); }
   };
-  captureInput.addEventListener("keydown", event => { if (event.key === "Escape") captureInput.blur(); });
+
+  const onUnload = (event: BeforeUnloadEvent) => { if (sheetDirty?.() || captureInput.value.trim()) { event.preventDefault(); event.returnValue = ""; } };
+  window.addEventListener("beforeunload", onUnload);
   document.addEventListener("keydown", onKey);
   document.addEventListener("visibilitychange", onHide);
   root.addEventListener("pointerdown", onPointer, true);
@@ -2010,10 +2113,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     disposed = true;
     flushPending();
     sheet?.close();
+    captureDialog?.close();
     window.clearInterval(tick);
     window.clearInterval(poll);
     window.clearTimeout(toastTimer);
     document.removeEventListener("visibilitychange", onHide);
+    window.removeEventListener("beforeunload", onUnload);
     document.removeEventListener("keydown", onKey);
     root.removeEventListener("pointerdown", onPointer, true);
     window.removeEventListener("hashchange", onHash);
