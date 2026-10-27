@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Quest } from "../types/questforge.ts";
 import { setLocale } from "../i18n.ts";
-import { blockers, bucketOf, dayPlan, fitForGap, freeAhead, habitDays, proposalFor, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes, weekReview } from "../interaction-lab/all-for-adhd/model.ts";
+import { forDay, agentSummary, blockers, bucketOf, dayPlan, fitForGap, freeAhead, habitDays, proposalFor, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes, weekReview } from "../interaction-lab/all-for-adhd/model.ts";
 
 // The labels below are the Japanese source copy; CI runs in an English locale.
 setLocale("ja");
@@ -37,7 +37,7 @@ test("next candidates put running work first and never offer Agent work", () => 
     quest("agent", { owner: "agent", state: "working" }),
     quest("done", { lifecycleState: "completed" }),
   ];
-  assert.deepEqual(nextCandidates(list, TODAY).map(q => q.id), ["running", "today-09", "today-10", "late", "inbox"]);
+  assert.deepEqual(nextCandidates(list, TODAY).map(q => q.id), ["running", "today-09", "today-10"]);
   assert.equal(groups(list, TODAY).agent.length, 1);
 });
 
@@ -83,7 +83,7 @@ test("dailies return every day and a finished task never counts as running", () 
 });
 
 test("steps run in order: waiting steps and their parent are not offered as next", () => {
-  const parent = quest("parent");
+  const parent = quest("parent", { scheduledDate: TODAY });
   const first = quest("first", { parentQuestId: "parent", createdAt: "2026-10-01" } as Partial<Quest>);
   const second = quest("second", { parentQuestId: "parent", createdAt: "2026-10-02", dependencyIds: ["first"] } as Partial<Quest>);
   const list = [parent, second, first];
@@ -147,4 +147,54 @@ test("the week review counts this week's finished, planned and moved work", () =
     quest("agent", { owner: "agent", done: true, completedAt: "2026-10-14T09:00:00Z" }),
   ], TODAY);
   assert.deepEqual(review, { done: 2, planned: 90, moved: 1 });
+});
+
+test("daily completion agrees across home, groups and candidates, without reviving archived tasks", () => {
+  const daily = quest("daily", { kind: "daily", done: true, lifecycleState: "completed", lastCompletedDate: "2026-10-17", state: "working" });
+  assert.equal(forDay(daily, TODAY).done, false);
+  assert.equal(isWorking(forDay(daily, TODAY)), false);
+  assert.equal(groups([daily], TODAY).today.length, 1);
+  assert.equal(nextCandidates([daily], TODAY)[0]?.id, "daily");
+  assert.equal(dayPlan([daily], TODAY).anytime[0]?.done, false);
+  assert.equal(groups([{ ...daily, lastCompletedDate: TODAY }], TODAY).today.length, 0);
+  assert.equal(nextCandidates([{ ...daily, lifecycleState: "archived" }], TODAY).length, 0);
+  assert.equal(nextCandidates([{ ...daily, scheduledDate: "2026-10-20" }], TODAY).length, 0);
+});
+test("Agent summary excludes completed and archived work and distinguishes ownership from running", () => {
+  const items = ["none", "ready", "working", "blocked", "review_required"].map(state => quest(state, { owner: "agent", state }));
+  items.push(quest("done", { owner: "agent", state: "working", done: true }), quest("archived", { owner: "agent", state: "blocked", lifecycleState: "archived" }));
+  const summary = agentSummary(items, TODAY);
+  assert.deepEqual(summary.visible.map(q => q.id), ["review_required", "blocked", "working"]);
+  assert.equal(summary.working.length, 1);
+  assert.equal(summary.ready.length, 1);
+});
+test("overnight calendar segments keep source ids and split the next day's duration", () => {
+  const late = quest("overnight", { scheduledDate: TODAY, scheduledTime: "23:30", estimatedMinutes: 90 });
+  const next = dayPlan([late], "2026-10-19").timed;
+  assert.equal(next[0]?.id, late.id);
+  assert.equal(next[0]?.scheduledTime, "00:00");
+  assert.equal(next[0]?.estimatedMinutes, 60);
+  assert.equal(late.scheduledDate, TODAY);
+  assert.equal(dayPlan([{ ...late, lifecycleState: "archived" }], "2026-10-19").timed.length, 0);
+});
+
+test("daily completion reopens stale persisted flags before scoring and refuses a stale revision", async () => {
+  const { completeToday } = await import("../interaction-lab/all-for-adhd/completion.ts");
+  const yesterday = quest("daily", { kind: "daily", done: true, lastCompletedDate: "2026-10-17" });
+  const writes: string[] = [];
+  const update = async (q: Quest) => { writes.push("reset"); return { ...q, done: false, updatedAt: "new-version" }; };
+  const score = async (q: Quest) => { writes.push("score:" + q.updatedAt); return { ...q, done: !q.done, lastCompletedDate: TODAY }; };
+  const saved = await completeToday(forDay(yesterday, TODAY), yesterday, TODAY, update, score);
+  assert.equal(saved.done, true);
+  assert.deepEqual(writes, ["reset", "score:new-version"]);
+  await assert.rejects(completeToday(yesterday, { ...yesterday, updatedAt: "new-version" }, TODAY, update, score), /quest_conflict/);
+  assert.equal(writes.length, 2);
+  await assert.rejects(completeToday({ ...yesterday, lastCompletedDate: TODAY }, { ...yesterday, lastCompletedDate: TODAY }, TODAY, update, score), /already_completed/);
+  await assert.rejects(completeToday(yesterday, yesterday, TODAY, async () => { throw new Error("offline"); }, score), /offline/);
+  assert.equal(writes.length, 2);
+});
+test("the calendar keeps scored one-off completions but excludes manually archived tasks", () => {
+  const scored = quest("scored", { scheduledDate: TODAY, done: true, lifecycleState: "archived", lastCompletedDate: TODAY });
+  const putAway = quest("put-away", { scheduledDate: TODAY, done: true, lifecycleState: "archived", lastCompletedDate: "" });
+  assert.deepEqual(dayPlan([scored, putAway], TODAY).anytime.map(q => q.id), ["scored"]);
 });

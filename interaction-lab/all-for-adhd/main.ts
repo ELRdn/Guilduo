@@ -3,6 +3,7 @@
  * ones, so this surface reads and writes exactly the same Quests.
  */
 
+import { completeToday } from "./completion.ts";
 import { tx } from "./copy.ts";
 import { iconFor } from "./emoji.ts";
 import { getLocale } from "../../i18n.ts";
@@ -21,6 +22,7 @@ import "../relay-forge/screens/connections.css";
 import "../relay-forge/screens/skills.css";
 import "./forge-skin.css";
 import "./styles.css";
+import "./polish.css";
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { requireElement } from "../relay-forge/primitives/dom.ts";
 import { observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
@@ -234,7 +236,7 @@ async function showDemo(): Promise<void> {
     quests: () => quests,
     create: async input => { const quest = replace({ ...(fixtureRawQuests[0] as Quest), id: `demo-${Date.now()}`, assignee: { type: "self", id: "self", label: "", handoffState: "none" }, humanRequest: null, parentQuestId: "", ...input, createdAt: stamp(), updatedAt: stamp() } as Quest); log("quest.created", quest, "app"); return quest; },
     update: async (quest, patch) => { const next = replace({ ...quest, ...patch, ...("lifecycleState" in patch ? { done: patch.lifecycleState === "completed" } : {}), updatedAt: stamp() } as Quest); log("quest.updated", next, "app"); return next; },
-    complete: async quest => { const done = replace({ ...quest, lifecycleState: "completed", done: true, updatedAt: stamp() }); log("quest.scored", done, "app"); return { quest: done, character: { level: 12, xp: 340, nextXp: 500 } as CharacterState }; },
+    complete: async quest => { const done = replace({ ...quest, lifecycleState: quest.kind === "daily" ? "active" : "completed", done: true, lastCompletedDate: FIXTURE_TODAY, updatedAt: stamp() }); log("quest.scored", done, "app"); return { quest: done, character: { level: 12, xp: 340, nextXp: 500 } as CharacterState }; },
   };
   unmount?.();
   unmount = mountAllFor(root, port);
@@ -343,10 +345,12 @@ async function showProduction(uid: string, email: string): Promise<void> {
       quests: () => quests,
       create: async input => replace(questOf(await runtime.questPort.createQuest(input))),
       update: async (quest, patch) => replace(questOf(await runtime.questPort.updateQuest(quest.id, { ...patch, expectedUpdatedAt: quest.updatedAt }), quest.id)),
-      complete: async quest => {
-        const response = await runtime.questPort.scoreQuest(quest.id, "up", quest.updatedAt);
-        return { quest: replace(questOf(response, quest.id)), character: (response.character as CharacterState | undefined) ?? null };
-      },
+      complete: async quest => completeToday(quest, quests.find(q => q.id === quest.id) ?? quest, localToday(),
+        async (current, patch) => replace(questOf(await runtime.questPort.updateQuest(current.id, patch), current.id)),
+        async current => {
+          const response = await runtime.questPort.scoreQuest(current.id, "up", current.updatedAt);
+          return { quest: replace(questOf(response, current.id)), character: (response.character as CharacterState | undefined) ?? null };
+        }),
       refresh: runtime.refreshWorkspace ? async () => {
         const touched = new Set<string>();
         savedDuringRefresh.add(touched);

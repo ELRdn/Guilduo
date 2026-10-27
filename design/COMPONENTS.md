@@ -89,3 +89,7 @@ LPのbrand、button、font/tokenを再利用。用途ページのリンクは本
 ### Public measurement controls (2026-10-12)
 
 公開LP・Docs・Solutionsのfooter内の標準detailsに同意・拒否/撤回button、可視status、Privacyリンクを置く。背景・文字色はSurfaceから継承し、focus-visibleと44px以上の操作領域を持つ。画面を覆うdialogやスクロール阻害を使わない。JavaScriptなしでも本文・アプリ導線を保持する。
+
+## AFA approved polish — 2026-10-27
+
+AFA alone uses the approved preview's row-based lists, compact focus card, semantic timeline faces, outlined completion dots and fixed-edge detail controls. The editable detail body scrolls independently between its header and footer. Native modal dialogs retain focus containment; an in-app discard dialog protects drafts. Capture retains the existing single-field parser. Lucide navigation icons and approved monochrome Guilduo marks are reused. See `interaction-lab/DESIGN.md` for exact scope and palette.

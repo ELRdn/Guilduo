@@ -137,6 +137,20 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 - Quest詳細の次の操作に「担当を変更」を置き、共通Quest編集を担当欄へフォーカスして開く。完了・保管済み・Human依頼には出さない。
 - カレンダー月表示で期間内の項目が0件の場合は、空であることと週表示への切替を示す。
 
+## All for ADHD — approved polish (2026-10-27)
+
+The owner approved `design/previews/all-for-adhd/` and authorized production integration. This section supersedes the earlier AFA prototype layout and task-ID color rules below.
+
+- Five tabs: 今日 / カレンダー / タスク / ギルド / 設定, retaining #now / #plan / #all / #guild / #settings and existing extra hashes.
+- ≥1100px: 176px left navigation, fluid content and a 280px AI rail on Today. ≥1380px the focus card and timeline sit side by side. Smaller screens stack them; ≤760px uses bottom navigation and a + button above the dock and safe area.
+- The approved paper/green light and ink/gold dark palette is implemented only in AFA's `polish.css`. Background/surface/text/action are #FBFAF7/#FFFFFF/#17161A/#2F5D50 and #0F1418/#172026/#E7E3DA/#B89A5E. State colors replace random ID hues. No empty emoji circles.
+- Today: compact date/count, one actionable task, next appointment, shared daily timeline; AI review → blocked → actually working (max five rows, owner shown), pickup count separate. Undated child steps inherit their scheduled parent's candidacy, not a stored date. Future/overdue/inbox tasks require explicit selection.
+- Capture opens from + or existing shortcuts, retaining the parser and failed input. Detail is a right panel / bottom sheet with pinned close/save and a scrollable body. Field, owner and step edits remain drafts until Save; failed saves retain drafts, closing or switching tasks asks before discarding. Existing API calls remain separate writes; completed writes are retained if a later step fails.
+- Day/week/month retain task dots (3 + overflow, outlined completed markers). Day shares Today's timeline; untimed first, previous timed tasks folded, overrun working tasks stay visible. Week has a 96px/hour axis, two overlap lanes, overflow opens a day, and overnight continuation segments open the original task. Short blocks retain 44px targets.
+- Tasks uses search/rows with collapsible organization groups, preserving embedded table/board/gantt/notes. Guild includes network/battle/skills; Settings starts with language/display, then notifications, connections/MCP, time, profile and billing.
+- Daily state is projected consistently before UI filtering; archived Agent work never counts as working. The existing score API requires resetting yesterday's persisted daily flag before today's score; both calls retain revision guards. Scored one-off completions remain visible in their day's counts, while manually put-away work is excluded.
+- Completion's existing five-second Undo window, reduced motion, translations, existing services, schemas and deployment routes are preserved.
+
 ## All for ADHD（2026-10-18、試作）
 
 - `interaction-lab/all-for-adhd/`（ビルド先 `/next/all-for-adhd/`）は、Relay Forge と同じ認証・Repository・Quest・Agent を使う並行UIである。API、MCP、スキーマ、Agent/Handoff の方針は変えない。パレットとトークンは Relay Forge の `tokens.css` をそのまま使う。
