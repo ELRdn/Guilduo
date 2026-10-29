@@ -63,10 +63,10 @@ test("actual tar retains both the previous entry and its lazy imports", async t 
 
 for (const wrapper of ["legacy", "parent-location"]) test(`v2 accepts only Cloudflare JSD request metadata changes (${wrapper})`, async t => {
   const continuation = wrapper === "legacy" ? "var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"
-    : "var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js';";
-  const jsd = (ray: string, time: string) => `<script>var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'${ray}',t:'${time}'};${continuation}";</script>`;
+    : "var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=REQUEST_RAY',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";
+  const jsd = (ray: string, time: string) => `<script>var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'${ray}',t:'${time}'};${continuation.replace("REQUEST_RAY", ray)}";</script>`;
   const captured = shell(oldName).replace("</body>", jsd("a4942470f8500900", "MTc5MTc4NzUzMg==") + "</body>");
-  const active = captured.replace("a4942470f8500900", "a49426f59e37cb83").replace("MTc5MTc4NzUzMg==", "MTc5MTc4NzYzNg==");
+  const active = captured.replaceAll("a4942470f8500900", "a49426f59e37cb83").replace("MTc5MTc4NzUzMg==", "MTc5MTc4NzYzNg==");
   const probe = previousShellProbe(captured, new URL(origin));
   const entries = members().map(item => item.name.endsWith("previous-shell.html") ? { ...item, text:probe }
     : item.name.endsWith("previous-shell.json") ? { ...item, text:JSON.stringify({version:2,capturedAt:now,sourcePath:"/next/relay-forge/",sourceSha256:sha(normalizePublicShell(captured)),probeSha256:sha(probe)}) } : item);
