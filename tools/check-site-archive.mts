@@ -86,8 +86,9 @@ export async function assertSiteArchiveSafe(options: {
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   assertSiteArchiveSafe({ archive: process.argv[2] || "", siteUrl: process.argv[3] || "" }).then(() => {
     console.log("Deployment archive retention verified.");
-  }).catch(() => {
+  }).catch((error: unknown) => {
     console.error("Archive verification failed; rebuild with current retained assets before uploading.");
+    console.error(error instanceof Error ? error.message : "Unknown archive verification error.");
     process.exitCode = 1;
   });
 }

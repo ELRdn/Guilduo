@@ -61,10 +61,12 @@ test("actual tar retains both the previous entry and its lazy imports", async t 
   await check(await archive(t, members()));
 });
 
-test("v2 accepts only changing Cloudflare JSD request metadata while preserving all HTML and script checks", async t => {
-  const jsd = (ray: string, time: string) => `<script>var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'${ray}',t:'${time}'};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";</script>`;
-  const captured = shell(oldName).replace("</body>", jsd("a4942470f8500900", "MTc5MTc4NzUzMg==") + "</body>");
-  const active = captured.replace("a4942470f8500900", "a49426f59e37cb83").replace("MTc5MTc4NzUzMg==", "MTc5MTc4NzYzNg==");
+for (const capturedWrapper of ["legacy", "parent-location"]) for (const activeWrapper of ["legacy", "parent-location"]) test(`v2 accepts known Cloudflare JSD wrappers (${capturedWrapper} to ${activeWrapper})`, async t => {
+  const continuation = (wrapper: string) => wrapper === "legacy" ? "var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"
+    : "var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=REQUEST_RAY',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";
+  const jsd = (wrapper: string, ray: string, time: string) => `<script>var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'${ray}',t:'${time}'};${continuation(wrapper).replace("REQUEST_RAY", ray)}";</script>`;
+  const captured = shell(oldName).replace("</body>", jsd(capturedWrapper, "a4942470f8500900", "MTc5MTc4NzUzMg==") + "</body>");
+  const active = shell(oldName).replace("</body>", jsd(activeWrapper, "a49426f59e37cb83", "MTc5MTc4NzYzNg==") + "</body>");
   const probe = previousShellProbe(captured, new URL(origin));
   const entries = members().map(item => item.name.endsWith("previous-shell.html") ? { ...item, text:probe }
     : item.name.endsWith("previous-shell.json") ? { ...item, text:JSON.stringify({version:2,capturedAt:now,sourcePath:"/next/relay-forge/",sourceSha256:sha(normalizePublicShell(captured)),probeSha256:sha(probe)}) } : item);
@@ -72,7 +74,9 @@ test("v2 accepts only changing Cloudflare JSD request metadata while preserving 
   const serve = (html: string): typeof fetch => async (input, options) => String(input).endsWith("retained-releases.json") ? server()(input, options)
     : new Response(html, {headers:{"content-type":"text/html"}});
   await check(tar, serve(active));
-  for (const altered of [active.replace("jsd/main.js", "jsd/altered.js"), active.replace("</head>", "<script>malicious()</script></head>"), active.replace(oldName, newName), active.replace("MTc5MTc4NzYzNg==", "YWxlcnQoMSk=")]) {
+  const alterations = [active.replace("jsd/main.js", "jsd/altered.js"), active.replace("</head>", "<script>malicious()</script></head>"), active.replace(oldName, newName), active.replace("MTc5MTc4NzYzNg==", "YWxlcnQoMSk="), active.replace("document.getElementsByTagName('head')[0].appendChild(a);", "document.body.appendChild(a);")];
+  if (activeWrapper === "parent-location") alterations.push(active.replace("?ray=a49426f59e37cb83", "?ray=invalid"));
+  for (const altered of alterations) {
     await assert.rejects(check(tar, serve(altered)), /Previous-shell/);
   }
   const legacy = entries.map(item => item.name.endsWith("previous-shell.json") ? {...item,text:JSON.stringify({version:1,capturedAt:now,sourcePath:"/next/relay-forge/",sourceSha256:sha(captured),probeSha256:sha(probe)})}:item);
