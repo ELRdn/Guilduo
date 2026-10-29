@@ -61,8 +61,10 @@ test("actual tar retains both the previous entry and its lazy imports", async t 
   await check(await archive(t, members()));
 });
 
-test("v2 accepts only changing Cloudflare JSD request metadata while preserving all HTML and script checks", async t => {
-  const jsd = (ray: string, time: string) => `<script>var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'${ray}',t:'${time}'};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";</script>`;
+for (const wrapper of ["legacy", "parent-location"]) test(`v2 accepts only Cloudflare JSD request metadata changes (${wrapper})`, async t => {
+  const continuation = wrapper === "legacy" ? "var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"
+    : "var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js';";
+  const jsd = (ray: string, time: string) => `<script>var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'${ray}',t:'${time}'};${continuation}";</script>`;
   const captured = shell(oldName).replace("</body>", jsd("a4942470f8500900", "MTc5MTc4NzUzMg==") + "</body>");
   const active = captured.replace("a4942470f8500900", "a49426f59e37cb83").replace("MTc5MTc4NzUzMg==", "MTc5MTc4NzYzNg==");
   const probe = previousShellProbe(captured, new URL(origin));

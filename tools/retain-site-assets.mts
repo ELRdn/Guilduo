@@ -9,7 +9,7 @@ export const PREVIOUS_SHELL_PATH = "/deployment-check/previous-shell.html";
 export const PREVIOUS_SHELL_META_PATH = "/deployment-check/previous-shell.json";
 export function normalizePublicShell(html: string): string {
   // Compare only this known Cloudflare JSD request metadata; keep its code and the stored probe intact.
-  return html.replace(/(d\.innerHTML="window\.__CF\$cv\$params=\{r:')[a-f0-9]{16}(',t:')([A-Za-z0-9+/]+={0,2})('\};var a=document\.createElement\('script'\);a\.src='\/cdn-cgi\/challenge-platform\/scripts\/jsd\/main\.js';)/g,
+  return html.replace(/(d\.innerHTML="window\.__CF\$cv\$params=\{r:')[a-f0-9]{16}(',t:')([A-Za-z0-9+/]+={0,2})('\};(?:var a=document\.createElement\('script'\);a\.src='\/cdn-cgi\/challenge-platform\/scripts\/jsd\/main\.js';|var l=window\.parent\.location,o;))/g,
     (match, before: string, between: string, time: string, after: string) => /^\d{10}$/.test(Buffer.from(time, "base64").toString("utf8")) ? `${before}REQUEST_RAY${between}REQUEST_TIME${after}` : match);
 }
 export function previousShellProbe(html: string, origin: URL): string {
