@@ -8,10 +8,14 @@ export const ASSET_RETENTION_MS = 48 * 60 * 60 * 1000;
 export const PREVIOUS_SHELL_PATH = "/deployment-check/previous-shell.html";
 export const PREVIOUS_SHELL_META_PATH = "/deployment-check/previous-shell.json";
 export function normalizePublicShell(html: string): string {
-  // Normalize only known Cloudflare JSD request IDs/time, including the URL query; keep all code and the stored probe intact.
+  // Cloudflare alternates these two exact loaders per request; any other HTML/code change must still fail comparison.
+  const prefix = "d.innerHTML=\"window.__CF$cv$params={r:'REQUEST_RAY',t:'REQUEST_TIME'};";
+  const legacy = "var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";
+  const parent = "var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=REQUEST_RAY',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";
   return html.replace(/(d\.innerHTML="window\.__CF\$cv\$params=\{r:')[a-f0-9]{16}(',t:')([A-Za-z0-9+/]+={0,2})('\};(?:var a=document\.createElement\('script'\);a\.src='\/cdn-cgi\/challenge-platform\/scripts\/jsd\/main\.js';|var l=window\.parent\.location,o;))/g,
     (match, before: string, between: string, time: string, after: string) => /^\d{10}$/.test(Buffer.from(time, "base64").toString("utf8")) ? `${before}REQUEST_RAY${between}REQUEST_TIME${after}` : match)
-    .replace(/(var u='\/cdn-cgi\/challenge-platform\/scripts\/jsd\/main\.js\?ray=)[a-f0-9]{16}(',a=document\.createElement\('script'\);)/g, "$1REQUEST_RAY$2");
+    .replace(/(var u='\/cdn-cgi\/challenge-platform\/scripts\/jsd\/main\.js\?ray=)[a-f0-9]{16}(',a=document\.createElement\('script'\);)/g, "$1REQUEST_RAY$2")
+    .replaceAll(prefix + parent + '"', prefix + legacy + '"');
 }
 export function previousShellProbe(html: string, origin: URL): string {
   if (!/<head(?:\s[^>]*)?>/i.test(html) || /<base\b/i.test(html)) throw new Error("Previous shell needs a verifiable head without base overrides.");
