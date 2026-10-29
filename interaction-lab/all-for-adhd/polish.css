@@ -44,7 +44,7 @@ body { color:var(--qf-color-fg-strong); }
 .a4-badge { margin-left:auto; font-size:11px; border-radius:4px; color:var(--qf-color-review); background:var(--a4-warning-soft); }
 .a4-profile { margin-top:auto; border-top:1px solid var(--qf-color-border-subtle); padding:20px 10px 3px; display:flex; align-items:center; gap:10px; font-size:13px; overflow-wrap:anywhere; }
 .a4-avatar { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:30px; height:30px; border-radius:8px; color:var(--qf-color-accent); background:var(--qf-color-selected); font-size:12px; font-weight:650; }
-.a4-avatar-agent { color:var(--qf-color-agent); background:var(--a4-agent-soft); }
+.a4-avatar-agent, .a4-avatar[data-kind="agent"] { color:var(--qf-color-agent); background:var(--a4-agent-soft); }
 .a4-top { position:static; margin-left:176px; height:80px; padding:0 40px; display:flex; align-items:center; justify-content:space-between; border:0; }
 .a4-breadcrumb { font-size:12px; color:var(--qf-color-fg-muted); }
 .a4-top-actions { display:flex; align-items:center; gap:7px; }
