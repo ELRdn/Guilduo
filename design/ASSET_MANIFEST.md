@@ -101,6 +101,8 @@ PWAアイコンはLucide機能アイコンと混同しない。アプリブラ�
 
 ## 追加Assetの受入条件
 
+Private Quest images (2026-10-30) are authenticated user content, not bundled brand assets. Allowed surfaces are AFA task detail/Guild review, private REST and the authorized MCP image response. Originals and generated previews stay in private R2 `quests/images/`; public LP/Docs/OG and public caches must never consume them. Preserve aspect ratio, use filename/caption alternatives, generate review captures only from synthetic fixtures, and revoke browser Blob URLs on disposal/logout. Original embedded metadata is retained; previews are re-encoded.
+
 1. ファイルが存在し、用途と許可Surfaceがこのmanifestに登録されている。
 2. 由来とライセンスが`ASSETS.md`に記録されている。
 3. 透過、縦横比、暗部の視認性を確認する。

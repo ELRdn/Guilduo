@@ -7,6 +7,8 @@ import { DomainError } from "../../server/questforge-domain.ts";
 import type { Quest, QuestForgeState } from "../../types/questforge.ts";
 import { sendPush, vapidKeys, type PushTarget } from "./web-push.ts";
 import type { WorkerEnv } from "./worker-types.ts";
+import { calendarItems } from "../../shared/productivity.ts";
+import { isRecurringQuest } from "../../shared/quest-schedule.ts";
 
 export interface NotificationSettings {
   timeZone: string;
@@ -84,14 +86,17 @@ const needsDecision = (quest: Quest) => isOpen(quest)
 /** Reminders for the person's own timed tasks in the next 48 hours. A task's own list wins over the settings. */
 export function reminderJobs(uid: string, state: QuestForgeState, settings: NotificationSettings, now: number): NotificationJob[] {
   const defaults = [...(settings.before > 0 ? [settings.before] : []), ...(settings.atStart ? [0] : [])];
-  return state.tasks.flatMap(quest => {
-    if (quest.kind !== "todo" || !isOpen(quest) || !isMine(quest) || !quest.scheduledDate || !/^\d{2}:\d{2}$/.test(quest.scheduledTime)) return [];
-    const start = localToUtc(quest.scheduledDate, quest.scheduledTime, settings.timeZone);
+  const date = wallClock(now, settings.timeZone).date;
+  const quests = new Map(state.tasks.map(quest => [quest.id, quest]));
+  return calendarItems(state.tasks, [], date, addDay(date, 2), settings.timeZone).flatMap(item => {
+    const quest = quests.get(item.questId)!;
+    if (item.kind !== "schedule" || !["todo", "daily"].includes(quest.kind) || quest.lifecycleState === "archived" || (!isOpen(quest) && (!isRecurringQuest(quest) || !quest.lastCompletedDate)) || !isMine(quest) || quest.lastCompletedDate === item.date || !/^\d{2}:\d{2}$/.test(item.time)) return [];
+    const start = localToUtc(item.date, item.time, settings.timeZone);
     const offsets = Array.isArray(quest.reminders) ? quest.reminders as number[] : defaults;
     return [...new Set(offsets)].flatMap(minutes => {
       const fireAt = start - minutes * 60_000;
       if (fireAt <= now || fireAt > now + 48 * HOUR) return [];
-      return [{ id: `reminder:${uid}:${quest.id}:${quest.scheduledDate}T${quest.scheduledTime}:${minutes}`, kind: "reminder" as const, fireAt,
+      return [{ id: `reminder:${uid}:${quest.id}:${item.date}T${item.time}:${minutes}`, kind: "reminder" as const, fireAt,
         payload: { title: label(quest), body: minutes ? say(settings, "soon", { n: minutes }) : say(settings, "start"), tag: `quest-${quest.id}`, url: `${APP}#now` } }];
     });
   });
@@ -107,8 +112,9 @@ export function dailyJob(uid: string, settings: NotificationSettings, now: numbe
 
 /** What an Agent did between two states that the person asked to hear about. */
 export function agentJobs(uid: string, before: QuestForgeState | null, after: QuestForgeState, settings: NotificationSettings, now: number): NotificationJob[] {
+  const relayCopy: Record<string, string> = { ja: "{agent} に仕事が渡りました", en: "Work was handed to {agent}", es: "Trabajo entregado a {agent}", "pt-BR": "Trabalho entregue a {agent}", fr: "Travail transmis à {agent}", de: "Arbeit an {agent} übergeben", ko: "{agent}에게 작업을 넘겼어요", "zh-Hans": "任务已交给 {agent}", ru: "Работа передана {agent}" };
   const previous = new Map((before?.tasks ?? []).map(quest => [quest.id, quest]));
-  const job = (id: string, title: string, quest: Quest, url = `${APP}#guild`): NotificationJob =>
+  const job = (id: string, title: string, quest: Quest, url = `${APP}?quest=${encodeURIComponent(quest.id)}#guild`): NotificationJob =>
     ({ id: `agent:${uid}:${quest.id}:${id}`, kind: "agent", fireAt: now, payload: { title, body: label(quest), tag: `agent-${quest.id}`, url } });
   return after.tasks.flatMap(quest => {
     const old = previous.get(quest.id);
@@ -119,6 +125,7 @@ export function agentJobs(uid: string, before: QuestForgeState | null, after: Qu
       jobs.push(job(`proposal:${quest.proposal.createdAt}`, say(settings, "proposal", { agent: quest.proposal.label || agent }), quest, `${APP}#now`));
     }
     if (settings.report && old && quest.assignee?.type === "agent" && old.assignee?.type === "agent") {
+      if (quest.relay && old.relay && quest.relay.at !== old.relay.at && quest.relay.at < quest.relay.legs.length) jobs.push(job(`relay:${quest.updatedAt}`, (relayCopy[settings.locale] || relayCopy.en!).replace("{agent}", agent), quest));
       if (quest.done && !old.done) jobs.push(job(`done:${quest.updatedAt}`, say(settings, "done", { agent }), quest));
       else if (quest.assignee.handoffState === "blocked" && old.assignee.handoffState !== "blocked") jobs.push(job(`blocked:${quest.updatedAt}`, say(settings, "blocked", { agent }), quest));
     }

@@ -62,5 +62,5 @@ export async function startRelayWorkerFixture(origin: string, overrides: Partial
     return { source, quest };
   }
   const first = await receive("first");
-  return { baseUrl, uid, env, first, receive, mcp, web, close: () => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }) };
+  return { baseUrl, uid, env, humanToken, agentToken, first, receive, mcp, web, close: () => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }) };
 }

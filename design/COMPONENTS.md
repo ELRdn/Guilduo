@@ -92,4 +92,6 @@ LPのbrand、button、font/tokenを再利用。用途ページのリンクは本
 
 ## AFA approved polish — 2026-10-27
 
+2026-10-30: private image rows reuse the existing button, text and surface tokens with 44px controls, retained aspect ratios and visible context/deleted/draft states. Original loading is explicit. The native image dialog has an accessible filename/caption, modal focus containment, Escape close and trigger-focus restoration. The image section is keyboard focusable for paste. Repeat remains a collapsed chip control inside the existing detail editor; all changes use its explicit Save.
+
 AFA alone uses the approved preview's row-based lists, compact focus card, semantic timeline faces, outlined completion dots and fixed-edge detail controls. The editable detail body scrolls independently between its header and footer. Native modal dialogs retain focus containment; an in-app discard dialog protects drafts. Capture retains the existing single-field parser. Lucide navigation icons and approved monochrome Guilduo marks are reused. See `interaction-lab/DESIGN.md` for exact scope and palette.

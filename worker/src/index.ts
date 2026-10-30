@@ -29,6 +29,9 @@ import {
 } from "../../server/questforge-domain.ts";
 import type { DomainInput, DomainRecord } from "../../server/questforge-domain.ts";
 import { listHumanRequests, preserveRelayState, requestHumanReview, respondHumanReview, type RelayContext } from "../../server/human-requests.ts";
+import { setQuestRelay, advanceQuestRelay } from "../../server/quest-relay.ts";
+import { PRACTICAL_TOOLS, IMAGE_IDS_SCHEMA } from "./practical-tools.ts";
+import { cleanupQuestImages, deleteOwnerQuestImages, exportOwnerQuestImages, listQuestImages, prepareQuestImage, uploadQuestImage, readQuestImage, removeQuestImage, validateImageReferences, questImageToolPayload, questImageToolResult } from "./quest-images.ts";
 import { mutateState, prepareStateTransaction, readState, writeState } from "./appwrite-store.ts";
 import { handleNotifications, onStateWritten, sendDueNotifications } from "./notifications.ts";
 import { authenticateRequest } from "./security.ts";
@@ -297,7 +300,7 @@ const HUMAN_REVIEW_INPUT = {
   questId: { type: "string", minLength: 1 }, requestKey: { type: "string", minLength: 1, maxLength: 120 },
   title: { type: "string", minLength: 1, maxLength: 80 }, reason: { type: "string", minLength: 1, maxLength: 1000 },
   checkTarget: { type: "string", minLength: 1, maxLength: 1000 }, completionCriteria: { type: "string", minLength: 1, maxLength: 300 },
-  artifactUrl: { type: "string", maxLength: 500 }, expectedUpdatedAt: { type: "string" }, dryRun: { type: "boolean", default: true },
+  artifactUrl: { type: "string", maxLength: 500 }, attachmentIds: IMAGE_IDS_SCHEMA, expectedUpdatedAt: { type: "string" }, dryRun: { type: "boolean", default: true },
 };
 const HUMAN_REVIEW_OUTPUT = { type: "object", properties: { dryRun: { type: "boolean" }, reused: { type: "boolean" }, quest: QUEST_OBJECT, events: { type: "array", items: QUEST_OBJECT } }, required: ["dryRun", "reused", "quest", "events"], additionalProperties: false };
 const QUEST_LIST_PAGE_OUTPUT = {
@@ -530,6 +533,7 @@ const MCP_TOOLS = [
   { name: "list_activity_events", title: "List Activity Events", description: "Paginate Guilduo activity events, optionally filtering by event type.", inputSchema: { type: "object", properties: { eventType: { type: "string", maxLength: 60 }, cursor: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 250, default: 50 } }, additionalProperties: false }, outputSchema: PAGED_EVENTS_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "get_calendar_schedule", title: "Get Calendar Schedule", description: "Read the cached Google Calendar schedule for a date. Connect and sync Calendar first.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: { type: "object", properties: { schedule: GENERIC_OBJECT_OUTPUT }, additionalProperties: false }, annotations: OPEN_WORLD_READ_ANNOTATIONS },
   { name: "convert_calendar_event_to_quest", title: "Convert Calendar Event to Quest", description: "Create a Guilduo quest from a cached Calendar event and optional safe task-field overrides.", inputSchema: { type: "object", required: ["eventId"], properties: { eventId: { type: "string", minLength: 1 }, calendarId: { type: "string", minLength: 1 }, overrides: { type: "object", properties: CALENDAR_OVERRIDE_PROPERTIES, additionalProperties: false } }, additionalProperties: false }, outputSchema: QUEST_AND_EVENT_OUTPUT, annotations: OPEN_WORLD_WRITE_ANNOTATIONS },
+  ...PRACTICAL_TOOLS,
 ].map(tool => ({ ...tool, inputSchema: { ...tool.inputSchema, properties: {
   ...tool.inputSchema.properties,
   actingAgentId: { type:"string", maxLength:80, pattern:"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", description:"Agent acting on this call. Required for a shared connection. Read get_current_agent_context for allowed IDs; this never changes another caller's Agent." },
@@ -894,8 +898,29 @@ async function relayContext(env: WorkerEnv, identity: WorkerIdentity, source: st
 async function requestReview(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, questId: string, input: WorkerArgs, source: string) {
   assertScope(identity.scopes, "quests:write");
   const actor = await relayContext(env, identity, source);
+  await validateImageReferences(env, identity, await stateFor(env, identity), questId, input.attachmentIds);
   if (input.dryRun !== false) return requestHumanReview(await stateFor(env, identity), questId, asDomainInput(input), actor);
   return mutateAndNotify(env, identity, context, (state) => requestHumanReview(state, questId, asDomainInput(input), actor));
+}
+
+async function changeRelay(env: WorkerEnv, identity: WorkerIdentity, context: WorkerContext, questId: string, input: WorkerArgs, advance: boolean) {
+  assertScope(identity.scopes, "quests:write");
+  if (!advance) assertScope(identity.scopes, "agents:read");
+  const actor = await relayContext(env, identity, identity.authType === "oauth" ? "mcp" : "api");
+  const run = async (state: QuestForgeState) => {
+    const agents = (await listAgents(env, identity.uid)).filter(agent => agent.status === "active");
+    const current = getQuest(state, questId).quest.relay;
+    const ids = Array.isArray(input.legs) ? input.legs.slice(current ? current.at + 1 : 0).map(leg => asRecord(leg).agentId) : current?.legs.slice(current.at, current.at + 2).map(leg => leg.agentId) || [];
+    const selected = new Set(ids.map(String));
+    for (const id of selected) {
+      if (!agents.some(agent => agent.agentId === id)) throw new DomainError(409, "agent_inactive", "A relay Agent is unavailable. Edit the unstarted stages.");
+      await assertAgentAccess(env, identity.uid, id);
+    }
+    await validateImageReferences(env, identity, state, questId, input.attachmentIds);
+    return (advance ? advanceQuestRelay : setQuestRelay)(state, questId, asDomainInput(input), { ...actor, agents });
+  };
+  if (input.dryRun !== false) return run(await stateFor(env, identity));
+  return mutateAndNotify(env, identity, context, run);
 }
 
 function validDateValue(value: unknown): string {
@@ -1017,6 +1042,38 @@ async function routeBilling(request: Request, env: WorkerEnv, context: WorkerCon
 }
 
 async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
+  if (path === "/v1/quest-images/export" || path === "/v1/quest-images") {
+    if (identity.authType === "oauth") throw new DomainError(403, "web_only", "Use the human's authenticated Web account for image export or account deletion.");
+    if (path.endsWith("/export") && request.method === "GET") { assertScope(identity.scopes, "quests:read"); return json(await exportOwnerQuestImages(env, identity.uid, new URL(request.url).searchParams.get("cursor") || ""), 200, { "cache-control": "no-store" }); }
+    if (path === "/v1/quest-images" && request.method === "DELETE") {
+      assertScope(identity.scopes, "quests:write");
+      const input = await billingInput(request);
+      if (input.confirm !== "delete-quest-images") throw new DomainError(400, "confirmation_required", "Confirm deletion of all of your Quest images.");
+      return json(await deleteOwnerQuestImages(env, identity.uid), 200, { "cache-control": "no-store" });
+    }
+    throw new DomainError(405, "method_not_allowed", "Unsupported image operation.");
+  }
+  const imagesMatch = path.match(/^\/v1\/quests\/([^/]+)\/images$/);
+  if (imagesMatch) {
+    const questId = decodeURIComponent(imagesMatch[1]!);
+    const state = await stateFor(env, identity);
+    if (request.method === "GET") return json(await listQuestImages(env, identity, state, questId), 200, { "cache-control": "no-store" });
+    if (request.method === "POST") return json(await prepareQuestImage(env, identity, state, { ...await billingInput(request), questId }), 200, { "cache-control": "no-store" });
+  }
+  const imageMatch = path.match(/^\/v1\/quest-images\/([^/]+)$/);
+  if (imageMatch) {
+    const imageId = decodeURIComponent(imageMatch[1]!);
+    const state = await stateFor(env, identity);
+    if (request.method === "DELETE") return json(await removeQuestImage(env, identity, state, { ...await billingInput(request), imageId }), 200, { "cache-control": "no-store" });
+    if (request.method === "GET") {
+      const variant = new URL(request.url).searchParams.get("variant") || "preview";
+      if (!["preview", "original"].includes(variant)) throw new DomainError(400, "invalid_image_variant", "Choose preview or original.");
+      const result = await readQuestImage(env, identity, state, imageId, variant === "original");
+      return new Response(result.object.body, { headers: { "content-type": result.contentType, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
+    }
+  }
+  const relayMatch = path.match(/^\/v1\/quests\/([^/]+)\/relay(?:\/(advance))?$/);
+  if (relayMatch && request.method === "POST") return json(await changeRelay(env, identity, context, decodeURIComponent(relayMatch[1]!), await billingInput(request), Boolean(relayMatch[2])));
   const method = request.method;
   if (path === "/v1/productivity" || path.startsWith("/v1/productivity/")) {
     assertAgentRegistryWebMutation(request, env, identity);
@@ -1083,11 +1140,12 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
       throw new DomainError(400, "invalid_state", "state must be a Guilduo state object.");
     }
     const current = await readState(env, identity);
+    const imageQuestIds = env.IMAGES && env.QUESTFORGE_DB ? (await env.QUESTFORGE_DB.prepare("SELECT DISTINCT quest_id FROM quest_images WHERE uid = ? AND status IN ('ready','uploading')").bind(identity.uid).all<{ quest_id: string }>()).results?.map(row => row.quest_id) || [] : [];
     const payload = {
       schemaVersion: Number(asRecord(input.state).schemaVersion || input.schemaVersion || 3),
       clientUpdatedAt: String(input.clientUpdatedAt || asRecord(input.state).updatedAt || new Date().toISOString()),
       deviceId: String(input.deviceId || "guilduo-web"),
-      state: preserveRelayState(input.state as unknown as QuestForgeState, current.payload.state || null),
+      state: preserveRelayState(input.state as unknown as QuestForgeState, current.payload.state || null, imageQuestIds),
     };
     // A browser/import cannot forge server-attested analytics milestones.
     payload.state.launchAnalyticsOutbox = current.payload.state?.launchAnalyticsOutbox;
@@ -1403,8 +1461,13 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const input = await requestRecord(request);
     const actor = await relayContext(env, identity, "api");
     const questId = decodeURIComponent(reviewResponseMatch[1]);
-    if (input.dryRun !== false) return json(respondHumanReview(await stateFor(env, identity), questId, asDomainInput(input), actor));
-    return json(await mutateAndNotify(env, identity, context, (state) => respondHumanReview(state, questId, asDomainInput(input), actor)));
+    const respond = async (state: QuestForgeState) => {
+      const review = getQuest(state, questId).quest.humanRequest;
+      if (review) await validateImageReferences(env, identity, state, review.sourceQuestId, input.attachmentIds, questId);
+      return respondHumanReview(state, questId, asDomainInput(input), actor);
+    };
+    if (input.dryRun !== false) return json(await respond(await stateFor(env, identity)));
+    return json(await mutateAndNotify(env, identity, context, respond));
   }
   if (path === "/v1/quests" && method === "POST") {
     assertScope(identity.scopes, "quests:write");
@@ -1467,7 +1530,10 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   const questMatch = path.match(/^\/v1\/quests\/([^/]+)$/);
   if (questMatch && method === "GET") {
     assertScope(identity.scopes, "quests:read");
-    return json(getQuest(await stateFor(env, identity), decodeURIComponent(questMatch[1])));
+    const state = await stateFor(env, identity);
+    const result = getQuest(state, decodeURIComponent(questMatch[1]));
+    if (env.QUESTFORGE_DB && env.AGENT_AVATARS) result.quest.images = (await listQuestImages(env, identity, state, result.quest.id)).images;
+    return json(result);
   }
   if (questMatch && method === "PATCH") {
     assertScope(identity.scopes, "quests:write");
@@ -1713,6 +1779,11 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
   if (identity.authType === "oauth" && identity.agent?.status === "active" && env.ANALYTICS_ENABLED === "true") {
     context.waitUntil(analyticsBackground(env, recordAgentConnection(env, identity.uid, identity.agent.agentId)));
   }
+  if (name === "prepare_quest_image_upload") return prepareQuestImage(env, identity, await stateFor(env, identity), args);
+  if (name === "list_quest_images") return listQuestImages(env, identity, await stateFor(env, identity), requiredString(args.questId, "questId"));
+  if (name === "read_quest_image") return questImageToolPayload(await readQuestImage(env, identity, await stateFor(env, identity), requiredString(args.imageId, "imageId"), args.variant === "original"));
+  if (name === "remove_quest_image") return removeQuestImage(env, identity, await stateFor(env, identity), args);
+  if (name === "set_quest_relay" || name === "advance_quest_relay") return changeRelay(env, identity, context, requiredString(args.questId, "questId"), args, name === "advance_quest_relay");
   if (name === "list_registered_agents") {
     assertConnectionScope(identity, "agents:read");
     return { agents: await publicAgentsWithAccess(env, identity.uid, await listAgents(env, identity.uid)) };
@@ -1903,7 +1974,10 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
   }
   if (name === "get_quest") {
     assertScope(identity.scopes, "quests:read");
-    return getQuest(await stateFor(env, identity), requiredString(args.questId, "questId"));
+    const state = await stateFor(env, identity);
+    const result = getQuest(state, requiredString(args.questId, "questId"));
+    if (env.QUESTFORGE_DB && env.AGENT_AVATARS) result.quest.images = (await listQuestImages(env, identity, state, result.quest.id)).images;
+    return result;
   }
   if (name === "get_quest_tree") {
     assertScope(identity.scopes, "quests:read");
@@ -1983,7 +2057,7 @@ async function handleMcp(request: Request, env: WorkerEnv, context: WorkerContex
   else if (message.method === "tools/call") {
     try {
       const value = await callMcpTool(String(params.name || ""), asRecord(params.arguments), env, context, identity);
-      result = { content: [{ type: "text", text: JSON.stringify(value, null, 2) }], structuredContent: value, isError: false };
+      result = questImageToolResult(value) || { content: [{ type: "text", text: JSON.stringify(value, null, 2) }], structuredContent: value, isError: false };
     } catch (error) {
       if (["invalid_tool_arguments", "unknown_tool"].includes(errorCode(error))) return json({ jsonrpc: "2.0", id: message.id, error: { code: -32602, message: errorMessage(error) } }, 400);
       result = {
@@ -2071,6 +2145,12 @@ async function handleRequest(request: Request, env: WorkerEnv, context: WorkerCo
     const rejected = validateMcpHttpRequest(request, env.ALLOWED_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173");
     if (rejected) return rejected;
   }
+  const imageUploadMatch = path.match(/^\/v1\/quest-images\/uploads\/([^/]+)$/);
+  if (imageUploadMatch) return json(await uploadQuestImage(request, env, decodeURIComponent(imageUploadMatch[1]!), async uid => {
+    const state = (await readState(env, uid)).payload.state;
+    if (!state) throw new DomainError(409, "state_unavailable", "The Quest workspace is unavailable.");
+    return state;
+  }), 200, { "cache-control": "no-store" });
   const authenticated = await timePhase("auth", () => authenticateRequest(request, env));
   if (!authenticated) return json({ error: { code: "unauthorized", message: "A valid OAuth or Appwrite bearer token is required." } }, 401, { "www-authenticate": `Bearer resource_metadata="${mcpOrigin || primaryMcpOrigin(env)}/.well-known/oauth-protected-resource/mcp"` });
   const identity = await timePhase("agent_context", () => identityWithAgentContext(env, authenticated));
@@ -2092,6 +2172,7 @@ export default {
       }
     });
     const path = new URL(request.url).pathname;
+    if (path.includes("/quest-images") || /\/quests\/[^/]+\/images$/.test(path)) response.headers.set("cache-control", "private, no-store");
     if (path.startsWith("/api/v1/") || path.startsWith("/v1/billing") || path.startsWith("/v1/decisions") || path.includes("/analytics/")) response.headers.set("cache-control", "no-store");
     return response;
   },
@@ -2107,6 +2188,7 @@ export default {
     context.waitUntil(purgeTelemetry(env));
     context.waitUntil(analyticsBackground(env, purgeLaunchAnalytics(env)));
     context.waitUntil(runAgentAvatarCleanup(env));
+    context.waitUntil(cleanupQuestImages(env).catch(() => console.error("quest_image_cleanup_failed")));
     context.waitUntil(runBillingMaintenance(env).then(result => {
       if (result.failed.length) console.error("billing_maintenance_failed", { failed: result.failed, nextCursor: result.nextCursor });
     }));

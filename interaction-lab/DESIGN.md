@@ -139,6 +139,8 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 
 ## All for ADHD — approved polish (2026-10-27)
 
+2026-10-30 additive behavior: retain chip controls and fixed Save/Close; a collapsed Repeat control exposes the five existing values. A private-image section accepts file/paste/drop drafts, shows context/filename, thumbnails, deletion/undo and storage usage. A native modal viewer explicitly loads originals, restores focus and revokes Blob URLs. Guild review shows requested images and response drafts beside text feedback; image viewing never confirms work. The existing vertical relay editor now persists its stages. Palettes, five tabs and approved page layouts remain the reference.
+
 The owner approved `design/previews/all-for-adhd/` and authorized production integration. This section supersedes the earlier AFA prototype layout and task-ID color rules below.
 
 - Five tabs: 今日 / カレンダー / タスク / ギルド / 設定, retaining #now / #plan / #all / #guild / #settings and existing extra hashes.

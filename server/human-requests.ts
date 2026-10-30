@@ -1,5 +1,5 @@
 import type { HumanRequest, Quest, QuestForgeState, QuestRequester } from "../types/questforge.ts";
-import { nextQuestTimestamp, normalizeRequester } from "../shared/relay.ts";
+import { imageIds, nextQuestTimestamp, normalizeRequester } from "../shared/relay.ts";
 import { createId, createQuest, DomainError, getQuest, migrateState, scoreQuest, type DomainContext, type DomainEvent, type DomainInput, type DomainRecord } from "./questforge-domain.ts";
 
 export interface RelayContext extends DomainContext {
@@ -49,6 +49,7 @@ export function requestHumanReview(state: QuestForgeState, sourceQuestId: string
   const title = text(input, "title", 80, true);
   const completionCriteria = text(input, "completionCriteria", 300, true);
   const artifactUrl = text(input, "artifactUrl", 500);
+  const attachmentIds = imageIds(input.attachmentIds);
   if (artifactUrl) {
     let valid = false;
     try { const url = new URL(artifactUrl); valid = url.protocol === "https:" && !url.username && !url.password; } catch { /* Reject malformed URLs. */ }
@@ -57,7 +58,7 @@ export function requestHumanReview(state: QuestForgeState, sourceQuestId: string
   const existing = target.tasks.find((quest) => quest.humanRequest?.sourceQuestId === sourceQuestId && quest.humanRequest.requestKey === requestKey);
   if (existing) {
     const previous = existing.humanRequest!;
-    if (existing.title !== title || existing.completionCriteria !== completionCriteria || previous.reason !== reason || previous.checkTarget !== checkTarget || previous.artifactUrl !== artifactUrl || existing.requester?.id !== requester.id || existing.requester.type !== requester.type) {
+    if (existing.title !== title || existing.completionCriteria !== completionCriteria || previous.reason !== reason || previous.checkTarget !== checkTarget || previous.artifactUrl !== artifactUrl || JSON.stringify(previous.attachmentIds || []) !== JSON.stringify(attachmentIds) || existing.requester?.id !== requester.id || existing.requester.type !== requester.type) {
       throw new DomainError(409, "request_key_conflict", "This requestKey already identifies a different request.");
     }
     return { dryRun, reused: true, quest: getQuest(target, existing.id).quest, events: [] };
@@ -69,7 +70,7 @@ export function requestHumanReview(state: QuestForgeState, sourceQuestId: string
   }
   const result = createQuest(target, { kind: "todo", title, notes: reason.slice(0, 180), category: source.category, completionCriteria, planningState: "backlog", difficulty: "easy", tags: [...source.tags.filter((tag) => tag !== "human-review").slice(0, 5), "human-review"], assignee: { type: "self", id: "self", label: "自分", handoffState: "none" } }, { ...context, requester, returnEvent: true });
   const quest = target.tasks.find((item) => item.id === result.quest.id)!;
-  quest.humanRequest = { sourceQuestId, requestKey, recipientId: context.ownerId, reason, checkTarget, artifactUrl, status: "pending", seenAt: "", respondedAt: "", response: "", outcome: "" };
+  quest.humanRequest = { sourceQuestId, requestKey, recipientId: context.ownerId, reason, checkTarget, artifactUrl, status: "pending", seenAt: "", respondedAt: "", response: "", outcome: "", attachmentIds, responseAttachmentIds: [] };
   const event = humanEvent(target, quest, "quest.human_request.created", context);
   return { dryRun, reused: false, quest: getQuest(target, quest.id).quest, events: [...result.events, event] };
 }
@@ -97,10 +98,11 @@ export function respondHumanReview(state: QuestForgeState, questId: string, inpu
   const action = String(input.action || "");
   if (!["seen", "defer", "resume", "approve", "revise"].includes(action)) throw new DomainError(400, "invalid_response_action", "Unknown human response action.");
   const response = text(input, "response", 2000, action === "revise");
+  const responseAttachmentIds = imageIds(input.attachmentIds);
   const outcome: HumanRequest["outcome"] = action === "approve" ? "approved" : action === "revise" ? "changes_requested" : "";
   if (outcome && input.confirmed !== true) throw new DomainError(400, "human_confirmation_required", "Explicitly confirm that you checked the requested work.");
   if (request.status === "answered") {
-    if (outcome && request.outcome === outcome && request.response === response) return { dryRun, reused: true, quest: getQuest(target, quest.id).quest, events: [] };
+    if (outcome && request.outcome === outcome && request.response === response && JSON.stringify(request.responseAttachmentIds || []) === JSON.stringify(responseAttachmentIds)) return { dryRun, reused: true, quest: getQuest(target, quest.id).quest, events: [] };
     throw new DomainError(409, "human_request_answered", "This request is already answered. Request a new review for a new round.");
   }
   expected(quest, input, dryRun);
@@ -116,6 +118,7 @@ export function respondHumanReview(state: QuestForgeState, questId: string, inpu
     request.response = response;
     request.outcome = outcome;
     request.respondedAt = now;
+    request.responseAttachmentIds = responseAttachmentIds;
     const scored = scoreQuest(target, quest.id, "up", { ...context, allowHumanResponse: true });
     events.push(scored.event);
   }
@@ -126,19 +129,23 @@ export function respondHumanReview(state: QuestForgeState, questId: string, inpu
 }
 
 /** Preserve server-owned relay fields and review records when an older client uploads a snapshot. */
-export function preserveRelayState(incoming: QuestForgeState, current: QuestForgeState | null): QuestForgeState {
+export function preserveRelayState(incoming: QuestForgeState, current: QuestForgeState | null, imageQuestIds: readonly string[] = []): QuestForgeState {
   if (!Array.isArray(incoming.tasks) || incoming.tasks.some((quest) => !quest || typeof quest !== "object" || typeof quest.id !== "string")) throw new DomainError(400, "invalid_state", "State must contain a Quest array.");
   const result = structuredClone(incoming);
   result.rewardClaims ||= {};
   const currentById = new Map((current?.tasks || []).map((quest) => [quest.id, quest]));
+  const referenced = new Set([...imageQuestIds, ...(current?.tasks || []).flatMap(quest => quest.humanRequest ? [quest.humanRequest.sourceQuestId] : [])]);
   result.tasks = result.tasks.map((quest) => {
     const previous = currentById.get(quest.id);
     if (previous?.humanRequest) return structuredClone(previous);
-    return { ...quest, requester: normalizeRequester(previous?.requester), humanRequest: null };
+    const { relay: ignoredRelay, ...editable } = quest;
+    return { ...editable, requester: normalizeRequester(previous?.requester), humanRequest: null,
+      ...(previous?.relay ? { relay: structuredClone(previous.relay), assignee: structuredClone(previous.assignee), handoff: structuredClone(previous.handoff), assignmentReadyFor: previous.assignmentReadyFor,
+        ...(previous.relay.at < previous.relay.legs.length ? { done: previous.done, lifecycleState: previous.lifecycleState, lastCompletedDate: previous.lastCompletedDate, completedAt: previous.completedAt, archivedAt: previous.archivedAt } : {}) } : {}) };
   });
   const present = new Set(result.tasks.map((quest) => quest.id));
-  for (const quest of current?.tasks || []) if (quest.humanRequest && !present.has(quest.id)) result.tasks.push(structuredClone(quest));
-  const reviewIds = new Set((current?.tasks || []).filter((quest) => quest.humanRequest).map((quest) => quest.id));
+  for (const quest of current?.tasks || []) if ((quest.humanRequest || quest.relay || referenced.has(quest.id)) && !present.has(quest.id)) result.tasks.push(structuredClone(quest));
+  const reviewIds = new Set((current?.tasks || []).filter((quest) => quest.humanRequest || quest.relay || referenced.has(quest.id)).map((quest) => quest.id));
   const protectedEvents = (current?.taskEvents || []).filter((event) => reviewIds.has(String(event.taskId || "")));
   const protectedIds = new Set(protectedEvents.map((event) => event.id));
   result.taskEvents = [...protectedEvents, ...(result.taskEvents || []).filter((event) => !protectedIds.has(event.id))];

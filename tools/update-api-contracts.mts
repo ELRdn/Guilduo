@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { MCP_TOOLS } from "../worker/src/index.ts";
+import { IMAGE_IDS_SCHEMA, PRACTICAL_TOOLS } from "../worker/src/practical-tools.ts";
 
 interface OpenApiSchema {
   type?: string | string[];
@@ -448,6 +449,35 @@ openapi.paths["/v1/productivity/import"] = { post: workWrite("Validate and resto
 openapi.paths["/v1/productivity"] = { delete: workWrite("Confirmed deletion of owner work data and private settings; stop running timers first", { expectedRevision: { type: "integer", minimum: 0 }, confirm: { type: "string", const: "delete-productivity" } }, ["expectedRevision", "confirm"]) };
 openapi.components.schemas.ProductivityNote = { type: "object", properties: { id: workId, ...noteFields, updatedAt: { type: "string", format: "date-time" } } };
 openapi.components.schemas.ProductivityTimeEntry = { type: "object", description: "Empty stopAt means a running timer. Instants carry a timezone; closed entries span at most 366 days.", properties: { id: workId, ...entryFields, updatedAt: { type: "string", format: "date-time" } } };
+
+for (const schemaName of ["HumanReviewInput", "HumanReviewResponse"]) {
+  const schema = openapi.components.schemas[schemaName];
+  schema.properties = { ...schema.properties, attachmentIds: IMAGE_IDS_SCHEMA };
+}
+openapi.components.schemas.HumanRequest.properties = { ...openapi.components.schemas.HumanRequest.properties, attachmentIds: IMAGE_IDS_SCHEMA, responseAttachmentIds: IMAGE_IDS_SCHEMA };
+openapi.components.schemas.QuestRelay = { type: ["object", "null"], readOnly: true, properties: { at: { type: "integer", minimum: 0, maximum: 6 }, legs: { type: "array", maxItems: 6, items: { type: "object", properties: {
+  id: workId, agentId: workId, ask: { type: "string", maxLength: 500 }, check: { type: "boolean" }, round: { type: "integer", minimum: 0 }, note: { type: "string", maxLength: 500 }, attachmentIds: IMAGE_IDS_SCHEMA,
+  reviewQuestId: { type: "string" }, completedAt: { type: "string" }, completedBy: { $ref: "#/components/schemas/QuestRequester" },
+} } } } };
+openapi.components.schemas.QuestImage = { type: "object", readOnly: true, properties: { id: workId, questId: workId, context: { type: "string", enum: ["reference", "result", "request", "response"] }, filename: { type: "string" }, caption: { type: "string", maxLength: 500 },
+  contentType: { type: "string" }, size: { type: "integer" }, previewSize: { type: "integer" }, sha256: { type: "string" }, width: { type: "integer" }, height: { type: "integer" }, reviewQuestId: { type: "string" }, legId: { type: "string" }, createdAt: { type: "string" }, createdBy: { $ref: "#/components/schemas/QuestRequester" }, deletedAt: { type: "string" } } };
+openapi.components.schemas.Quest.properties = { ...openapi.components.schemas.Quest.properties, relay: { $ref: "#/components/schemas/QuestRelay" }, images: { type: "array", readOnly: true, items: { $ref: "#/components/schemas/QuestImage" } } };
+const imagePrepare = PRACTICAL_TOOLS.find(tool => tool.name === "prepare_quest_image_upload")!.inputSchema;
+openapi.paths["/v1/quests/{questId}/images"] = {
+  get: { summary: "List private Quest images and owner storage usage", parameters: [parameter("questId")], responses: ok("Image metadata, never public URLs") },
+  post: { summary: "Preview or reserve an image upload; response images require Web authentication", parameters: [parameter("questId")], requestBody: body({ ...imagePrepare, required: imagePrepare.required?.filter(name => name !== "questId"), properties: { ...imagePrepare.properties, context: { type: "string", enum: ["reference", "result", "request", "response"] } } }), responses: ok("A ten-minute upload capability; keep it out of task text and logs") },
+};
+openapi.paths["/v1/quest-images/uploads/{uploadId}"] = { put: { summary: "Upload exact original bytes with the scoped upload Bearer capability", parameters: [parameter("uploadId")], requestBody: { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary", maxLength: 10485760 } } } }, responses: ok("Saved original and generated preview") } };
+openapi.paths["/v1/quest-images/{imageId}"] = {
+  get: { summary: "Read private image bytes, no-store; a response draft is human-only", parameters: [parameter("imageId"), { name: "variant", in: "query", schema: { type: "string", enum: ["preview", "original"], default: "preview" } }], responses: { "200": { description: "Private image bytes" }, "410": { description: "Image deleted; history retains its reference" } } },
+  delete: { summary: "Preview or remove an image; OAuth Agents may remove only their own uploads", parameters: [parameter("imageId")], requestBody: body({ type: "object", properties: { dryRun: { type: "boolean", default: true } } }), responses: ok("Deletion marker") },
+};
+openapi.paths["/v1/quest-images/export"] = { get: { summary: "Web-only paginated owner image manifest; back up every listed R2 key separately", parameters: [{ name: "cursor", in: "query", schema: { type: "string" } }], responses: ok("Image manifest with nextCursor") } };
+openapi.paths["/v1/quest-images"] = { delete: { summary: "Web-only confirmed owner image deletion; revokes transfers and removes at most 50 records per call", requestBody: body({ type: "object", required: ["confirm"], properties: { confirm: { type: "string", const: "delete-quest-images" } } }), responses: ok("Deleted count and remaining count; retry until zero") } };
+for (const [tool, suffix] of [["set_quest_relay", ""], ["advance_quest_relay", "/advance"]]) {
+  const definition = PRACTICAL_TOOLS.find(item => item.name === tool)!;
+  openapi.paths[`/v1/quests/{questId}/relay${suffix}`] = { post: { summary: definition.description, parameters: [parameter("questId")], requestBody: body({ ...definition.inputSchema, required: definition.inputSchema.required?.filter(name => name !== "questId") }), responses: ok("Version-guarded relay change, separate from Quest completion") } };
+}
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
 await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.7.0", tools: MCP_TOOLS }, null, 2)}\n`);

@@ -1,9 +1,10 @@
 import { tx } from "./copy.ts";
 import type { Quest } from "../../types/questforge.ts";
+import { isRecurringQuest, occursOnDate } from "../../shared/quest-schedule.ts";
 
 /** Resolve recurring completion before filtering; never revive archived work. */
 export function forDay(quest: Quest, date: string): Quest {
-  if (quest.kind !== "daily" || quest.lifecycleState === "archived") return quest;
+  if (!isRecurringQuest(quest) || quest.lifecycleState === "archived") return quest;
   const done = quest.lastCompletedDate === date;
   return { ...quest, done, lifecycleState: done ? "completed" : "active",
     assignee: !done && quest.assignee.handoffState === "working" && quest.lastCompletedDate && !(quest.handoff?.startedAt && Date.parse(quest.handoff.startedAt) >= Date.parse(date + "T00:00:00")) ? { ...quest.assignee, handoffState: "none" } : quest.assignee };
@@ -30,7 +31,7 @@ export function isOpen(quest: Quest): boolean {
 
 /** A human decision is owed: an Agent finished and wants review, or someone asked for a reply. */
 export function needsDecision(quest: Quest): boolean {
-  return isOpen(quest) && (quest.humanRequest ? quest.humanRequest.status === "pending" : quest.assignee.type === "agent" && quest.assignee.handoffState === "review_required");
+  return isOpen(quest) && (quest.humanRequest ? quest.humanRequest.status === "pending" : quest.assignee.type === "agent" && quest.assignee.handoffState === "review_required" && !quest.relay?.legs[quest.relay.at]?.reviewQuestId);
 }
 
 /** Review requests are conversations, not tasks: once answered or put off they leave the task lists. */
@@ -65,7 +66,7 @@ export function stepsOf(parent: Quest, quests: readonly Quest[]): Quest[] {
 export function bucketOf(quest: Quest, today: string): Bucket {
   if (needsDecision(quest)) return "decision";
   if (quest.assignee.type !== "self") return "agent";
-  if (isDaily(quest)) return onDay(quest, today) ? "today" : "later";
+  if (isRecurringQuest(quest)) return quest.planningState === "backlog" && quest.kind !== "daily" ? "inbox" : onDay(quest, today) ? "today" : "later";
   const start = quest.scheduledDate || quest.dueDate;
   if (!start) return "inbox";
   // "until due" work stays on today from its start until the due date.
@@ -131,6 +132,7 @@ export function addDays(date: string, days: number): string {
 
 /** Whether a Quest sits on a calendar day: its planned day, or every day of an "until due" span. */
 export function onDay(quest: Quest, date: string): boolean {
+  if (isRecurringQuest(quest)) return occursOnDate(quest, date);
   if (isDaily(quest)) return !quest.scheduledDate || quest.scheduledDate <= date;
   const start = quest.scheduledDate || quest.dueDate;
   if (!start) return false;
@@ -160,7 +162,7 @@ export interface DayPlan {
 /** One day of the timeline. Completed Quests stay visible (ticked) on the day they were planned for. */
 export function dayPlan(quests: readonly Quest[], date: string): DayPlan {
   const visible = quests.map(q => forDay(q, date)).filter(q => q.kind !== "reward" && (q.lifecycleState !== "archived" || (q.done && q.lastCompletedDate === date)) && (isOpen(q) || q.done) && !isSettledRequest(q) && onDay(q, date));
-  const carried = quests.filter(q => q.kind !== "daily" && q.kind !== "reward" && q.lifecycleState !== "archived" && !isSettledRequest(q)
+  const carried = quests.filter(q => !isRecurringQuest(q) && q.kind !== "reward" && q.lifecycleState !== "archived" && !isSettledRequest(q)
     && q.scheduledDate === addDays(date, -1) && q.scheduledTime && endOf(q) > 1440)
     .map(q => ({ ...q, scheduledDate: date, scheduledTime: "00:00", estimatedMinutes: endOf(q) - 1440 }));
   const timed = [...visible.filter(q => q.scheduledTime && q.scheduledDate === date), ...carried];

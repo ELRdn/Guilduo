@@ -13,6 +13,7 @@ import { el, replaceChildren, svg } from "../relay-forge/primitives/dom.ts";
 import { celebrate } from "./celebrate.ts";
 import { getLocale, setLocale, LOCALE_METADATA, SUPPORTED_LOCALES } from "../../i18n.ts";
 import { tx } from "./copy.ts";
+import { questImageEditor, type QuestImagePort } from "./images.ts";
 import type { RelayForgeRuntime } from "../relay-forge/production.ts";
 import { productivityWorkspace } from "../relay-forge/screens/productivity.ts";
 import { createBillingUi } from "../relay-forge/screens/billing.ts";
@@ -27,6 +28,7 @@ export interface AllForAgent {
   readonly name: string;
   readonly role: string;
   readonly active: boolean;
+  readonly reviewRequired?: boolean;
   /** Handoff state a Quest enters when given to this Agent. */
   readonly startState: string;
 }
@@ -49,10 +51,11 @@ export interface AllForPort {
   readonly agents: () => readonly AllForAgent[];
   readonly members: () => readonly { readonly id: string; readonly name: string; readonly owner: boolean }[];
   /** Answers a review request; the server validates with a dry run before writing. */
-  answer(quest: Quest, action: RequestAnswer, response: string): Promise<Quest>;
+  answer(quest: Quest, action: RequestAnswer, response: string, attachmentIds?: string[]): Promise<Quest>;
+  readonly images?: QuestImagePort;
   /** Accepts an Agent's finished work, or sends it back with a note. Dry run first. */
   review(quest: Quest, accept: boolean, note: string): Promise<Quest>;
-  /** Multi-Agent relays. Demo-only until the storage is decided; absent means one Agent at most. */
+  /** Sequential relays share the Quest's server-protected current holder and stage history. */
   readonly relay?: { get(id: string): Relay | null; set(quest: Quest, legs: readonly RelayLeg[]): Promise<Quest> };
   /** Data changed outside this UI (the demo's simulated Agents). */
   subscribe?(listener: () => void): () => void;
@@ -140,7 +143,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let focusId: string | null = null;
   let planDate = port.today();
   // Guild: which decision is shown, whether "please fix" is open, and what was typed.
-  let decisionId: string | null = null;
+  let decisionId: string | null = new URL(location.href).searchParams.get("quest");
   let reviseFor: string | null = null;
   const confirmed = new Set<string>();
   let activity: readonly AllForActivity[] | null = null;
@@ -180,6 +183,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let lastPointer = { x: 0, y: 0, at: 0 };
   const onPointer = (event: PointerEvent) => { lastPointer = { x: event.clientX, y: event.clientY, at: Date.now() }; };
   let disposed = false;
+  const reviewImageEditors = new Map<string, ReturnType<typeof questImageEditor>>();
   // Completions wait out the undo window before they are sent: the undo timer while waiting, 0 while the
   // save is in flight. They stay hidden until the server answers, so the old copy never flashes back.
   const pending = new Map<string, number>();
@@ -570,7 +574,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const agents = port.agents().filter(agent => agent.active);
     const nameOf = (id: string) => port.agents().find(agent => agent.id === id)?.name || (quest.assignee.id === id ? quest.assignee.label : "") || "Agent";
     const stored = port.relay?.get(quest.id) ?? null;
-    const initial: RelayLeg[] = stored ? [...stored.legs] : quest.assignee.type === "agent" ? [{ agentId: quest.assignee.id, ask: "", check: true }] : [];
+    const initial: RelayLeg[] = stored ? [...stored.legs] : quest.assignee.type === "agent" ? [{ agentId: quest.assignee.id, ask: "", check: false }] : [];
     let legs = initial.map(leg => ({ ...leg }));
     let palette = false;
     let suppressClickUntil = 0;
@@ -683,8 +687,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     function link(after: number | null, at: number, label = ""): HTMLElement {
       if (after === null || !multi) return el("li", { class: "a4-relay-link", "aria-hidden": label ? null : "true" }, label ? el("span", { class: "a4-meta" }, label) : null);
       const leg = legs[after]!;
-      if (!editable || after < at) return el("li", { class: "a4-relay-link" }, el("span", { class: "a4-meta" }, leg.check ? tx("あなたが確認してから次へ") : tx("そのまま次へ")));
-      const toggle = el("button", { type: "button", class: "a4-relay-check", "aria-pressed": String(leg.check) }, leg.check ? tx("確認を挟む") : tx("そのまま次へ"));
+      const required = after === legs.length - 1 || Boolean(port.agents().find(agent => agent.id === leg.agentId)?.reviewRequired);
+      const checked = leg.check || required;
+      if (!editable || after < at) return el("li", { class: "a4-relay-link" }, el("span", { class: "a4-meta" }, checked ? tx("あなたが確認してから次へ") : tx("そのまま次へ")));
+      const toggle = el("button", { type: "button", class: "a4-relay-check", disabled: required, "aria-pressed": String(checked) }, checked ? tx("確認を挟む") : tx("そのまま次へ"));
       toggle.addEventListener("click", () => { legs[after] = { ...legs[after]!, check: !legs[after]!.check }; paint(); });
       return el("li", { class: "a4-relay-link" }, toggle);
     }
@@ -926,6 +932,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       }
     };
 
+    const images = questImageEditor(port.images, quest);
+    const repeatOptions: [Quest["repeat"], string][] = [["none", tx("繰り返さない")], ["daily", tx("毎日")], ["weekdays", tx("平日")], ["weekly", tx("毎週")], ["monthly", tx("毎月")]];
+    const repeat = el("select", { class: "a4-input", "aria-label": tx("繰り返し") }, ...repeatOptions.map(([value, label]) => el("option", { value, selected: value === quest.repeat }, label)));
+    form.append(el("details", { class: "a4-more" }, el("summary", { class: "a4-chip" }, tx("繰り返し")), repeat), images.element);
     const close = el("button", { type: "button", class: "a4-button" }, tx("閉じる"));
     const dialog = el("dialog", { class: "a4-sheet", "aria-label": tx("詳しく：{title}", { title: quest.title }) },
       el("div", { class: "a4-sheet-head" },
@@ -955,7 +965,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     body.append(...contents);
     dialog.querySelector(".a4-sheet-foot")!.before(body);
     paintSteps();
-    const snapshot = () => JSON.stringify([title.value, step.value, date.value, time.value, due.value, notes.value, criteria.value, estimate, icon, reminder.value, relay.legs(), drafts.map(d => [d.title, d.done, d.removed]), stepInput.value]);
+    const snapshot = () => JSON.stringify([title.value, step.value, date.value, time.value, due.value, notes.value, criteria.value, estimate, icon, reminder.value, repeat.value, images.fingerprint(), relay.legs(), drafts.map(d => [d.title, d.done, d.removed]), stepInput.value]);
     const original = snapshot();
     sheetDirty = () => snapshot() !== original;
     let saving = false;
@@ -996,6 +1006,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         if (icon) store.set("a4-icons", [icon, ...recentIcons().filter(item => item !== icon)].slice(0, 8).join(" "));
       }
       set("dueDate", due.value);
+      set("repeat", repeat.value);
       if (reminder.value !== reminderValue(current.reminders)) patch.reminders = reminder.value === "default" ? null : JSON.parse(reminder.value);
       const legs = relay.legs();
       const handOver = relay.changed();
@@ -1024,6 +1035,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         if (Object.keys(patch).length > 0) saved = await port.update(current, { ...patch, expectedUpdatedAt: current.updatedAt });
         quest = saved;
         if (relayWrite) quest = await relayWrite.set(saved, legs);
+        await images.save();
         if (stepInput.value.trim()) {
           drafts.push({ quest: null, title: stepInput.value.trim(), done: false, removed: false }); stepInput.value = "";
         }
@@ -1049,6 +1061,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     });
     const opener = document.activeElement;
     dialog.addEventListener("close", () => {
+      images.dispose();
       window.removeEventListener("resize", resizeFields);
       dialog.remove();
       if (sheet === dialog) { sheet = null; closeSheet = null; sheetDirty = null; repaintSheet = null; }
@@ -1514,7 +1527,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function answer(quest: Quest, action: RequestAnswer): void {
     const text = (replies.get(quest.id) ?? "").trim();
     void run(async () => {
-      await port.answer(quest, action, text);
+      const editor = reviewImageEditors.get(quest.id);
+      const attachmentIds = action === "approve" || action === "revise" ? await editor?.save() : undefined;
+      await port.answer(quest, action, text, attachmentIds);
+      if (action === "approve" || action === "revise") { editor?.dispose(); reviewImageEditors.delete(quest.id); }
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
       if (cheer && action === "approve") celebrate(innerWidth / 2, innerHeight * 0.55);
       say(action === "approve" ? tx("OKを伝えました") : action === "revise" ? tx("直してほしい点を伝えました") : action === "defer" ? tx("あとで見るに移しました") : tx("判断待ちに戻しました"));
@@ -1562,6 +1578,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("div", { class: "a4-actions" },
         source ? button(tx("元のタスクを見る"), () => openSheet(source), "link") : null,
         link ? el("a", { class: "a4-link", href: link, target: "_blank", rel: "noopener noreferrer" }, tx("成果物を開く ↗")) : null),
+      request ? (() => { let editor = reviewImageEditors.get(quest.id); if (!editor) { editor = questImageEditor(port.images, quest, "response"); reviewImageEditors.set(quest.id, editor); } return editor.element; })() : null,
       el("label", { class: "a4-option" }, check, tx("中身を確認しました")),
       revising ? el("div", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, request ? tx("直してほしいこと") : tx("やり直してほしいこと")), reply) : null,
       el("div", { class: "a4-actions" },
@@ -2111,6 +2128,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   return () => {
     disposed = true;
+    for (const editor of reviewImageEditors.values()) editor.dispose();
+    reviewImageEditors.clear();
     flushPending();
     sheet?.close();
     captureDialog?.close();

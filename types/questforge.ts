@@ -40,6 +40,46 @@ export interface HumanRequest {
   respondedAt: string;
   response: string;
   outcome: "" | "approved" | "changes_requested";
+  attachmentIds?: string[];
+  responseAttachmentIds?: string[];
+}
+
+export interface QuestRelayLeg {
+  id: string;
+  agentId: string;
+  ask: string;
+  check: boolean;
+  round: number;
+  operationId?: string;
+  note?: string;
+  attachmentIds?: string[];
+  reviewQuestId?: string;
+  completedAt?: string;
+  completedBy?: QuestRequester;
+}
+
+export interface QuestRelay {
+  legs: QuestRelayLeg[];
+  at: number;
+}
+
+export interface QuestImage {
+  id: string;
+  questId: string;
+  context: "reference" | "result" | "request" | "response";
+  reviewQuestId: string;
+  legId: string;
+  filename: string;
+  caption: string;
+  contentType: string;
+  size: number;
+  previewSize: number;
+  width: number;
+  height: number;
+  sha256: string;
+  createdAt: string;
+  createdBy: QuestRequester;
+  deletedAt: string;
 }
 
 export interface HandoffDetails {
@@ -118,6 +158,7 @@ export interface Quest {
   proposal?: QuestProposal | null;
   /** Minutes before the start to remind; absent follows the notification settings, [] turns reminders off. */
   reminders?: number[];
+  relay?: QuestRelay | null;
   negativeOnly?: boolean;
   assignee: QuestAssignee;
   handoff: HandoffDetails;

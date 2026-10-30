@@ -290,13 +290,23 @@ async function showProduction(uid: string, email: string): Promise<void> {
     const port: AllForPort = {
       demo: false,
       self: () => ({ id: runtime.selfUid, label: runtime.profile?.displayName || tx("自分") }),
-      agents: () => runtime.agents.filter(agent => agent.status !== "archived").map(agent => ({ id: agent.agentId, name: agent.displayName, role: agent.role ?? "", active: (agent.status ?? "active") === "active", startState: agent.defaultHandoffState || "ready" })),
+      agents: () => runtime.agents.filter(agent => agent.status !== "archived").map(agent => ({ id: agent.agentId, name: agent.displayName, role: agent.role ?? "", active: (agent.status ?? "active") === "active", startState: agent.defaultHandoffState || "ready", reviewRequired: agent.reviewRequired })),
       members: () => runtime.members.map(member => ({ id: member.uid, name: member.displayName, owner: member.role === "owner" })),
-      answer: async (quest, action, response) => {
+      images: repository.questImages(),
+      relay: {
+        get: id => quests.find(quest => quest.id === id)?.relay || null,
+        set: async (quest, legs) => {
+          const path = `/v1/quests/${encodeURIComponent(quest.id)}/relay`;
+          const input = { legs: legs.map(leg => ({ agentId: leg.agentId, ask: leg.ask, check: leg.check })), expectedUpdatedAt: quest.updatedAt };
+          await repository.request(path, { method: "POST", body: JSON.stringify({ ...input, dryRun: true }) });
+          return replace(questOf(await repository.request(path, { method: "POST", body: JSON.stringify({ ...input, dryRun: false }) }), quest.id));
+        },
+      },
+      answer: async (quest, action, response, attachmentIds) => {
         const requests = runtime.humanRequestPort;
         if (!requests) throw new Error("human_requests_unavailable");
         // Same contract as Relay Forge's inbox: a dry run validates, then the real write.
-        const input = { action, response, confirmed: true, expectedUpdatedAt: quest.updatedAt };
+        const input = { action, response, attachmentIds, confirmed: true, expectedUpdatedAt: quest.updatedAt };
         await requests.respondHumanReview(quest.id, { ...input, dryRun: true });
         return replace(questOf(await requests.respondHumanReview(quest.id, { ...input, dryRun: false }), quest.id));
       },

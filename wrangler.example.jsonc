@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "questforge-gateway",
 	"main": "worker/src/index.ts",
+  "images": { "binding": "IMAGES" },
 	"compatibility_date": "2026-07-31",
 	"compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
