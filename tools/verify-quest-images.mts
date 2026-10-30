@@ -10,8 +10,8 @@ import type { QuestImage } from "../types/questforge.ts";
 
 const origin = process.argv[2] || "http://127.0.0.1:4319";
 assert.equal(new URL(origin).hostname, "127.0.0.1");
-const output = resolve(".qa-artifacts/practical-v1"); await mkdir(output, { recursive: true });
-const fixture = await startRelayWorkerFixture(origin, { QUESTFORGE_DB: new SqliteD1Database(), IMAGES: fakeImages() });
+const output = resolve(process.argv[3] || ".qa-artifacts/practical-v1"); await mkdir(output, { recursive: true });
+const fixture = await startRelayWorkerFixture(origin, { QUESTFORGE_DB: new SqliteD1Database(), IMAGES: fakeImages(), ALLOWED_ORIGINS: `${origin},https://app.guilduo.com` });
 const browser = await chromium.launch({ executablePath: process.env.QF_CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true });
 const errors: string[] = []; const checks: string[] = [];
 const png = await sharp(Buffer.from('<svg width="1800" height="700"><rect width="1800" height="700" fill="#13352f"/><text x="80" y="200" fill="#e7e3da" font-size="100">CYAN IMAGE 42</text><text x="80" y="350" fill="#b89a5e" font-size="60">Private reference image</text></svg>')).png().toBuffer();
@@ -56,6 +56,7 @@ try {
   }
   const images = await fixture.mcp("list_quest_images", { questId: fixture.first.source.id }) as unknown as { images: QuestImage[] };
   assert.equal(images.images.length, 8);
+  const peer = await fixture.receive("artifact-peer");
   for (const width of [390, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
@@ -80,6 +81,138 @@ try {
     assert.equal(await page.evaluate("document.documentElement.scrollWidth > innerWidth"), false);
     assert.deepEqual(writes, []); assert.equal(originals.length, 0);
     checks.push(`${width}: actual AFA decision shows source attachments, one-tap viewer, focus restoration and no implicit approval/write`);
+    await context.close();
+  }
+  for (const width of [390, 1440]) {
+    const appOrigin = width === 390 ? origin : "https://app.guilduo.com";
+    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+    // Exercise the official-root alias locally; no request reaches the public app.
+    if (appOrigin !== origin) {
+      await context.grantPermissions(["local-network-access"], { origin: appOrigin });
+      await context.route(`${appOrigin}/**`, async route => {
+        const local = new URL(route.request().url()); const server = new URL(origin);
+        local.protocol = server.protocol; local.host = server.host;
+        await route.fulfill({ response: await route.fetch({ url: local.href }) });
+      });
+    }
+    const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
+    const visit = async (artifact: string) => {
+      const params = new URLSearchParams({ api: fixture.baseUrl, quest: fixture.first.quest.id, peer: peer.quest.id, surface: "decision", theme: "dark", lang: "ja", artifact });
+      params.append("peer", fixture.first.quest.id);
+      await page.goto(`${appOrigin}/tests/browser/quest-images.html?${params}#guild`);
+      await page.locator(".a4-decision h2").filter({ hasText: "Review first" }).waitFor({ timeout: 10_000 }).catch(async error => {
+        console.log(JSON.stringify({ appOrigin, artifact, errors, body: (await page.locator("body").textContent())?.slice(0, 600) }));
+        await page.screenshot({ path: resolve(output, `artifact-failure-${width}.png`), fullPage: true }); throw error;
+      });
+    };
+    const resultLink = page.getByRole("link", { name: "成果物を開く", exact: true });
+    const navigation: string[] = [], popups: string[] = [], writes: string[] = [];
+    page.on("request", request => { if (request.isNavigationRequest()) navigation.push(request.url()); if (!["GET", "HEAD"].includes(request.method())) writes.push(request.method()); });
+    page.on("popup", popup => popups.push(popup.url()));
+    await visit(`${appOrigin}/next/all-for-adhd/#today`);
+    await page.getByRole("button", { name: "直してほしい", exact: true }).click();
+    await page.locator(".a4-decision textarea").fill("Keep this reply and its image.");
+    await page.locator('.a4-decision input[type="checkbox"]').check();
+    await page.locator('.a4-decision input[type="file"]').setInputFiles({ name: "unsent-response.png", mimeType: "image/png", buffer: png });
+    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+    navigation.length = 0;
+    for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+      assert.equal(await resultLink.evaluate((node, init) => {
+        let prevented = false;
+        node.addEventListener("click", (event: { defaultPrevented: boolean; preventDefault(): void }) => { prevented = event.defaultPrevented; event.preventDefault(); }, { once: true });
+        node.dispatchEvent(new node.ownerDocument.defaultView.MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
+        return prevented;
+      }, modifiers), false, JSON.stringify(modifiers));
+    }
+    await resultLink.focus(); await page.keyboard.press("Enter");
+    await page.locator('.a4-main[data-view="plan"]').waitFor();
+    await page.locator('a[data-view="guild"]').click();
+    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
+    assert.equal(await page.locator(".a4-decision textarea").inputValue(), "Keep this reply and its image.");
+    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), true);
+    assert.equal(await page.locator(".a4-decision .a4-image-row").filter({ hasText: "unsent-response.png" }).count(), 1);
+    await page.screenshot({ path: resolve(output, `artifact-retained-${width}.png`), fullPage: true });
+    checks.push(`${width}: internal artifact keyboard navigation preserves selected decision, reply, confirmation and unsent image; modifiers stay native`);
+    await page.getByRole("button", { name: "元のタスクを見る", exact: true }).click();
+    await page.locator('.a4-sheet [name="title"]').fill("Unsaved task title");
+    await resultLink.evaluate(node => node.click());
+    await page.locator(".a4-discard-dialog").waitFor();
+    await page.getByRole("button", { name: "編集を続ける", exact: true }).click();
+    await page.locator(".a4-discard-dialog").waitFor({ state: "detached" });
+    assert.equal(await page.locator('.a4-sheet [name="title"]').inputValue(), "Unsaved task title");
+    assert.equal(await page.locator('.a4-main[data-view="guild"]').count(), 1);
+    await resultLink.evaluate(node => node.click());
+    await page.getByRole("button", { name: "破棄する", exact: true }).click();
+    await page.locator('.a4-main[data-view="plan"]').waitFor();
+    await page.locator('a[data-view="guild"]').click();
+    assert.equal(await page.locator(".a4-decision textarea").inputValue(), "Keep this reply and its image.");
+    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), true);
+    assert.equal(await page.evaluate(() => performance.timeOrigin), timeOrigin);
+    assert.deepEqual(navigation, []); assert.deepEqual(popups, []); assert.deepEqual(writes, []);
+    checks.push(`${width}: internal artifact uses the draft discard/cancel guard without popup, document navigation, runtime restart or write`);
+    await visit(`${appOrigin}/next/all-for-adhd/?quest=${peer.quest.id}#guild`);
+    await page.locator('.a4-decision input[type="checkbox"]').check();
+    const peerTimeOrigin = await page.evaluate(() => performance.timeOrigin); navigation.length = 0;
+    const firstUrl = page.url();
+    await page.getByRole("button", { name: "元のタスクを見る", exact: true }).click();
+    await page.locator('.a4-sheet [name="title"]').fill("Keep the guarded Quest draft");
+    await resultLink.evaluate(node => node.click());
+    await page.locator(".a4-discard-dialog").waitFor();
+    assert.equal(page.url(), firstUrl);
+    await page.getByRole("button", { name: "編集を続ける", exact: true }).click();
+    await page.locator(".a4-discard-dialog").waitFor({ state: "detached" });
+    assert.equal(await page.locator('.a4-sheet [name="title"]').inputValue(), "Keep the guarded Quest draft");
+    await resultLink.evaluate(node => node.click());
+    await page.getByRole("button", { name: "破棄する", exact: true }).click();
+    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review artifact-peer");
+    assert.equal(new URL(page.url()).searchParams.get("quest"), peer.quest.id);
+    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), false);
+    await page.goBack();
+    await page.locator(".a4-decision h2").filter({ hasText: "Review first" }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("quest"), fixture.first.quest.id);
+    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
+    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), true);
+    await page.goForward();
+    await page.locator(".a4-decision h2").filter({ hasText: "Review artifact-peer" }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("quest"), peer.quest.id);
+    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), false);
+    await page.getByRole("button", { name: "次の判断へ", exact: true }).click();
+    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
+    assert.equal(new URL(page.url()).searchParams.get("quest"), fixture.first.quest.id);
+    await page.goBack();
+    await page.locator(".a4-decision h2").filter({ hasText: "Review artifact-peer" }).waitFor();
+    assert.equal(await page.evaluate(() => performance.timeOrigin), peerTimeOrigin);
+    assert.deepEqual(navigation, []); assert.deepEqual(popups, []);
+    checks.push(`${width}: quest-specific clicks/back/forward and next-decision selection keep URL, exact decision and per-Quest confirmation aligned without document navigation`);
+    await page.reload();
+    await page.locator(".a4-decision h2").filter({ hasText: "Review artifact-peer" }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("quest"), peer.quest.id);
+    assert.ok((await page.locator(".a4-decision .a4-eyebrow").textContent())?.includes("/ 2"));
+    checks.push(`${width}: reloading a quest-specific artifact URL restores the targeted pending decision`);
+    for (const artifact of [`${appOrigin}/next/all-for-adhd/#guild`, `${appOrigin}/next/all-for-adhd/?quest=${fixture.first.quest.id}#guild`, ...(appOrigin !== origin ? ["https://app.guilduo.com/#guild"] : [])]) {
+      await visit(artifact);
+      assert.equal(await page.getByRole("link", { name: /成果物を開く/ }).count(), 0, artifact);
+    }
+    checks.push(`${width}: redundant same-screen and same-decision artifact links are omitted${appOrigin !== origin ? ", including the reported official #guild URL" : ""}`);
+    for (const artifact of ["https://example.test/result", `${appOrigin}/next/relay-forge/#guild`, `${appOrigin}/unknown/#guild`, `${appOrigin}/next/all-for-adhd/#unknown`, `${appOrigin}/next/all-for-adhd/?quest=missing#guild`, `${appOrigin}/next/all-for-adhd/?quest=${fixture.first.source.id}#guild`, `${appOrigin}/next/all-for-adhd/?quest=${peer.quest.id}#plan`, `${appOrigin}/next/all-for-adhd/?quest=#guild`, `${appOrigin}/next/all-for-adhd/?quest=${peer.quest.id}&quest=missing#guild`, `${appOrigin}/next/all-for-adhd/?lang=en#guild`, ...(appOrigin === origin ? ["https://app.guilduo.com/#guild", `${origin}/#guild`] : [])]) {
+      await visit(artifact);
+      const external = page.getByRole("link", { name: "成果物を開く ↗", exact: true });
+      assert.equal(await external.getAttribute("href"), artifact);
+      assert.equal(await external.getAttribute("target"), "_blank", artifact);
+      assert.equal(await external.getAttribute("rel"), "noopener noreferrer", artifact);
+    }
+    checks.push(`${width}: external/other-surface/unknown routes and unresolved or ambiguous Quest/query targets retain exact safe external links`);
+    await visit("https://example.test/result");
+    await context.route("https://example.test/result", route => route.fulfill({ contentType: "text/html", body: "External result fixture" }));
+    navigation.length = 0;
+    const popupPromise = page.waitForEvent("popup");
+    await page.getByRole("link", { name: "成果物を開く ↗", exact: true }).click();
+    const popup = await popupPromise; await popup.waitForLoadState();
+    assert.equal(popup.url(), "https://example.test/result");
+    assert.equal(await popup.evaluate("window.opener === null"), true);
+    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
+    assert.deepEqual(navigation, []); assert.deepEqual(writes, []);
+    checks.push(`${width}: a real external click opens its own safe tab and leaves the AFA document intact`);
     await context.close();
   }
   await fixture.web(`/v1/quests/${fixture.first.quest.id}/review-response`, "POST", { action: "approve", response: "OK", confirmed: true, expectedUpdatedAt: fixture.first.quest.updatedAt, dryRun: false });

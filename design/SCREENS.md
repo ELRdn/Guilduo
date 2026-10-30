@@ -44,6 +44,8 @@ All for ADHD: the 2026-10-27 owner-approved preview is the visual reference. See
 
 Guild's featured decision displays attached images inline on PC and mobile; each preview opens the existing modal in one tap. The task title is the heading, lengthy check instructions are in details, and response-image attachment stays beside the answer controls. No task-sheet navigation is required to view incoming references/results.
 
+Its artifact link stays in the mounted AFA app for known same-origin destinations, preserving reply text, confirmation, image drafts and the selected decision when returning. The official root and AFA deployment path share this behavior; other surfaces and unknown destinations remain external. Quest-specific Guild links select only an existing pending decision, never a fallback decision.
+
 Calendar Day/Week presents a shared hourly axis, separate all-day items, today marker and quarter-hour range preview. Empty-axis mouse drag or touch long press opens a range form; record uses native TimeEntry save, schedule uses the common Quest editor prefilled with planned date/time and estimate. Keyboard selection is equivalent. Common Quest editing exposes planned date/time and on-date/until-due mode independently of deadline.
 
 ## Today / 今日の作戦

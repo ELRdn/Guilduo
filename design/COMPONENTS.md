@@ -96,4 +96,6 @@ LPのbrand、button、font/tokenを再利用。用途ページのリンクは本
 
 Guild decisions reuse that viewer in an inline read-only gallery directly below the task title, with responsive columns and larger contained previews. Detailed instructions stay in the existing details control; incoming attachments and response-image drafts use separate sections. The gallery offers viewing and retry only, retaining deleted markers and explicit confirmation.
 
+AFA decision artifact links use guarded SPA navigation for recognized routes on the current origin and AFA surface. A redundant link to the displayed decision/screen is omitted. Internal links keep native modifier behavior; external, other-surface and unresolved links retain a new tab with noopener/noreferrer. Opening a link never confirms a decision.
+
 AFA alone uses the approved preview's row-based lists, compact focus card, semantic timeline faces, outlined completion dots and fixed-edge detail controls. The editable detail body scrolls independently between its header and footer. Native modal dialogs retain focus containment; an in-app discard dialog protects drafts. Capture retains the existing single-field parser. Lucide navigation icons and approved monochrome Guilduo marks are reused. See `interaction-lab/DESIGN.md` for exact scope and palette.

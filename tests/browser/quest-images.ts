@@ -17,9 +17,16 @@ if (params.get("surface") === "decision") {
   const { mountAllFor } = await import("../../interaction-lab/all-for-adhd/app.ts");
   const source = quest.humanRequest ? (await repository.getQuest(quest.humanRequest.sourceQuestId)).quest as Quest : null;
   let quests = source ? [quest, source] : [quest];
+  for (const peer of params.getAll("peer")) {
+    if (!quests.some(item => item.id === peer)) quests.push((await repository.getQuest(peer)).quest as Quest);
+  }
+  const artifact = params.get("artifact");
   const unavailable = async (): Promise<never> => { throw new Error("Not part of the image fixture"); };
   const port: AllForPort = {
-    demo: true, self: () => ({ id: "self", label: "Fixture Human" }), today: () => "2026-10-30", quests: () => quests,
+    demo: true, self: () => ({ id: "self", label: "Fixture Human" }), today: () => "2026-10-30",
+    quests: () => quests.map(item => item.id !== quest.id || artifact === null ? item : item.humanRequest
+      ? { ...item, humanRequest: { ...item.humanRequest, artifactUrl: artifact } }
+      : { ...item, handoff: { ...item.handoff, artifactUrl: artifact } }),
     agents: () => [{ id: "review-agent", name: "Review Agent", role: "assistant", active: true, startState: "ready" }], members: () => [],
     images: repository.questImages(), activity: async () => [], create: unavailable, update: unavailable, complete: unavailable,
     refresh: async () => { quests = await Promise.all(quests.map(async item => (await repository.getQuest(item.id)).quest as Quest)); },

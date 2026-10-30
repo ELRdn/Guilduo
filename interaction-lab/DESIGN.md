@@ -145,6 +145,10 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 
 The owner approved `design/previews/all-for-adhd/` and authorized production integration. This section supersedes the earlier AFA prototype layout and task-ID color rules below.
 
+2026-10-30 artifact navigation delta (AFA only): recognized same-origin AFA links use the existing `go` and draft guards, retaining the mounted auth/runtime, reply/confirmation and response-image drafts. Links back to the displayed screen/decision are omitted. The official app root is an alias only on app.guilduo.com; the AFA deployment/source paths and current mount path are recognized. Only known hashes (including #today) and an optional single nonempty quest parameter are handled; quest links require #guild and a loaded pending decision. Unknown paths/hashes/query parameters, unavailable Quests, other origins and Relay Forge keep ordinary safe external links. Ctrl/Cmd/Shift/Alt and non-primary clicks retain native link behavior. This overrides the general external-artifact new-tab rule above only for these AFA destinations.
+
+Quest-specific SPA destinations update the quest query and hash together. Same-hash browser Back/Forward restores the targeted decision, and reloading restores the URL's target. A pending draft guard keeps the prior full URL until navigation is accepted.
+
 - Five tabs: 今日 / カレンダー / タスク / ギルド / 設定, retaining #now / #plan / #all / #guild / #settings and existing extra hashes.
 - ≥1100px: 176px left navigation, fluid content and a 280px AI rail on Today. ≥1380px the focus card and timeline sit side by side. Smaller screens stack them; ≤760px uses bottom navigation and a + button above the dock and safe area.
 - The approved paper/green light and ink/gold dark palette is implemented only in AFA's `polish.css`. Background/surface/text/action are #FBFAF7/#FFFFFF/#17161A/#2F5D50 and #0F1418/#172026/#E7E3DA/#B89A5E. State colors replace random ID hues. No empty emoji circles.

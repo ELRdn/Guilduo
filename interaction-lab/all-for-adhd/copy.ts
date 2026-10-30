@@ -242,6 +242,7 @@ export const COPY: Readonly<Record<string, Row>> = {
   "{name} が「終わった」と報告しています": ["{name} reports it’s done", "{name} dice que terminó", "{name} diz que terminou", "{name} indique avoir terminé", "{name} meldet: fertig", "{name}이(가) 끝났다고 보고했어요", "{name} 报告已完成", "{name} сообщает, что готово"],
   "元のタスクを見る": ["See the original task", "Ver la tarea original", "Ver a tarefa original", "Voir la tâche d’origine", "Ursprüngliche Aufgabe ansehen", "원래 작업 보기", "查看原任务", "Открыть исходную задачу"],
   "成果物を開く ↗": ["Open the result ↗", "Abrir el resultado ↗", "Abrir o resultado ↗", "Ouvrir le résultat ↗", "Ergebnis öffnen ↗", "결과물 열기 ↗", "打开成果 ↗", "Открыть результат ↗"],
+  "成果物を開く": ["Open the result", "Abrir el resultado", "Abrir o resultado", "Ouvrir le résultat", "Ergebnis öffnen", "결과물 열기", "打开成果", "Открыть результат"],
   "中身を確認しました": ["I’ve checked it", "Lo he revisado", "Já conferi", "J’ai vérifié", "Ich habe es geprüft", "내용을 확인했어요", "我已确认内容", "Я проверил(а)"],
   "やり直してほしいこと": ["What to redo", "Qué rehacer", "O que refazer", "À reprendre", "Was überarbeiten", "다시 해 줬으면 하는 점", "需要重做的地方", "Что переделать"],
   "やめる": ["Cancel", "Cancelar", "Cancelar", "Annuler", "Abbrechen", "그만두기", "取消", "Отмена"],
