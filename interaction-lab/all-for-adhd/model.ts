@@ -1,6 +1,11 @@
 import { tx } from "./copy.ts";
-import type { Quest } from "../../types/questforge.ts";
+import type { Quest, QuestImage } from "../../types/questforge.ts";
 import { isRecurringQuest, occursOnDate } from "../../shared/quest-schedule.ts";
+
+export function reviewImages(images: readonly QuestImage[], questId: string, selectedIds?: readonly string[]): QuestImage[] {
+  return images.filter(image => selectedIds?.length ? selectedIds.includes(image.id)
+    : image.context !== "response" && (!image.reviewQuestId || image.reviewQuestId === questId));
+}
 
 /** Resolve recurring completion before filtering; never revive archived work. */
 export function forDay(quest: Quest, date: string): Quest {

@@ -42,6 +42,8 @@ Quest creation has one entry point per surface: the desktop operation bar, the m
 
 All for ADHD: the 2026-10-27 owner-approved preview is the visual reference. See [AFA approved polish](../interaction-lab/DESIGN.md#all-for-adhd--approved-polish-2026-10-27) for the five-screen layout, 176px navigation, Today focus/timeline/280px AI rail, responsive bottom navigation, day/week/month calendar and right-panel/bottom-sheet detail behavior. Existing Guild decisions, Agent registry, MCP connections, notifications, embedded table/board/gantt/notes, time tracking, billing and compatibility hashes remain reachable. Local comparison uses `design/previews/all-for-adhd/integration.html` with the same fictional data as the approved mock; it is not a production entry.
 
+Guild's featured decision displays attached images inline on PC and mobile; each preview opens the existing modal in one tap. The task title is the heading, lengthy check instructions are in details, and response-image attachment stays beside the answer controls. No task-sheet navigation is required to view incoming references/results.
+
 Calendar Day/Week presents a shared hourly axis, separate all-day items, today marker and quarter-hour range preview. Empty-axis mouse drag or touch long press opens a range form; record uses native TimeEntry save, schedule uses the common Quest editor prefilled with planned date/time and estimate. Keyboard selection is equivalent. Common Quest editing exposes planned date/time and on-date/until-due mode independently of deadline.
 
 ## Today / 今日の作戦

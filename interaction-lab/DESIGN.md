@@ -141,6 +141,8 @@ Interaction Labの目的は、現行版へ昇格する前に新しいUI構造と
 
 2026-10-30 additive behavior: retain chip controls and fixed Save/Close; a collapsed Repeat control exposes the five existing values. A private-image section accepts file/paste/drop drafts, shows context/filename, thumbnails, deletion/undo and storage usage. A native modal viewer explicitly loads originals, restores focus and revokes Blob URLs. Guild review shows requested images and response drafts beside text feedback; image viewing never confirms work. The existing vertical relay editor now persists its stages. Palettes, five tabs and approved page layouts remain the reference.
 
+2026-10-30 owner feedback: Guild's large decision card shows its short Quest title and an inline, read-only attachment gallery before the existing details. Opening an image takes one tap on the card; the task sheet is optional. Explicit requested image IDs remain authoritative; requests without them fall back to the source's reference/result/general request images, excluding response drafts and another review's images. Long check instructions remain in the existing details. Response-image drafts have their own labeled section. Gallery columns collapse to one on narrow screens, reuse the existing modal/focus behavior, load previews by default and keep original loading explicit. Viewing never checks the confirmation box.
+
 The owner approved `design/previews/all-for-adhd/` and authorized production integration. This section supersedes the earlier AFA prototype layout and task-ID color rules below.
 
 - Five tabs: 今日 / カレンダー / タスク / ギルド / 設定, retaining #now / #plan / #all / #guild / #settings and existing extra hashes.

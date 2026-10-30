@@ -1,18 +1,20 @@
 import type { Quest, QuestImage } from "../../types/questforge.ts";
 import { tx } from "./copy.ts";
+import { reviewImages } from "./model.ts";
 import type { ImageUploadTicket, QuestImagePort } from "../../types/quest-images.ts";
 export type { QuestImagePort } from "../../types/quest-images.ts";
 
 /** Draft files stay local; successful individual writes survive a later failed Save. */
-export function questImageEditor(port: QuestImagePort | undefined, quest: Quest, context: "reference" | "response" = "reference") {
-  const root = document.createElement("section"); root.className = "a4-images";
-  const title = document.createElement("h3"); title.className = "a4-step-label"; title.textContent = tx("画像");
+export function questImageEditor(port: QuestImagePort | undefined, quest: Quest, context: "reference" | "response" | "review" = "reference") {
+  const root = document.createElement("section"); root.className = context === "review" ? "a4-images a4-images-gallery" : "a4-images";
+  const title = document.createElement("h3"); title.className = "a4-step-label"; title.textContent = context === "response" ? tx("回答の画像") : tx("画像");
   const rows = document.createElement("div"); rows.className = "a4-image-list";
   const status = document.createElement("p"); status.className = "a4-meta"; status.setAttribute("role", "status");
   const picker = document.createElement("input"); picker.type = "file"; picker.multiple = true; picker.accept = "image/png,image/jpeg,image/webp"; picker.hidden = true;
   const add = document.createElement("button"); add.type = "button"; add.className = "a4-button"; add.textContent = tx("画像を添付");
   const hint = document.createElement("p"); hint.className = "a4-meta"; hint.textContent = tx("PNG・JPEG・WebP。1枚10MB、1タスク10枚。貼り付けやドロップも使えます。");
-  root.append(title, rows, add, picker, hint, status);
+  if (context === "review") root.append(title, rows, status);
+  else root.append(title, rows, add, picker, hint, status);
   let disposed = false, saving = false, loaded = false;
   let images: QuestImage[] = [];
   const removed = new Set<string>();
@@ -21,9 +23,9 @@ export function questImageEditor(port: QuestImagePort | undefined, quest: Quest,
   const viewers = new Set<HTMLDialogElement>();
   const reviewId = context === "response" ? quest.id : "";
   const sourceId = quest.humanRequest?.sourceQuestId || quest.id;
-  const readonly = Boolean(context === "response" && quest.humanRequest?.status === "answered");
+  const readonly = context === "review" || Boolean(context === "response" && quest.humanRequest?.status === "answered");
   add.disabled = !port || readonly;
-  if (!port) { hint.textContent = tx("画像の添付はログイン後に使えます。"); loaded = true; }
+  if (!port) { hint.textContent = tx("画像の添付はログイン後に使えます。"); loaded = true; if (context === "review") root.hidden = true; }
 
   function accept(list: FileList | File[]) {
     if (!port || readonly || saving) return;
@@ -34,12 +36,14 @@ export function questImageEditor(port: QuestImagePort | undefined, quest: Quest,
     }
     paint();
   }
-  add.addEventListener("click", () => picker.click());
-  picker.addEventListener("change", () => { if (picker.files) accept(picker.files); picker.value = ""; });
-  root.addEventListener("dragover", event => { if (!readonly && event.dataTransfer?.types.includes("Files")) event.preventDefault(); });
-  root.addEventListener("drop", event => { if (event.dataTransfer?.files.length) { event.preventDefault(); accept(event.dataTransfer.files); } });
-  root.addEventListener("paste", event => { if (event.clipboardData?.files.length) { event.preventDefault(); accept(event.clipboardData.files); } });
-  root.tabIndex = 0; root.setAttribute("aria-label", tx("参照画像を貼り付ける場所"));
+  if (context !== "review") {
+    add.addEventListener("click", () => picker.click());
+    picker.addEventListener("change", () => { if (picker.files) accept(picker.files); picker.value = ""; });
+    root.addEventListener("dragover", event => { if (!readonly && event.dataTransfer?.types.includes("Files")) event.preventDefault(); });
+    root.addEventListener("drop", event => { if (event.dataTransfer?.files.length) { event.preventDefault(); accept(event.dataTransfer.files); } });
+    root.addEventListener("paste", event => { if (event.clipboardData?.files.length) { event.preventDefault(); accept(event.clipboardData.files); } });
+    root.tabIndex = 0; root.setAttribute("aria-label", tx("参照画像を貼り付ける場所"));
+  }
 
   function button(label: string, action: () => void) {
     const node = document.createElement("button"); node.type = "button"; node.className = "a4-button"; node.textContent = label;
@@ -62,8 +66,10 @@ export function questImageEditor(port: QuestImagePort | undefined, quest: Quest,
     for (const url of urls) URL.revokeObjectURL(url); urls.clear();
     rows.replaceChildren();
     const labels = { reference: tx("参考画像"), result: tx("成果画像"), request: tx("確認用の画像"), response: tx("回答の画像") };
-    for (const image of images) {
-      if (context === "response" && !quest.humanRequest?.attachmentIds?.includes(image.id) && image.reviewQuestId !== quest.id) continue;
+    const visible = context === "review" ? reviewImages(images, quest.id, quest.humanRequest?.attachmentIds)
+      : context === "response" ? images.filter(image => image.context === "response" && image.reviewQuestId === reviewId) : images;
+    if (context === "review") root.hidden = loaded && visible.length === 0;
+    for (const image of visible) {
       const row = document.createElement("div"); row.className = "a4-image-row";
       const name = document.createElement("span"); name.textContent = `${labels[image.context]} · ${image.caption || image.filename}`;
       row.append(name);
@@ -99,19 +105,21 @@ export function questImageEditor(port: QuestImagePort | undefined, quest: Quest,
   }
   async function load() {
     if (!port) return;
+    root.setAttribute("aria-busy", "true");
     try {
       const page = await port.list(sourceId); if (disposed) return;
       images = page.images; loaded = true;
-      status.textContent = tx("画像容量 {used} / {total} MB", { used: Math.ceil(page.usedBytes / 1048576), total: Math.floor(page.quotaBytes / 1048576) });
+      status.textContent = context === "review" ? "" : tx("画像容量 {used} / {total} MB", { used: Math.ceil(page.usedBytes / 1048576), total: Math.floor(page.quotaBytes / 1048576) });
       paint();
-    } catch { if (!disposed) { status.textContent = tx("画像を読み込めませんでした。再試行できます。"); status.append(button(tx("再試行"), () => { void load(); })); } }
+    } catch { if (!disposed) { root.hidden = false; status.textContent = tx("画像を読み込めませんでした。再試行できます。"); status.append(button(tx("再試行"), () => { void load(); })); } }
+    finally { if (!disposed) root.setAttribute("aria-busy", "false"); }
   }
   void load();
   return {
     element: root,
     fingerprint: () => JSON.stringify([files.map(item => [item.file.name, item.file.size, item.removed, item.saved?.id]), [...removed]]),
     async save(): Promise<string[]> {
-      if (!port) return [];
+      if (!port || context === "review") return [];
       if (!loaded && (removed.size || files.some(item => !item.removed))) throw new Error("image_list_unavailable");
       saving = true; add.disabled = true;
       try {

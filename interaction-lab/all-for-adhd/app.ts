@@ -184,6 +184,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   const onPointer = (event: PointerEvent) => { lastPointer = { x: event.clientX, y: event.clientY, at: Date.now() }; };
   let disposed = false;
   const reviewImageEditors = new Map<string, ReturnType<typeof questImageEditor>>();
+  const reviewImageGalleries = new Map<string, ReturnType<typeof questImageEditor>>();
   // Completions wait out the undo window before they are sent: the undo timer while waiting, 0 while the
   // save is in flight. They stay hidden until the server answers, so the old copy never flashes back.
   const pending = new Map<string, number>();
@@ -1524,13 +1525,23 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   /** Shows a request's link only when it is a plain web address. */
   const safeUrl = (value: string | undefined) => { try { const url = new URL(value ?? ""); return url.protocol === "https:" || url.protocol === "http:" ? url.href : null; } catch { return null; } };
 
+  function disposeDecisionImages(id: string): void {
+    reviewImageEditors.get(id)?.dispose(); reviewImageEditors.delete(id);
+    reviewImageGalleries.get(id)?.dispose(); reviewImageGalleries.delete(id);
+  }
+
+  function clearDecisionGalleries(): void {
+    for (const gallery of reviewImageGalleries.values()) gallery.dispose();
+    reviewImageGalleries.clear();
+  }
+
   function answer(quest: Quest, action: RequestAnswer): void {
     const text = (replies.get(quest.id) ?? "").trim();
     void run(async () => {
       const editor = reviewImageEditors.get(quest.id);
       const attachmentIds = action === "approve" || action === "revise" ? await editor?.save() : undefined;
       await port.answer(quest, action, text, attachmentIds);
-      if (action === "approve" || action === "revise") { editor?.dispose(); reviewImageEditors.delete(quest.id); }
+      if (action === "approve" || action === "revise") disposeDecisionImages(quest.id);
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
       if (cheer && action === "approve") celebrate(innerWidth / 2, innerHeight * 0.55);
       say(action === "approve" ? tx("OKを伝えました") : action === "revise" ? tx("直してほしい点を伝えました") : action === "defer" ? tx("あとで見るに移しました") : tx("判断待ちに戻しました"));
@@ -1541,6 +1552,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const note = (replies.get(quest.id) ?? "").trim();
     void run(async () => {
       const saved = await port.review(quest, accept, note);
+      disposeDecisionImages(quest.id);
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
       const passed = accept && saved.assignee.type === "agent" && saved.assignee.id !== quest.assignee.id ? saved.assignee.label : "";
       if (cheer && accept) celebrate(innerWidth / 2, innerHeight * 0.55);
@@ -1558,8 +1570,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const leg = relay?.legs[relay.at];
     const nextLeg = relay?.legs[relay.at + 1];
     const nextName = nextLeg ? port.agents().find(agent => agent.id === nextLeg.agentId)?.name ?? "Agent" : "";
-    const headline = request?.checkTarget || quest.title;
-    const details = [detail(tx("理由"), request?.reason), detail(tx("完了の条件"), quest.completionCriteria), detail(tx("報告"), request ? undefined : quest.handoff?.note)].filter(Boolean) as HTMLElement[];
+    const details = [request?.checkTarget ? el("p", { class: "a4-step" }, request.checkTarget) : null, detail(tx("理由"), request?.reason), detail(tx("完了の条件"), quest.completionCriteria), detail(tx("報告"), request ? undefined : quest.handoff?.note)].filter(Boolean) as HTMLElement[];
+    let gallery = reviewImageGalleries.get(quest.id);
+    if (gallery && !gallery.element.isConnected) { gallery.dispose(); reviewImageGalleries.delete(quest.id); gallery = undefined; }
+    if (!gallery) { gallery = questImageEditor(port.images, quest, "review"); reviewImageGalleries.set(quest.id, gallery); }
     const check = el("input", { type: "checkbox", checked: confirmed.has(quest.id) });
     const reply = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, "aria-label": tx("直してほしいこと"), placeholder: tx("例：見出しをもう少し短く") });
     reply.value = replies.get(quest.id) ?? "";
@@ -1572,8 +1586,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     return el("div", { class: "a4-focus a4-decision" },
       el("p", { class: "a4-eyebrow" }, request ? tx("{name} からの確認依頼", { name: quest.requester?.label || "Agent" }) : leg?.ask ? tx("{name} が「{ask}」を終えました", { name: quest.assignee.label || "Agent", ask: leg.ask }) : tx("{name} が「終わった」と報告しています", { name: quest.assignee.label || "Agent" }),
         total > 1 ? el("span", { class: "a4-meta" }, `  ${index + 1} / ${total}`) : null),
-      el("h2", { class: "a4-focus-title" }, headline),
-      headline !== quest.title ? el("p", { class: "a4-meta a4-decision-sub" }, quest.title) : null,
+      el("h2", { class: "a4-focus-title" }, quest.title),
+      gallery.element,
       details.length > 0 ? el("details", { class: "a4-more" }, el("summary", {}, tx("詳しく")), el("div", { class: "a4-more-body" }, ...details)) : null,
       el("div", { class: "a4-actions" },
         source ? button(tx("元のタスクを見る"), () => openSheet(source), "link") : null,
@@ -2083,7 +2097,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   const tick = window.setInterval(() => { for (const node of root.querySelectorAll<HTMLElement & { a4Paint?: () => void }>(".a4-ring")) node.a4Paint?.(); paintProgress(); }, 1000);
-  const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet && !captureDialog) void port.refresh().then(() => { refreshError = false; render(); }, () => { refreshError = true; say(tx("再取得できませんでした。表示中の内容を残しています。")); render(); }); };
+  const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet && !captureDialog && !document.querySelector(".a4-image-viewer[open]")) void port.refresh().then(() => { clearDecisionGalleries(); refreshError = false; render(); }, () => { refreshError = true; say(tx("再取得できませんでした。表示中の内容を残しています。")); render(); }); };
   const onHide = () => { if (document.visibilityState === "hidden") flushPending(); else onFocus(); };
   // Agents move work while the page sits open; pick that up unless someone is typing.
   const poll = window.setInterval(() => {
@@ -2123,13 +2137,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   window.addEventListener("popstate", onHash);
   window.addEventListener("focus", onFocus);
   window.addEventListener("online", onFocus);
-  const unsubscribe = port.subscribe?.(() => { if (!busy) render(); });
+  const unsubscribe = port.subscribe?.(() => { clearDecisionGalleries(); if (!busy) render(); });
   render();
 
   return () => {
     disposed = true;
-    for (const editor of reviewImageEditors.values()) editor.dispose();
-    reviewImageEditors.clear();
+    for (const id of new Set([...reviewImageEditors.keys(), ...reviewImageGalleries.keys()])) disposeDecisionImages(id);
     flushPending();
     sheet?.close();
     captureDialog?.close();
