@@ -28,7 +28,12 @@ if (params.get("surface") === "decision") {
       ? { ...item, humanRequest: { ...item.humanRequest, artifactUrl: artifact } }
       : { ...item, handoff: { ...item.handoff, artifactUrl: artifact } }),
     agents: () => [{ id: "review-agent", name: "Review Agent", role: "assistant", active: true, startState: "ready" }], members: () => [],
-    images: repository.questImages(), activity: async () => [], create: unavailable, update: unavailable, complete: unavailable,
+    images: repository.questImages(), activity: async () => [
+      { to: "review_required" },
+      { assignee: { handoffState: "review_required" } },
+      {},
+    ].map((details, index) => ({ id: `handoff-${index}`, at: quest.updatedAt, type: "quest.handoff.transitioned", questId: quest.id, source: "mcp", details })),
+    create: unavailable, update: unavailable, complete: unavailable,
     refresh: async () => { quests = await Promise.all(quests.map(async item => (await repository.getQuest(item.id)).quest as Quest)); },
     answer: async (current, action, text, attachmentIds) => {
       const input = { action, response: text, attachmentIds, confirmed: true, expectedUpdatedAt: current.updatedAt };

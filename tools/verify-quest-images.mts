@@ -68,6 +68,13 @@ try {
     await page.waitForFunction("document.querySelector('.a4-images-gallery img')?.naturalWidth > 0");
     assert.equal(await gallery.locator("img").count(), 8, "Requests without selected IDs show source attachments directly on the card");
     assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
+    const activity = page.locator(".a4-activity");
+    await activity.last().waitFor();
+    const lines = await activity.allTextContents();
+    assert.ok(lines[0]!.includes("「確認してほしい」にしました"));
+    assert.ok(lines[1]!.includes("「確認してほしい」にしました"), "Stored relay events carry the state in details.assignee");
+    assert.ok(lines[2]!.includes("更新しました"), "An event without a recorded state must not render empty quotes");
+    checks.push(`${width}: handoff activity reads ordinary and relay event states and keeps missing states explicit`);
     assert.equal(await gallery.locator("input").count(), 0);
     assert.equal(await gallery.getByRole("button", { name: "削除", exact: true }).count(), 0);
     assert.equal(await page.locator(".a4-sheet").count(), 0);

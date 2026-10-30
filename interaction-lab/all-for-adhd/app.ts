@@ -1646,12 +1646,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const title = quest?.title ?? tx("タスク");
     const agentName = quest?.assignee.type === "agent" ? quest.assignee.label || "Agent" : "Agent";
     const who = event.source === "mcp" ? agentName : tx("あなた");
-    const assignee = (event.details.assignee as { label?: string } | undefined)?.label;
-    const to = String(event.details.to ?? "");
-    const vars = { who, title, name: assignee || "Agent", state: AGENT_STATE[to as keyof typeof AGENT_STATE] ?? to };
+    const assignee = event.details.assignee as { label?: string; handoffState?: string } | undefined;
+    const to = String(event.details.to ?? assignee?.handoffState ?? "");
+    const vars = { who, title, name: assignee?.label || "Agent", state: AGENT_STATE[to as keyof typeof AGENT_STATE] ?? to };
     const line = event.type === "quest.created" ? tx("{who} が「{title}」を作りました", vars)
       : event.type === "quest.assignment.ready" ? tx("{who} が「{title}」を {name} に渡しました", vars)
-      : event.type === "quest.handoff.transitioned" ? tx("{who} が「{title}」を「{state}」にしました", vars)
+      : event.type === "quest.handoff.transitioned" && to ? tx("{who} が「{title}」を「{state}」にしました", vars)
       : event.type === "quest.scored" ? tx("{who} が「{title}」を完了しました", vars)
       : event.type === "quest.reopened" ? tx("{who} が「{title}」を戻しました", vars)
       : event.type === "quest.archived" ? tx("{who} が「{title}」をしまいました", vars)
