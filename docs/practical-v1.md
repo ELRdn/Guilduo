@@ -4,7 +4,8 @@ Owner decisions on 2026-10-30: finish practical product use through production a
 
 ## Source and existing Quest correspondence
 
-- Base: `3077340` (latest fetched main). Implementation is isolated in `.qa-artifacts/practical-v1`; the original checkout and the prototype's untracked handoff remain untouched.
+- Base: `3077340`; implementation: `257add3`. Work began in the isolated `.qa-artifacts/practical-v1` checkout and continued in the managed practical-v1 worktree. The original checkout and the prototype's untracked handoff remain untouched.
+- [PR #83](https://github.com/ELRdn/Guilduo/pull/83) is open on `codex/practical-v1-release`. The owner explicitly deferred merge; production uses the verified branch through the existing manual workflows.
 - G-01: actual task/Agent/review workflow and recorded friction.
 - G-03: PC authoring; phone decisions and short corrections.
 - LA-02/03/05: device sync, real MCP and performance acceptance. LP-R07 is archived in Guilduo while its saved text still names incomplete acceptance; this discrepancy is not proof of either success or failure. No Quest status or progress is changed by this implementation.
@@ -21,7 +22,9 @@ Owner decisions on 2026-10-30: finish practical product use through production a
 
 - Added tests exercise actual image decode/resize, original SHA preservation, both MCP image transports, wrong owner, quota races, revoked uploads, response draft visibility, relay stages/required review/revisions, recurrence projections and reward deduplication.
 - Browser verifier: `node --import tsx tools/verify-quest-images.mts http://127.0.0.1:4319`. Uses an actual local Worker HTTP bridge, SQLite D1 and private R2 fixtures with real Sharp image processing. No provider credentials or production data. Captures and results go to `.qa-artifacts/practical-v1/`.
-- Local full suite: 829 tests, 828 passed, 0 failed, 1 skipped. After the final snapshot/completion guard, 25 relevant tests passed. Typecheck, generated contracts, design check, production build and diff whitespace checks passed.
+- Final local full suite: 830 tests, 829 passed, 0 failed, 1 skipped; affected tests: 25 passed. Typecheck, generated contracts, design check, production build and diff whitespace checks passed.
+- [CI on implementation commit](https://github.com/ELRdn/Guilduo/actions/runs/41001493167): all steps passed; 823 tests, 819 passed, 0 failed, 4 skipped. Skips concern platform-specific package checks and the separately installed DSH SDK fixture, not the new image/relay tests. The new HTTP image browser verifier passed all 12 checks.
+- After deployment, the real local Worker HTTP test additionally covers MCP relay configuration/submission, Web Human approval, Registry/final review enforcement, rejection of the previous Agent and the unfinished completion patch, and final REST acceptance without Quest scoring. Both tests in `tests/practical-api.test.ts` passed. These are isolated fixtures, not production Human answers or external Agent execution; no runtime source was changed by this follow-up.
 - Local HTTP browser: 12 checks passed at 390/1440px, Japanese/English and light/dark, covering retained failed uploads, explicit thumbnail retry, preview/original separation, modal focus, saved image feedback and actual AFA recurrence editing. CI runs this verifier. A browser viewport is not a physical Pixel 9 or TalkBack result.
 
 ## Deployment and remaining acceptance
@@ -29,5 +32,28 @@ Owner decisions on 2026-10-30: finish practical product use through production a
 Deploy only the verified source: D1 0018 → Worker with IMAGES/private R2 → Web. Reconcile Site archive and old tabs using existing guards. Record commit, CI run, Worker/Site deployment IDs and UTC/JST timestamps. Roll back Web while retaining the new server's data protections.
 
 Production checklist: original/image read from real R2; new tools after client refresh; actual Codex image reading and return upload; a two-Agent relay with an actual Human answer; PC ↔ Pixel 9 persistence; Push delivery and exact-request navigation; permission denial; reload after correction. Keep each unexecuted check pending. Do not close launch gates or claim phone acceptance from fixtures.
+
+### Production record
+
+- [Worker workflow](https://github.com/ELRdn/Guilduo/actions/runs/41002722954) succeeded on `257add3`: D1 `0018_quest_images.sql` applied, IMAGES bound, deployed 2026-10-30 04:25:45 UTC / 13:25:45 JST. Public health reports 63 tools, API 2.7.0, Schema 7; unauthenticated image listing/export return 401 and private/no-store.
+- [Site workflow](https://github.com/ELRdn/Guilduo/actions/runs/41002944514) succeeded on the same commit and became ready at 2026-10-30 04:31:42 UTC / 13:31:42 JST. HTML cache guards, the actual upload archive retention check (107 current / 16 retained assets), published Docs and real missing-path 404 checks passed. The public entry serves `allForAdhd-BAlFN6_Y.js`. Exact deployment identifiers remain in local operation evidence rather than public documentation.
+- Actual authenticated production Web: a synthetic reference PNG was saved, independently listed through the connected MCP `get_quest`, then reopened through Web. Its original was explicitly loaded at 1800×700, downloaded from the visible image and compared locally: 51,517 bytes and SHA-256 `6a4a99c8c67ae26c6627eb85f1ba79433633e629d4f7d907e6d84074e17e9b76` exactly match the input. The stored WebP preview is 12,012 bytes. This proves real Images processing and private D1/R2 persistence/read-back; it does not prove a refreshed client's MCP ImageContent handling or a physical phone result.
+- The current Codex connection exposes 56 cached tools despite the server's 63-tool catalog. Real image-tool acceptance requires a client discovery refresh. No credentials are extracted, Agent relinked or scopes expanded to bypass that boundary.
+- A separate synthetic QA Quest and a pending Human confirmation request were created through the authorized connection. The real review URL opens the intended request and exposes response-image attachment. The Human answer remains pending; no response or physical-device result is fabricated and the original QA Quest stays active.
+
+| Requirement | Current evidence / remaining work |
+| --- | --- |
+| Images: storage, preview, original, limits and permissions | Local unit/HTTP/browser checks and production save/original hash match passed; live cross-owner denial is not claimed from fixtures. |
+| MCP image read and return upload | Both transports passed isolated HTTP tests; live `get_quest` returns the saved image metadata. Actual new image-tool calls await client discovery refresh. |
+| Six-stage relay and mandatory Human checks | Domain/HTTP protections are tested. A real two-Agent run and saved Human answers remain unaccepted; assignment alone does not prove external execution. |
+| Recurrence and reminders | Shared date/reward/reminder tests and actual AFA recurrence editing passed. Physical Push delivery remains pending. |
+| PC ↔ Pixel 9 and Human image feedback | Production PC image workflow passed; Pixel 9, TalkBack, real reply image, Push and its exact-request navigation await the owner. |
+| Production and Git | D1 → Worker → Web succeeded from `257add3`; PR #83 remains open and unmerged as requested. |
+
+### Conditions outside this practical release
+
+Stripe Live is implemented but is not activated or financially accepted by this work. Seller/Live eligibility, approved products/prices/tax/refund settings, matching secrets/webhooks and a separately authorized real payment/refund check remain necessary. Credits and commercial Jev likewise retain their product, data-policy and budget gates; their code or fixture results do not establish commercial readiness. See [product decisions](launch-product-decisions.md) and [operations](launch-operations.md). No paid plan, real payment, advertising launch or formal paid-launch Go is performed here.
+
+The unchanged dependency lockfile reports 20 audit advisories (4 moderate, 15 high, 1 critical), including MCP SDK/Zod and development dependencies. This release is not a dependency-security remediation or a security sign-off. The audit is retained with local validation evidence; dependency upgrades need their own compatibility validation.
 
 For backup, include `quest_images` in the consistent D1 snapshot and inventory/read-back/hash both R2 object keys returned by every page of `/v1/quest-images/export`. Restore into isolated D1/R2 and test authorized image reads. For approved account deletion, first revoke MCP connections and stop writes, then call `DELETE /v1/quest-images` with `confirm: delete-quest-images` as the human owner until remaining=0; a 409 means an upload must settle before retrying. Continue existing account/financial-retention procedures. No production deletion or restore is part of automated verification.

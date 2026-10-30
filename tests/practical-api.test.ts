@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { startRelayWorkerFixture } from "./browser/worker-fixture.ts";
 import { fakeImages } from "./image-fixture.ts";
 import { SqliteD1Database } from "./test-helpers.ts";
-import { getAgent, updateAgent } from "../worker/src/agent-store.ts";
+import { createAgent, getAgent, updateAgent } from "../worker/src/agent-store.ts";
 import type { ImageUploadTicket } from "../types/quest-images.ts";
 import type { QuestImage } from "../types/questforge.ts";
 
@@ -35,5 +35,39 @@ test("actual Worker HTTP and both MCP transports preserve image content and rech
     await updateAgent(fixture.env, fixture.uid, agent.agentId, { status: "disabled", expectedUpdatedAt: agent.updatedAt });
     const denied = await fetch(fixture.baseUrl + revoked.uploadPath, { method: "PUT", headers: { authorization: `Bearer ${revoked.uploadToken}` }, body: bytes });
     assert.equal(denied.status, 403);
+  } finally { await fixture.close(); }
+});
+
+test("Worker MCP and REST relay callers retain required reviews, current identity and explicit completion", async () => {
+  const fixture = await startRelayWorkerFixture("http://127.0.0.1:5173", { QUESTFORGE_DB: new SqliteD1Database() });
+  const id = fixture.first.source.id;
+  async function approve(reviewId: string) {
+    const { quest } = await fixture.web(`/v1/quests/${reviewId}`);
+    await fixture.web(`/v1/quests/${reviewId}/review-response`, "POST", { action: "approve", response: "Fixture checked", confirmed: true, expectedUpdatedAt: quest.updatedAt, dryRun: false });
+  }
+  try {
+    await approve(fixture.first.quest.id);
+    await createAgent(fixture.env, fixture.uid, { agentId: "relay-next", displayName: "Next fixture Agent", allowedScopes: ["quests:read", "quests:write"], reviewRequired: false });
+    const source = (await fixture.web(`/v1/quests/${id}`)).quest;
+    const input = { questId: id, legs: [{ agentId: "review-agent", ask: "Build", check: false }, { agentId: "relay-next", ask: "Review", check: false }], expectedUpdatedAt: source.updatedAt };
+    const preview = await fixture.mcp("set_quest_relay", { ...input, dryRun: true });
+    assert.equal(preview.quest.relay!.legs.length, 2);
+    assert.equal((await fixture.web(`/v1/quests/${id}`)).quest.relay, undefined);
+    const configured = await fixture.mcp("set_quest_relay", { ...input, dryRun: false });
+    await assert.rejects(fixture.web(`/v1/quests/${id}`, "PATCH", { lifecycleState: "completed", expectedUpdatedAt: configured.quest.updatedAt }), /relay_incomplete/);
+    const report = await fixture.mcp("advance_quest_relay", { questId: id, legId: configured.quest.relay!.legs[0]!.id, operationId: "build", note: "Built", expectedUpdatedAt: configured.quest.updatedAt, dryRun: false });
+    assert.equal(report.quest.relay!.at, 0, "Registry policy requires a saved Human approval even with check=false");
+    await approve(report.quest.relay!.legs[0]!.reviewQuestId!);
+    let current = (await fixture.web(`/v1/quests/${id}`)).quest;
+    const next = await fixture.mcp("advance_quest_relay", { questId: id, legId: current.relay!.legs[0]!.id, operationId: "forward", expectedUpdatedAt: current.updatedAt, dryRun: false });
+    assert.equal(next.quest.assignee.id, "relay-next"); assert.equal(next.quest.assignee.handoffState, "ready");
+    const finalInput = { legId: next.quest.relay!.legs[1]!.id, operationId: "final", note: "Final fixture report", expectedUpdatedAt: next.quest.updatedAt, dryRun: false };
+    await assert.rejects(fixture.mcp("advance_quest_relay", { questId: id, ...finalInput }), /quest_assignee_mismatch/);
+    const reviewed = await fixture.web(`/v1/quests/${id}/relay/advance`, "POST", finalInput);
+    assert.equal(reviewed.quest.relay!.at, 1, "The final stage requires review even for a review-free Agent");
+    await approve(reviewed.quest.relay!.legs[1]!.reviewQuestId!);
+    current = (await fixture.web(`/v1/quests/${id}`)).quest;
+    const accepted = await fixture.web(`/v1/quests/${id}/relay/advance`, "POST", { legId: current.relay!.legs[1]!.id, operationId: "accept", expectedUpdatedAt: current.updatedAt, dryRun: false });
+    assert.equal(accepted.quest.relay!.at, 2); assert.equal(accepted.quest.assignee.handoffState, "accepted"); assert.equal(accepted.quest.done, false);
   } finally { await fixture.close(); }
 });
