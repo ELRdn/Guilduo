@@ -44,7 +44,12 @@ const isSettledRequest = (quest: Quest) => quest.humanRequest != null && quest.h
 
 /** Agent handoff states in plain words. */
 export const AGENT_STATE: Readonly<Record<string, string>> = {
-  none: tx("担当"), ready: tx("受け取り待ち"), working: tx("作業中"), blocked: tx("止まっている"), review_required: tx("確認してほしい"), accepted: tx("受け取り済み"),
+  get none() { return tx("担当"); },
+  get ready() { return tx("受け取り待ち"); },
+  get working() { return tx("作業中"); },
+  get blocked() { return tx("止まっている"); },
+  get review_required() { return tx("確認してほしい"); },
+  get accepted() { return tx("受け取り済み"); },
 };
 export const AGENT_STATE_ORDER = ["blocked", "working", "ready", "accepted", "none"] as const;
 

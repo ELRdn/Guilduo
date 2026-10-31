@@ -58,7 +58,7 @@ try {
   assert.equal(images.images.length, 8);
   const peer = await fixture.receive("artifact-peer");
   for (const width of [390, 1440]) {
-    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+    const context = await browser.newContext({ viewport: { width, height: 900 }, locale: "en-US", reducedMotion: "reduce" });
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
     const originals: string[] = [], writes: string[] = [];
     page.on("request", request => { if (request.url().includes("variant=original")) originals.push(request.url()); if (!["GET", "HEAD"].includes(request.method())) writes.push(request.method()); });
