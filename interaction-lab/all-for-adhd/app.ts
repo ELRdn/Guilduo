@@ -1644,7 +1644,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function activityLine(event: AllForActivity): HTMLElement {
     const quest = byId(event.questId);
     const title = quest?.title ?? tx("タスク");
-    const agentName = quest?.assignee.type === "agent" ? quest.assignee.label || "Agent" : "Agent";
+    const actor = event.details.actor;
+    const agentName = actor && typeof actor === "object" && "label" in actor && typeof actor.label === "string" ? actor.label || "Agent" : "Agent";
     const who = event.source === "mcp" ? agentName : tx("あなた");
     const assignee = event.details.assignee as { label?: string; handoffState?: string } | undefined;
     const to = String(event.details.to ?? assignee?.handoffState ?? "");

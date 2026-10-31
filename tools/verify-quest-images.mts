@@ -70,11 +70,16 @@ try {
     assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
     const activity = page.locator(".a4-activity");
     await activity.last().waitFor();
-    const lines = await activity.allTextContents();
+    const lines = await activity.locator("span:last-child").allTextContents();
     assert.ok(lines[0]!.includes("「確認してほしい」にしました"));
     assert.ok(lines[1]!.includes("「確認してほしい」にしました"), "Stored relay events carry the state in details.assignee");
     assert.ok(lines[2]!.includes("更新しました"), "An event without a recorded state must not render empty quotes");
     checks.push(`${width}: handoff activity reads ordinary and relay event states and keeps missing states explicit`);
+    assert.equal(lines.length, 10);
+    assert.ok(lines[3]!.startsWith("claude スカーレット が"), "The recorded actor wins over the current holder and the event's next assignee");
+    for (const index of [0, 1, 2, 4, 5, 6, 7, 8]) assert.ok(lines[index]!.startsWith("Agent が"), `Missing or malformed actor ${index} must not name the current assignee`);
+    assert.ok(lines[9]!.startsWith("あなた が"), "Non-MCP activity keeps the existing human attribution");
+    checks.push(`${width}: activity uses recorded actors, safely falls back to Agent and keeps Web actions attributed to you`);
     assert.equal(await gallery.locator("input").count(), 0);
     assert.equal(await gallery.getByRole("button", { name: "削除", exact: true }).count(), 0);
     assert.equal(await page.locator(".a4-sheet").count(), 0);

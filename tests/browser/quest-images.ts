@@ -29,10 +29,17 @@ if (params.get("surface") === "decision") {
       : { ...item, handoff: { ...item.handoff, artifactUrl: artifact } }),
     agents: () => [{ id: "review-agent", name: "Review Agent", role: "assistant", active: true, startState: "ready" }], members: () => [],
     images: repository.questImages(), activity: async () => [
-      { to: "review_required" },
-      { assignee: { handoffState: "review_required" } },
-      {},
-    ].map((details, index) => ({ id: `handoff-${index}`, at: quest.updatedAt, type: "quest.handoff.transitioned", questId: quest.id, source: "mcp", details })),
+      ...[
+        { to: "review_required" },
+        { assignee: { handoffState: "review_required" } },
+        {},
+      ].map((details, index) => ({ id: `handoff-${index}`, at: quest.updatedAt, type: "quest.handoff.transitioned", questId: (source ?? quest).id, source: "mcp", details })),
+      ...[
+        { type: "agent", id: "claude-sca", label: "claude スカーレット" },
+        null, "broken-actor", {}, { label: 42 }, { label: "" },
+      ].map((actor, index) => ({ id: `relay-${index}`, at: quest.updatedAt, type: "quest.relay.advanced", questId: (source ?? quest).id, source: "mcp", details: { actor, assignee: { id: "codex", label: "Cyan-OA", handoffState: "ready" } } })),
+      { id: "web-activity", at: quest.updatedAt, type: "quest.updated", questId: quest.id, source: "web", details: { actor: { label: "Another actor" } } },
+    ],
     create: unavailable, update: unavailable, complete: unavailable,
     refresh: async () => { quests = await Promise.all(quests.map(async item => (await repository.getQuest(item.id)).quest as Quest)); },
     answer: async (current, action, text, attachmentIds) => {

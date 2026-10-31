@@ -63,3 +63,31 @@ test("Registry review requirements override an unchecked stage and revisions ret
   assert.notEqual(second.quest.relay!.legs[0]!.reviewQuestId, request.id);
   assert.equal(state.tasks.find(q => q.id === request.id)!.humanRequest!.response, "Change it");
 });
+
+test("six stages require all saved Human checks and reject a seventh stage", () => {
+  const { state, quest } = fixture();
+  const legs = Array.from({ length: 6 }, (_, index) => ({ agentId: index % 2 ? "scarlet" : "cyan", ask: index === 0 ? "Build" : `Stage ${index + 1}`, check: false }));
+  assert.throws(() => setQuestRelay(state, quest.id, { legs: [...legs, legs[0]!], expectedUpdatedAt: quest.updatedAt, dryRun: false }, human), error => hasErrorCode(error, "invalid_relay"));
+  assert.equal(getQuest(state, quest.id).quest.relay!.legs.length, 2);
+  let current = setQuestRelay(state, quest.id, { legs, expectedUpdatedAt: quest.updatedAt, dryRun: false }, human).quest;
+  assert.equal(new Set(current.relay!.legs.map(leg => leg.id)).size, 6);
+  for (let index = 0; index < 6; index += 1) {
+    const leg = current.relay!.legs[index]!;
+    const context = { ...agent(leg.agentId), agents: policies.map(policy => ({ ...policy, reviewRequired: true })) };
+    const input = { legId: leg.id, operationId: `stage-${index}`, note: `Result ${index + 1}`, expectedUpdatedAt: current.updatedAt, dryRun: false };
+    const submitted = advanceQuestRelay(state, quest.id, input, context);
+    assert.equal(submitted.reviewRequired, true);
+    assert.equal(submitted.quest.relay!.at, index);
+    const review = state.tasks.find(item => item.id === submitted.quest.relay!.legs[index]!.reviewQuestId)!;
+    assert.equal(review.humanRequest!.status, "pending");
+    assert.equal(advanceQuestRelay(state, quest.id, input, context).quest.relay!.at, index);
+    respondHumanReview(state, review.id, { action: "approve", response: `Checked ${index + 1}`, confirmed: true, expectedUpdatedAt: review.updatedAt, dryRun: false }, human);
+    current = getQuest(state, quest.id).quest;
+    current = advanceQuestRelay(state, quest.id, { legId: leg.id, operationId: input.operationId, expectedUpdatedAt: current.updatedAt, dryRun: false }, context).quest;
+    assert.equal(current.relay!.at, index + 1);
+  }
+  assert.equal(state.tasks.filter(item => item.humanRequest?.sourceQuestId === quest.id && item.humanRequest.outcome === "approved").length, 6);
+  assert.ok(current.relay!.legs.every(leg => leg.completedBy?.id === leg.agentId));
+  assert.equal(current.assignee.handoffState, "accepted");
+  assert.equal(current.done, false);
+});
