@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate, fromJsonSchema } from "@modelcontextprotoc
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { callMcpTool, MCP_TOOLS } from "./index.ts";
+import { questImageToolResult } from "./quest-images.ts";
 import { mcpHostRules } from "./mcp-origin.ts";
 import type { AuthIdentity } from "./security.ts";
 import type { WorkerEnv } from "./worker-types.ts";
@@ -47,7 +48,7 @@ function safeToolError(error: unknown): string {
 async function runTool(name: string, args: McpToolArguments, env: WorkerEnv, context: McpContext, identity: AuthIdentity): Promise<CallToolResult> {
   try {
     const value = await callMcpTool(name, args || {}, env, context, identity);
-    return { content: [{ type: "text", text: conciseText(value) }], structuredContent: value, isError: false };
+    return questImageToolResult(value) || { content: [{ type: "text", text: conciseText(value) }], structuredContent: value, isError: false };
   } catch (error: unknown) {
     const message = safeToolError(error);
     const item = error && typeof error === "object" ? error as Record<string, unknown> : {};

@@ -63,6 +63,7 @@ jobs:
           npm run sync:verify -- http://127.0.0.1:4174
           node --import tsx tools/verify-quiet-refresh.mts http://127.0.0.1:4174
           npm run relay:verify -- http://127.0.0.1:4174
+          node --import tsx tools/verify-quest-images.mts http://127.0.0.1:4174
           node --import tsx tools/verify-relay-settings.mts http://127.0.0.1:4174
           node --import tsx tools/verify-relay-battle.mts http://127.0.0.1:4174
           node --import tsx tools/verify-relay-connections.mts http://127.0.0.1:4174

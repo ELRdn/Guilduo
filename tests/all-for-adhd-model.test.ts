@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Quest } from "../types/questforge.ts";
 import { setLocale } from "../i18n.ts";
-import { forDay, agentSummary, blockers, bucketOf, dayPlan, fitForGap, freeAhead, habitDays, proposalFor, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes, weekReview } from "../interaction-lab/all-for-adhd/model.ts";
+import { forDay, agentSummary, AGENT_STATE, blockers, bucketOf, dayPlan, fitForGap, freeAhead, habitDays, proposalFor, stepsOf, groups, isWorking, minutesLabel, nextCandidates, plannedMinutes, weekReview } from "../interaction-lab/all-for-adhd/model.ts";
 
 // The labels below are the Japanese source copy; CI runs in an English locale.
 setLocale("ja");
@@ -16,6 +16,17 @@ function quest(id: string, patch: Partial<Quest> & { owner?: "self" | "agent"; s
     assignee: { type: owner, id: owner, label: owner, handoffState: state }, ...rest,
   } as unknown as Quest;
 }
+
+test("Agent state labels follow locale changes after module initialization", () => {
+  try {
+    setLocale("en");
+    assert.equal(AGENT_STATE.review_required, "Needs review");
+    assert.equal(AGENT_STATE.working, "Working");
+    setLocale("ja");
+    assert.equal(AGENT_STATE.review_required, "確認してほしい");
+    assert.equal(AGENT_STATE.working, "作業中");
+  } finally { setLocale("ja"); }
+});
 
 test("buckets follow date, owner and decisions", () => {
   assert.equal(bucketOf(quest("a"), TODAY), "inbox");

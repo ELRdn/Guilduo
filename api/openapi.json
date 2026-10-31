@@ -4484,6 +4484,467 @@
           }
         }
       }
+    },
+    "/v1/quests/{questId}/images": {
+      "get": {
+        "summary": "List private Quest images and owner storage usage",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image metadata, never public URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Preview or reserve an image upload; response images require Web authentication",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "filename",
+                  "size",
+                  "sha256"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "questId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "uploadId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9-]{36}$",
+                    "description": "A fresh UUID for this file. Reuse it to reconcile a lost preparation or upload response."
+                  },
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10485760
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{64}$"
+                  },
+                  "context": {
+                    "type": "string",
+                    "enum": [
+                      "reference",
+                      "result",
+                      "request",
+                      "response"
+                    ]
+                  },
+                  "caption": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "reviewQuestId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "legId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A ten-minute upload capability; keep it out of task text and logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quest-images/uploads/{uploadId}": {
+      "put": {
+        "summary": "Upload exact original bytes with the scoped upload Bearer capability",
+        "parameters": [
+          {
+            "name": "uploadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 10485760
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved original and generated preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quest-images/{imageId}": {
+      "get": {
+        "summary": "Read private image bytes, no-store; a response draft is human-only",
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "preview",
+                "original"
+              ],
+              "default": "preview"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private image bytes"
+          },
+          "410": {
+            "description": "Image deleted; history retains its reference"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Preview or remove an image; OAuth Agents may remove only their own uploads",
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deletion marker",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}/relay": {
+      "post": {
+        "summary": "Preview or configure up to six sequential registered Agents. The current Agent may configure its own relay; started stages are immutable. Assignment never launches an Agent.",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "legs"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "questId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "legs": {
+                    "type": "array",
+                    "maxItems": 6,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "agentId",
+                        "ask",
+                        "check"
+                      ],
+                      "properties": {
+                        "agentId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "ask": {
+                          "type": "string",
+                          "maxLength": 500
+                        },
+                        "check": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Version-guarded relay change, separate from Quest completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quests/{questId}/relay/advance": {
+      "post": {
+        "summary": "Submit this stage's report and saved image IDs, or advance after reading the saved human approval. Required checks and the final stage create a Human confirmation Quest. Reuse operationId only for the same report. Never completes the work Quest or launches an Agent.",
+        "parameters": [
+          {
+            "name": "questId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "legId",
+                  "operationId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "questId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "legId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,120}$"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "attachmentIds": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    }
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Version-guarded relay change, separate from Quest completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quest-images/export": {
+      "get": {
+        "summary": "Web-only paginated owner image manifest; back up every listed R2 key separately",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image manifest with nextCursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quest-images": {
+      "delete": {
+        "summary": "Web-only confirmed owner image deletion; revokes transfers and removes at most 50 records per call",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "confirm"
+                ],
+                "properties": {
+                  "confirm": {
+                    "type": "string",
+                    "const": "delete-quest-images"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deleted count and remaining count; retry until zero",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4780,7 +5241,19 @@
               }
             }
           }
-        ]
+        ],
+        "properties": {
+          "relay": {
+            "$ref": "#/components/schemas/QuestRelay"
+          },
+          "images": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "$ref": "#/components/schemas/QuestImage"
+            }
+          }
+        }
       },
       "ExternalLink": {
         "type": "object",
@@ -5865,6 +6338,26 @@
               "approved",
               "changes_requested"
             ]
+          },
+          "attachmentIds": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "responseAttachmentIds": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
           }
         },
         "additionalProperties": false
@@ -5911,6 +6404,16 @@
           "artifactUrl": {
             "type": "string",
             "maxLength": 500
+          },
+          "attachmentIds": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
           },
           "expectedUpdatedAt": {
             "type": "string"
@@ -5959,6 +6462,16 @@
           "dryRun": {
             "type": "boolean",
             "default": true
+          },
+          "attachmentIds": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
           }
         },
         "additionalProperties": false
@@ -6298,6 +6811,142 @@
         },
         "additionalProperties": false,
         "description": "A registered Agent's proposed slot. Accepting copies date and time into the schedule and clears it."
+      },
+      "QuestRelay": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "readOnly": true,
+        "properties": {
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "legs": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                "agentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                "ask": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "check": {
+                  "type": "boolean"
+                },
+                "round": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "attachmentIds": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                },
+                "reviewQuestId": {
+                  "type": "string"
+                },
+                "completedAt": {
+                  "type": "string"
+                },
+                "completedBy": {
+                  "$ref": "#/components/schemas/QuestRequester"
+                }
+              }
+            }
+          }
+        }
+      },
+      "QuestImage": {
+        "type": "object",
+        "readOnly": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "questId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "context": {
+            "type": "string",
+            "enum": [
+              "reference",
+              "result",
+              "request",
+              "response"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "previewSize": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "reviewQuestId": {
+            "type": "string"
+          },
+          "legId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/QuestRequester"
+          },
+          "deletedAt": {
+            "type": "string"
+          }
+        }
       }
     }
   }

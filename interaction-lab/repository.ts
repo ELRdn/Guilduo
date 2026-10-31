@@ -1,5 +1,7 @@
 import type { BillingStatus, CreditLedgerPage } from "../worker/src/billing-store.ts";
 import type { AnalyticsPort } from "../server/launch-analytics.ts";
+import type { QuestImage } from "../types/questforge.ts";
+import type { ImageUploadTicket, QuestImagePort } from "../types/quest-images.ts";
 
 const defaultGatewayUrl = "https://mcp.guilduo.com";
 
@@ -208,6 +210,37 @@ export class QuestForgeApiError extends Error {
 }
 
 export class QuestForgeRepository {
+  questImages(): QuestImagePort {
+    return {
+      list: questId => this.request(`/v1/quests/${encodeURIComponent(questId)}/images`),
+      prepare: async (questId, file, context, reviewQuestId, uploadId) => {
+        const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))).map(byte => byte.toString(16).padStart(2, "0")).join("");
+        const input = { filename: file.name, size: file.size, sha256, context, reviewQuestId, uploadId };
+        await this.request(`/v1/quests/${encodeURIComponent(questId)}/images`, { method: "POST", body: JSON.stringify({ ...input, dryRun: true }) });
+        return this.request<ImageUploadTicket>(`/v1/quests/${encodeURIComponent(questId)}/images`, { method: "POST", body: JSON.stringify({ ...input, dryRun: false }) });
+      },
+      upload: async (ticket, file) => {
+        if (!/^\/v1\/quest-images\/uploads\/[a-zA-Z0-9-]+$/.test(ticket.uploadPath)) throw new QuestForgeApiError(0, "invalid_upload_path", "Invalid image upload.");
+        const response = await fetch(`${this.baseUrl}${ticket.uploadPath}`, { method: "PUT", headers: { authorization: `Bearer ${ticket.uploadToken}`, "content-type": file.type }, body: file, redirect: "error", credentials: "omit" });
+        if (!response.ok) throw new QuestForgeApiError(response.status, "image_upload_failed", "画像を保存できませんでした。");
+        const result = await response.json() as { image: QuestImage };
+        if (result.image?.id !== ticket.imageId) throw new QuestForgeApiError(0, "image_save_unverified", "画像の保存を確認できませんでした。");
+        return result.image;
+      },
+      read: async (id, original) => {
+        const path = `/v1/quest-images/${encodeURIComponent(id)}?variant=${original ? "original" : "preview"}`;
+        const send = async (refresh: boolean) => fetch(`${this.baseUrl}${path}`, { headers: { authorization: `Bearer ${await this.getToken(refresh)}`, accept: "image/*" }, cache: "no-store", redirect: "error", credentials: "omit", signal: AbortSignal.timeout(15000) });
+        let response = await send(false); if (response.status === 401) response = await send(true);
+        if (!response.ok) throw new QuestForgeApiError(response.status, "image_read_failed", "画像を読み込めませんでした。");
+        return response.blob();
+      },
+      remove: async imageId => {
+        const path = `/v1/quest-images/${encodeURIComponent(imageId)}`;
+        await this.request(path, { method: "DELETE", body: JSON.stringify({ dryRun: true }) });
+        await this.request(path, { method: "DELETE", body: JSON.stringify({ dryRun: false }) });
+      },
+    };
+  }
   productivity<T = JsonRecord>(path: string, input?: JsonRecord, method = input ? "POST" : "GET"): Promise<T> {
     return this.request<T>(`/v1/productivity${path}`, { method, ...(input ? { body: JSON.stringify(input) } : {}) });
   }

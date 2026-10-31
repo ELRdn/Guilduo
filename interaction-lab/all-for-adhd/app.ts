@@ -13,6 +13,7 @@ import { el, replaceChildren, svg } from "../relay-forge/primitives/dom.ts";
 import { celebrate } from "./celebrate.ts";
 import { getLocale, setLocale, LOCALE_METADATA, SUPPORTED_LOCALES } from "../../i18n.ts";
 import { tx } from "./copy.ts";
+import { questImageEditor, type QuestImagePort } from "./images.ts";
 import type { RelayForgeRuntime } from "../relay-forge/production.ts";
 import { productivityWorkspace } from "../relay-forge/screens/productivity.ts";
 import { createBillingUi } from "../relay-forge/screens/billing.ts";
@@ -27,6 +28,7 @@ export interface AllForAgent {
   readonly name: string;
   readonly role: string;
   readonly active: boolean;
+  readonly reviewRequired?: boolean;
   /** Handoff state a Quest enters when given to this Agent. */
   readonly startState: string;
 }
@@ -49,10 +51,11 @@ export interface AllForPort {
   readonly agents: () => readonly AllForAgent[];
   readonly members: () => readonly { readonly id: string; readonly name: string; readonly owner: boolean }[];
   /** Answers a review request; the server validates with a dry run before writing. */
-  answer(quest: Quest, action: RequestAnswer, response: string): Promise<Quest>;
+  answer(quest: Quest, action: RequestAnswer, response: string, attachmentIds?: string[]): Promise<Quest>;
+  readonly images?: QuestImagePort;
   /** Accepts an Agent's finished work, or sends it back with a note. Dry run first. */
   review(quest: Quest, accept: boolean, note: string): Promise<Quest>;
-  /** Multi-Agent relays. Demo-only until the storage is decided; absent means one Agent at most. */
+  /** Sequential relays share the Quest's server-protected current holder and stage history. */
   readonly relay?: { get(id: string): Relay | null; set(quest: Quest, legs: readonly RelayLeg[]): Promise<Quest> };
   /** Data changed outside this UI (the demo's simulated Agents). */
   subscribe?(listener: () => void): () => void;
@@ -137,10 +140,11 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   // "#today" is the previous name of the plan view.
   const viewFromHash = (): View => location.hash === "#today" ? "plan" : [...VIEWS, ...EXTRAS].find(v => location.hash === `#${v.id}`)?.id ?? "now";
   let view: View = viewFromHash();
+  let viewUrl = location.href;
   let focusId: string | null = null;
   let planDate = port.today();
   // Guild: which decision is shown, whether "please fix" is open, and what was typed.
-  let decisionId: string | null = null;
+  let decisionId: string | null = new URL(location.href).searchParams.get("quest");
   let reviseFor: string | null = null;
   const confirmed = new Set<string>();
   let activity: readonly AllForActivity[] | null = null;
@@ -180,6 +184,8 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   let lastPointer = { x: 0, y: 0, at: 0 };
   const onPointer = (event: PointerEvent) => { lastPointer = { x: event.clientX, y: event.clientY, at: Date.now() }; };
   let disposed = false;
+  const reviewImageEditors = new Map<string, ReturnType<typeof questImageEditor>>();
+  const reviewImageGalleries = new Map<string, ReturnType<typeof questImageEditor>>();
   // Completions wait out the undo window before they are sent: the undo timer while waiting, 0 while the
   // save is in flight. They stay hidden until the server answers, so the old copy never flashes back.
   const pending = new Map<string, number>();
@@ -524,7 +530,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function row(quest: Quest, bucket: Bucket): HTMLElement {
     const quick = bucket === "inbox" || bucket === "review" || bucket === "later"
       ? button(tx("今日やる"), () => update(quest, { ...plan(port.today()), expectedUpdatedAt: quest.updatedAt }, tx("今日に入れました"), previousPlan(quest)), "link")
-      : bucket === "decision" ? button(tx("確認する"), () => { decisionId = quest.id; go("guild"); }, "link") : null;
+      : bucket === "decision" ? button(tx("確認する"), () => go("guild", quest.id), "link") : null;
     const steps = openSteps(quest);
     const next = steps.find(step => blockers(step, port.quests()).length === 0);
     return el("li", { class: "a4-row", "data-bucket": bucket }, el("div", { class: "a4-row-main" }, checkButton(quest), iconCircle(quest), rowText(quest), quick),
@@ -570,7 +576,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const agents = port.agents().filter(agent => agent.active);
     const nameOf = (id: string) => port.agents().find(agent => agent.id === id)?.name || (quest.assignee.id === id ? quest.assignee.label : "") || "Agent";
     const stored = port.relay?.get(quest.id) ?? null;
-    const initial: RelayLeg[] = stored ? [...stored.legs] : quest.assignee.type === "agent" ? [{ agentId: quest.assignee.id, ask: "", check: true }] : [];
+    const initial: RelayLeg[] = stored ? [...stored.legs] : quest.assignee.type === "agent" ? [{ agentId: quest.assignee.id, ask: "", check: false }] : [];
     let legs = initial.map(leg => ({ ...leg }));
     let palette = false;
     let suppressClickUntil = 0;
@@ -683,8 +689,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     function link(after: number | null, at: number, label = ""): HTMLElement {
       if (after === null || !multi) return el("li", { class: "a4-relay-link", "aria-hidden": label ? null : "true" }, label ? el("span", { class: "a4-meta" }, label) : null);
       const leg = legs[after]!;
-      if (!editable || after < at) return el("li", { class: "a4-relay-link" }, el("span", { class: "a4-meta" }, leg.check ? tx("あなたが確認してから次へ") : tx("そのまま次へ")));
-      const toggle = el("button", { type: "button", class: "a4-relay-check", "aria-pressed": String(leg.check) }, leg.check ? tx("確認を挟む") : tx("そのまま次へ"));
+      const required = after === legs.length - 1 || Boolean(port.agents().find(agent => agent.id === leg.agentId)?.reviewRequired);
+      const checked = leg.check || required;
+      if (!editable || after < at) return el("li", { class: "a4-relay-link" }, el("span", { class: "a4-meta" }, checked ? tx("あなたが確認してから次へ") : tx("そのまま次へ")));
+      const toggle = el("button", { type: "button", class: "a4-relay-check", disabled: required, "aria-pressed": String(checked) }, checked ? tx("確認を挟む") : tx("そのまま次へ"));
       toggle.addEventListener("click", () => { legs[after] = { ...legs[after]!, check: !legs[after]!.check }; paint(); });
       return el("li", { class: "a4-relay-link" }, toggle);
     }
@@ -926,6 +934,10 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       }
     };
 
+    const images = questImageEditor(port.images, quest);
+    const repeatOptions: [Quest["repeat"], string][] = [["none", tx("繰り返さない")], ["daily", tx("毎日")], ["weekdays", tx("平日")], ["weekly", tx("毎週")], ["monthly", tx("毎月")]];
+    const repeat = el("select", { class: "a4-input", "aria-label": tx("繰り返し") }, ...repeatOptions.map(([value, label]) => el("option", { value, selected: value === quest.repeat }, label)));
+    form.append(el("details", { class: "a4-more" }, el("summary", { class: "a4-chip" }, tx("繰り返し")), repeat), images.element);
     const close = el("button", { type: "button", class: "a4-button" }, tx("閉じる"));
     const dialog = el("dialog", { class: "a4-sheet", "aria-label": tx("詳しく：{title}", { title: quest.title }) },
       el("div", { class: "a4-sheet-head" },
@@ -955,7 +967,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     body.append(...contents);
     dialog.querySelector(".a4-sheet-foot")!.before(body);
     paintSteps();
-    const snapshot = () => JSON.stringify([title.value, step.value, date.value, time.value, due.value, notes.value, criteria.value, estimate, icon, reminder.value, relay.legs(), drafts.map(d => [d.title, d.done, d.removed]), stepInput.value]);
+    const snapshot = () => JSON.stringify([title.value, step.value, date.value, time.value, due.value, notes.value, criteria.value, estimate, icon, reminder.value, repeat.value, images.fingerprint(), relay.legs(), drafts.map(d => [d.title, d.done, d.removed]), stepInput.value]);
     const original = snapshot();
     sheetDirty = () => snapshot() !== original;
     let saving = false;
@@ -996,6 +1008,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         if (icon) store.set("a4-icons", [icon, ...recentIcons().filter(item => item !== icon)].slice(0, 8).join(" "));
       }
       set("dueDate", due.value);
+      set("repeat", repeat.value);
       if (reminder.value !== reminderValue(current.reminders)) patch.reminders = reminder.value === "default" ? null : JSON.parse(reminder.value);
       const legs = relay.legs();
       const handOver = relay.changed();
@@ -1024,6 +1037,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
         if (Object.keys(patch).length > 0) saved = await port.update(current, { ...patch, expectedUpdatedAt: current.updatedAt });
         quest = saved;
         if (relayWrite) quest = await relayWrite.set(saved, legs);
+        await images.save();
         if (stepInput.value.trim()) {
           drafts.push({ quest: null, title: stepInput.value.trim(), done: false, removed: false }); stepInput.value = "";
         }
@@ -1049,6 +1063,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     });
     const opener = document.activeElement;
     dialog.addEventListener("close", () => {
+      images.dispose();
       window.removeEventListener("resize", resizeFields);
       dialog.remove();
       if (sheet === dialog) { sheet = null; closeSheet = null; sheetDirty = null; repaintSheet = null; }
@@ -1085,7 +1100,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("div", { class: "a4-ai-counts" }, ...[[tx("確認待ち"), ai.review.length], [tx("止まっている"), ai.blocked.length], [tx("作業中"), ai.working.length]].map(([label, count]) =>
         el("div", {}, el("strong", {}, String(count)), el("span", {}, String(label))))),
       ...ai.visible.map(q => {
-        const item = button("", () => { if (needsDecision(q)) { decisionId = q.id; go("guild"); } else openSheet(q); });
+        const item = button("", () => { if (needsDecision(q)) go("guild", q.id); else openSheet(q); });
         item.className = "a4-ai-row";
         const state = needsDecision(q) ? tx("確認待ち") : AGENT_STATE[q.assignee.handoffState] ?? tx("担当");
         item.append(el("span", { class: "a4-avatar a4-avatar-agent", "aria-hidden": "true" }, (q.assignee.label || "AI").slice(0, 2)),
@@ -1511,10 +1526,44 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   /** Shows a request's link only when it is a plain web address. */
   const safeUrl = (value: string | undefined) => { try { const url = new URL(value ?? ""); return url.protocol === "https:" || url.protocol === "http:" ? url.href : null; } catch { return null; } };
 
+  function artifactLink(value: string | undefined, current: Quest): HTMLAnchorElement | null {
+    const href = safeUrl(value);
+    if (!href) return null;
+    const url = new URL(href);
+    const paths = [location.pathname, "/next/all-for-adhd/", "/interaction-lab/all-for-adhd/"];
+    if (location.origin === "https://app.guilduo.com") paths.push("/");
+    const next = url.hash === "#today" ? "plan" : !url.hash ? "now" : [...VIEWS, ...EXTRAS].find(item => url.hash === `#${item.id}`)?.id;
+    const ids = url.searchParams.getAll("quest");
+    const questId = ids[0];
+    const internal = url.origin === location.origin && !url.username && !url.password && paths.includes(url.pathname)
+      && next !== undefined && [...url.searchParams.keys()].every(key => key === "quest") && ids.length <= 1
+      && (ids.length === 0 || (questId && next === "guild" && quests().some(q => q.id === questId && needsDecision(q))));
+    if (internal && next === view && (!questId || questId === current.id)) return null;
+    const link = el("a", { class: "a4-link", href, target: internal ? null : "_blank", rel: "noopener noreferrer" }, internal ? tx("成果物を開く") : tx("成果物を開く ↗"));
+    if (internal) link.addEventListener("click", event => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault(); go(next, questId);
+    });
+    return link;
+  }
+
+  function disposeDecisionImages(id: string): void {
+    reviewImageEditors.get(id)?.dispose(); reviewImageEditors.delete(id);
+    reviewImageGalleries.get(id)?.dispose(); reviewImageGalleries.delete(id);
+  }
+
+  function clearDecisionGalleries(): void {
+    for (const gallery of reviewImageGalleries.values()) gallery.dispose();
+    reviewImageGalleries.clear();
+  }
+
   function answer(quest: Quest, action: RequestAnswer): void {
     const text = (replies.get(quest.id) ?? "").trim();
     void run(async () => {
-      await port.answer(quest, action, text);
+      const editor = reviewImageEditors.get(quest.id);
+      const attachmentIds = action === "approve" || action === "revise" ? await editor?.save() : undefined;
+      await port.answer(quest, action, text, attachmentIds);
+      if (action === "approve" || action === "revise") disposeDecisionImages(quest.id);
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
       if (cheer && action === "approve") celebrate(innerWidth / 2, innerHeight * 0.55);
       say(action === "approve" ? tx("OKを伝えました") : action === "revise" ? tx("直してほしい点を伝えました") : action === "defer" ? tx("あとで見るに移しました") : tx("判断待ちに戻しました"));
@@ -1525,6 +1574,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     const note = (replies.get(quest.id) ?? "").trim();
     void run(async () => {
       const saved = await port.review(quest, accept, note);
+      disposeDecisionImages(quest.id);
       replies.delete(quest.id); confirmed.delete(quest.id); reviseFor = null; decisionId = null;
       const passed = accept && saved.assignee.type === "agent" && saved.assignee.id !== quest.assignee.id ? saved.assignee.label : "";
       if (cheer && accept) celebrate(innerWidth / 2, innerHeight * 0.55);
@@ -1536,14 +1586,16 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function decisionCard(quest: Quest, index: number, total: number, next: () => void): HTMLElement {
     const request = quest.humanRequest ?? null;
     const source = request?.sourceQuestId ? byId(request.sourceQuestId) : null;
-    const link = safeUrl(request?.artifactUrl || quest.handoff?.artifactUrl);
+    const link = artifactLink(request?.artifactUrl || quest.handoff?.artifactUrl, quest);
     const detail = (label: string, value: string | undefined) => value ? el("p", { class: "a4-step" }, el("span", { class: "a4-step-label" }, label), value) : null;
     const relay = !request ? port.relay?.get(quest.id) ?? null : null;
     const leg = relay?.legs[relay.at];
     const nextLeg = relay?.legs[relay.at + 1];
     const nextName = nextLeg ? port.agents().find(agent => agent.id === nextLeg.agentId)?.name ?? "Agent" : "";
-    const headline = request?.checkTarget || quest.title;
-    const details = [detail(tx("理由"), request?.reason), detail(tx("完了の条件"), quest.completionCriteria), detail(tx("報告"), request ? undefined : quest.handoff?.note)].filter(Boolean) as HTMLElement[];
+    const details = [request?.checkTarget ? el("p", { class: "a4-step" }, request.checkTarget) : null, detail(tx("理由"), request?.reason), detail(tx("完了の条件"), quest.completionCriteria), detail(tx("報告"), request ? undefined : quest.handoff?.note)].filter(Boolean) as HTMLElement[];
+    let gallery = reviewImageGalleries.get(quest.id);
+    if (gallery && !gallery.element.isConnected) { gallery.dispose(); reviewImageGalleries.delete(quest.id); gallery = undefined; }
+    if (!gallery) { gallery = questImageEditor(port.images, quest, "review"); reviewImageGalleries.set(quest.id, gallery); }
     const check = el("input", { type: "checkbox", checked: confirmed.has(quest.id) });
     const reply = el("textarea", { class: "a4-input a4-textarea", rows: 3, maxlength: 2000, "aria-label": tx("直してほしいこと"), placeholder: tx("例：見出しをもう少し短く") });
     reply.value = replies.get(quest.id) ?? "";
@@ -1556,12 +1608,13 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     return el("div", { class: "a4-focus a4-decision" },
       el("p", { class: "a4-eyebrow" }, request ? tx("{name} からの確認依頼", { name: quest.requester?.label || "Agent" }) : leg?.ask ? tx("{name} が「{ask}」を終えました", { name: quest.assignee.label || "Agent", ask: leg.ask }) : tx("{name} が「終わった」と報告しています", { name: quest.assignee.label || "Agent" }),
         total > 1 ? el("span", { class: "a4-meta" }, `  ${index + 1} / ${total}`) : null),
-      el("h2", { class: "a4-focus-title" }, headline),
-      headline !== quest.title ? el("p", { class: "a4-meta a4-decision-sub" }, quest.title) : null,
+      el("h2", { class: "a4-focus-title" }, quest.title),
+      gallery.element,
       details.length > 0 ? el("details", { class: "a4-more" }, el("summary", {}, tx("詳しく")), el("div", { class: "a4-more-body" }, ...details)) : null,
       el("div", { class: "a4-actions" },
         source ? button(tx("元のタスクを見る"), () => openSheet(source), "link") : null,
-        link ? el("a", { class: "a4-link", href: link, target: "_blank", rel: "noopener noreferrer" }, tx("成果物を開く ↗")) : null),
+        link),
+      request ? (() => { let editor = reviewImageEditors.get(quest.id); if (!editor) { editor = questImageEditor(port.images, quest, "response"); reviewImageEditors.set(quest.id, editor); } return editor.element; })() : null,
       el("label", { class: "a4-option" }, check, tx("中身を確認しました")),
       revising ? el("div", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, request ? tx("直してほしいこと") : tx("やり直してほしいこと")), reply) : null,
       el("div", { class: "a4-actions" },
@@ -1591,14 +1644,15 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   function activityLine(event: AllForActivity): HTMLElement {
     const quest = byId(event.questId);
     const title = quest?.title ?? tx("タスク");
-    const agentName = quest?.assignee.type === "agent" ? quest.assignee.label || "Agent" : "Agent";
+    const actor = event.details.actor;
+    const agentName = actor && typeof actor === "object" && "label" in actor && typeof actor.label === "string" ? actor.label || "Agent" : "Agent";
     const who = event.source === "mcp" ? agentName : tx("あなた");
-    const assignee = (event.details.assignee as { label?: string } | undefined)?.label;
-    const to = String(event.details.to ?? "");
-    const vars = { who, title, name: assignee || "Agent", state: AGENT_STATE[to as keyof typeof AGENT_STATE] ?? to };
+    const assignee = event.details.assignee as { label?: string; handoffState?: string } | undefined;
+    const to = String(event.details.to ?? assignee?.handoffState ?? "");
+    const vars = { who, title, name: assignee?.label || "Agent", state: AGENT_STATE[to as keyof typeof AGENT_STATE] ?? to };
     const line = event.type === "quest.created" ? tx("{who} が「{title}」を作りました", vars)
       : event.type === "quest.assignment.ready" ? tx("{who} が「{title}」を {name} に渡しました", vars)
-      : event.type === "quest.handoff.transitioned" ? tx("{who} が「{title}」を「{state}」にしました", vars)
+      : event.type === "quest.handoff.transitioned" && to ? tx("{who} が「{title}」を「{state}」にしました", vars)
       : event.type === "quest.scored" ? tx("{who} が「{title}」を完了しました", vars)
       : event.type === "quest.reopened" ? tx("{who} が「{title}」を戻しました", vars)
       : event.type === "quest.archived" ? tx("{who} が「{title}」をしまいました", vars)
@@ -1879,7 +1933,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
       el("p", { class: "a4-lead" }, tx("Agentや仲間と一緒に進めるための場所です。あなたが決めることだけ、ここに集まります。")),
       el("section", { class: "a4-group" },
         el("h2", { class: "a4-subtitle" }, tx("あなたの判断待ち（{count}）", { count: list.length })),
-        current ? decisionCard(current, index, list.length, () => { decisionId = list[(index + 1) % list.length]!.id; reviseFor = null; render(); })
+        current ? decisionCard(current, index, list.length, () => { reviseFor = null; go("guild", list[(index + 1) % list.length]!.id); })
           : el("p", { class: "a4-muted" }, tx("いま、あなたの判断を待っているものはありません。"))),
       later.length === 0 ? null : el("section", { class: "a4-group" },
         el("h2", { class: "a4-subtitle" }, tx("あとで見る（{count}）", { count: later.length })),
@@ -2001,14 +2055,15 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
 
   /* ------------------------------ shell ------------------------------ */
 
-  function go(next: View): void {
-    if (sheet) { closeSheet?.(() => go(next)); return; }
+  function go(next: View, questId?: string | null): void {
+    if (sheet) { closeSheet?.(() => go(next, questId)); return; }
     // An unsaved note asks before it is left behind.
-    if (workUi.dirty() && next !== view) { workUi.guard(() => { workUi.clearCalendar(); leave(next); }); return; }
-    leave(next);
+    if (workUi.dirty() && next !== view) { workUi.guard(() => { workUi.clearCalendar(); leave(next, questId); }); return; }
+    leave(next, questId);
   }
 
-  function leave(next: View): void {
+  function leave(next: View, questId?: string | null): void {
+    if (questId && !quests().some(q => q.id === questId && needsDecision(q))) { say(tx("見つかりませんでした。")); return; }
     if (isExtra(next) && next !== view) {
       if (next === "billing") { billingUi.enter(); analyticsUi.enter(); }
       else if (FORGE.includes(next)) forge?.enter(next as ForgeScreen);
@@ -2016,8 +2071,15 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
     }
     if (next === "guild" && view !== "guild") { activity = null; activityError = false; }
     if (next === "settings" && view !== "settings") { connections = null; connectionsError = false; notify = null; notifyError = false; }
+    const url = new URL(location.href);
+    if (questId !== undefined) {
+      decisionId = questId;
+      if (questId) url.searchParams.set("quest", questId); else url.searchParams.delete("quest");
+    }
     view = next;
-    if (location.hash !== `#${next}`) history.pushState(null, "", `#${next}`);
+    url.hash = next;
+    if (url.href !== location.href) history.pushState(null, "", url);
+    viewUrl = url.href;
     render();
     main.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
     window.scrollTo(0, 0);
@@ -2066,13 +2128,21 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   }
 
   const tick = window.setInterval(() => { for (const node of root.querySelectorAll<HTMLElement & { a4Paint?: () => void }>(".a4-ring")) node.a4Paint?.(); paintProgress(); }, 1000);
-  const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet && !captureDialog) void port.refresh().then(() => { refreshError = false; render(); }, () => { refreshError = true; say(tx("再取得できませんでした。表示中の内容を残しています。")); render(); }); };
+  const onFocus = () => { if (port.refresh && !busy && pending.size === 0 && !sheet && !captureDialog && !document.querySelector(".a4-image-viewer[open]")) void port.refresh().then(() => { clearDecisionGalleries(); refreshError = false; render(); }, () => { refreshError = true; say(tx("再取得できませんでした。表示中の内容を残しています。")); render(); }); };
   const onHide = () => { if (document.visibilityState === "hidden") flushPending(); else onFocus(); };
   // Agents move work while the page sits open; pick that up unless someone is typing.
   const poll = window.setInterval(() => {
     if (document.visibilityState === "visible" && !document.activeElement?.matches("input, textarea, select")) onFocus();
   }, 60_000);
-  const onHash = () => { const next = viewFromHash(); if (next !== view) { if (sheet) history.replaceState(null, "", "#" + view); go(next); } };
+  const onHash = () => {
+    const next = viewFromHash();
+    const requested = next === "guild" ? new URL(location.href).searchParams.get("quest") : undefined;
+    const questId = requested === null || (requested && quests().some(q => q.id === requested && needsDecision(q))) ? requested : undefined;
+    if (next !== view || (questId !== undefined && questId !== decisionId)) {
+      if (sheet || workUi.dirty()) history.replaceState(null, "", viewUrl);
+      go(next, questId);
+    }
+  };
   const onKey = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || sheet || disposed) return;
     const key = event.key.toLowerCase();
@@ -2106,11 +2176,12 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   window.addEventListener("popstate", onHash);
   window.addEventListener("focus", onFocus);
   window.addEventListener("online", onFocus);
-  const unsubscribe = port.subscribe?.(() => { if (!busy) render(); });
+  const unsubscribe = port.subscribe?.(() => { clearDecisionGalleries(); if (!busy) render(); });
   render();
 
   return () => {
     disposed = true;
+    for (const id of new Set([...reviewImageEditors.keys(), ...reviewImageGalleries.keys()])) disposeDecisionImages(id);
     flushPending();
     sheet?.close();
     captureDialog?.close();

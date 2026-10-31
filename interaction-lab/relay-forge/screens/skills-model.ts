@@ -174,6 +174,8 @@ function metadataCategory(source: JsonRecord): string | null {
 
 /** Existing tool names are a compatibility fallback until metadata is added. */
 function nameCategory(name: string): string {
+  if (/^(prepare_quest_image_upload|list_quest_images|read_quest_image|remove_quest_image)$/.test(name)) return "quest-management";
+  if (/^(set_quest_relay|advance_quest_relay)$/.test(name)) return "agent-relay";
   if (/^(request_human_review|list_human_requests)$/.test(name)) return "agent-relay";
   if (/toggl/.test(name)) return "toggl-focus";
   if (/^(get_party|create_party|invite_party_member|accept_party_invite|leave_party|remove_party_member)$/.test(name)) return "party";

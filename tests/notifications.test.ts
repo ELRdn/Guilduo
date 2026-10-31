@@ -10,7 +10,7 @@ const settings = { ...DEFAULT_SETTINGS, timeZone: "Asia/Tokyo" };
 const NOW = Date.parse("2026-10-26T00:00:00Z"); // 09:00 in Tokyo
 
 function quest(id: string, patch: Partial<Quest> = {}): Quest {
-  return { id, kind: "todo", title: id, done: false, lifecycleState: "active", scheduledDate: "2026-10-26", scheduledTime: "10:00", icon: "",
+  return { id, kind: "todo", title: id, done: false, lifecycleState: "active", planningState: "scheduled", repeat: "none", scheduledDate: "2026-10-26", scheduledTime: "10:00", icon: "",
     assignee: { type: "self", id: "self", label: "me", handoffState: "none" }, humanRequest: null, proposal: null, updatedAt: "u1", ...patch } as Quest;
 }
 const state = (...tasks: Quest[]): QuestForgeState => asQuestForgeState({ tasks });

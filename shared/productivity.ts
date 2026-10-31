@@ -1,5 +1,6 @@
 import type { Quest } from "../types/questforge.ts";
 import { nextDueDateForTask } from "../questforge-core.ts";
+import { isRecurringQuest, occursOnDate } from "./quest-schedule.ts";
 
 export type TimeSource = "native" | "toggl" | "separate";
 export interface NoteRecord { id: string; title: string; body: string; questId: string; archived: boolean; updatedAt: string; }
@@ -73,10 +74,10 @@ export function calendarItems(quests: readonly Quest[], entries: readonly TimeEn
     if (quest.dueDate >= from && quest.dueDate <= to) items.push({ id: `${quest.id}:due`, questId: quest.id, date: quest.dueDate, time: "", minutes: 0, kind: "deadline", title: quest.title });
     if (quest.planningState !== "scheduled") continue;
     const scheduled = quest.scheduledDate;
-    if (scheduled >= from && scheduled <= to) items.push({ id: `${quest.id}:${scheduled}`, questId: quest.id, date: scheduled, time: quest.scheduledTime, minutes: quest.estimatedMinutes, kind: "schedule", title: quest.title });
-    if (quest.repeat === "none" || quest.lifecycleState !== "active") continue;
+    if (scheduled >= from && scheduled <= to && (!isRecurringQuest(quest) || occursOnDate(quest, scheduled))) items.push({ id: `${quest.id}:${scheduled}`, questId: quest.id, date: scheduled, time: quest.scheduledTime, minutes: quest.estimatedMinutes, kind: "schedule", title: quest.title });
+    if (!isRecurringQuest(quest) || quest.lifecycleState !== "active") continue;
     let date = scheduled ? (from > scheduled ? from : addDays(scheduled, 1)) : from;
-    const recurring = { ...quest, dueDate: quest.dueDate || scheduled || (Number.isFinite(Date.parse(quest.createdAt)) ? localDate(new Date(quest.createdAt), timezone) : from) };
+    const recurring = { ...quest, repeat: quest.repeat && quest.repeat !== "none" ? quest.repeat : "daily" as const, dueDate: quest.dueDate || scheduled || (Number.isFinite(Date.parse(quest.createdAt)) ? localDate(new Date(quest.createdAt), timezone) : from) };
     for (let n = 0; n < 366 && date <= to; n++) {
       const next = nextDueDateForTask(recurring, date);
       if (!next || next < date) break; date = next;

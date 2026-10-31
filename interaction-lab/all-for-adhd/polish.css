@@ -312,3 +312,14 @@ button.a4-emoji[data-empty="true"] { font-size:12px; width:44px; min-height:44px
 .a4-row-steps { min-width:0; padding-left:16px; }
 .a4-row-steps summary { width:auto; max-width:100%; overflow-wrap:anywhere; }
 [data-tone="focus"] { --a4-tone:var(--qf-color-accent); --a4-task-tint:var(--qf-color-selected); }
+.a4-images { border-top: 1px solid var(--qf-color-border-subtle); padding-block: 16px; }
+.a4-image-list { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 12px; }
+.a4-image-row { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 100%; overflow-wrap: anywhere; }
+.a4-image-row img { object-fit: contain; max-width: 100%; height: 100px; }
+.a4-image-row button { min-height: 44px; }
+.a4-images-gallery .a4-image-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); }
+.a4-images-gallery .a4-image-row { align-items: stretch; min-width: 0; }
+.a4-images-gallery .a4-image-row > button { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.a4-images-gallery .a4-image-row img { width: 100%; height: 200px; }
+.a4-image-viewer { color: var(--qf-color-fg-strong); background: var(--qf-color-surface); max-width: 95vw; max-height: 90dvh; overflow: auto; }
+.a4-image-viewer > img { display: block; max-width: 100%; height: auto; margin-top: 12px; }

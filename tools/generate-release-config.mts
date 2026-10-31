@@ -118,6 +118,7 @@ const wrangler = {
   // generation (see the `required` check above) rather than silently
   // producing a config where Avatar PUT 503s despite the bucket existing.
   r2_buckets: [{ binding: "AGENT_AVATARS", bucket_name: process.env.R2_BUCKET_NAME }],
+  images: { binding: "IMAGES" },
 };
 
 await writeFile("appwrite-config.js", `export default ${json(appwrite)};\n`);

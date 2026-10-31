@@ -26,6 +26,9 @@ const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 
 // shortcut: scope drafts are not runtime authorization, reinspect after MCP policy changes.
 const scopeGroups: [string[], string[]][] = [
+  [["quests:read"], ["list_quest_images", "read_quest_image"]],
+  [["quests:write"], ["prepare_quest_image_upload", "remove_quest_image", "advance_quest_relay"]],
+  [["agents:read", "quests:write"], ["set_quest_relay"]],
   [["agents:read"], ["list_registered_agents", "get_current_agent_context", "get_agent_link"]],
   [["agents:write"], ["link_agent", "unlink_agent"]],
   [["agents:read", "quests:write"], ["assign_quest_to_agent"]],

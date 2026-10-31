@@ -101,7 +101,7 @@ test("Skills: localized categories are searchable while protocol data and raw in
 test("Skills: the checked-in MCP contract is fully catalogued without an unknown bucket", () => {
   const contract = JSON.parse(readFileSync(new URL("../api/mcp-tools.json", import.meta.url), "utf8")) as { tools?: unknown[] };
   const model = normalizeSkillsModel({ tools: contract.tools ?? [], sourceUrl: "https://mcp.guilduo.com/mcp" });
-  assert.equal(model.totalToolCount, 57);
+  assert.equal(model.totalToolCount, 63);
   assert.equal(model.status, "ready");
   assert.equal(model.groups.some((group) => group.id === "other"), false);
   assert.deepEqual(

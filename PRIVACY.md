@@ -1,5 +1,11 @@
 # Privacy Notice
 
+## Private Quest images (2026-10-30 addition)
+
+You may attach reference, result and feedback images to private Quests. We keep the original image, including any embedded metadata, and a smaller preview in private Cloudflare R2; ownership, context, creator and storage usage are recorded in Cloudflare D1. Images are processed through Cloudflare Images to create the preview. They are not published as public URLs or sent to analytics. Your authorized MCP Agents may read saved images through their effective Quest permissions; their external model/client processing follows the services you choose. Unsubmitted Human response images remain private to your Web account. Images do not constitute approval.
+
+Images remain with their Quest when it is archived. You may remove them; the image bytes become unavailable while a deleted reference may remain in the task history. Account-image deletion revokes pending uploads and removes image objects and metadata in resumable batches. Backups follow the existing custody and retention policy. Legacy Quest JSON exports do not contain image bytes; the authenticated image manifest and original image downloads are separate.
+
 Effective date: 2026-10-02
 
 Local candidate addendum: 2026-10-04. Linked measurement described below is disabled until operator approval and acceptance; this edit does not activate collection on the official service.

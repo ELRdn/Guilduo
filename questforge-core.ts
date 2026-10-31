@@ -45,7 +45,7 @@ function completionClaimKey(task: CoreTask, dateText: string): string {
     return `${task.id}:daily:${dateText}`;
   }
   if (task.kind === "todo" && task.repeat && task.repeat !== "none") {
-    return `${task.id}:todo:${task.dueDate || dateText}`;
+    return `${task.id}:todo:${dateText}`;
   }
   return `${task.id}:todo:once`;
 }

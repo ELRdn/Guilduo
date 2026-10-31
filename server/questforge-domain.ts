@@ -22,7 +22,8 @@ import type {
 } from "../types/questforge.ts";
 import { isQuestKind } from "../types/questforge.ts";
 import type { QuestRequester } from "../types/questforge.ts";
-import { nextQuestTimestamp, normalizeHumanRequest, normalizeRequester } from "../shared/relay.ts";
+import { nextQuestTimestamp, normalizeHumanRequest, normalizeQuestRelay, normalizeRequester } from "../shared/relay.ts";
+import { isRecurringQuest, occursOnDate } from "../shared/quest-schedule.ts";
 
 export interface DomainRecord {
   quest?: Quest;
@@ -453,6 +454,7 @@ function normalizeQuest(task: RawQuest, index: number, previousVersion: number, 
     assignee: normalizeAssignee(task.assignee),
     requester: normalizeRequester(task.requester),
     humanRequest: normalizeHumanRequest(task.humanRequest),
+    ...(task.relay === undefined ? {} : { relay: normalizeQuestRelay(task.relay) }),
     icon: validIcon(String(task.icon || "")) ? String(task.icon || "") : "",
     iconSource: validIcon(String(task.icon || "")) && task.icon ? setFromSet<QuestIconSource>(ICON_SOURCES, task.iconSource, "user") : "",
     proposal: normalizeProposal(task.proposal),
@@ -601,7 +603,7 @@ function rewardDelta(task: Quest): { gems: number; xp: number; mp: number } {
 
 function completionKey(task: Quest, date: string): string {
   if (task.kind === "daily") return `${task.id}:daily:${date}`;
-  if (task.kind === "todo" && task.repeat && task.repeat !== "none") return `${task.id}:todo:${task.dueDate || date}`;
+  if (task.kind === "todo" && task.repeat && task.repeat !== "none") return `${task.id}:todo:${date}`;
   return `${task.id}:todo:once`;
 }
 
@@ -628,7 +630,7 @@ function validateString(input: DomainInput, key: string, maxLength: number): str
 function validateQuestInput(input: unknown, partial = false): ValidatedQuestInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new DomainError(400, "invalid_body", "A JSON object is required.");
   const body = input as DomainInput;
-  if (Object.hasOwn(body, "requester") || Object.hasOwn(body, "humanRequest")) {
+  if (Object.hasOwn(body, "requester") || Object.hasOwn(body, "humanRequest") || Object.hasOwn(body, "relay")) {
     throw new DomainError(400, "relay_metadata_readonly", "Requester and human request metadata are managed by the server.");
   }
   const next: ValidatedQuestInput = {};
@@ -874,6 +876,7 @@ export function transitionQuestHandoff(state: QuestForgeState, questId: string, 
   const nextStateRaw = String(input.state || input.handoffState || "");
   if (!HANDOFF_STATES.has(nextStateRaw)) throw new DomainError(400, "invalid_handoff_state", "A handoff transition must target none, ready, working, blocked, review_required, or accepted.");
   const nextState = nextStateRaw as HandoffState;
+  if (quest.relay && nextState === "accepted" && quest.relay.at < quest.relay.legs.length) throw new DomainError(409, "relay_managed", "Advance the relay after its saved human approval.");
   const currentState = quest.assignee.handoffState || "none";
   if (input.expectedState && input.expectedState !== currentState) throw new DomainError(409, "stale_handoff_state", "The handoff changed before this update was applied.", { expectedState: input.expectedState, actualState: currentState });
   if (currentState !== nextState && !HANDOFF_TRANSITIONS.get(currentState)?.has(nextState)) {
@@ -905,7 +908,9 @@ function isOverdue(task: Quest, date: string): boolean {
 }
 
 function visibleOnDate(task: Quest, date: string): boolean {
-  if (!isActiveOpen(task) || task.planningState !== "scheduled" || task.kind === "reward") return false;
+  if (task.planningState !== "scheduled" || task.kind === "reward" || task.lifecycleState === "archived") return false;
+  if (isRecurringQuest(task)) return task.lastCompletedDate !== date && occursOnDate(task, date);
+  if (!isActiveOpen(task)) return false;
   if (isOverdue(task, date)) return true;
   if (task.kind === "habit") return true;
   if (task.kind === "daily" && !task.scheduledDate) return true;
@@ -1035,6 +1040,9 @@ export function patchQuest(state: QuestForgeState, questId: string, input: unkno
   if (quest.humanRequest) {
     throw new DomainError(409, "human_request_managed", "Use the human request response action to change this confirmation Quest.");
   }
+  if (quest.relay && clean.assignee && (clean.assignee.type !== quest.assignee.type || clean.assignee.id !== quest.assignee.id || clean.assignee.handoffState === "accepted")) throw new DomainError(409, "relay_managed", "Use the relay actions to change its current holder or accept work.");
+  if (quest.relay && clean.handoff) throw new DomainError(409, "relay_managed", "Submit relay reports through the relay action.");
+  if (quest.relay && quest.relay.at < quest.relay.legs.length && clean.lifecycleState === "completed") throw new DomainError(409, "relay_incomplete", "Finish the relay and human confirmation before completing this Quest.");
   if (clean.dependencyIds) validateDependencies(state, questId, clean.dependencyIds);
   if (clean.parentQuestId !== undefined) validateParentQuest(state, questId, clean.parentQuestId);
   if (clean.assignee) validateHandoffPatch(quest, clean.assignee);
@@ -1259,9 +1267,17 @@ export function scoreQuest(state: QuestForgeState, questId: string, direction: "
   const quest = state.tasks.find((item) => item.id === questId);
   if (!quest) throw new DomainError(404, "quest_not_found", "Quest not found.");
   if (quest.humanRequest && !context.allowHumanResponse) throw new DomainError(409, "human_response_required", "Respond to this human request before completing it.");
+  if (direction === "up" && quest.relay && quest.relay.at < quest.relay.legs.length) throw new DomainError(409, "relay_incomplete", "Finish the relay and human confirmation before completing this Quest.");
   assertQuestVersion(quest, context.expectedUpdatedAt);
   if (quest.kind === "reward") return buyReward(state, questId, context) as unknown as ScoreResult;
   const positive = direction === "up";
+  const scoreDate = context.date || todayText();
+  if (positive && isRecurringQuest(quest)) {
+    // Older recurring To Dos keyed rewards by the deadline; preserve today's existing award.
+    const legacy = state.rewardClaims[`${quest.id}:todo:${quest.dueDate || scoreDate}`];
+    if (quest.kind === "todo" && quest.lastCompletedDate === scoreDate && legacy) state.rewardClaims[completionKey(quest, scoreDate)] ||= legacy;
+    if (quest.lastCompletedDate !== scoreDate) quest.done = false;
+  }
   const scale = difficultyScale(quest.difficulty);
   let reward = { gems: 0, xp: 0, mp: 0 };
   let rewardGranted = false;

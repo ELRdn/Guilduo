@@ -89,6 +89,14 @@ export interface WorkerEnv {
   QUESTFORGE_DB?: D1DatabaseLike;
   /** Private Agent and profile avatar image bytes. Namespace prefixes and D1 metadata keep ownership separate. */
   AGENT_AVATARS?: R2BucketLike;
+  IMAGES?: {
+    info(stream: ReadableStream<Uint8Array>): Promise<{ width: number; height: number; format: string }>;
+    input(stream: ReadableStream<Uint8Array>): {
+      transform(options: { width: number; height: number; fit: "scale-down" }): {
+        output(options: { format: "image/webp"; quality: number; anim: boolean }): Promise<{ response(): Response }>;
+      };
+    };
+  };
   APPWRITE_ENDPOINT?: string;
   APPWRITE_PROJECT_ID?: string;
   APPWRITE_DATABASE_ID?: string;

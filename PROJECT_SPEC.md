@@ -1,5 +1,16 @@
 # Guilduo Project Specification
 
+## Practical workspace additions (2026-10-30)
+
+- Private Quest images extend the external-artifact boundary: PNG/JPEG/WebP originals up to 10 MiB, one stored lightweight WebP preview, ten active images per source Quest across reviews, and 500 MiB owner storage including reservations and derivatives. D1 `quest_images` owns metadata/creator/context/capabilities/quota; private R2 uses `quests/images/<id>/original` and `preview.webp`. Original embedded metadata is retained. No public object URL or image data URL enters the Quest snapshot.
+- A stable upload UUID and exact SHA-256/size identify each transfer; changed content/context conflicts. Hashed ten-minute Bearer capabilities recheck the OAuth grant, connection membership, Agent status/scopes and entitlement. Streaming bounds, actual decoding, atomic reservations, read-back and orphan cleanup cover failures. Deletion blocks reads immediately and releases quota after bytes are removed.
+- Human request/response image references are server-protected. Response drafts are visible only to the Web owner until the saved Human answer references them. MCP returns actual ImageContent in both transports. Every read checks owner/scope, uses private/no-store delivery, and browsers revoke Blob URLs on disposal/logout. Images and their text are untrusted reference material, never approval.
+- Optional `Quest.relay` stores up to six stable stages, requests/checks, report/image references, review rounds and completion identity/time. The current index and assignee change atomically in the Appwrite snapshot. Started stages are protected from ordinary patches and stale snapshots. Only the current Agent or Human owner advances. Stage checks, Registry reviewRequired and the final stage require saved Human approval; revisions preserve old answers. The next Agent becomes ready without auto-start, and final acceptance does not score the Quest.
+- Recurrence shares calendar-date rules across today, calendar and reminders, retaining existing monthly end-date clamping. Recurring To Do reward keys use completion dates, honoring legacy same-day deadline claims to avoid double awards. Earlier completed occurrences do not hide later ones.
+- Image metadata export and confirmed owner image deletion are Web-only and separate from legacy Quest JSON. Backups cover D1 `quest_images` and every `quests/images/` R2 object. Account deletion revokes capabilities before bounded byte/metadata deletion; in-flight transfers must settle. A rollback retains the compatible Worker field protections while rolling Web back.
+
+Implementation and evidence: [practical-v1.md](docs/practical-v1.md). Local fixtures do not establish production or physical-device acceptance.
+
 > 2026-10-12公開方針: 本体タグはSource Release、無料β配備は既存手動workflowで管理する。以下の署名・Live販売・Jev・連結計測ゲートは有料ローンチ候補の契約で、本体beta.9の公開で完了扱いしない。正本は[RELEASE_SETUP.md](RELEASE_SETUP.md)。
 
 2026-10-10 追加方針：OpenAI / ChatGPT・Codex Windows・Grok Bot・Muse Codeをbeta.12候補で展開する。[導入・受入ガイド](docs/guilduo-next-hosts.jp.md)に構成と検証境界を記録する。OpenAIのhookなし提出ZIPとCodex通常版は別artifact。認証bridge・自動Agent登録・新規課金は追加しない。Grok／Muse実モデル・Human往復、各公開ディレクトリ掲載は配布検査とは別の工程とする。既存Claude・DSH・OpenCode・OpenClawの配布物は変更しない。
