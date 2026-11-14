@@ -179,7 +179,7 @@ export function billingView(api: BillingApi, rerender: () => void, say: (message
         status.referral.rewarded ? el("p", { class: "a4-meta" }, copy("referralRewarded")) : null));
   }
 
-  function jevPage(): HTMLElement[] {
+  function jevPage(): (HTMLElement | null)[] {
     const locked = api.busy() !== "" || !!api.decisionId();
     const quests = api.quests();
     const candidates = api.candidates();
@@ -189,7 +189,7 @@ export function billingView(api: BillingApi, rerender: () => void, say: (message
     const quest = quests.find(item => item.id === api.questId());
     const chosen = candidates.filter(agent => api.candidateIds().includes(agent.agentId));
     const credits = api.status()?.pricing.decisionCredits ?? null;
-    const out: HTMLElement[] = [
+    const out: (HTMLElement | null)[] = [
       el("label", { class: "a4-field-row" }, el("span", { class: "a4-step-label" }, tx("対象のタスク")), select),
       quests.length ? null : el("p", { class: "a4-meta" }, tx("提案を受けられるタスクがありません。")),
       el("div", { class: "a4-bill-section" }, el("span", { class: "a4-step-label" }, tx("候補のAgent")),
