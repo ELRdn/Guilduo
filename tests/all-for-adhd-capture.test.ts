@@ -50,7 +50,7 @@ test("titles get an emoji from the dictionary in any locale, or none", () => {
   assert.equal(iconFor("이메일 답장"), "📧");
   assert.equal(iconFor("Пробежка в парке"), "🏃");
   assert.equal(iconFor("ほげほげ"), "");
-  assert.deepEqual(iconChoices("散歩する", ["🎨"], 3), ["🚶", "🎨", "💊"]);
+  assert.deepEqual(iconChoices("散歩する", ["🎨"], 3), ["🚶", "🎨", "📝"]);
 });
 
 test("short English keywords only match whole words", () => {

@@ -46,7 +46,7 @@ try {
     assert.equal(originalReads.length, 0, "The original is never prefetched");
     const open = page.locator(".a4-image-row button").filter({ has: page.locator("img") }).first(); await open.click();
     await page.locator("dialog.a4-image-viewer").waitFor();
-    await page.locator("dialog.a4-image-viewer button").nth(1).click();
+    await page.locator("dialog.a4-image-viewer .a4-image-viewer-head .a4-link").click();
     await page.waitForFunction("document.querySelector('dialog img')?.naturalWidth === 1800");
     await page.keyboard.press("Escape"); assert.equal(await open.evaluate(node => node.matches(":focus")), true);
     const overflow = await page.evaluate("document.documentElement.scrollWidth > innerWidth"); assert.equal(overflow, false);
@@ -63,13 +63,14 @@ try {
     const originals: string[] = [], writes: string[] = [];
     page.on("request", request => { if (request.url().includes("variant=original")) originals.push(request.url()); if (!["GET", "HEAD"].includes(request.method())) writes.push(request.method()); });
     await page.goto(`${origin}/tests/browser/quest-images.html?api=${encodeURIComponent(fixture.baseUrl)}&quest=${fixture.first.quest.id}&surface=decision&theme=dark&lang=ja#guild`);
-    const gallery = page.locator(".a4-decision .a4-images-gallery");
+    const gallery = page.locator(".a4-dec .a4-images-gallery");
     await gallery.locator("img").first().waitFor();
     await page.waitForFunction("document.querySelector('.a4-images-gallery img')?.naturalWidth > 0");
     assert.equal(await gallery.locator("img").count(), 8, "Requests without selected IDs show source attachments directly on the card");
-    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
-    const activity = page.locator(".a4-activity");
-    await activity.last().waitFor();
+    assert.equal(await page.locator(".a4-dec .a4-dec-title").textContent(), "Review first");
+    // The rail (wide) and the fold (narrow) hold the same list; CSS shows one.
+    const activity = page.locator(".a4-activity-list").first().locator(".a4-activity");
+    await activity.last().waitFor({ state: "attached" }); // Folded on narrow widths.
     const lines = await activity.locator("span:last-child").allTextContents();
     assert.ok(lines[0]!.includes("「確認してほしい」にしました"));
     assert.ok(lines[1]!.includes("「確認してほしい」にしました"), "Stored relay events carry the state in details.assignee");
@@ -83,13 +84,13 @@ try {
     assert.equal(await gallery.locator("input").count(), 0);
     assert.equal(await gallery.getByRole("button", { name: "削除", exact: true }).count(), 0);
     assert.equal(await page.locator(".a4-sheet").count(), 0);
-    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), false);
+    assert.equal(await page.locator('.a4-dec input[type="checkbox"]').isChecked(), false);
     assert.equal(originals.length, 0);
     await page.screenshot({ path: resolve(output, `inline-decision-${width}.png`), fullPage: true });
     const open = gallery.locator("button").filter({ has: page.locator("img") }).first(); await open.click();
     await page.locator("dialog.a4-image-viewer").waitFor(); await page.keyboard.press("Escape");
     assert.equal(await open.evaluate(node => node.matches(":focus")), true);
-    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), false);
+    assert.equal(await page.locator('.a4-dec input[type="checkbox"]').isChecked(), false);
     assert.equal(await page.evaluate("document.documentElement.scrollWidth > innerWidth"), false);
     assert.deepEqual(writes, []); assert.equal(originals.length, 0);
     checks.push(`${width}: actual AFA decision shows source attachments, one-tap viewer, focus restoration and no implicit approval/write`);
@@ -112,7 +113,7 @@ try {
       const params = new URLSearchParams({ api: fixture.baseUrl, quest: fixture.first.quest.id, peer: peer.quest.id, surface: "decision", theme: "dark", lang: "ja", artifact });
       params.append("peer", fixture.first.quest.id);
       await page.goto(`${appOrigin}/tests/browser/quest-images.html?${params}#guild`);
-      await page.locator(".a4-decision h2").filter({ hasText: "Review first" }).waitFor({ timeout: 10_000 }).catch(async error => {
+      await page.locator(".a4-dec .a4-dec-title").filter({ hasText: "Review first" }).waitFor({ timeout: 10_000 }).catch(async error => {
         console.log(JSON.stringify({ appOrigin, artifact, errors, body: (await page.locator("body").textContent())?.slice(0, 600) }));
         await page.screenshot({ path: resolve(output, `artifact-failure-${width}.png`), fullPage: true }); throw error;
       });
@@ -123,9 +124,9 @@ try {
     page.on("popup", popup => popups.push(popup.url()));
     await visit(`${appOrigin}/next/all-for-adhd/#today`);
     await page.getByRole("button", { name: "直してほしい", exact: true }).click();
-    await page.locator(".a4-decision textarea").fill("Keep this reply and its image.");
-    await page.locator('.a4-decision input[type="checkbox"]').check();
-    await page.locator('.a4-decision input[type="file"]').setInputFiles({ name: "unsent-response.png", mimeType: "image/png", buffer: png });
+    await page.locator(".a4-dec textarea").fill("Keep this reply and its image.");
+    await page.locator('.a4-dec input[type="checkbox"]').check();
+    await page.locator('.a4-dec input[type="file"]').setInputFiles({ name: "unsent-response.png", mimeType: "image/png", buffer: png });
     const timeOrigin = await page.evaluate(() => performance.timeOrigin);
     navigation.length = 0;
     for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
@@ -139,13 +140,13 @@ try {
     await resultLink.focus(); await page.keyboard.press("Enter");
     await page.locator('.a4-main[data-view="plan"]').waitFor();
     await page.locator('a[data-view="guild"]').click();
-    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
-    assert.equal(await page.locator(".a4-decision textarea").inputValue(), "Keep this reply and its image.");
-    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), true);
-    assert.equal(await page.locator(".a4-decision .a4-image-row").filter({ hasText: "unsent-response.png" }).count(), 1);
+    assert.equal(await page.locator(".a4-dec .a4-dec-title").textContent(), "Review first");
+    assert.equal(await page.locator(".a4-dec textarea").inputValue(), "Keep this reply and its image.");
+    assert.equal(await page.locator('.a4-dec input[type="checkbox"]').isChecked(), true);
+    assert.equal(await page.locator(".a4-dec .a4-image-row").filter({ hasText: "unsent-response.png" }).count(), 1);
     await page.screenshot({ path: resolve(output, `artifact-retained-${width}.png`), fullPage: true });
     checks.push(`${width}: internal artifact keyboard navigation preserves selected decision, reply, confirmation and unsent image; modifiers stay native`);
-    await page.getByRole("button", { name: "元のタスクを見る", exact: true }).click();
+    await page.getByRole("button", { name: "元のタスク", exact: true }).click();
     await page.locator('.a4-sheet [name="title"]').fill("Unsaved task title");
     await resultLink.evaluate(node => node.click());
     await page.locator(".a4-discard-dialog").waitFor();
@@ -157,16 +158,16 @@ try {
     await page.getByRole("button", { name: "破棄する", exact: true }).click();
     await page.locator('.a4-main[data-view="plan"]').waitFor();
     await page.locator('a[data-view="guild"]').click();
-    assert.equal(await page.locator(".a4-decision textarea").inputValue(), "Keep this reply and its image.");
-    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), true);
+    assert.equal(await page.locator(".a4-dec textarea").inputValue(), "Keep this reply and its image.");
+    assert.equal(await page.locator('.a4-dec input[type="checkbox"]').isChecked(), true);
     assert.equal(await page.evaluate(() => performance.timeOrigin), timeOrigin);
     assert.deepEqual(navigation, []); assert.deepEqual(popups, []); assert.deepEqual(writes, []);
     checks.push(`${width}: internal artifact uses the draft discard/cancel guard without popup, document navigation, runtime restart or write`);
     await visit(`${appOrigin}/next/all-for-adhd/?quest=${peer.quest.id}#guild`);
-    await page.locator('.a4-decision input[type="checkbox"]').check();
+    await page.locator('.a4-dec input[type="checkbox"]').check();
     const peerTimeOrigin = await page.evaluate(() => performance.timeOrigin); navigation.length = 0;
     const firstUrl = page.url();
-    await page.getByRole("button", { name: "元のタスクを見る", exact: true }).click();
+    await page.getByRole("button", { name: "元のタスク", exact: true }).click();
     await page.locator('.a4-sheet [name="title"]').fill("Keep the guarded Quest draft");
     await resultLink.evaluate(node => node.click());
     await page.locator(".a4-discard-dialog").waitFor();
@@ -176,30 +177,30 @@ try {
     assert.equal(await page.locator('.a4-sheet [name="title"]').inputValue(), "Keep the guarded Quest draft");
     await resultLink.evaluate(node => node.click());
     await page.getByRole("button", { name: "破棄する", exact: true }).click();
-    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review artifact-peer");
+    assert.equal(await page.locator(".a4-dec .a4-dec-title").textContent(), "Review artifact-peer");
     assert.equal(new URL(page.url()).searchParams.get("quest"), peer.quest.id);
-    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), false);
+    assert.equal(await page.locator('.a4-dec input[type="checkbox"]').isChecked(), false);
     await page.goBack();
-    await page.locator(".a4-decision h2").filter({ hasText: "Review first" }).waitFor();
+    await page.locator(".a4-dec .a4-dec-title").filter({ hasText: "Review first" }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get("quest"), fixture.first.quest.id);
-    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
-    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), true);
+    assert.equal(await page.locator(".a4-dec .a4-dec-title").textContent(), "Review first");
+    assert.equal(await page.locator('.a4-dec input[type="checkbox"]').isChecked(), true);
     await page.goForward();
-    await page.locator(".a4-decision h2").filter({ hasText: "Review artifact-peer" }).waitFor();
+    await page.locator(".a4-dec .a4-dec-title").filter({ hasText: "Review artifact-peer" }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get("quest"), peer.quest.id);
-    assert.equal(await page.locator('.a4-decision input[type="checkbox"]').isChecked(), false);
+    assert.equal(await page.locator('.a4-dec input[type="checkbox"]').isChecked(), false);
     await page.getByRole("button", { name: "次の判断へ", exact: true }).click();
-    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
+    assert.equal(await page.locator(".a4-dec .a4-dec-title").textContent(), "Review first");
     assert.equal(new URL(page.url()).searchParams.get("quest"), fixture.first.quest.id);
     await page.goBack();
-    await page.locator(".a4-decision h2").filter({ hasText: "Review artifact-peer" }).waitFor();
+    await page.locator(".a4-dec .a4-dec-title").filter({ hasText: "Review artifact-peer" }).waitFor();
     assert.equal(await page.evaluate(() => performance.timeOrigin), peerTimeOrigin);
     assert.deepEqual(navigation, []); assert.deepEqual(popups, []);
     checks.push(`${width}: quest-specific clicks/back/forward and next-decision selection keep URL, exact decision and per-Quest confirmation aligned without document navigation`);
     await page.reload();
-    await page.locator(".a4-decision h2").filter({ hasText: "Review artifact-peer" }).waitFor();
+    await page.locator(".a4-dec .a4-dec-title").filter({ hasText: "Review artifact-peer" }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get("quest"), peer.quest.id);
-    assert.ok((await page.locator(".a4-decision .a4-eyebrow").textContent())?.includes("/ 2"));
+    assert.ok((await page.locator(".a4-guild-at").textContent())?.includes("/ 2"));
     checks.push(`${width}: reloading a quest-specific artifact URL restores the targeted pending decision`);
     for (const artifact of [`${appOrigin}/next/all-for-adhd/#guild`, `${appOrigin}/next/all-for-adhd/?quest=${fixture.first.quest.id}#guild`, ...(appOrigin !== origin ? ["https://app.guilduo.com/#guild"] : [])]) {
       await visit(artifact);
@@ -222,7 +223,7 @@ try {
     const popup = await popupPromise; await popup.waitForLoadState();
     assert.equal(popup.url(), "https://example.test/result");
     assert.equal(await popup.evaluate("window.opener === null"), true);
-    assert.equal(await page.locator(".a4-decision h2").textContent(), "Review first");
+    assert.equal(await page.locator(".a4-dec .a4-dec-title").textContent(), "Review first");
     assert.deepEqual(navigation, []); assert.deepEqual(writes, []);
     checks.push(`${width}: a real external click opens its own safe tab and leaves the AFA document intact`);
     await context.close();
@@ -235,7 +236,7 @@ try {
   await page.goto(`${origin}/tests/browser/quest-images.html?api=${encodeURIComponent(fixture.baseUrl)}&quest=${review.quest.id}&surface=decision&theme=light&lang=ja#guild`);
   await page.locator(".a4-images-gallery img").waitFor();
   assert.equal(await page.locator(".a4-images-gallery img").count(), 1, "Explicit selection stays authoritative");
-  assert.equal(await page.locator(".a4-decision .a4-images:not(.a4-images-gallery) img").count(), 0, "Incoming images do not duplicate into the reply draft");
+  assert.equal(await page.locator(".a4-dec .a4-images:not(.a4-images-gallery) img").count(), 0, "Incoming images do not duplicate into the reply draft");
   checks.push("explicit requested attachments stay selected and separate from the response draft");
   await page.goto(`${origin}/tests/browser/quest-images.html?api=${encodeURIComponent(fixture.baseUrl)}&quest=${review.quest.id}&context=response`);
   await page.locator(".a4-images input[type=file]").setInputFiles({ name: "human-correction.png", mimeType: "image/png", buffer: png });
@@ -251,7 +252,7 @@ try {
   await agentPage.goto(`${origin}/tests/browser/quest-images.html?api=${encodeURIComponent(fixture.baseUrl)}&quest=${source.quest.id}&surface=decision&theme=dark&lang=ja#guild`);
   await agentPage.locator(".a4-images-gallery img").first().waitFor();
   assert.equal(await agentPage.locator(".a4-images-gallery img").count(), 8, "Ordinary Agent reports show references/results and exclude response images");
-  assert.equal(await agentPage.locator('.a4-decision input[type="file"]').count(), 0);
+  assert.equal(await agentPage.locator('.a4-dec input[type="file"]').count(), 0);
   checks.push("ordinary Agent result cards also display the inline read-only gallery");
   await fixture.web(`/v1/quest-images/${images.images[7]!.id}`, "DELETE", { dryRun: false });
   await agentPage.evaluate("window.dispatchEvent(new Event('focus'))");
@@ -273,13 +274,13 @@ try {
   const appContext = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "ja-JP" });
   const app = await appContext.newPage(); app.on("pageerror", error => errors.push(error.message));
   await app.goto(`${origin}/interaction-lab/all-for-adhd/?demo`);
-  await app.locator(".a4-focus-title button").first().click();
-  await app.locator('.a4-sheet summary').filter({ hasText: "繰り返し" }).click();
+  await app.locator(".a4-focus-title .a4-row-title").first().click();
+  await app.locator(".a4-sheet-chips .a4-chip").first().click(); // Repeat lives in the date pane.
   await app.getByRole("combobox", { name: "繰り返し", exact: true }).selectOption("daily");
   await app.locator('.a4-sheet button[form="a4-sheet-form"]').click();
   await app.locator(".a4-sheet").waitFor({ state: "detached" });
-  await app.locator(".a4-focus-title button").first().click();
-  await app.locator('.a4-sheet summary').filter({ hasText: "繰り返し" }).click();
+  await app.locator(".a4-focus-title .a4-row-title").first().click();
+  await app.locator(".a4-sheet-chips .a4-chip").first().click(); // Repeat lives in the date pane.
   assert.equal(await app.getByRole("combobox", { name: "繰り返し", exact: true }).inputValue(), "daily");
   await app.screenshot({ path: resolve(output, "afa-detail-390.png"), fullPage: true });
   checks.push("actual AFA task detail saves and restores the recurring value without losing the sheet");

@@ -75,7 +75,10 @@ export function iconFor(title: string): string {
 }
 
 /** Choices for the picker: matches for the title first, then recent picks, then common ones. */
+// Everyday picks for people with no match or history yet; the dictionary order starts with medical ones.
+const DAILY = ["📝", "📧", "🛒", "🧹", "☕", "🌿", "💭", "📞"];
+
 export function iconChoices(title: string, recent: readonly string[], count = 8): string[] {
   const matches = compiled.filter(([, pattern]) => pattern.test(title)).map(([emoji]) => emoji);
-  return [...new Set([...matches, ...recent, ...DICTIONARY.map(([emoji]) => emoji)])].slice(0, count);
+  return [...new Set([...matches, ...recent, ...DAILY])].slice(0, count);
 }

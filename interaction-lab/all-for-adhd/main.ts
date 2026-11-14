@@ -25,6 +25,7 @@ import "./styles.css";
 import "./polish.css";
 import type { CharacterState, Quest } from "../../types/questforge.ts";
 import { requireElement } from "../relay-forge/primitives/dom.ts";
+import { createElement, Sun, CalendarDays, Users, type IconNode } from "lucide";
 import { observeAuthState, signIn, signOutUser, getIdToken } from "../auth.ts";
 import { QuestForgeRepository } from "../repository.ts";
 import { mountAllFor, type AllForActivity, type AllForAgent, type AllForConnection, type AllForPort, type NotifySettings, type Relay } from "./app.ts";
@@ -41,8 +42,23 @@ const localToday = () => new Intl.DateTimeFormat("en-CA", { year: "numeric", mon
 type BootKind = "loading" | "welcome" | "error";
 
 /** Boot screens share one calm layout: wordmark, a headline, one line, then either a quiet placeholder or the actions. */
-function message(title: string, body: string, actions: readonly [string, () => void][] = [], kind: BootKind = actions.length ? "error" : "loading", points: readonly string[] = []): void {
+interface BootExtra {
+  /** Icon and line pairs under the lead. */
+  readonly points?: readonly (readonly [IconNode, string])[];
+  readonly note?: string;
+  readonly legal?: boolean;
+  /** The first action is Google sign-in and carries the Google mark. */
+  readonly google?: boolean;
+  readonly signOut?: boolean;
+}
+
+// Google's own four colours, kept to the mark on the sign-in button (approved exception; not product tokens).
+const GOOGLE_G = '<svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.05l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 9 0 9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>';
+let slowTimer = 0;
+
+function message(title: string, body: string, actions: readonly [string, () => void][] = [], kind: BootKind = actions.length ? "error" : "loading", extra: BootExtra = {}): void {
   unmount?.(); unmount = null;
+  window.clearTimeout(slowTimer);
   const node = <K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = "") => {
     const item = document.createElement(tag);
     if (className) item.className = className;
@@ -52,31 +68,57 @@ function message(title: string, body: string, actions: readonly [string, () => v
   const panel = node("main", "a4-boot");
   panel.dataset.kind = kind;
   panel.setAttribute("aria-busy", String(kind === "loading"));
+  // The same brand mark as the app's rail.
+  const mark = node("p", "a4-boot-mark");
+  for (const [src, cls] of [["/assets/brand/guilduo-mark-ink.svg", "a4-brand-light"], ["/assets/brand/guilduo-mark-gold.svg", "a4-brand-dark"]] as const) {
+    const img = node("img", cls); img.src = src; img.alt = ""; img.width = 19; img.height = 26; mark.append(img);
+  }
+  mark.append("Guilduo");
+  panel.append(mark);
   const h1 = node("h1", "", title); h1.tabIndex = -1;
-  panel.append(node("p", "a4-boot-mark", "Guilduo"), h1, node("p", "a4-boot-lead", body));
-  if (points.length) {
+  if (title) panel.append(h1);
+  const lead = node("p", "a4-boot-lead", body);
+  if (kind !== "loading") panel.append(lead);
+  if (extra.points?.length) {
     const list = node("ul", "a4-boot-points");
-    for (const point of points) list.append(node("li", "", point));
+    for (const [icon, point] of extra.points) { const item = node("li"); item.append(createElement(icon), point); list.append(item); }
     panel.append(list);
   }
   if (kind === "loading") {
-    // A faint outline of the Now card, so the wait looks like the screen that is coming.
+    // One screen while loading: a faint outline of the Now card, then one quiet line that turns patient after 3 s.
     const ghost = node("div", "a4-boot-ghost");
     ghost.setAttribute("aria-hidden", "true");
     for (const width of ["30%", "72%", "52%"]) { const bar = node("span"); bar.style.width = width; ghost.append(bar); }
     const chips = node("div", "a4-boot-ghost-chips");
     for (let i = 0; i < 3; i++) chips.append(node("i"));
     ghost.append(chips);
-    panel.append(ghost);
+    lead.setAttribute("role", "status");
+    panel.append(ghost, lead);
+    slowTimer = window.setTimeout(() => { lead.textContent = tx("少し時間がかかっています。そのままお待ちください。"); }, 3000);
   }
   const row = node("div", "a4-boot-actions");
   actions.forEach(([label, run], index) => {
     const button = node("button", index === 0 ? "a4-button a4-primary" : "a4-button", label);
     button.type = "button";
+    if (index === 0 && extra.google) { const tile = node("span", "a4-google"); tile.innerHTML = GOOGLE_G; button.prepend(tile); }
     button.addEventListener("click", run);
     row.append(button);
   });
   if (actions.length) panel.append(row);
+  if (extra.note) panel.append(node("p", "a4-boot-note", extra.note));
+  if (extra.signOut) {
+    const out = node("button", "a4-link a4-boot-out", tx("サインアウト"));
+    out.type = "button";
+    out.addEventListener("click", () => { void signOutUser().finally(checkAuth); });
+    panel.append(out);
+  }
+  if (extra.legal) {
+    const legal = node("p", "a4-boot-legal");
+    for (const [label, href] of [[tx("利用規約"), "https://guilduo.com/terms/"], [tx("プライバシー"), "https://guilduo.com/privacy/"]] as const) {
+      const link = node("a", "", label); link.href = href; link.target = "_blank"; link.rel = "noopener noreferrer"; legal.append(link);
+    }
+    panel.append(legal);
+  }
   root.replaceChildren(panel);
   if (actions.length) h1.focus();
 }
@@ -274,7 +316,7 @@ function pushNotifications(repository: QuestForgeRepository): AllForPort["notifi
 }
 
 async function showProduction(uid: string, email: string): Promise<void> {
-  message(tx("読み込んでいます"), tx("やることを取り出しています。少しだけ待ってください。"));
+  message("", tx("読み込んでいます"));
   try {
     const [{ createProductionRuntime, normalizeAgentRecord, normalizeAgentConnections }, { runHandoff }, { deriveMcpUrl }] = await Promise.all([
       import("../relay-forge/production.ts"), import("../relay-forge/adapter.ts"), import("../relay-forge/screens/settings-model.ts")]);
@@ -375,7 +417,7 @@ async function showProduction(uid: string, email: string): Promise<void> {
     unmount?.();
     unmount = mountAllFor(root, port);
   } catch {
-    message(tx("読み込めませんでした"), tx("通信を確認して、もう一度試してください。データは変更されていません。"), [[tx("再試行"), () => { void showProduction(uid, email); }], [tx("デモを見る"), () => { void showDemo(); }]]);
+    message(tx("読み込めませんでした"), tx("通信を確認して、もう一度試してください。データは変更されていません。"), [[tx("もう一度"), () => { void showProduction(uid, email); }], [tx("デモを見る"), () => { void showDemo(); }]], "error", { signOut: true });
   }
 }
 
@@ -383,11 +425,15 @@ function checkAuth(): void {
   stopAuth?.();
   stopAuth = observeAuthState(state => {
     if (state.status === "authenticated") { void showProduction(state.user.uid, state.user.email); return; }
-    if (state.status === "checking") { message(tx("ようこそ"), tx("サインインの状態を確かめています。")); return; }
-    message(tx("ひとつずつ、迷わず進める。"), tx("Googleでサインインすると、いつものやることがそのまま使えます。"), [
-      [tx("Googleでサインイン"), () => { void signIn().catch(() => message(tx("サインインできませんでした"), tx("もう一度試してください。"), [[tx("再試行"), checkAuth]])); }],
+    if (state.status === "checking") { message("", tx("読み込んでいます")); return; }
+    const failed = () => message(tx("サインインできませんでした"), tx("Googleの画面を途中で閉じたか、通信が切れた可能性があります。"), [[tx("もう一度"), () => { void signIn().catch(failed); }], [tx("デモを見る"), () => { void showDemo(); }]]);
+    // Coming back from a failed Google sign-in says so instead of starting over silently.
+    if (state.status === "oauth-failed") { failed(); return; }
+    message(tx("ひとつずつ、迷わず進める。"), tx("Googleアカウントで始められます。次からも、続きをそのまま使えます。"), [
+      [tx("Googleでサインイン"), () => { void signIn().catch(failed); }],
       [tx("デモを見る"), () => { void showDemo(); }],
-    ], "welcome", [tx("今やることは、いつも1つだけ"), tx("予定は時間の帯で見える"), tx("Agent に任せて、あなたは判断だけ")]);
+    ], "welcome", { google: true, legal: true, note: tx("デモはサインインなしで試せます。変更は保存されません。"),
+      points: [[Sun, tx("今やることは、いつも1つだけ")], [CalendarDays, tx("予定は時間の帯で見える")], [Users, tx("Agentに任せて、あなたは判断だけ")]] });
   });
 }
 

@@ -11,7 +11,7 @@ export function questImageEditor(port: QuestImagePort | undefined, quest: Quest,
   const rows = document.createElement("div"); rows.className = "a4-image-list";
   const status = document.createElement("p"); status.className = "a4-meta"; status.setAttribute("role", "status");
   const picker = document.createElement("input"); picker.type = "file"; picker.multiple = true; picker.accept = "image/png,image/jpeg,image/webp"; picker.hidden = true;
-  const add = document.createElement("button"); add.type = "button"; add.className = "a4-button"; add.textContent = tx("画像を添付");
+  const add = document.createElement("button"); add.type = "button"; add.className = context === "response" ? "a4-link" : "a4-button"; add.textContent = context === "response" ? tx("＋ 回答に画像を添付") : tx("画像を添付");
   const hint = document.createElement("p"); hint.className = "a4-meta"; hint.textContent = tx("PNG・JPEG・WebP。1枚10MB、1タスク10枚。貼り付けやドロップも使えます。");
   if (context === "review") root.append(title, rows, status);
   else root.append(title, rows, add, picker, hint, status);
@@ -68,15 +68,15 @@ export function questImageEditor(port: QuestImagePort | undefined, quest: Quest,
     const labels = { reference: tx("参考画像"), result: tx("成果画像"), request: tx("確認用の画像"), response: tx("回答の画像") };
     const visible = context === "review" ? reviewImages(images, quest.id, quest.humanRequest?.attachmentIds)
       : context === "response" ? images.filter(image => image.context === "response" && image.reviewQuestId === reviewId) : images;
-    if (context === "review") root.hidden = loaded && visible.length === 0;
+    if (context === "review") { root.hidden = loaded && visible.length === 0; title.replaceChildren(tx("確認用の画像"), Object.assign(document.createElement("span"), { textContent: tx("{count}枚", { count: visible.length }) })); }
     for (const image of visible) {
       const row = document.createElement("div"); row.className = "a4-image-row";
-      const name = document.createElement("span"); name.textContent = `${labels[image.context]} · ${image.caption || image.filename}`;
+      const name = document.createElement("span"); name.textContent = context === "review" ? image.caption || image.filename : `${labels[image.context]} · ${image.caption || image.filename}`;
       row.append(name);
       if (image.deletedAt) { row.append(document.createTextNode(tx("削除済み"))); rows.append(row); continue; }
       if (removed.has(image.id)) { row.append(button(tx("元に戻す"), () => { removed.delete(image.id); paint(); })); rows.append(row); continue; }
       const img = document.createElement("img"); img.alt = image.caption || image.filename; img.loading = "lazy"; img.width = 160; img.height = 100;
-      const open = button(tx("拡大する"), () => {
+      const open = button(context === "review" ? "" : tx("拡大する"), () => {
         const dialog = document.createElement("dialog"); dialog.className = "a4-image-viewer";
         dialog.setAttribute("aria-label", image.caption || image.filename);
         const large = document.createElement("img"); large.alt = img.alt; large.src = img.src;
@@ -88,12 +88,16 @@ export function questImageEditor(port: QuestImagePort | undefined, quest: Quest,
             const url = URL.createObjectURL(blob); urls.add(url); large.src = url;
           }).catch(() => { if (!disposed) status.textContent = tx("画像を読み込めませんでした。再試行できます。"); }).finally(() => { original.disabled = false; });
         });
-        dialog.append(close, original, large);
+        original.className = "a4-link";
+        const head = document.createElement("div"); head.className = "a4-image-viewer-head";
+        head.append(Object.assign(document.createElement("strong"), { textContent: image.caption || image.filename }), original, close);
+        dialog.append(head, large);
         dialog.addEventListener("close", () => { dialog.remove(); if (open.isConnected) open.focus(); });
         viewers.add(dialog); dialog.addEventListener("close", () => viewers.delete(dialog));
         document.body.append(dialog); dialog.showModal(); close.focus();
       });
       open.prepend(img); row.append(open);
+      if (context === "review") { open.setAttribute("aria-label", `${tx("拡大する")}: ${name.textContent}`); row.append(name); }
       if (!readonly && (context !== "response" || image.context === "response" && image.reviewQuestId === reviewId)) row.append(button(tx("削除"), () => { removed.add(image.id); paint(); }));
       rows.append(row); void preview(image, img);
     }
