@@ -375,5 +375,24 @@ export function createBillingUi(options: BillingUiOptions) {
     }
     return section;
   }
-  return { enter: () => { void load(); }, retry: () => { void load(true); }, render: billingRegion };
+  // The same state and guarded actions for another renderer (All for ADHD draws its own layout).
+  const api = {
+    status: () => status, busy: () => busy, error: () => error, message: () => message, canWrite, agents, candidates, quests,
+    selectedIds: () => selectedIds ?? [], validFree: () => validFreeAgentSelection(selectedIds ?? [], agents()),
+    toggleFree: (id: string) => { selectedIds = (selectedIds ?? []).includes(id) ? selectedIds!.filter(value => value !== id) : [...selectedIds ?? [], id]; changed(); },
+    saveAgents, purchasable: () => !!status && billingPurchaseAvailable(status), checkout, portal,
+    referralCode: () => referralCode, setReferral: (value: string) => { referralCode = value; purchaseConsent = false; },
+    purchaseConsent: () => purchaseConsent, setPurchaseConsent: (value: boolean) => { purchaseConsent = value; changed(); },
+    purchaseAttempt: () => purchaseAttempt,
+    ledger: () => ledger, ledgerMore: () => !!ledgerCursor && !ledgerError, ledgerError: () => ledgerError, loadLedger, entryLabel,
+    questId: () => questId, setQuest: (id: string) => { questId = id; resetQuote(); },
+    candidateIds: () => candidateIds, toggleCandidate: (id: string) => { candidateIds = candidateIds.includes(id) ? candidateIds.filter(value => value !== id) : [...candidateIds, id]; resetQuote(); },
+    consent: () => consent, setConsent: (value: boolean) => { consent = value; changed(); },
+    allowedCandidates, quoteCurrent, quote: () => quote, estimate, execute,
+    decisionId: () => decisionId, decisionVersion: () => decisionVersion, decisionState: () => billingString(decision?.status), hasDecision: () => decision !== null,
+    applied: () => applied, suggestion, checkResult, apply,
+    clearDecision: () => { decisionId = ""; decisionVersion = ""; decision = null; decisionCandidateIds = []; applied = false; quote = null; consent = false; changed(); },
+    contextText,
+  };
+  return { enter: () => { void load(); }, retry: () => { void load(true); }, render: billingRegion, api };
 }

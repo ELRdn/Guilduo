@@ -5,7 +5,7 @@ import { COPY } from "../interaction-lab/all-for-adhd/copy.ts";
 
 test("every tx() key in All for ADHD has all eight translations with matching placeholders", () => {
   const used = new Set<string>();
-  for (const file of ["app.ts", "main.ts", "model.ts", "images.ts"]) {
+  for (const file of ["app.ts", "main.ts", "model.ts", "images.ts", "forge.ts", "billing-view.ts", "network-view.ts", "battle-view.ts", "connections-view.ts", "skills-view.ts"]) {
     const source = readFileSync(new URL(`../interaction-lab/all-for-adhd/${file}`, import.meta.url), "utf8");
     for (const match of source.matchAll(/tx\("((?:[^"\\]|\\.)*)"/g)) used.add(match[1]!);
   }

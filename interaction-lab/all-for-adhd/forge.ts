@@ -7,17 +7,22 @@
 
 import type { BattleSession, Quest } from "../../types/questforge.ts";
 import type { RelayForgeRuntime } from "../relay-forge/production.ts";
-import { relayText } from "../relay-forge/relay-copy.ts";
 import { deriveMcpUrl } from "../relay-forge/screens/settings.ts";
 import type { ScreenContext } from "../relay-forge/screens/runtime.ts";
 import { initialQuestsState, normalizeQuestsModel, renderQuestsDesktop, renderQuestsMobile } from "../relay-forge/screens/quests.ts";
 import { initialNetworkState, normalizeNetworkModel, renderNetworkDesktop, renderNetworkMobile } from "../relay-forge/screens/network.ts";
-import { initialBattleState, normalizeBattleModel, renderBattleDesktop, renderBattleMobile } from "../relay-forge/screens/battle.ts";
+import { initialBattleState, normalizeBattleModel } from "../relay-forge/screens/battle.ts";
 import { validateBattleSession } from "../relay-forge/screens/battle-port.ts";
-import { initialConnectionsState, normalizeConnectionsModel, renderConnectionsDesktop, renderConnectionsMobile } from "../relay-forge/screens/connections.ts";
+import { initialConnectionsState, normalizeConnectionsModel } from "../relay-forge/screens/connections.ts";
 import { REQUIRED_SCOPES } from "../relay-forge/screens/connections-port.ts";
 import type { ConnectionActionResult } from "../relay-forge/screens/connections-model.ts";
-import { initialSkillsState, normalizeSkillsModel, renderSkillsDesktop, renderSkillsMobile } from "../relay-forge/screens/skills.ts";
+import { networkView, kindLabel, stateLabel } from "./network-view.ts";
+import { tx } from "./copy.ts";
+import { battleView } from "./battle-view.ts";
+import { connectionsView } from "./connections-view.ts";
+import { skillsView } from "./skills-view.ts";
+import { el } from "../relay-forge/primitives/dom.ts";
+import { initialSkillsState, normalizeSkillsModel } from "../relay-forge/screens/skills.ts";
 
 export type ForgeScreen = "list" | "network" | "battle" | "connections" | "skills";
 
@@ -32,6 +37,7 @@ export interface ForgeHost {
   readonly refresh: () => Promise<void>;
   readonly workTime?: (quest: Quest) => string;
   readonly relatedNotes?: (questId: string) => HTMLElement;
+  readonly openMcpSettings: () => void;
 }
 
 const DOMAIN: Readonly<Record<string, ForgeScreen | "guild" | "all" | "calendar">> = {
@@ -46,11 +52,17 @@ export function forgeScreens(host: ForgeHost) {
   };
   let battle: BattleSession | null = null;
   let battleVersion = 0;
+  let battleRequested = false;
+  let connectionsRequested = false;
   let integrations: RelayForgeRuntime["integrations"] | null = null;
   let tools: readonly unknown[] | null = null;
   let toolsLoading = false;
   let toolsError: string | null = null;
   let selected: string | null = null;
+  // Network: the list of blocked roots comes first; the drawing is one switch away.
+  let netMode: "list" | "graph" = "list";
+  let netRoot: string | null = null;
+  let netDetail = false;
   const mobile = () => matchMedia("(max-width: 760px)").matches;
 
   const context = (): ScreenContext => ({
@@ -119,7 +131,10 @@ export function forgeScreens(host: ForgeHost) {
   }
 
   function enter(screen: ForgeScreen): void {
-    if (screen === "battle" && battle === null) { battle = host.runtime().battleSession; void refreshBattle(); }
+    // Entered on every render, so the first read is started only once.
+    if (screen === "battle" && battle === null && !battleRequested) { battleRequested = true; battle = host.runtime().battleSession; void refreshBattle(); }
+    // Connections are read on entry too, so a reload shows the current state.
+    if (screen === "connections" && !connectionsRequested) { connectionsRequested = true; void refreshConnections(); }
     if (screen === "skills" && tools === null && !toolsLoading) {
       const runtime = host.runtime();
       if (runtime.mcpToolsLoadError === null && runtime.mcpTools.length > 0) tools = runtime.mcpTools; else void loadTools();
@@ -151,7 +166,36 @@ export function forgeScreens(host: ForgeHost) {
           questIds: quests.filter(q => q.externalLinks.some(link => link.service === entry.id)).map(q => q.id),
         })),
       });
-      return pick(() => renderNetworkDesktop(model, state.network, ctx, selected), () => renderNetworkMobile(model, state.network, ctx, selected)).main;
+      const graph = (rootId: string | null) => {
+        state.network.view = "graph";
+        if (rootId) state.network.focusId = rootId;
+        const drawn = pick(() => renderNetworkDesktop(model, state.network, ctx, rootId), () => renderNetworkMobile(model, state.network, ctx, rootId)).main;
+        // Only the drawing is kept; the numbers, the reasons column and Relay Forge's own heading stay out.
+        const canvas = drawn.querySelector<HTMLElement>(".rf-n-workspace > :first-child") ?? drawn;
+        canvas.querySelectorAll<HTMLElement>(".rf-n-node").forEach(card => {
+          const node = model.nodes.get(card.dataset.nodeId ?? "");
+          if (!node) return;
+          // Type and state in the reader's words; no reference numbers.
+          const top = card.querySelector(".rf-n-node-top");
+          // What waits on the centre reads as waiting, the same as the list.
+          const label = card.dataset.role === "downstream" && node.blocked ? { label: tx("待機中"), tone: "neutral" } : stateLabel(node);
+          top?.replaceChildren(el("span", { class: "a4-net-kind" }, kindLabel(node.kind), label ? el("span", { class: "a4-net-chip", "data-tone": label.tone }, label.label) : null));
+        });
+        const lanes = canvas.querySelectorAll(".rf-n-lane-labels > span");
+        if (lanes[0]) lanes[0].textContent = tx("止めているもの");
+        if (lanes[1]) lanes[1].textContent = tx("待っているもの");
+        return el("div", { class: "a4-net-graph" }, canvas);
+      };
+      return networkView(model, {
+        mobile: ctx.isMobile, mode: netMode, selected: netRoot, detailOpen: netDetail,
+        blockedReason: id => quests.find(q => q.id === id)?.handoff.blockedReason ?? "",
+        setMode: mode => { netMode = mode; host.render(); },
+        select: id => { netRoot = id; netDetail = ctx.isMobile; host.render(); if (netDetail) requestAnimationFrame(() => document.querySelector<HTMLElement>(".a4-net h1")?.focus()); },
+        closeDetail: () => { netDetail = false; host.render(); },
+        openQuest: host.openQuest,
+        reconnect: id => ctx.onNavigate("connections", id),
+        graph,
+      });
     }
     if (screen === "battle") {
       const model = normalizeBattleModel({ session: battle, notices: [], writeHeld: ctx.writeLocked, decisions: state.battle.decisions });
@@ -159,7 +203,7 @@ export function forgeScreens(host: ForgeHost) {
         port: runtime.battlePort, isDisposed: () => false, onRefresh: refreshBattle,
         onSession: (session: BattleSession) => { battleVersion += 1; battle = session; },
       };
-      return pick(() => renderBattleDesktop(model, state.battle, ctx, callbacks), () => renderBattleMobile(model, state.battle, ctx, callbacks)).main;
+      return battleView(model, state.battle, callbacks, { rerender: host.render, announce: host.announce, openQuest: host.openQuest }, battle === null);
     }
     if (screen === "connections") {
       const model = normalizeConnectionsModel({
@@ -170,20 +214,16 @@ export function forgeScreens(host: ForgeHost) {
         notices: [], writeHeld: ctx.writeLocked, refreshFailed: false,
       });
       const port = connectionsPort();
-      return pick(() => renderConnectionsDesktop(model, state.connections, ctx, port), () => renderConnectionsMobile(model, state.connections, ctx, port)).main;
+      return connectionsView(model, state.connections, { mobile: ctx.isMobile, rerender: host.render, announce: host.announce, openQuest: host.openQuest, port,
+        agentName: id => runtime.agents.find(agent => agent.agentId === id)?.displayName ?? id });
     }
     const authorized = runtime.agentConnections.filter(connection => connection.authorized).length;
     const model = normalizeSkillsModel({
       tools: tools ?? [], sourceLabel: "Guilduo MCP", sourceUrl: deriveMcpUrl(runtime.gatewayUrl),
-      connectionLabel: authorized === 0 ? relayText("skillsNoClients") : `${relayText("skillsOAuth")}: ${authorized}`, query: state.skills.query,
+      query: state.skills.query,
       loading: toolsLoading, connected: true, error: toolsError,
     });
-    const callbacks = {
-      onSearch: (query: string) => { state.skills.query = query; host.render(); },
-      onToggleGroup: (groupId: string) => { state.skills.expandedGroups[groupId] = state.skills.expandedGroups[groupId] !== true; host.render(); },
-      onRetry: () => { void loadTools(); },
-    };
-    return pick(() => renderSkillsDesktop(model, state.skills, ctx, callbacks), () => renderSkillsMobile(model, state.skills, ctx, callbacks)).main;
+    return skillsView(model, state.skills, { authorized, rerender: host.render, announce: host.announce, openMcpSettings: host.openMcpSettings, retry: () => { void loadTools(); } });
   }
 
   return { enter, render };
