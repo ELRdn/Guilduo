@@ -11,11 +11,12 @@ function setup() {
   const db = new SqliteD1Database(), vectors = new Map<string, { metadata: { knowledgeId: string; revision: number }; namespace: string }>();
   let calls = 0, failAi = false;
   const sent: unknown[] = [];
-  const env: WorkerEnv = { QUESTFORGE_DB: db, KNOWLEDGE_ENABLED: "true", KNOWLEDGE_EXTERNAL_APPROVED: "true", KNOWLEDGE_BUDGET_ID: "fixture-only", KNOWLEDGE_MAX_EMBEDDING_REQUESTS: "30", KNOWLEDGE_EMBEDDING_MODEL: "@cf/baai/bge-m3", KNOWLEDGE_EMBEDDING_DIMENSIONS: "2",
+  const env: WorkerEnv = { QUESTFORGE_DB: db, KNOWLEDGE_ENABLED: "true", KNOWLEDGE_OWNER_UID: human.uid, KNOWLEDGE_EXTERNAL_APPROVED: "true", KNOWLEDGE_BUDGET_ID: "fixture-only", KNOWLEDGE_MAX_EMBEDDING_REQUESTS: "30", KNOWLEDGE_EMBEDDING_MODEL: "@cf/baai/bge-m3", KNOWLEDGE_EMBEDDING_DIMENSIONS: "2",
     KNOWLEDGE_AI: { async run() { calls++; if (failAi) throw new Error("offline"); return { data: [[1, 0]] }; } },
     KNOWLEDGE_VECTOR: {
       async upsert(items) { for (const item of items) vectors.set(item.id, item); },
       async deleteByIds(ids) { for (const id of ids) vectors.delete(id); },
+      async getByIds(ids) { return ids.filter(id => vectors.has(id)).map(id => ({ id })); },
       async query(_vector, options) { return { matches: [...vectors].filter(([, value]) => value.namespace === options.namespace).map(([id, value]) => ({ id, metadata: value.metadata })) }; },
     }, KNOWLEDGE_QUEUE: { async send(body) { sent.push(body); } },
   };
@@ -49,7 +50,7 @@ test("semantic results are revalidated against D1 owner, revision and deletion",
   assert.equal((await searchKnowledge(env, human, { query: "semantic-only" })).items.length, 0);
   // Bypass the namespace filter to simulate a bad provider/index response; D1 ownership still wins.
   env.KNOWLEDGE_VECTOR!.query = async () => ({ matches: [...vectors].map(([id, value]) => ({ id, metadata: value.metadata })) });
-  assert.equal((await searchKnowledge(env, { ...human, uid: "stranger" }, { query: "semantic-only" })).items.length, 0);
+  await assert.rejects(searchKnowledge(env, { ...human, uid: "stranger" }, { query: "semantic-only" }), e => hasErrorCode(e, "knowledge_owner_beta_only"));
   await deleteKnowledge(env, human.uid, first.id, 2);
   assert.equal((await searchKnowledge(env, human, { query: "semantic-only" })).items.length, 0);
   await processKnowledgeIndex(env, { uid: human.uid, knowledgeId: first.id }); assert.equal(vectors.size, 0);
@@ -88,4 +89,28 @@ test("semantic candidate revalidation respects D1's bound-parameter limit and re
   };
   const result = await searchKnowledge(env, human, { query: "semantic-only", limit: 50 });
   assert.equal(result.semantic, "available"); assert.deepEqual(result.items.map(item => item.id), ids.slice(0, 20));
+});
+
+test("concurrent hints reserve one embedding for the same revision", async () => {
+  const { env, calls } = setup(), item = (await captureKnowledge(env, human, input("one revision"))).knowledge;
+  const hint = { uid: human.uid, knowledgeId: item.id };
+  await Promise.all([processKnowledgeIndex(env, hint), processKnowledgeIndex(env, hint)]);
+  assert.equal(calls(), 1);
+});
+
+test("uncertain async indexing leaves a durable cleanup job for deleted knowledge", async () => {
+  const { env, vectors, db } = setup(), item = (await captureKnowledge(env, human, input("temporary fact"))).knowledge;
+  const upsert = env.KNOWLEDGE_VECTOR!.upsert;
+  env.KNOWLEDGE_VECTOR!.upsert = async items => {
+    await deleteKnowledge(env, human.uid, item.id, 1);
+    await upsert(items);
+    throw new Error("Provider outcome not received");
+  };
+  const hint = { uid: human.uid, knowledgeId: item.id };
+  await assert.rejects(processKnowledgeIndex(env, hint));
+  assert.equal(vectors.size, 1);
+  assert.deepEqual((await searchKnowledge(env, human, {})).items, []);
+  await processKnowledgeIndex(env, hint);
+  assert.equal(vectors.size, 0);
+  assert.equal((await db.prepare("SELECT count(*) n FROM knowledge_index_jobs").first<{ n: number }>())?.n, 0);
 });

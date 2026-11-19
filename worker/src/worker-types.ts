@@ -72,6 +72,7 @@ export interface WorkerEnv {
   KNOWLEDGE_VECTOR?: {
     upsert(vectors: { id: string; values: number[]; namespace: string; metadata: { knowledgeId: string; revision: number } }[]): Promise<unknown>;
     deleteByIds(ids: string[]): Promise<unknown>;
+    getByIds(ids: string[]): Promise<{ id: string }[]>;
     query(vector: number[], options: { topK: number; namespace: string; returnMetadata: "all" }): Promise<{ matches: { id: string; metadata?: { knowledgeId?: string; revision?: number } }[] }>;
   };
   KNOWLEDGE_QUEUE?: { send(body: { uid: string; knowledgeId: string; revision: number }): Promise<unknown> };

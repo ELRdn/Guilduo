@@ -4953,7 +4953,7 @@
     "/v1/knowledge/context": {
       "post": {
         "operationId": "getWorkContext",
-        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and selected Agent consent",
+        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and owner approval of the connection/Agent pair",
         "requestBody": {
           "required": true,
           "content": {
@@ -4980,6 +4980,10 @@
                   },
                   "includeSuperseded": {
                     "type": "boolean"
+                  },
+                  "pageVersion": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{43}$"
                   },
                   "cursor": {
                     "type": "integer",
@@ -5031,7 +5035,7 @@
     "/v1/knowledge/search": {
       "post": {
         "operationId": "searchKnowledge",
-        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and selected Agent consent",
+        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and owner approval of the connection/Agent pair",
         "requestBody": {
           "required": true,
           "content": {
@@ -5058,6 +5062,10 @@
                   },
                   "includeSuperseded": {
                     "type": "boolean"
+                  },
+                  "pageVersion": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{43}$"
                   },
                   "cursor": {
                     "type": "integer",
@@ -5109,7 +5117,7 @@
     "/v1/knowledge/capture": {
       "post": {
         "operationId": "captureKnowledge",
-        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and selected Agent consent",
+        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and owner approval of the connection/Agent pair",
         "requestBody": {
           "required": true,
           "content": {
@@ -5207,6 +5215,9 @@
                       "explicit",
                       "correction"
                     ]
+                  },
+                  "confirmReview": {
+                    "type": "boolean"
                   },
                   "sources": {
                     "type": "array",
@@ -5328,6 +5339,14 @@
             }
           },
           {
+            "name": "pageVersion",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{43}$"
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "schema": {
@@ -5415,7 +5434,7 @@
       },
       "put": {
         "operationId": "setKnowledgeSettings",
-        "summary": "Human-only revision-guarded sharing of the owner's knowledge with selected Agents; does not grant scopes",
+        "summary": "Human-only revision-guarded sharing of the owner's knowledge with selected connection/Agent pairs; does not grant scopes",
         "requestBody": {
           "required": true,
           "content": {
@@ -5442,6 +5461,28 @@
                     "items": {
                       "type": "string",
                       "maxLength": 80
+                    }
+                  },
+                  "grants": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "clientId",
+                        "agentId"
+                      ],
+                      "properties": {
+                        "clientId": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "agentId": {
+                          "type": "string",
+                          "maxLength": 80
+                        }
+                      }
                     }
                   }
                 }

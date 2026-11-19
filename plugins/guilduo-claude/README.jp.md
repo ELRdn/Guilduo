@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-`guilduo@guilduo` `0.6.0-beta.2`は、**Claude Code**（CLI、IDE拡張、デスクトップアプリのCodeタブ）向けのGuilduoプラグインです。npmではなく、[Guilduoリポジトリ](https://github.com/ELRdn/Guilduo)のClaude Code plugin marketplaceで配布します。Claude DesktopのConnectorsやDesktop Extension（`.mcpb`）とは別物です。
+`guilduo@guilduo` `0.6.0-beta.3`は、**Claude Code**（CLI、IDE拡張、デスクトップアプリのCodeタブ）向けのGuilduoプラグインです。npmではなく、[Guilduoリポジトリ](https://github.com/ELRdn/Guilduo)のClaude Code plugin marketplaceで配布します。Claude DesktopのConnectorsやDesktop Extension（`.mcpb`）とは別物です。
 
 構成要素は次の2つだけです。
 

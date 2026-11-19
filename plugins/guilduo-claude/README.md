@@ -2,7 +2,7 @@
 
 [日本語](README.jp.md)
 
-`guilduo@guilduo` `0.6.0-beta.2` is the Guilduo plugin for **Claude Code** (CLI, IDE extensions and the desktop app's Code tab). It is distributed through the Claude Code plugin marketplace in the [Guilduo repository](https://github.com/ELRdn/Guilduo), not npm. It is separate from Claude Desktop Connectors and Desktop Extensions (`.mcpb`).
+`guilduo@guilduo` `0.6.0-beta.3` is the Guilduo plugin for **Claude Code** (CLI, IDE extensions and the desktop app's Code tab). It is distributed through the Claude Code plugin marketplace in the [Guilduo repository](https://github.com/ELRdn/Guilduo), not npm. It is separate from Claude Desktop Connectors and Desktop Extensions (`.mcpb`).
 
 Its only components are:
 
