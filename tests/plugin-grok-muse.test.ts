@@ -20,7 +20,7 @@ async function fixture(check: (path: string) => Promise<void>): Promise<void> {
 
 for (const target of ["grok", "muse"] as const) test(`${target}: beta.12 closed whitelist, canonical bytes and onboarding`, async () => {
   const result = await validateGrokMuseSource(root, target);
-  assert.equal(result.files.length, 11);
+  assert.equal(result.files.length, 12);
   assert(!result.files.some(file => /^(?:hooks|auth|profile|node_modules)\//.test(file.path)));
 });
 

@@ -60,6 +60,7 @@ const AGENT_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const AGENT_STATUSES = new Set(["active", "disabled", "archived"]);
 const HANDOFF_STATES = new Set(["none", "ready", "working", "blocked", "review_required", "accepted"]);
 const ALLOWED_AGENT_SCOPES = new Set([
+  "knowledge:read", "knowledge:write",
   "quests:read", "quests:write", "character:read", "rewards:write",
   "integrations:read", "integrations:sync", "events:read", "profiles:read",
   "friends:read", "friends:write", "parties:read", "parties:write",
@@ -406,7 +407,7 @@ export async function createAgent(env: WorkerEnv, uid: string, input: AgentInput
   const instructions = cleanString(input.instructions, 4000, "instructions");
   const status = input.status === undefined ? "active" : validateStatus(input.status);
   if (status !== "active") throw agentError(400, "agent_status_invalid", "New agents must start as active.");
-  const allowedScopes = validateScopes(input.allowedScopes, [...ALLOWED_AGENT_SCOPES]);
+  const allowedScopes = validateScopes(input.allowedScopes, [...ALLOWED_AGENT_SCOPES].filter(scope => !scope.startsWith("knowledge:")));
   const defaultHandoffState = cleanString(input.defaultHandoffState, 20, "default_handoff_state") || "ready";
   if (!HANDOFF_STATES.has(defaultHandoffState)) throw agentError(400, "default_handoff_state_invalid", "Default handoff state is invalid.");
   const reviewRequired = input.reviewRequired === undefined ? true : coerceBoolean(input.reviewRequired, "review_required");

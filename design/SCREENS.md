@@ -50,6 +50,8 @@ Calendar Day/Week presents a shared hourly axis, separate all-day items, today m
 
 ## Today / 今日の作戦
 
+Relay Memoryの管理はRelay Forge Settings内の独立regionとする。共有対象と説明、状態／再読込、Agent選択、プロジェクト、検索と一覧、編集・履歴、エクスポートの順に置く。Quest詳細では関連知識・適用範囲・出典・矛盾を表示し、プロジェクト関連付けを提供する。本文・出典・履歴をPrivate Notesの入力画面へ混ぜない。390pxとDesktop、キーボード、保存・応答不明・競合・無効状態を確認する。
+
 ### Desktop
 
 ```text

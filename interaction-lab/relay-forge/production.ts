@@ -22,6 +22,7 @@ import { t } from "../../i18n.ts";
 type JsonRecord = Record<string, unknown>;
 
 export interface RelayForgeRuntime {
+  readonly knowledgePort?: Pick<QuestForgeRepository, "knowledge">;
   readonly productivityPort?: Pick<QuestForgeRepository, "productivity">;
   readonly mode: "production";
   readonly loadDeferred?: () => Promise<RelayForgeRuntime>;
@@ -280,6 +281,7 @@ function runtimeFromSnapshot(snapshot: Awaited<ReturnType<QuestForgeRepository["
     humanRequestPort: repository,
     agentPort: repository,
     productivityPort: repository,
+    ...(snapshot.knowledgeAvailable ? { knowledgePort: repository } : {}),
     billingPort: repository,
     // Consent withdrawal must remain available when collection is switched off.
     analyticsPort: repository,

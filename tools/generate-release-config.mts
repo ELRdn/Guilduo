@@ -11,6 +11,16 @@ for (const name of required) {
 }
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2);
+const knowledgeExternal = process.env.KNOWLEDGE_EXTERNAL_APPROVED === "true";
+if (process.env.KNOWLEDGE_ENABLED === "true" && !process.env.KNOWLEDGE_OWNER_UID?.trim()) throw new Error("Initial knowledge beta requires a selected KNOWLEDGE_OWNER_UID");
+if (knowledgeExternal) {
+  for (const name of ["KNOWLEDGE_VECTOR_INDEX", "KNOWLEDGE_QUEUE_NAME", "KNOWLEDGE_EMBEDDING_MODEL", "KNOWLEDGE_EMBEDDING_DIMENSIONS", "KNOWLEDGE_BUDGET_ID", "KNOWLEDGE_MAX_EMBEDDING_REQUESTS"]) {
+    if (!process.env[name]?.trim()) throw new Error(`Missing approved knowledge configuration: ${name}`);
+  }
+  if (process.env.KNOWLEDGE_ENABLED !== "true") throw new Error("External knowledge requires KNOWLEDGE_ENABLED=true");
+  if (!["@cf/baai/bge-m3", "@cf/pfnet/plamo-embedding-1b"].includes(process.env.KNOWLEDGE_EMBEDDING_MODEL ?? "")) throw new Error("Unsupported knowledge embedding model");
+  for (const name of ["KNOWLEDGE_EMBEDDING_DIMENSIONS", "KNOWLEDGE_MAX_EMBEDDING_REQUESTS"]) if (!Number.isSafeInteger(Number(process.env[name])) || Number(process.env[name]) <= 0) throw new Error(`Invalid knowledge limit: ${name}`);
+}
 const normalizeBaseUrl = (value: string, name: string): string => {
   const normalized = String(value || "").trim().replace(/\/+$/, "");
   try {
@@ -81,6 +91,10 @@ const wrangler = {
     ...(webApiZone && webApiManagement === "wrangler" ? [{ pattern: `${webAppUrl}/api/v1/*`, zone_id: webApiZone }] : []),
   ],
   vars: {
+    KNOWLEDGE_ENABLED: process.env.KNOWLEDGE_ENABLED || "false",
+    ...(process.env.KNOWLEDGE_OWNER_UID ? { KNOWLEDGE_OWNER_UID: process.env.KNOWLEDGE_OWNER_UID } : {}),
+    KNOWLEDGE_EXTERNAL_APPROVED: process.env.KNOWLEDGE_EXTERNAL_APPROVED || "false",
+    ...(knowledgeExternal ? Object.fromEntries(["KNOWLEDGE_EMBEDDING_MODEL", "KNOWLEDGE_EMBEDDING_DIMENSIONS", "KNOWLEDGE_BUDGET_ID", "KNOWLEDGE_MAX_EMBEDDING_REQUESTS"].map(name => [name, process.env[name]])) : {}),
     APPWRITE_ENDPOINT: process.env.APPWRITE_ENDPOINT,
     APPWRITE_PROJECT_ID: process.env.APPWRITE_PROJECT_ID,
     APPWRITE_DATABASE_ID: process.env.APPWRITE_DATABASE_ID,
@@ -111,6 +125,11 @@ const wrangler = {
   },
   triggers: { crons: ["*/15 * * * *", "* * * * *"] },
   d1_databases: [{ binding: "QUESTFORGE_DB", database_name: process.env.D1_DATABASE_NAME, database_id: process.env.D1_DATABASE_ID }],
+  ...(knowledgeExternal ? {
+    ai: { binding: "KNOWLEDGE_AI" },
+    vectorize: [{ binding: "KNOWLEDGE_VECTOR", index_name: process.env.KNOWLEDGE_VECTOR_INDEX }],
+    queues: { producers: [{ binding: "KNOWLEDGE_QUEUE", queue: process.env.KNOWLEDGE_QUEUE_NAME }], consumers: [{ queue: process.env.KNOWLEDGE_QUEUE_NAME, max_batch_size: 5, max_retries: 3 }] },
+  } : {}),
   kv_namespaces: [{ binding: "QUESTFORGE_KV", id: process.env.KV_NAMESPACE_ID, remote: true }],
   // Agent avatar image bytes (worker/src/agent-avatar-store.ts). The bucket
   // itself is created out-of-band with `wrangler r2 bucket create` — this

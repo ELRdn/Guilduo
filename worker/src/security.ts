@@ -14,6 +14,8 @@ type CryptoSubtleCompat = {
 const subtle = crypto.subtle as unknown as CryptoSubtleCompat;
 
 export const ALL_SCOPES = [
+  "knowledge:read",
+  "knowledge:write",
   "quests:read",
   "quests:write",
   "character:read",

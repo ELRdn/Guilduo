@@ -2609,6 +2609,10 @@
                         "type": "object"
                       }
                     },
+                    "knowledgeAvailable": {
+                      "type": "boolean",
+                      "description": "Present when Relay Memory is available to this signed-in owner."
+                    },
                     "panelErrors": {
                       "type": "array",
                       "items": {
@@ -4945,6 +4949,1009 @@
           }
         }
       }
+    },
+    "/v1/knowledge/context": {
+      "post": {
+        "operationId": "getWorkContext",
+        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and selected Agent consent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "questId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "knowledgeId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "includeSuperseded": {
+                    "type": "boolean"
+                  },
+                  "cursor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/search": {
+      "post": {
+        "operationId": "searchKnowledge",
+        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and selected Agent consent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "questId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "knowledgeId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "includeSuperseded": {
+                    "type": "boolean"
+                  },
+                  "cursor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/capture": {
+      "post": {
+        "operationId": "captureKnowledge",
+        "summary": "Owner-scoped shared knowledge; OAuth requires knowledge scope and selected Agent consent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "requestId",
+                  "title",
+                  "content",
+                  "kind",
+                  "scope",
+                  "epistemic",
+                  "sources",
+                  "reason"
+                ],
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "minLength": 1
+                  },
+                  "knowledgeId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 160,
+                    "minLength": 1
+                  },
+                  "content": {
+                    "type": "string",
+                    "maxLength": 6000,
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "decision",
+                      "constraint",
+                      "finding",
+                      "question"
+                    ]
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "project",
+                      "quest"
+                    ]
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "questId": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "epistemic": {
+                    "type": "string",
+                    "enum": [
+                      "human_statement",
+                      "agent_observation",
+                      "inference",
+                      "system_verified"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "superseded"
+                    ]
+                  },
+                  "conflictWith": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "change": {
+                    "type": "string",
+                    "enum": [
+                      "explicit",
+                      "correction"
+                    ]
+                  },
+                  "sources": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "reference",
+                        "version",
+                        "excerpt",
+                        "availability"
+                      ],
+                      "properties": {
+                        "reference": {
+                          "type": "string",
+                          "maxLength": 1000,
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "maxLength": 160
+                        },
+                        "excerpt": {
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        "availability": {
+                          "type": "string",
+                          "enum": [
+                            "reported",
+                            "verified",
+                            "unavailable"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge": {
+      "get": {
+        "operationId": "listKnowledge",
+        "summary": "Human-only bounded knowledge list/export pages, with explicit continuation",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          {
+            "name": "questId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "knowledgeId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "includeSuperseded",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Knowledge page with scope, provenance, conflicts and continuation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/settings": {
+      "get": {
+        "operationId": "getKnowledgeSettings",
+        "summary": "Human-only read of sharing settings; disabled by default",
+        "responses": {
+          "200": {
+            "description": "Sharing settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setKnowledgeSettings",
+        "summary": "Human-only revision-guarded sharing of the owner's knowledge with selected Agents; does not grant scopes",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedRevision",
+                  "enabled",
+                  "agentIds"
+                ],
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "agentIds": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/projects": {
+      "get": {
+        "operationId": "listKnowledgeProjects",
+        "summary": "Human-only native knowledge projects",
+        "responses": {
+          "200": {
+            "description": "Projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createKnowledgeProject",
+        "summary": "Human-only project identity, independent of Quest category and external-link projectId",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/quest-project": {
+      "put": {
+        "operationId": "linkKnowledgeQuestProject",
+        "summary": "Human-only verified Quest/project association",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "questId",
+                  "projectId"
+                ],
+                "properties": {
+                  "questId": {
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/operations/{requestId}": {
+      "get": {
+        "operationId": "getKnowledgeOperation",
+        "summary": "Human-only readback of an uncertain capture/restore; deletion never returns old content",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved receipt or saved=false",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/{knowledgeId}": {
+      "delete": {
+        "operationId": "deleteKnowledge",
+        "summary": "Human-only permanent content/history deletion with content-free replay tombstone and pending derived-index cleanup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedRevision"
+                ],
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        },
+        "parameters": [
+          {
+            "name": "knowledgeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/knowledge/{knowledgeId}/history": {
+      "get": {
+        "operationId": "getKnowledgeHistory",
+        "summary": "Human-only bounded revision history",
+        "parameters": [
+          {
+            "name": "knowledgeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revisions and nextCursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        }
+      }
+    },
+    "/v1/knowledge/{knowledgeId}/restore": {
+      "post": {
+        "operationId": "restoreKnowledge",
+        "summary": "Human-only restore; creates history and never attests Quest approval",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedRevision",
+                  "restoreRevision",
+                  "requestId"
+                ],
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "restoreRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        },
+        "parameters": [
+          {
+            "name": "knowledgeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/knowledge/{knowledgeId}/resolve": {
+      "post": {
+        "operationId": "resolveKnowledge",
+        "summary": "Human-only resolve; creates history and never attests Quest approval",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedRevision",
+                  "expectedRightRevision",
+                  "rightId",
+                  "winnerId"
+                ],
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "expectedRightRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "rightId": {
+                    "type": "string"
+                  },
+                  "winnerId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified result; never changes Quest approval/completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid structured input"
+          },
+          "403": {
+            "description": "Missing scope, owner-only management, or Agent not shared"
+          },
+          "404": {
+            "description": "Unavailable/deleted knowledge or project"
+          },
+          "409": {
+            "description": "Revision conflict or reused request ID"
+          },
+          "413": {
+            "description": "Actual request body exceeds 64000 bytes"
+          },
+          "503": {
+            "description": "Feature disabled; no storage change"
+          }
+        },
+        "parameters": [
+          {
+            "name": "knowledgeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -4974,7 +5981,9 @@
               "battle:read": "Read command battle state",
               "battle:write": "Preview and execute command battle turns",
               "agents:read": "Read registered Agent profiles and the current Agent context",
-              "agents:write": "Link and unlink the current OAuth MCP connection to a registered Agent"
+              "agents:write": "Link and unlink the current OAuth MCP connection to a registered Agent",
+              "knowledge:read": "Read owner-enabled knowledge with selected Agent consent",
+              "knowledge:write": "Capture and revise owner-enabled structured knowledge; never formal Human approval"
             }
           }
         }

@@ -11,6 +11,7 @@
 - 語源: **Guild + Duo**
 - Category: **Human × AI Work Platform**
 - UI system: **Guilduo / Relay Forge**
+- AI間の共有知識機能: **Relay Memory**（リレーメモリ）
 
 Guilduoは、AIを人間が一方的に操作する道具としてだけ扱いません。HumanとAI Agentのどちらも、仕事を依頼し、担当し、実行し、受け渡し、レビューできるCoordination Modelを目指します。
 

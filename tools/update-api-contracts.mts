@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { MCP_TOOLS } from "../worker/src/index.ts";
 import { IMAGE_IDS_SCHEMA, PRACTICAL_TOOLS } from "../worker/src/practical-tools.ts";
+import { KNOWLEDGE_CAPTURE_SCHEMA, KNOWLEDGE_QUERY_SCHEMA } from "../shared/knowledge.ts";
 
 interface OpenApiSchema {
   type?: string | string[];
@@ -77,6 +78,7 @@ openapi.paths["/v1/workspace/bootstrap"] = {
         quests: { type: "array", items: { $ref: "#/components/schemas/Quest" }, maxItems: 200 },
         total: { type: "integer", minimum: 0 }, profile: { type: ["object", "null"] },
         agents: { type: "array", items: { type: "object" } },
+        knowledgeAvailable: { type: "boolean", description: "Present when Relay Memory is available to this signed-in owner." },
         panelErrors: { type: "array", items: { type: "object", required: ["index", "message"], properties: {
           index: { type: "integer", enum: [3, 5] }, message: { type: "string" },
         } } },
@@ -268,6 +270,8 @@ Object.assign(scopes, {
   "agents:write": "Link and unlink the current OAuth MCP connection to a registered Agent",
   "profiles:read": "Read public profile data",
   "profiles:write": "Create and update the user's public profile",
+  "knowledge:read": "Read owner-enabled knowledge with selected Agent consent",
+  "knowledge:write": "Capture and revise owner-enabled structured knowledge; never formal Human approval",
   "friends:read": "Read friends and pending requests",
   "friends:write": "Send, respond to, and remove friend connections",
   "parties:read": "Read the active party and public members",
@@ -478,6 +482,30 @@ for (const [tool, suffix] of [["set_quest_relay", ""], ["advance_quest_relay", "
   const definition = PRACTICAL_TOOLS.find(item => item.name === tool)!;
   openapi.paths[`/v1/quests/{questId}/relay${suffix}`] = { post: { summary: definition.description, parameters: [parameter("questId")], requestBody: body({ ...definition.inputSchema, required: definition.inputSchema.required?.filter(name => name !== "questId") }), responses: ok("Version-guarded relay change, separate from Quest completion") } };
 }
+const knowledgeErrors = { "400": { description: "Invalid structured input" }, "403": { description: "Missing scope, owner-only management, or Agent not shared" }, "404": { description: "Unavailable/deleted knowledge or project" }, "409": { description: "Revision conflict or reused request ID" }, "413": { description: "Actual request body exceeds 64000 bytes" }, "503": { description: "Feature disabled; no storage change" } };
+const knowledgePost = (operationId: string, summary: string, schema: OpenApiSchema): OpenApiOperation => ({ operationId, summary, requestBody: body(schema), responses: { ...ok("Verified result; never changes Quest approval/completion"), ...knowledgeErrors } });
+for (const [path, operationId, schema] of [["context", "getWorkContext", KNOWLEDGE_QUERY_SCHEMA], ["search", "searchKnowledge", KNOWLEDGE_QUERY_SCHEMA], ["capture", "captureKnowledge", KNOWLEDGE_CAPTURE_SCHEMA]] as const) {
+  openapi.paths[`/v1/knowledge/${path}`] = { post: knowledgePost(operationId, "Owner-scoped shared knowledge; OAuth requires knowledge scope and selected Agent consent", schema) };
+}
+openapi.paths["/v1/knowledge"] = { get: { operationId: "listKnowledge", summary: "Human-only bounded knowledge list/export pages, with explicit continuation", parameters: Object.entries(KNOWLEDGE_QUERY_SCHEMA.properties).map(([name, schema]) => ({ name, in: "query", schema })), responses: { ...ok("Knowledge page with scope, provenance, conflicts and continuation"), ...knowledgeErrors } } };
+const knowledgeSettingsSchema = { type: "object", additionalProperties: false, required: ["expectedRevision", "enabled", "agentIds"], properties: { expectedRevision: { type: "integer", minimum: 0 }, enabled: { type: "boolean" }, agentIds: { type: "array", maxItems: 20, items: { type: "string", maxLength: 80 } } } };
+openapi.paths["/v1/knowledge/settings"] = {
+  get: { operationId: "getKnowledgeSettings", summary: "Human-only read of sharing settings; disabled by default", responses: { ...ok("Sharing settings"), ...knowledgeErrors } },
+  put: knowledgePost("setKnowledgeSettings", "Human-only revision-guarded sharing of the owner's knowledge with selected Agents; does not grant scopes", knowledgeSettingsSchema),
+};
+openapi.paths["/v1/knowledge/projects"] = {
+  get: { operationId: "listKnowledgeProjects", summary: "Human-only native knowledge projects", responses: { ...ok("Projects"), ...knowledgeErrors } },
+  post: knowledgePost("createKnowledgeProject", "Human-only project identity, independent of Quest category and external-link projectId", { type: "object", required: ["name"], additionalProperties: false, properties: { name: { type: "string", minLength: 1, maxLength: 120 } } }),
+};
+openapi.paths["/v1/knowledge/quest-project"] = { put: knowledgePost("linkKnowledgeQuestProject", "Human-only verified Quest/project association", { type: "object", additionalProperties: false, required: ["questId", "projectId"], properties: { questId: { type: "string" }, projectId: { type: "string" } } }) };
+openapi.paths["/v1/knowledge/operations/{requestId}"] = { get: { operationId: "getKnowledgeOperation", summary: "Human-only readback of an uncertain capture/restore; deletion never returns old content", parameters: [parameter("requestId")], responses: { ...ok("Saved receipt or saved=false"), ...knowledgeErrors } } };
+const revisionInput = { expectedRevision: { type: "integer", minimum: 1 } };
+openapi.paths["/v1/knowledge/{knowledgeId}"] = { delete: { ...knowledgePost("deleteKnowledge", "Human-only permanent content/history deletion with content-free replay tombstone and pending derived-index cleanup", { type: "object", additionalProperties: false, required: ["expectedRevision"], properties: revisionInput }), parameters: [parameter("knowledgeId")] } };
+openapi.paths["/v1/knowledge/{knowledgeId}/history"] = { get: { operationId: "getKnowledgeHistory", summary: "Human-only bounded revision history", parameters: [parameter("knowledgeId"), { name: "cursor", in: "query", schema: { type: "integer", minimum: 0, maximum: 1000000 } }], responses: { ...ok("Revisions and nextCursor"), ...knowledgeErrors } } };
+for (const [action, properties, required] of [
+  ["restore", { ...revisionInput, restoreRevision: { type: "integer", minimum: 1 }, requestId: { type: "string", maxLength: 120 } }, ["expectedRevision", "restoreRevision", "requestId"]],
+  ["resolve", { ...revisionInput, expectedRightRevision: { type: "integer", minimum: 1 }, rightId: { type: "string" }, winnerId: { type: "string" } }, ["expectedRevision", "expectedRightRevision", "rightId", "winnerId"]],
+] as const) openapi.paths[`/v1/knowledge/{knowledgeId}/${action}`] = { post: { ...knowledgePost(`${action}Knowledge`, `Human-only ${action}; creates history and never attests Quest approval`, { type: "object", additionalProperties: false, required: [...required], properties }), parameters: [parameter("knowledgeId")] } };
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
 await writeFile(join(apiDirectory, "mcp-tools.json"), `${JSON.stringify({ serverName: "questforge-mcp", version: "2.7.0", tools: MCP_TOOLS }, null, 2)}\n`);

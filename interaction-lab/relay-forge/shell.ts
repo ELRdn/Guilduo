@@ -1,6 +1,7 @@
 import { humanInbox } from "./human-inbox.ts";
 import { createBillingUi } from "./screens/billing.ts";
 import { createAnalyticsUi } from "./screens/analytics.ts";
+import { knowledgeWorkspace } from "./screens/knowledge.ts";
 import { mountPullToRefresh } from "./pull-to-refresh.ts";
 import { QuestForgeApiError } from "../repository.ts";
 import { reportGuiTiming } from "./gui-timing.ts";
@@ -576,7 +577,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   let workDirty = () => false;
   const baseScreenWriteHeld = () => mutationBusy() || workspaceWriteHeld() || state.screens.battle.needsRefresh || Boolean(battleLoadError) || state.stale || (!production && writeHeldFor(state.variant));
   const screenWriteHeld = () => baseScreenWriteHeld() || workBusy();
-  const canRefreshWorkspace = () => !lifecycle.disposed && !workspaceRefreshing && !mutationBusy() && !workBusy() && !workDirty() && !deferredLoading && !createDialog.open && !agentDialog.open && !inputComposing && Object.keys(state.screens.settings.connectionDrafts).length === 0;
+  const canRefreshWorkspace = () => !lifecycle.disposed && !workspaceRefreshing && !mutationBusy() && !workBusy() && !workDirty() && !knowledgeUi.busy() && !knowledgeUi.dirty() && !deferredLoading && !createDialog.open && !agentDialog.open && !inputComposing && Object.keys(state.screens.settings.connectionDrafts).length === 0;
 
   async function refreshWorkspace(): Promise<void> {
     if (!runtime?.refreshWorkspace || !canRefreshWorkspace()) return;
@@ -1052,6 +1053,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     el("option", { value: "active" }, "Active"),
     el("option", { value: "disabled" }, "Disabled"));
   const agentScopeValues = [
+    "knowledge:read", "knowledge:write",
     "quests:read", "quests:write", "character:read", "rewards:write", "integrations:read",
     "integrations:sync", "events:read", "profiles:read", "friends:read", "friends:write",
     "parties:read", "parties:write", "battle:read", "battle:write", "agents:read",
@@ -2002,6 +2004,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     refreshWorkspace,
   });
   const analyticsUi = createAnalyticsUi({ port: runtime?.analyticsPort ?? null, render, alive: () => !lifecycle.disposed });
+  const knowledgeUi = knowledgeWorkspace({ port: runtime?.knowledgePort, agents: screenAgents, quests: screenQuests, refresh: () => render(true), held: baseScreenWriteHeld, alive: () => !lifecycle.disposed });
   const workUi = productivityWorkspace({
     port: runtime?.productivityPort, quests: screenQuests, held: baseScreenWriteHeld,
     refresh: () => render(true),
@@ -2037,6 +2040,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
     render();
     billingUi.enter();
     analyticsUi.enter();
+    knowledgeUi.enter();
   }
 
   function selectTheme(next: ThemePreference): void {
@@ -3088,6 +3092,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       const callbacks = {
         onCreate: openCreate,
         relatedNotes: workUi.relatedNotes,
+        relatedKnowledge: knowledgeUi.related,
         workTime: (id: string) => { const quest = screenQuests().find(q => q.id === id); return quest ? workUi.totals(quest) : "—"; },
         onEdit: (questId: string) => {
           const quest = sharedQuests.find((entry) => entry.id === questId);
@@ -3251,6 +3256,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
       const callbacks = {
         billingRegion: billingUi.render,
         analyticsRegion: analyticsUi.render,
+        knowledgeRegion: knowledgeUi.render,
         workRegion: workUi.settings,
         onThemeSelect: selectTheme,
         onAvatarFileSelected: (file: File) => { void saveProfileAvatar(file); },

@@ -36,6 +36,8 @@ type OAuthScopeCopy = { label: string; description: string };
 type OAuthScopePresentation = { en: OAuthScopeCopy; ja: OAuthScopeCopy };
 
 const OAUTH_SCOPE_PRESENTATION: Readonly<Record<string, OAuthScopePresentation>> = {
+  "knowledge:read": { en: { label: "Read Relay Memory", description: "Read owner-enabled shared decisions, constraints and provenance." }, ja: { label: "Relay Memoryの閲覧", description: "本人が共有した決定・制約・出典を読み取ります。" } },
+  "knowledge:write": { en: { label: "Write Relay Memory", description: "Save and revise structured shared knowledge with history. Does not grant Human approval." }, ja: { label: "Relay Memoryの保存", description: "要点を履歴付きで保存・更新します。人間の正式承認は行えません。" } },
   "quests:read": { en: { label: "Quest data", description: "Read your quests and progress." }, ja: { label: "Questの閲覧", description: "Questと進捗を読み取ります。" } },
   "quests:write": { en: { label: "Quest management", description: "Create, update, and progress quests." }, ja: { label: "Questの管理", description: "Questの作成・更新・進行を行います。" } },
   "character:read": { en: { label: "Character state", description: "Read character, MP, equipment, and boss state." }, ja: { label: "キャラクター情報", description: "キャラクター、MP、装備、ボス状態を読み取ります。" } },
@@ -148,7 +150,7 @@ function oauthBase(request: Request, env: WorkerEnv): string {
 }
 
 function allowedScopes(value: unknown): string[] | null {
-  if (value === null || value === undefined) return [...ALL_SCOPES];
+  if (value === null || value === undefined) return ALL_SCOPES.filter(scope => !scope.startsWith("knowledge:"));
   if (typeof value === "string" && value.length > MAX_SCOPE_LENGTH) return null;
   const requested = typeof value === "string" ? value.trim().split(/\s+/).filter(Boolean) : [];
   // An explicit scope is the snapshot for this authorization request. Never

@@ -60,6 +60,21 @@ export interface R2BucketLike {
 }
 
 export interface WorkerEnv {
+  KNOWLEDGE_ENABLED?: string;
+  KNOWLEDGE_OWNER_UID?: string;
+  /** All external knowledge operations stay disabled until a separately approved bounded campaign. */
+  KNOWLEDGE_EXTERNAL_APPROVED?: string;
+  KNOWLEDGE_EMBEDDING_MODEL?: string;
+  KNOWLEDGE_EMBEDDING_DIMENSIONS?: string;
+  KNOWLEDGE_BUDGET_ID?: string;
+  KNOWLEDGE_MAX_EMBEDDING_REQUESTS?: string;
+  KNOWLEDGE_AI?: { run(model: string, input: { text: string[] }): Promise<unknown> };
+  KNOWLEDGE_VECTOR?: {
+    upsert(vectors: { id: string; values: number[]; namespace: string; metadata: { knowledgeId: string; revision: number } }[]): Promise<unknown>;
+    deleteByIds(ids: string[]): Promise<unknown>;
+    query(vector: number[], options: { topK: number; namespace: string; returnMetadata: "all" }): Promise<{ matches: { id: string; metadata?: { knowledgeId?: string; revision?: number } }[] }>;
+  };
+  KNOWLEDGE_QUEUE?: { send(body: { uid: string; knowledgeId: string; revision: number }): Promise<unknown> };
   ANALYTICS_ENABLED?: string;
   ANALYTICS_CONFIG?: string;
   ANALYTICS_DATA_POLICY_APPROVED?: string;

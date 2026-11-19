@@ -234,6 +234,16 @@ local
 
 ## 6. MCP、Skill、Harnessの境界
 
+### Relay Memory（既定無効）
+
+- 共有知識の正本はD1の独立テーブル。QuestのAppwrite正本とPrivate NotesのWeb専用境界は維持する。保存対象は構造化した決定・理由・制約・発見・未解決事項と必要最小限の出典で、会話全文・推論ログ・Private Notesを自動取得しない。
+- `get_work_context` / `capture_knowledge` / `search_knowledge`をRESTと同じドメインへ接続する。知識専用OAuthスコープ、呼出ごとのAgent実効権限、本人の共有有効化とAgent選択をすべて必要とする。既存grantとAgent、新規Agentの既定権限へ知識権限を追加しない。
+- 全体／独立したプロジェクト／Questの適用範囲を保持する。プロジェクトは適用判断であり、初期版の共有ACLは本人の知識全体を対象とする。categoryや外部連携projectIdを転用しない。他ユーザー／Partyへ共有しない。
+- 追加・更新は冪等なrequestIdと版比較、履歴・出典・索引outboxを同一D1トランザクションに保存する。CASが0件の場合は副作用も0件。取り消しは新しい復元版、永久削除は本文・出典・履歴の削除と内容を持たない再送防止記録／非同期索引削除とする。自動期限切れは設けない。
+- 明示変更だけが更新でき、曖昧な矛盾は両方を保持して非確定として返す。本人による解決は両側の版を同時照合する。Agentの人間発言の報告、推測、認証された本人の知識操作を記録主体と情報種別で区別し、知識から正式承認・Handoff・Quest完了を変更しない。
+- Vectorizeは再構築できる派生索引。返却候補をD1の所有者・現行版・削除状態で再検査する。Queuesの重複／逆順配送、応答不明、削除後の遅延処理を許容する。キーワード検索は独立して利用でき、文脈の省略と取得継続先を返す。Quest保存と知識保存の成否を混同しない。
+- 外部サービスの実行は別途費用承認と固定モデル／索引形式の設定を必要とし、既定で無効。試行前に予約する永続的な埋め込み回数上限は金銭上限そのものではない。現在の追加課金承認は0円。実機受入と24ケースの期待結果確認が済むまで、3ホスト自動利用・LP公開を達成と扱わない。[検証・配備手順](docs/knowledge-acceptance.md)
+
 任意の公開ドメイン所有確認として、Workerは認証前の正確な `GET /.well-known/openai-apps-challenge` で `OPENAI_APPS_CHALLENGE_TOKEN` の値だけを `text/plain; charset=utf-8`・`Cache-Control: no-store` で返す。値を加工せず、未設定・空白のみ・制御文字を含む設定は公開404、GET以外は405とし、MCP/RESTの認証・契約は維持する。[公式提出仕様](https://developers.openai.com/plugins/deploy/submission#domain-verification-details)に従い運営者が発行値と指定hostを確認し、承認済み配備後にVerify Domainを実施する。本番は未設定で、ローカルテスト合格は所有確認・提出・公開の完了を意味しない。
 
 ### Shared MCP callers (2026-10-02)

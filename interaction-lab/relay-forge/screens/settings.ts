@@ -47,6 +47,7 @@ import {
 export * from "./settings-model.ts";
 
 export interface SettingsRenderCallbacks extends SettingsCallbacks {
+  readonly knowledgeRegion?: () => HTMLElement | null;
   readonly workRegion?: () => HTMLElement;
   readonly billingRegion?: () => HTMLElement;
   readonly analyticsRegion?: () => HTMLElement | null;
@@ -564,6 +565,7 @@ function settingsMain(
     accountRegion(model, state, context, callbacks),
     appearanceRegion(model, callbacks),
     callbacks.workRegion?.(),
+    callbacks.knowledgeRegion?.(),
     callbacks.billingRegion?.(),
     callbacks.analyticsRegion?.(),
     mcpRegion(model, state, context, callbacks),

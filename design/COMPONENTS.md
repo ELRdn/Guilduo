@@ -54,6 +54,8 @@ View selector reuses the existing keyboard segment control. Board cards and Gant
 
 ## 状態マトリクス
 
+Relay MemoryはRelay Forgeの既存region、label付きnative input/textarea/select、button、details/summaryを再利用する。出典は実アクセスと区別したテキストで示し、矛盾は文字と状態で表示する。履歴の復元と永久削除を分け、後者は確認を必須にする。通信失敗／保存結果不明では再読取を案内し、未確認の成功表示や別編集を進めない。本文はHTMLとして解釈せず、長い参照文字列は領域内で折り返す。
+
 すべての操作部品は次を持つ。
 
 ```text

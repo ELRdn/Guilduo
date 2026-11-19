@@ -205,7 +205,7 @@ test("authorize rejects explicit empty or repeated scopes and ambiguous binding 
   assert.equal([...f.records.keys()].some(key => key.startsWith("authorize:")), false);
   const omitted = await authorizePage(new Request(`${origin}/oauth/authorize?${new URLSearchParams(base)}`), f.env);
   assert.equal(omitted.status, 200);
-  assert.deepEqual(JSON.parse([...f.records].find(([key]) => key.startsWith("authorize:"))![1]).scopes, ALL_SCOPES);
+  assert.deepEqual(JSON.parse([...f.records].find(([key]) => key.startsWith("authorize:"))![1]).scopes, ALL_SCOPES.filter(scope => !scope.startsWith("knowledge:")));
 });
 
 test("token endpoint rejects repeated single-valued parameters without consuming a grant", async () => {

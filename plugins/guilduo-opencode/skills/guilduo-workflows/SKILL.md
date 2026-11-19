@@ -1,6 +1,6 @@
 ---
 name: guilduo-workflows
-description: Manage Guilduo (legacy QuestForge) Quests and Human/Agent relays through MCP, including planning, reviews, parties, integrations, rewards, and battles. Use when continuing an authorized existing Guilduo Quest, finishing a work phase, verifying results, encountering a blocker, or preparing the next action or Handoff. Proactively sync verified results, blockers, and nextAction at meaningful phase boundaries within standing permission, without waiting for another reminder.
+description: Manage Guilduo (legacy QuestForge) Quests, shared AI knowledge and Human/Agent relays through MCP. Use at the start of consultation or authorized work to retrieve shared decisions and constraints, when switching AI hosts, or at meaningful decisions, findings, blockers and Handoffs to capture structured knowledge within owner consent. Proactively sync verified Quest results, blockers and nextAction only within existing standing permission. Supports planning, reviews, parties, integrations, rewards and battles.
 ---
 
 # Guilduo Workflows
@@ -36,6 +36,10 @@ When the user has authorized ongoing MCP progress updates for an exact existing 
 Read [references/phase-sync.md](references/phase-sync.md) when continuing such work, reaching a phase boundary, or recovering an uncertain write. It defines identity checks, bounded patches, preservation, no-op detection, and conflict recovery. If the Quest or Agent is unknown, establish it before writing; never guess or relink a shared connection.
 
 Skill selection uses description matching or explicit invocation. Public Skill behavior is best effort: it does not force host invocation at every phase or session end. Local lifecycle hooks are a separate opt-in integration, not part of the public plugin ZIP.
+
+## Relay Memory
+
+When consulting on or continuing work, read [references/shared-knowledge.md](references/shared-knowledge.md). After one-time owner sharing consent and scope authorization, call `get_work_context` at the start without requiring a repeated "remember/search" instruction; capture structured decisions, constraints, findings and unresolved issues only at meaningful boundaries. Use `search_knowledge` for additional evidence. This applies to consultation before a Quest exists as well as work on an existing Quest. It never authorizes autonomous host launches, transcripts/Private Notes collection or Human approval.
 
 ## Start With Your Agent
 

@@ -264,6 +264,7 @@ function evidenceCell(row: QuestRow): HTMLElement {
 
 export interface QuestsCallbacks {
   readonly relatedNotes?: (questId: string) => HTMLElement;
+  readonly relatedKnowledge?: (questId: string) => HTMLElement | null;
   readonly workTime?: (questId: string) => string;
   /** Open the Quest editor focused on the assignee. Backed by `updateQuest`. */
   readonly onAssign?: (questId: string) => void;
@@ -356,6 +357,7 @@ function detailRail(
     row.proposal ? el("p", { class: "rf-q-detail-next" }, el("b", { class: "rf-inline-label" }, `${relayText("agentProposal")} `), `${row.proposal.label} · ${row.proposal.date} ${row.proposal.time} · ${row.proposal.minutes}′${row.proposal.note ? ` · ${row.proposal.note}` : ""}`) : null,
     el("p", {}, `${workText("time")}: ${callbacks.workTime?.(row.id) ?? row.actualMinutes} · ${relayText("minutesEstimate")}: ${row.estimatedMinutes}`),
     callbacks.relatedNotes?.(row.id) ?? null,
+    callbacks.relatedKnowledge?.(row.id) ?? null,
     row.nextAction === "" ? null : el("p", { class: "rf-q-detail-next" }, el("b", { class: "rf-inline-label" }, `${t("ui.nextAction")} `), row.nextAction),
     el("h4", { class: "rf-q-detail-label" }, relayText("handoff")),
     relayLine(context, row),

@@ -1,6 +1,9 @@
 import { timePhase, withRequestTiming } from "./request-timing.ts";
 import { PUBLIC_EVENT_NAMES, validPublicEvent } from "../../shared/public-measurement.ts";
 import { productivityRoute } from "./productivity.ts";
+import { KNOWLEDGE_TOOLS } from "../../shared/knowledge.ts";
+import { dispatchKnowledgeIndex, processKnowledgeIndex } from "./knowledge-index.ts";
+import { authorizeKnowledge, captureKnowledge, searchKnowledge, knowledgeDb, getKnowledgeSettings, setKnowledgeSettings, knowledgeHistory, restoreKnowledge, deleteKnowledge, resolveKnowledgeConflict, knowledgeOperation } from "./knowledge-store.ts";
 import {
   DomainError,
   archiveQuests,
@@ -387,6 +390,7 @@ const HANDOFF_OUTPUT = {
   additionalProperties: false,
 };
 const AGENT_SCOPES = [
+  "knowledge:read", "knowledge:write",
   "quests:read", "quests:write", "character:read", "rewards:write",
   "integrations:read", "integrations:sync", "events:read", "webhooks:manage", "plugins:manage", "profiles:read", "profiles:write",
   "friends:read", "friends:write", "parties:read", "parties:write",
@@ -476,6 +480,7 @@ const TOGGL_FOCUS_ENTRY_PROPERTIES = {
 };
 
 const MCP_TOOLS = [
+  ...KNOWLEDGE_TOOLS,
   { name: "request_human_review", title: "Ask a Human", description: "Create a separate human confirmation Quest for Agent-assigned work. Describe what to check externally and return as text. Preview first; execute with the source Quest expectedUpdatedAt. Reuse requestKey only for the same request. Never launches an Agent or completes original work.", inputSchema: { type: "object", required: ["questId", "requestKey", "title", "reason", "checkTarget", "completionCriteria"], properties: HUMAN_REVIEW_INPUT, additionalProperties: false }, outputSchema: HUMAN_REVIEW_OUTPUT, annotations: IDEMPOTENT_WRITE_ANNOTATIONS },
   { name: "list_human_requests", title: "Read Human Requests", description: "Read pending, deferred, or answered human confirmation Quests and their text feedback. Read answered requests before resuming Agent work. Never fabricate a human answer.", inputSchema: { type: "object", properties: { status: { type: "string", enum: ["pending", "deferred", "answered", "all"], default: "pending" }, sourceQuestId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 100, default: 50 }, cursor: { type: "string" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
   { name: "list_today_quests", title: "List Today's Quests", description: "List active scheduled Guilduo quests visible today, including overdue work.", inputSchema: { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false }, outputSchema: QUEST_LIST_PAGE_OUTPUT, annotations: READ_ANNOTATIONS },
@@ -1041,6 +1046,29 @@ async function routeBilling(request: Request, env: WorkerEnv, context: WorkerCon
   throw new DomainError(404, "not_found", "Route not found.");
 }
 
+async function knowledgeInput(request: Request): Promise<JsonRecord> {
+  let bytes: Uint8Array;
+  try { bytes = await readBoundedBody(request, 64000); }
+  catch (error) { if (errorStatus(error) === 413) throw new DomainError(413, "knowledge_body_too_large", "Knowledge request must be 64 KB or smaller."); throw error; }
+  try {
+    const input: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error();
+    return input as JsonRecord;
+  } catch { throw new DomainError(400, "invalid_json", "A JSON object is required."); }
+}
+
+async function workKnowledge(name: string, env: WorkerEnv, identity: WorkerIdentity, input: JsonRecord): Promise<unknown> {
+  await authorizeKnowledge(env, identity, name === "capture_knowledge");
+  let quest: Quest | undefined;
+  if (input.questId) {
+    assertScope(identity.scopes, "quests:read");
+    quest = getQuest(await stateFor(env, identity), String(input.questId)).quest;
+  }
+  if (name === "capture_knowledge") return captureKnowledge(env, identity, input);
+  const knowledge = await searchKnowledge(env, identity, input);
+  return name === "get_work_context" ? { ...knowledge, quest: quest ?? null, questStateChanged: false } : knowledge;
+}
+
 async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext, identity: WorkerIdentity, path: string): Promise<Response> {
   if (path === "/v1/quest-images/export" || path === "/v1/quest-images") {
     if (identity.authType === "oauth") throw new DomainError(403, "web_only", "Use the human's authenticated Web account for image export or account deletion.");
@@ -1075,6 +1103,67 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
   const relayMatch = path.match(/^\/v1\/quests\/([^/]+)\/relay(?:\/(advance))?$/);
   if (relayMatch && request.method === "POST") return json(await changeRelay(env, identity, context, decodeURIComponent(relayMatch[1]!), await billingInput(request), Boolean(relayMatch[2])));
   const method = request.method;
+  if (path === "/v1/knowledge" || path.startsWith("/v1/knowledge/")) {
+    // REST uses the same domain functions, with the existing Human-origin boundary for management.
+    if (identity.authType === "oauth" && (identity.agentConnection?.allowedAgentIds?.length ?? 0) > 1) throw new DomainError(403, "acting_agent_required", "Use MCP with actingAgentId for shared connections.");
+    const management = !["/v1/knowledge/context", "/v1/knowledge/search", "/v1/knowledge/capture"].includes(path);
+    if (management || identity.authType !== "oauth" && method !== "GET") assertAgentRegistryWebMutation(request, env, identity);
+    await authorizeKnowledge(env, identity, method !== "GET" && path !== "/v1/knowledge/search" && path !== "/v1/knowledge/context");
+    if (identity.authType === "oauth" && identity.agent && env.BILLING_ENABLED === "true") await assertAgentAccess(env, identity.uid, identity.agent.agentId);
+    const input = method === "GET" ? {} : await knowledgeInput(request);
+    const db = knowledgeDb(env);
+    let result: unknown;
+    if (path === "/v1/knowledge/settings" && method === "GET") result = await getKnowledgeSettings(env, identity.uid);
+    else if (path === "/v1/knowledge/settings" && method === "PUT") {
+      if (Array.isArray(input.agentIds)) for (const id of input.agentIds) { const agent = await getAgent(env, identity.uid, String(id)); if (agent.status !== "active") throw new DomainError(400, "agent_inactive", "Sharing requires active registered Agents."); }
+      result = await setKnowledgeSettings(env, identity.uid, input);
+    } else if (path.startsWith("/v1/knowledge/operations/") && method === "GET") result = await knowledgeOperation(env, identity.uid, path.slice("/v1/knowledge/operations/".length));
+    else if (path === "/v1/knowledge/projects" && method === "GET") {
+      const [projects, links] = await Promise.all([
+        db.prepare("SELECT id,name FROM knowledge_projects WHERE uid=? ORDER BY name").bind(identity.uid).all(),
+        db.prepare("SELECT quest_id AS questId,project_id AS projectId FROM knowledge_quest_projects WHERE uid=? ORDER BY quest_id").bind(identity.uid).all(),
+      ]);
+      result = { projects: projects.results ?? [], questProjects: links.results ?? [] };
+    }
+    else if (path === "/v1/knowledge/projects" && method === "POST") {
+      if (Object.keys(input).some(k => k !== "name") || typeof input.name !== "string" || !input.name.trim() || input.name.length > 120) throw new DomainError(400, "invalid_project", "A project name of 1–120 characters is required.");
+      await db.prepare("INSERT INTO knowledge_projects(uid,id,name) VALUES(?,?,?) ON CONFLICT(uid,name) DO NOTHING").bind(identity.uid, crypto.randomUUID(), input.name.trim()).run();
+      result = { project: await db.prepare("SELECT id,name FROM knowledge_projects WHERE uid=? AND name=?").bind(identity.uid, input.name.trim()).first() };
+    } else if (path === "/v1/knowledge/quest-project" && method === "PUT") {
+      if (Object.keys(input).some(k => !["questId", "projectId"].includes(k)) || typeof input.questId !== "string" || typeof input.projectId !== "string") throw new DomainError(400, "invalid_project", "Quest and project are required.");
+      assertScope(identity.scopes, "quests:read"); getQuest(await stateFor(env, identity), input.questId);
+      if (!await db.prepare("SELECT id FROM knowledge_projects WHERE uid=? AND id=?").bind(identity.uid, input.projectId).first()) throw new DomainError(404, "knowledge_project_not_found", "Project is unavailable.");
+      await db.prepare("INSERT INTO knowledge_quest_projects(uid,quest_id,project_id) VALUES(?,?,?) ON CONFLICT(uid,quest_id) DO UPDATE SET project_id=excluded.project_id").bind(identity.uid, input.questId, input.projectId).run();
+      result = { linked: true };
+    } else if (path === "/v1/knowledge" && method === "GET") {
+      const query: JsonRecord = Object.fromEntries(new URL(request.url).searchParams);
+      for (const key of ["limit", "cursor"]) if (query[key] !== undefined) query[key] = Number(query[key]);
+      if (query.includeSuperseded !== undefined) { if (!["true", "false"].includes(String(query.includeSuperseded))) throw new DomainError(400, "invalid_knowledge_query", "Invalid includeSuperseded flag."); query.includeSuperseded = query.includeSuperseded === "true"; }
+      result = await searchKnowledge(env, identity, query);
+    } else if (["/v1/knowledge/context", "/v1/knowledge/search", "/v1/knowledge/capture"].includes(path) && method === "POST") {
+      result = await workKnowledge(path.endsWith("capture") ? "capture_knowledge" : path.endsWith("context") ? "get_work_context" : "search_knowledge", env, identity, input);
+    } else {
+      const match = path.match(/^\/v1\/knowledge\/([a-zA-Z0-9-]{1,120})(?:\/(history|restore|resolve))?$/);
+      if (!match) throw new DomainError(404, "not_found", "Knowledge route is unavailable.");
+      const [, id, action] = match;
+      if (action === "history" && method === "GET") {
+        const cursor = Number(new URL(request.url).searchParams.get("cursor") ?? 0);
+        if (!Number.isSafeInteger(cursor) || cursor < 0 || cursor > 1000000) throw new DomainError(400, "invalid_cursor", "Invalid history cursor.");
+        result = await knowledgeHistory(env, identity.uid, id, cursor);
+      } else if (action === "restore" && method === "POST") {
+        if (Object.keys(input).some(k => !["requestId", "expectedRevision", "restoreRevision"].includes(k)) || typeof input.requestId !== "string" || !input.requestId || input.requestId.length > 120 || !Number.isSafeInteger(input.restoreRevision) || Number(input.restoreRevision) < 1) throw new DomainError(400, "invalid_knowledge_restore", "A stable requestId and valid restore revision are required.");
+        result = await restoreKnowledge(env, identity, id, input);
+      } else if (action === "resolve" && method === "POST") {
+        if (Object.keys(input).some(k => !["rightId", "expectedRevision", "expectedRightRevision", "winnerId"].includes(k)) || String(input.rightId ?? "").length > 120 || String(input.winnerId ?? "").length > 120) throw new DomainError(400, "invalid_knowledge_conflict", "Only the two current revisions and chosen knowledge ID are accepted.");
+        result = await resolveKnowledgeConflict(env, identity.uid, id, requiredString(input.rightId, "rightId"), input.expectedRevision, input.expectedRightRevision, requiredString(input.winnerId, "winnerId"));
+      } else if (!action && method === "DELETE") {
+        if (Object.keys(input).some(k => k !== "expectedRevision")) throw new DomainError(400, "invalid_knowledge_delete", "Only expectedRevision is accepted; no dryRun is supported.");
+        result = await deleteKnowledge(env, identity.uid, id, input.expectedRevision);
+      }
+      else throw new DomainError(404, "not_found", "Knowledge route is unavailable.");
+    }
+    return json(result, 200, { "cache-control": "no-store" });
+  }
   if (path === "/v1/productivity" || path.startsWith("/v1/productivity/")) {
     assertAgentRegistryWebMutation(request, env, identity);
     assertScope(identity.scopes, method === "GET" ? "quests:read" : "quests:write");
@@ -1120,6 +1209,7 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     if (identity.scopes.includes("quests:write")) context.waitUntil(prepareStateTransaction(env));
     return json({
       ...questPage,
+      ...(env.KNOWLEDGE_ENABLED === "true" && env.QUESTFORGE_DB && env.KNOWLEDGE_OWNER_UID === identity.uid ? { knowledgeAvailable: true } : {}),
       profile: panels[0].status === "fulfilled" ? panels[0].value : null,
       agents: panels[1].status === "fulfilled" ? panels[1].value : [],
       panelErrors: panels.flatMap((panel, index) => panel.status === "rejected"
@@ -1784,6 +1874,7 @@ async function callMcpTool(name: string, args: McpArgs, env: WorkerEnv, context:
   if (name === "read_quest_image") return questImageToolPayload(await readQuestImage(env, identity, await stateFor(env, identity), requiredString(args.imageId, "imageId"), args.variant === "original"));
   if (name === "remove_quest_image") return removeQuestImage(env, identity, await stateFor(env, identity), args);
   if (name === "set_quest_relay" || name === "advance_quest_relay") return changeRelay(env, identity, context, requiredString(args.questId, "questId"), args, name === "advance_quest_relay");
+  if (KNOWLEDGE_TOOLS.some(tool => tool.name === name)) return workKnowledge(name, env, identity, args);
   if (name === "list_registered_agents") {
     assertConnectionScope(identity, "agents:read");
     return { agents: await publicAgentsWithAccess(env, identity.uid, await listAgents(env, identity.uid)) };
@@ -2173,7 +2264,7 @@ export default {
     });
     const path = new URL(request.url).pathname;
     if (path.includes("/quest-images") || /\/quests\/[^/]+\/images$/.test(path)) response.headers.set("cache-control", "private, no-store");
-    if (path.startsWith("/api/v1/") || path.startsWith("/v1/billing") || path.startsWith("/v1/decisions") || path.includes("/analytics/")) response.headers.set("cache-control", "no-store");
+    if (path.startsWith("/api/v1/") || path.startsWith("/v1/knowledge") || path.startsWith("/v1/billing") || path.startsWith("/v1/decisions") || path.includes("/analytics/")) response.headers.set("cache-control", "no-store");
     return response;
   },
   async scheduled(controller: { cron?: string } | undefined, env: WorkerEnv, context: WorkerContext): Promise<void> {
@@ -2183,6 +2274,7 @@ export default {
         .catch(error => console.error("notifications_cron_failed", { message: error instanceof Error ? error.message : String(error) })));
       return;
     }
+    context.waitUntil(dispatchKnowledgeIndex(env));
     context.waitUntil(retryDeliveries(env));
     context.waitUntil(runScheduledIntegrations(env));
     context.waitUntil(purgeTelemetry(env));
@@ -2192,6 +2284,14 @@ export default {
     context.waitUntil(runBillingMaintenance(env).then(result => {
       if (result.failed.length) console.error("billing_maintenance_failed", { failed: result.failed, nextCursor: result.nextCursor });
     }));
+  },
+  async queue(batch: { messages: { body: unknown; ack(): void; retry(): void }[] }, env: WorkerEnv): Promise<void> {
+    for (const message of batch.messages) {
+      const body = asRecord(message.body);
+      if (typeof body.uid !== "string" || typeof body.knowledgeId !== "string" || body.uid.length > 240 || body.knowledgeId.length > 120) { message.ack(); continue; }
+      try { await processKnowledgeIndex(env, { uid: body.uid, knowledgeId: body.knowledgeId }); message.ack(); }
+      catch { console.error("knowledge_index_failed", { failed: 1 }); message.retry(); }
+    }
   },
 };
 

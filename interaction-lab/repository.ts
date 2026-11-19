@@ -47,6 +47,7 @@ type Snapshot = JsonRecord & {
   agentConnections: JsonRecord;
   mcpTools: unknown[];
   panelErrors: Array<{ index: number; message: string }>;
+  knowledgeAvailable?: boolean;
   loadDeferred?: () => Promise<Snapshot>;
 };
 
@@ -241,6 +242,9 @@ export class QuestForgeRepository {
       },
     };
   }
+  knowledge<T = JsonRecord>(path: string, input?: JsonRecord, method = input ? "POST" : "GET"): Promise<T> {
+    return this.request<T>(`/v1/knowledge${path}`, { method, ...(input ? { body: JSON.stringify(input) } : {}) });
+  }
   productivity<T = JsonRecord>(path: string, input?: JsonRecord, method = input ? "POST" : "GET"): Promise<T> {
     return this.request<T>(`/v1/productivity${path}`, { method, ...(input ? { body: JSON.stringify(input) } : {}) });
   }
@@ -323,7 +327,7 @@ export class QuestForgeRepository {
         if (error instanceof QuestForgeApiError && error.status === 404) return legacyLoad();
         throw error;
       }) : await legacyLoad();
-    const completePage = await this.listAllQuests(questPage);
+    const completePage = { ...await this.listAllQuests(questPage), knowledgeAvailable: questPage.knowledgeAvailable === true };
     const snapshot = this.snapshotFromEntries(completePage, optionalEntries);
     if (options.deferPanels) snapshot.loadDeferred = async () => {
       const entries = await Promise.allSettled(loaders.map((load, index) => index === 3 || index === 5
@@ -407,6 +411,7 @@ export class QuestForgeRepository {
       agents: arrayField(5, "agents"),
       agentConnections: value(6, { authorizedClients: [], connections: [] }),
       mcpTools: arrayField(7, "tools"),
+      ...(questPage.knowledgeAvailable === true ? { knowledgeAvailable: true } : {}),
       panelErrors,
     };
   }

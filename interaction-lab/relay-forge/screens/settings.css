@@ -20,6 +20,12 @@
  * document surface and needs its content height preserved. */
 .rf-set-screen > .rf-screen-region { min-height: max-content; }
 
+.rf-knowledge, .rf-knowledge-item { overflow-wrap: anywhere; }
+.rf-knowledge-field { display: grid; gap: var(--qf-space-2); }
+.rf-knowledge input:not([type="checkbox"]), .rf-knowledge textarea, .rf-knowledge select { max-width: 100%; min-width: 0; box-sizing: border-box; }
+.rf-knowledge-item { border-top: var(--qf-border-width) solid var(--qf-color-border-subtle); padding-block: var(--qf-space-3); }
+.rf-knowledge-item p, .rf-knowledge-item blockquote { white-space: pre-wrap; }
+
 /* ---------------- Account ---------------- */
 
 .rf-set-account {
