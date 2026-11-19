@@ -1,7 +1,7 @@
 {
   "name": "guilduo",
   "displayName": "Guilduo",
-  "version": "0.6.0-beta.2",
+  "version": "0.6.0-beta.3",
   "description": "Guilduo Quests and Human/Agent relays through the official OAuth MCP endpoint, with the guilduo-workflows Skill.",
   "author": {
     "name": "Guilduo",

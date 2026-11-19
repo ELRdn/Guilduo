@@ -1,5 +1,5 @@
 import { getLocale } from "../../../i18n.ts";
-import type { KnowledgeItem, KnowledgeSearch, KnowledgeSettings } from "../../../shared/knowledge.ts";
+import type { KnowledgeConnection, KnowledgeGrant, KnowledgeItem, KnowledgeSearch, KnowledgeSettings } from "../../../shared/knowledge.ts";
 import type { RelayForgeRuntime } from "../production.ts";
 import { el } from "../primitives/dom.ts";
 import { screenRegion } from "./runtime.ts";
@@ -8,10 +8,17 @@ const copy = {
   title: ["Relay Memory", "Relay Memory"], open: ["知識を読み込む", "Load knowledge"], reload: ["再読込", "Reload"],
   description: ["決定・理由・制約・出典を、許可したAIと共有します。会話全文とPrivate Notesは収集しません。", "Share decisions, reasons, constraints and sources with permitted AI Agents. Full chats and Private Notes are excluded."],
   enabled: ["選択したAgentと知識全体を共有する", "Share all knowledge with selected Agents"], save: ["保存", "Save"],
-  agents: ["共有するAgent（接続とAgentの両方に知識の権限が必要）", "Permitted Agents (both connection and Agent need knowledge permissions)"],
+  agents: ["共有する接続とAgent", "Connections and Agents to share with"],
+  missingScope: ["知識の権限が必要です。接続を再認可し、Agentの権限を確認してください。", "Authorize knowledge scopes on the connection and check the Agent permissions."],
+  noConnections: ["MCP接続をAgentに紐付けると共有先を選べます。", "Link an MCP connection to an Agent to select it here."],
   loading: ["読込中…", "Loading…"], failed: ["通信に失敗しました。保存状況を再読込で確認してください。", "Request failed. Reload to check what was saved."],
   unknown: ["保存結果が不明です。確認するまで再送や別の編集はできません。", "Save outcome is unknown. Reconcile before another edit."],
-  reconcile: ["保存状況を確認・同じ内容で再試行", "Reconcile and retry the same save"], saved: ["保存を確認しました。", "Saved and verified."],
+  reconcile: ["保存状況を確認・同じ内容で再試行", "Reconcile and retry the same save"],
+  stale: ["同時に変更されました。最新版と下書きを比較してください。", "This changed concurrently. Compare the current version with your draft."],
+  latest: ["最新版を確認", "Review current version"], rebase: ["最新版に対する編集として続ける", "Continue editing against this version"],
+  pageChanged: ["検索結果が変わりました。最初のページから検索してください。", "Results changed. Restart from the first page."],
+  truncated: ["意味検索の候補に上限があります。必要なら語句や範囲を変えて検索してください。", "Semantic candidates are limited. Narrow the scope or change the query if needed."],
+  saved: ["保存を確認しました。", "Saved and verified."],
   query: ["知識を検索", "Search knowledge"], search: ["検索", "Search"], empty: ["該当する知識はありません。", "No matching knowledge."],
   next: ["続きを表示", "Show more"], edit: ["編集", "Edit"], cancel: ["キャンセル", "Cancel"], history: ["履歴・取り消し", "History and undo"],
   restore: ["この版へ復元", "Restore this revision"], remove: ["永久削除", "Permanently delete"],
@@ -20,7 +27,9 @@ const copy = {
   scope: ["適用範囲", "Applicability"], global: ["全体共通", "Global"], project: ["プロジェクト", "Project"], quest: ["Quest", "Quest"],
   sources: ["出典（参照先の閲覧確認とは別）", "Sources (listing a reference does not verify access)"],
   conflict: ["矛盾あり・確定事項として使用しない", "Unresolved conflict — do not treat as authoritative"],
-  selectWinner: ["この内容を採用する", "Choose this version"], related: ["Relay Memory", "Relay Memory"],
+  selectWinner: ["この内容を採用する", "Choose this version"], compare: ["矛盾の内容を比較", "Compare conflicting versions"],
+  reviewRemaining: ["残った内容を確認して確定する", "Review and confirm the remaining decision"],
+  referenceOnly: ["別案件の参考情報（今回の判断には適用しない）", "Other work, for reference only"], related: ["Relay Memory", "Relay Memory"],
   projectName: ["新しいプロジェクト名", "New project name"], createProject: ["プロジェクト作成", "Create project"],
   link: ["Questと関連付ける", "Link Quest to project"], export: ["JSONをエクスポート", "Export JSON"],
   exportNote: ["全件の本文・出典・履歴を端末へ保存します。他人に渡す前に内容を確認してください。", "Download all content, sources and revisions to this device. Review before sharing."],
@@ -36,16 +45,17 @@ type Key = keyof typeof copy;
 export const knowledgeText = (key: Key) => copy[key][getLocale() === "ja" ? 0 : 1];
 type Input = Record<string, unknown>;
 type Project = { id: string; name: string };
-type Draft = { item: KnowledgeItem; title: string; content: string; reason: string; scope: string; projectId: string; questId: string };
+type Draft = { item: KnowledgeItem; stale?: boolean; latest?: KnowledgeItem; confirmReview?: boolean; title: string; content: string; reason: string; scope: string; projectId: string; questId: string };
 
 export function knowledgeWorkspace(options: {
   port: RelayForgeRuntime["knowledgePort"]; agents: () => readonly { agentId: string; displayName: string; status?: string }[];
   quests: () => readonly { id: string; title: string }[]; refresh: () => void; held: () => boolean; alive: () => boolean;
 }) {
   const w = knowledgeText;
-  let settings: KnowledgeSettings | null = null, projects: Project[] = [], page: KnowledgeSearch | null = null;
+  let settings: KnowledgeSettings | null = null, connections: KnowledgeConnection[] = [], projects: Project[] = [], page: KnowledgeSearch | null = null;
   let loading = false, busy = false, failed = false, disabled = false, status: Key | null = null, query = "", projectName = "", includeSuperseded = false;
   let draft: Draft | null = null, history: { id: string; revisions: KnowledgeItem[]; nextCursor: number | null } | null = null;
+  let comparison: { left: KnowledgeItem; right: KnowledgeItem } | null = null;
   let pending: { path: string; input: Input; method: string } | null = null;
   const related = new Map<string, { page?: KnowledgeSearch; loading?: boolean; failed?: boolean }>();
   const held = () => !options.port || options.held() || busy || loading || failed || pending !== null;
@@ -55,13 +65,19 @@ export function knowledgeWorkspace(options: {
     const node = el("button", { type: "button", class: "rf-secondary-button", disabled: locked }, w(label));
     node.addEventListener("click", action); return node;
   }
+  const statusOf = (error: unknown) => error && typeof error === "object" && "status" in error ? Number(error.status) : 0;
+  const codeOf = (error: unknown) => error && typeof error === "object" && "code" in error ? error.code : undefined;
+  function markConflict() {
+    status = "stale"; comparison = null;
+    if (draft) { draft.stale = true; draft.latest = undefined; }
+  }
   async function load() {
     if (!options.port || loading || busy || pending) return;
     loading = true; failed = false; refresh();
     try {
-      const result = await Promise.all([call<KnowledgeSettings>("/settings"), call<{ projects: Project[] }>("/projects"), call<KnowledgeSearch>("/search", { query, includeSuperseded })]);
+      const result = await Promise.all([call<KnowledgeSettings & { availableConnections: KnowledgeConnection[] }>("/settings"), call<{ projects: Project[] }>("/projects"), call<KnowledgeSearch>("/search", { query, includeSuperseded })]);
       if (!options.alive()) return;
-      [settings, { projects }, page] = result; disabled = false;
+      [settings, { projects }, page] = result; connections = result[0].availableConnections; disabled = false;
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "knowledge_disabled") disabled = true;
       else { failed = true; status = "failed"; }
@@ -71,10 +87,14 @@ export function knowledgeWorkspace(options: {
     if (held()) return;
     loading = true; refresh();
     try {
-      const result = await call<KnowledgeSearch>("/search", { query, includeSuperseded, ...(more ? { cursor: page?.nextCursor ?? 0 } : {}) });
+      const result = await call<KnowledgeSearch>("/search", { query, includeSuperseded, ...(more ? { cursor: page?.nextCursor ?? 0, pageVersion: page?.pageVersion } : {}) });
       if (!options.alive()) return;
       page = more && page ? { ...result, items: [...page.items, ...result.items] } : result;
-    } catch { failed = true; status = "failed"; }
+      if (status === "pageChanged") status = null;
+    } catch (error) {
+      if (codeOf(error) === "knowledge_page_changed") { status = "pageChanged"; page = null; }
+      else { failed = true; status = "failed"; }
+    }
     finally { loading = false; refresh(); }
   }
   async function write(path: string, input: Input, method = "POST") {
@@ -83,23 +103,34 @@ export function knowledgeWorkspace(options: {
     try {
       await call(path, input, method);
       if (!options.alive()) return;
-      status = "saved"; draft = null; history = null; related.clear();
+      status = "saved"; draft = null; history = null; comparison = null; related.clear();
     } catch (error) {
-      const httpStatus = error && typeof error === "object" && "status" in error ? Number(error.status) : 0;
+      const httpStatus = statusOf(error);
       // Retry only the original idempotent capture/restore; other uncertain writes require a readback.
       if ((!httpStatus || httpStatus >= 500) && input.requestId) pending = { path, input, method };
-      failed = true; status = pending ? "unknown" : "failed";
+      if (httpStatus === 409) markConflict();
+      else { failed = true; status = pending ? "unknown" : "failed"; }
     } finally { busy = false; if (!failed) await load(); refresh(); }
   }
   async function reconcile() {
     if (!pending || busy) return;
-    const original = pending; busy = true; refresh();
+    const original = pending; let resubmitting = false; busy = true; refresh();
     try {
       const result = await call<{ saved: boolean }>(`/operations/${encodeURIComponent(String(original.input.requestId))}`);
-      if (!result.saved) await call(original.path, original.input, original.method);
+      if (!result.saved) {
+        resubmitting = true;
+        await call(original.path, original.input, original.method);
+      }
       if (!options.alive()) return;
-      pending = null; failed = false; status = "saved"; draft = null; history = null; related.clear();
-    } catch { status = "unknown"; }
+      pending = null; failed = false; status = "saved"; draft = null; history = null; comparison = null; related.clear();
+    } catch (error) {
+      const httpStatus = statusOf(error);
+      if (resubmitting && httpStatus >= 400 && httpStatus < 500) {
+        pending = null; failed = false;
+        if (httpStatus === 409 || httpStatus === 404) markConflict();
+        else status = "failed";
+      } else status = "unknown";
+    }
     finally { busy = false; if (!pending) await load(); refresh(); }
   }
   async function showHistory(item: KnowledgeItem, more = false) {
@@ -111,19 +142,27 @@ export function knowledgeWorkspace(options: {
     finally { loading = false; refresh(); }
   }
   function itemView(item: KnowledgeItem, controls = true): HTMLElement {
-    const attribution = item.actor === "human" ? w("human") : options.agents().find(a => `agent:${a.agentId}` === item.actor)?.displayName ?? item.actor;
-    const epistemic = item.epistemic === "human_statement" ? w(item.actor === "human" ? "humanStatement" : "reportedStatement") : w(item.epistemic === "inference" ? "inference" : item.epistemic === "system_verified" ? "verified" : "observation");
+    const sourceActor = item.sourceActor ?? item.actor;
+    const attribution = sourceActor === "human" ? w("human") : options.agents().find(a => `agent:${a.agentId}` === sourceActor)?.displayName ?? sourceActor;
+    const epistemic = item.epistemic === "human_statement" ? w(sourceActor === "human" ? "humanStatement" : "reportedStatement") : w(item.epistemic === "inference" ? "inference" : item.epistemic === "system_verified" ? "verified" : "observation");
     const node = el("article", { class: "rf-knowledge-item" }, el("h4", {}, item.title), el("p", {}, item.content),
       el("p", {}, `${w(item.status === "superseded" ? "superseded" : "active")} · ${w(item.scope)} · ${projects.find(p => p.id === item.projectId)?.name ?? options.quests().find(q => q.id === item.questId)?.title ?? ""} · v${item.revision} · ${attribution} · ${epistemic}`), el("p", {}, item.reason));
     const sources = el("details", {}, el("summary", {}, w("sources")));
     for (const source of item.sources) sources.append(el("p", {}, `${source.reference} · ${source.version} · ${w(source.availability === "unavailable" ? "unavailableSource" : source.availability === "verified" ? "verified" : "reported")}`), el("blockquote", {}, source.excerpt));
     node.append(sources);
-    if (item.conflicts.length) {
+    if (item.applicability === "reference" && !controls) node.append(el("p", {}, w("referenceOnly")));
+    if (item.conflicts.length || item.reviewRequired) {
       node.append(el("p", { role: "status" }, w("conflict")));
-      if (controls) for (const peer of item.conflicts) node.append(button("selectWinner", () => { void resolve(item, peer); }));
+      if (controls) for (const peer of item.conflicts) node.append(button("compare", () => { void compare(item.id, peer); }));
     }
     if (controls) {
-      node.append(button("edit", () => { draft = { item, title: item.title, content: item.content, reason: "", scope: item.scope, projectId: item.projectId ?? "", questId: item.questId ?? "" }; refresh(); }),
+      const startEdit = (confirmReview = false) => {
+        draft = { item, title: item.title, content: item.content, reason: "", scope: item.scope,
+          projectId: item.projectId ?? "", questId: item.questId ?? "", confirmReview };
+        refresh();
+      };
+      if (item.reviewRequired && !item.conflicts.length && item.status === "active") node.append(button("reviewRemaining", () => startEdit(true)));
+      node.append(button("edit", () => startEdit()),
         button("history", () => { void showHistory(item); }), button("remove", () => { if (window.confirm(w("confirmDelete"))) void write(`/${item.id}`, { expectedRevision: item.revision }, "DELETE"); }));
       if (history?.id === item.id) {
         for (const revision of history.revisions) node.append(el("details", {}, el("summary", {}, `v${revision.revision} · ${revision.updatedAt} · ${revision.actor}`), el("p", {}, revision.content),
@@ -133,13 +172,21 @@ export function knowledgeWorkspace(options: {
     }
     return node;
   }
-  async function resolve(item: KnowledgeItem, peerId: string) {
+  async function compare(leftId: string, rightId: string) {
     if (held()) return; loading = true; refresh();
     try {
-      const other = (await call<KnowledgeSearch>("/search", { knowledgeId: peerId })).items[0];
-      loading = false;
-      await write(`/${item.id}/resolve`, { rightId: other.id, expectedRevision: item.revision, expectedRightRevision: other.revision, winnerId: item.id });
+      const [left, right] = (await Promise.all([leftId, rightId].map(knowledgeId => call<KnowledgeSearch>("/search", { knowledgeId })))).map(result => result.items[0]);
+      if (!left || !right) throw new Error("Missing conflict decision");
+      if (options.alive()) comparison = { left, right };
     } catch { failed = true; status = "failed"; }
+    finally { loading = false; refresh(); }
+  }
+  async function reviewDraft(active: Draft) {
+    if (held()) return; loading = true; refresh();
+    try {
+      const result = await call<KnowledgeSearch>("/search", { knowledgeId: active.item.id });
+      if (options.alive() && draft === active) active.latest = result.items[0];
+    } catch { status = "failed"; }
     finally { loading = false; refresh(); }
   }
   function field(label: Key, value: string, update: (value: string) => void, multiline = false, required = true): HTMLElement {
@@ -162,11 +209,26 @@ export function knowledgeWorkspace(options: {
       selection("scope", active.scope, ["global", "project", "quest"].map(id => ({ id, name: w(id as Key) })), v => { active.scope = v; refresh(); }),
       active.scope === "project" ? selection("project", active.projectId, projects, v => { active.projectId = v; }) : null,
       active.scope === "quest" ? selection("quest", active.questId, options.quests().map(q => ({ id: q.id, name: q.title })), v => { active.questId = v; }) : null,
-      el("button", { type: "submit", class: "rf-primary-button", disabled: held() }, w("save")), button("cancel", () => { draft = null; refresh(); }, busy || pending !== null));
+      el("button", { type: "submit", class: "rf-primary-button", disabled: held() || active.stale }, w(active.confirmReview ? "reviewRemaining" : "save")), button("cancel", () => { draft = null; refresh(); }, busy || pending !== null));
+    if (active.stale) {
+      form.prepend(el("p", { role: "status" }, w("stale")),
+        active.latest ? itemView(active.latest, false) : button("latest", () => { void reviewDraft(active); }));
+      if (active.latest) form.append(button("rebase", () => {
+        active.item = active.latest!;
+        active.stale = false;
+        active.latest = undefined;
+        active.confirmReview = active.confirmReview && active.item.reviewRequired;
+        status = null;
+        refresh();
+      }));
+    }
     form.addEventListener("submit", event => {
       event.preventDefault();
+      if (active.stale) return;
       void write("/capture", { requestId: crypto.randomUUID(), knowledgeId: active.item.id, expectedRevision: active.item.revision, title: active.title, content: active.content, reason: active.reason,
-        kind: active.item.kind, epistemic: "human_statement", sources: active.item.sources, change: "explicit", scope: active.scope,
+        kind: active.item.kind, epistemic: active.title.trim() === active.item.title && active.content.trim() === active.item.content && active.item.epistemic !== "system_verified"
+          ? active.item.epistemic : "human_statement", sources: active.item.sources,
+        change: "explicit", scope: active.scope, ...(active.confirmReview ? { confirmReview: true } : {}),
         ...(active.scope === "project" ? { projectId: active.projectId } : active.scope === "quest" ? { questId: active.questId } : {}) });
     });
     return form;
@@ -175,15 +237,15 @@ export function knowledgeWorkspace(options: {
     if (held()) return; busy = true; refresh();
     try {
       const projectMetadata = await call<{ projects: Project[]; questProjects: { questId: string; projectId: string }[] }>("/projects");
-      const items: { knowledge: KnowledgeItem; revisions: KnowledgeItem[] }[] = []; let cursor: number | null = 0;
+      const items: { knowledge: KnowledgeItem; revisions: KnowledgeItem[] }[] = []; let cursor: number | null = 0; let pageVersion = "";
       do {
-        const result: KnowledgeSearch = await call<KnowledgeSearch>(`?cursor=${cursor}&limit=50&includeSuperseded=true`);
+        const result: KnowledgeSearch = await call<KnowledgeSearch>(`?cursor=${cursor}&limit=50&includeSuperseded=true${pageVersion ? "&pageVersion=" + pageVersion : ""}`);
         for (const item of result.items) {
           let next: number | null = 0; const revisions: KnowledgeItem[] = [];
           do { const part: { revisions: KnowledgeItem[]; nextCursor: number | null } = await call(`/${item.id}/history?cursor=${next}`); revisions.push(...part.revisions); next = part.nextCursor; } while (next !== null);
           items.push({ knowledge: item, revisions });
         }
-        cursor = result.nextCursor;
+        cursor = result.nextCursor; pageVersion = result.pageVersion ?? "";
       } while (cursor !== null);
       if (!options.alive()) return;
       const url = URL.createObjectURL(new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), settings, ...projectMetadata, items }, null, 2)], { type: "application/json" }));
@@ -199,13 +261,22 @@ export function knowledgeWorkspace(options: {
     region.append(button(settings ? "reload" : "open", () => { void load(); }, loading || busy || pending !== null));
     if (!settings || disabled) return region;
     const enabled = el("input", { type: "checkbox", checked: settings.enabled, disabled: held() });
-    const checks = new Map<string, HTMLInputElement>();
+    const choices: { grant: KnowledgeGrant; check: HTMLInputElement }[] = [];
     const chooser = el("fieldset", {}, el("legend", {}, w("agents")));
-    for (const agent of options.agents().filter(a => a.status !== "archived")) {
-      const check = el("input", { type: "checkbox", value: agent.agentId, checked: settings.agentIds.includes(agent.agentId), disabled: held() || agent.status === "disabled" });
-      checks.set(agent.agentId, check); chooser.append(el("label", { class: "rf-billing-check" }, check, agent.displayName));
+    if (!connections.length) chooser.append(el("p", {}, w("noConnections")));
+    for (const { agentId, clientId, clientName, scopes } of connections) {
+      const selected = settings.grants.some(grant => grant.clientId === clientId && grant.agentId === agentId);
+      const check = el("input", { type: "checkbox", checked: selected, disabled: held() || (!selected && !scopes.length) });
+      const name = options.agents().find(agent => agent.agentId === agentId)?.displayName ?? agentId;
+      choices.push({ grant: { clientId, agentId }, check });
+      chooser.append(el("label", { class: "rf-billing-check" }, check, name + " · " + clientName),
+        el("p", {}, scopes.length ? scopes.join(" · ") : w("missingScope")));
     }
-    region.append(el("label", { class: "rf-billing-check" }, enabled, w("enabled")), chooser, button("save", () => { void write("/settings", { expectedRevision: settings!.revision, enabled: enabled.checked, agentIds: [...checks].filter(([, c]) => c.checked).map(([id]) => id) }, "PUT"); }));
+    region.append(el("label", { class: "rf-billing-check" }, enabled, w("enabled")), chooser, button("save", () => {
+      const grants = enabled.checked ? choices.filter(({ check }) => check.checked).map(({ grant }) => grant) : [];
+      const agentIds = [...new Set(grants.map(grant => grant.agentId))];
+      void write("/settings", { expectedRevision: settings!.revision, enabled: enabled.checked, agentIds, grants }, "PUT");
+    }));
     region.append(field("projectName", projectName, v => { projectName = v; }), button("createProject", () => { void write("/projects", { name: projectName }); }));
     const inactive = el("input", { type: "checkbox", checked: includeSuperseded, disabled: held() });
     inactive.addEventListener("change", () => { includeSuperseded = inactive.checked; void search(); });
@@ -214,7 +285,21 @@ export function knowledgeWorkspace(options: {
     searchForm.addEventListener("submit", e => { e.preventDefault(); void search(); }); region.append(searchForm);
     const edit = editor(); if (edit) region.append(edit);
     if (!page?.items.length) region.append(el("p", {}, w("empty")));
+    if (page?.semanticTruncated) region.append(el("p", { role: "status" }, w("truncated")));
     if (page?.semantic === "unavailable") region.append(el("p", { role: "status" }, w("approximate")));
+    if (comparison) {
+      const { left, right } = comparison;
+      const panel = el("section", {}, el("h3", {}, w("compare")),
+        button("cancel", () => { comparison = null; refresh(); }));
+      for (const candidate of [left, right]) {
+        panel.append(itemView(candidate, false), button("selectWinner", () => {
+          void write("/" + left.id + "/resolve", {
+            rightId: right.id, expectedRevision: left.revision, expectedRightRevision: right.revision, winnerId: candidate.id,
+          });
+        }, held() || candidate.status !== "active"));
+      }
+      region.append(panel);
+    }
     for (const item of page?.items ?? []) region.append(itemView(item));
     if (page?.nextCursor !== null && page?.nextCursor !== undefined) region.append(button("next", () => { void search(true); }));
     region.append(el("p", {}, w("exportNote")), button("export", () => { void exportAll(); }));
@@ -240,7 +325,7 @@ export function knowledgeWorkspace(options: {
     const previous = related.get(questId)?.page;
     related.set(questId, { page: previous, loading: true }); refresh();
     try {
-      const [page, projectList] = await Promise.all([call<KnowledgeSearch>("/context", { questId, limit: 5, ...(more ? { cursor: previous?.nextCursor ?? 0 } : {}) }), call<{ projects: Project[] }>("/projects")]);
+      const [page, projectList] = await Promise.all([call<KnowledgeSearch>("/context", { questId, limit: 5, ...(more ? { cursor: previous?.nextCursor ?? 0, pageVersion: previous?.pageVersion } : {}) }), call<{ projects: Project[] }>("/projects")]);
       if (options.alive()) { projects = projectList.projects; related.set(questId, { page: more && previous ? { ...page, items: [...previous.items, ...page.items] } : page }); }
     }
     catch { related.set(questId, { failed: true }); }

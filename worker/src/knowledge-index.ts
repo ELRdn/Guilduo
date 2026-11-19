@@ -5,7 +5,7 @@ import type { WorkerEnv } from "./worker-types.ts";
 type Job = { uid: string; knowledge_id: string; revision: number; action: string };
 const MODELS = new Set(["@cf/baai/bge-m3", "@cf/pfnet/plamo-embedding-1b"]);
 export function externalKnowledgeEnabled(env: WorkerEnv): boolean {
-  return env.KNOWLEDGE_ENABLED === "true" && env.KNOWLEDGE_EXTERNAL_APPROVED === "true" && Boolean(env.KNOWLEDGE_VECTOR && env.KNOWLEDGE_AI && env.QUESTFORGE_DB
+  return env.KNOWLEDGE_ENABLED === "true" && env.KNOWLEDGE_EXTERNAL_APPROVED === "true" && Boolean(env.KNOWLEDGE_OWNER_UID?.trim() && env.KNOWLEDGE_VECTOR && env.KNOWLEDGE_AI && env.QUESTFORGE_DB
     && env.KNOWLEDGE_BUDGET_ID && MODELS.has(env.KNOWLEDGE_EMBEDDING_MODEL ?? "") && Number.isSafeInteger(Number(env.KNOWLEDGE_MAX_EMBEDDING_REQUESTS))
     && Number(env.KNOWLEDGE_MAX_EMBEDDING_REQUESTS) > 0 && Number.isSafeInteger(Number(env.KNOWLEDGE_EMBEDDING_DIMENSIONS)) && Number(env.KNOWLEDGE_EMBEDDING_DIMENSIONS) > 0);
 }
@@ -25,6 +25,7 @@ async function embedding(env: WorkerEnv, text: string): Promise<number[]> {
   return values as number[];
 }
 export async function semanticKnowledgeCandidates(env: WorkerEnv, uid: string, query: string): Promise<{ id: string; revision: number }[]> {
+  if (uid !== env.KNOWLEDGE_OWNER_UID) return [];
   const vector = await embedding(env, query);
   // Keep candidate revision checks and ordering within D1's SQL parameter budget.
   const result = await env.KNOWLEDGE_VECTOR!.query(vector, { topK: 20, namespace: await sha256(uid), returnMetadata: "all" });
@@ -32,37 +33,78 @@ export async function semanticKnowledgeCandidates(env: WorkerEnv, uid: string, q
     ? [{ id: match.metadata.knowledgeId, revision: Number(match.metadata.revision) }] : []);
 }
 export async function processKnowledgeIndex(env: WorkerEnv, hint: { uid: string; knowledgeId: string }): Promise<void> {
-  if (!externalKnowledgeEnabled(env)) return;
-  if (env.KNOWLEDGE_OWNER_UID && hint.uid !== env.KNOWLEDGE_OWNER_UID) return;
-  const db = env.QUESTFORGE_DB!;
-  const job = await db.prepare("SELECT * FROM knowledge_index_jobs WHERE uid=? AND knowledge_id=?").bind(hint.uid, hint.knowledgeId).first<Job>();
-  if (!job) return;
-  const current = await db.prepare("SELECT revision,status,title,content FROM knowledge_items WHERE uid=? AND id=?").bind(job.uid, job.knowledge_id).first<{ revision: number; status: string; title: string; content: string }>();
-  if (!current || current.revision !== job.revision) return;
-  const entries = await db.prepare("SELECT vector_id,revision FROM knowledge_index_entries WHERE uid=? AND knowledge_id=?").bind(job.uid, job.knowledge_id).all<{ vector_id: string; revision: number }>();
-  const obsolete = (entries.results ?? []).filter(e => e.revision !== current.revision || current.status !== "active").map(e => e.vector_id);
-  if (obsolete.length) {
-    for (let offset = 0; offset < obsolete.length; offset += 100) await env.KNOWLEDGE_VECTOR!.deleteByIds(obsolete.slice(offset, offset + 100));
-    // Keep content-free entry IDs for retry/reconciliation of asynchronous or late provider mutations.
+  if (!externalKnowledgeEnabled(env) || hint.uid !== env.KNOWLEDGE_OWNER_UID) return;
+  const db = env.QUESTFORGE_DB!, vector = env.KNOWLEDGE_VECTOR!;
+  const uid = hint.uid, id = hint.knowledgeId, token = crypto.randomUUID(), now = Date.now();
+  const lease = await db.prepare(`INSERT INTO knowledge_index_leases VALUES(?,?,?,?)
+    ON CONFLICT(uid,knowledge_id) DO UPDATE SET token=excluded.token,expires_at=excluded.expires_at WHERE knowledge_index_leases.expires_at<=?`)
+    .bind(uid, id, token, now + 120000, now).run();
+  if (!lease.meta?.changes) return;
+  try {
+    const current = await db.prepare(`SELECT i.revision,i.status,i.title,i.content,j.action
+      FROM knowledge_items i LEFT JOIN knowledge_index_jobs j ON j.uid=i.uid AND j.knowledge_id=i.id AND j.revision=i.revision
+      WHERE i.uid=? AND i.id=?`).bind(uid, id).first<{ revision: number; status: string; title: string; content: string; action: string | null }>();
+    if (!current) return;
+    const entries = await db.prepare(`SELECT vector_id FROM knowledge_index_entries
+      WHERE uid=? AND knowledge_id=? AND (revision!=? OR ?!='active')`)
+      .bind(uid, id, current.revision, current.status).all<{ vector_id: string }>();
+    const obsolete = (entries.results ?? []).map(entry => entry.vector_id);
+    for (let offset = 0; offset < obsolete.length; offset += 100) {
+      const ids = obsolete.slice(offset, offset + 100);
+      await vector.deleteByIds(ids);
+      if ((await vector.getByIds(ids)).length) {
+        throw new DomainError(503, "knowledge_index_cleanup_pending", "Derived deletion has not been observed.");
+      }
+    }
+    if (obsolete.length) {
+      // Keep IDs for periodic reconciliation with asynchronous or late provider mutations.
+      await db.prepare(`UPDATE knowledge_index_entries SET checked_at=? WHERE uid=? AND knowledge_id=? AND (revision!=? OR ?!='active')`)
+        .bind(now, uid, id, current.revision, current.status).run();
+    }
+    if (current.status === "active" && current.action === "upsert") {
+      const values = await embedding(env, `${current.title}\n${current.content}`);
+      const vectorId = await sha256(JSON.stringify([uid, id, current.revision]));
+      const namespace = await sha256(uid);
+      // Record intent before contacting the external index and guard against jobs superseded during embedding.
+      const registered = await db.prepare(`INSERT INTO knowledge_index_entries(uid,knowledge_id,revision,vector_id,checked_at)
+        SELECT ?,?,?,?,0 WHERE EXISTS(SELECT 1 FROM knowledge_items WHERE uid=? AND id=? AND revision=? AND status='active')
+          AND EXISTS(SELECT 1 FROM knowledge_index_leases WHERE uid=? AND knowledge_id=? AND token=? AND expires_at>?)
+        ON CONFLICT(uid,knowledge_id,revision) DO UPDATE SET checked_at=0`)
+        .bind(uid, id, current.revision, vectorId, uid, id, current.revision, uid, id, token, Date.now()).run();
+      if (!registered.meta?.changes) return;
+      await vector.upsert([{ id: vectorId, values, namespace, metadata: { knowledgeId: id, revision: current.revision } }]);
+      const after = await db.prepare("SELECT revision,status FROM knowledge_items WHERE uid=? AND id=?")
+        .bind(uid, id).first<{ revision: number; status: string }>();
+      if (after?.revision !== current.revision || after.status !== "active") {
+        await vector.deleteByIds([vectorId]);
+        return;
+      }
+    }
+    await db.prepare(`DELETE FROM knowledge_index_jobs WHERE uid=? AND knowledge_id=? AND revision=?
+      AND EXISTS(SELECT 1 FROM knowledge_index_leases WHERE uid=? AND knowledge_id=? AND token=?)`)
+      .bind(uid, id, current.revision, uid, id, token).run();
+  } finally {
+    await db.prepare("DELETE FROM knowledge_index_leases WHERE uid=? AND knowledge_id=? AND token=?").bind(uid, id, token).run();
   }
-  if (current.status === "active" && job.action === "upsert") {
-    const values = await embedding(env, `${current.title}\n${current.content}`);
-    const vectorId = await sha256(JSON.stringify([job.uid, job.knowledge_id, job.revision]));
-    await db.prepare("INSERT INTO knowledge_index_entries VALUES(?,?,?,?) ON CONFLICT(uid,knowledge_id,revision) DO NOTHING").bind(job.uid, job.knowledge_id, job.revision, vectorId).run();
-    await env.KNOWLEDGE_VECTOR!.upsert([{ id: vectorId, values, namespace: await sha256(job.uid), metadata: { knowledgeId: job.knowledge_id, revision: job.revision } }]);
-    const after = await db.prepare("SELECT revision,status FROM knowledge_items WHERE uid=? AND id=?").bind(job.uid, job.knowledge_id).first<{ revision: number; status: string }>();
-    if (after?.revision !== job.revision || after.status !== "active") await env.KNOWLEDGE_VECTOR!.deleteByIds([vectorId]);
-  }
-  await db.prepare("DELETE FROM knowledge_index_jobs WHERE uid=? AND knowledge_id=? AND revision=?").bind(job.uid, job.knowledge_id, job.revision).run();
 }
 export async function dispatchKnowledgeIndex(env: WorkerEnv): Promise<void> {
   if (!externalKnowledgeEnabled(env) || !env.KNOWLEDGE_QUEUE) return;
-  const jobs = await env.QUESTFORGE_DB!.prepare("SELECT * FROM knowledge_index_jobs WHERE (?='' OR uid=?) ORDER BY attempts,revision LIMIT 20").bind(env.KNOWLEDGE_OWNER_UID ?? "", env.KNOWLEDGE_OWNER_UID ?? "").all<Job>();
+  const now = Date.now();
+  const db = env.QUESTFORGE_DB!;
+  const jobs = await db.prepare(`SELECT j.uid,j.knowledge_id,j.revision,j.attempts FROM knowledge_index_jobs j
+    WHERE j.uid=? AND NOT EXISTS(SELECT 1 FROM knowledge_index_leases l WHERE l.uid=j.uid AND l.knowledge_id=j.knowledge_id AND l.expires_at>?)
+    ORDER BY j.attempts,j.revision LIMIT 20`).bind(env.KNOWLEDGE_OWNER_UID, now).all<Job>();
+  const cleanup = await db.prepare(`SELECT e.uid,e.knowledge_id,i.revision FROM knowledge_index_entries e JOIN knowledge_items i ON i.uid=e.uid AND i.id=e.knowledge_id
+    WHERE e.uid=? AND (e.revision!=i.revision OR i.status!='active') AND e.checked_at<=?
+      AND NOT EXISTS(SELECT 1 FROM knowledge_index_jobs j WHERE j.uid=e.uid AND j.knowledge_id=e.knowledge_id)
+      AND NOT EXISTS(SELECT 1 FROM knowledge_index_leases l WHERE l.uid=e.uid AND l.knowledge_id=e.knowledge_id AND l.expires_at>?)
+    GROUP BY e.uid,e.knowledge_id,i.revision ORDER BY min(e.checked_at) LIMIT 5`)
+    .bind(env.KNOWLEDGE_OWNER_UID, now - 86400000, now).all<Job>();
   let failures = 0;
-  for (const job of jobs.results ?? []) {
+  for (const job of [...jobs.results ?? [], ...cleanup.results ?? []]) {
     try {
       await env.KNOWLEDGE_QUEUE.send({ uid: job.uid, knowledgeId: job.knowledge_id, revision: job.revision });
-      await env.QUESTFORGE_DB!.prepare("UPDATE knowledge_index_jobs SET attempts=attempts+1 WHERE uid=? AND knowledge_id=? AND revision=?").bind(job.uid, job.knowledge_id, job.revision).run();
+      await db.prepare("UPDATE knowledge_index_jobs SET attempts=attempts+1 WHERE uid=? AND knowledge_id=? AND revision=?").bind(job.uid, job.knowledge_id, job.revision).run();
     } catch { failures++; }
   }
   if (failures) console.error("knowledge_queue_dispatch_failed", { failures });

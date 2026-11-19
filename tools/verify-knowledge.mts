@@ -4,8 +4,9 @@ import { chromium, type Page } from "playwright-core";
 import { createServer } from "vite";
 import { startRelayWorkerFixture } from "../tests/browser/worker-fixture.ts";
 import { SqliteD1Database } from "../tests/test-helpers.ts";
-import { createAgent } from "../worker/src/agent-store.ts";
-import { captureKnowledge } from "../worker/src/knowledge-store.ts";
+import { getOAuthRecordStore } from "../worker/src/oauth-record-store.ts";
+import { createAgent, linkAgentConnection } from "../worker/src/agent-store.ts";
+import { captureKnowledge, readKnowledge } from "../worker/src/knowledge-store.ts";
 
 const devServer = process.argv[2] ? null : await createServer({ server: { host: "127.0.0.1", port: 0, open: false, hmr: false, watch: null }, logLevel: "error" });
 await devServer?.listen();
@@ -15,6 +16,10 @@ const output = ".qa-artifacts/knowledge"; await mkdir(output, { recursive: true 
 const fixture = await startRelayWorkerFixture(new URL(base).origin);
 fixture.env.QUESTFORGE_DB = new SqliteD1Database(); fixture.env.KNOWLEDGE_ENABLED = "true"; fixture.env.KNOWLEDGE_OWNER_UID = fixture.uid;
 await createAgent(fixture.env, fixture.uid, { agentId: "review-agent", displayName: "My Review Agent", allowedScopes: ["quests:read", "knowledge:read", "knowledge:write"] });
+const clientId = "relay-memory-browser-client", scopes = ["quests:read", "knowledge:read", "knowledge:write"];
+const grant = { uid: fixture.uid, email: "browser@example.test", clientId, clientName: "Local Relay Memory", scopes, firstConnectedAt: new Date().toISOString(), lastUsedAt: "", revokedAt: "" };
+await getOAuthRecordStore(fixture.env).put(`user-client:${fixture.uid}:${clientId}`, JSON.stringify(grant));
+await linkAgentConnection(fixture.env, fixture.uid, "review-agent", { clientId, clientName: grant.clientName, scopes });
 const original = (await captureKnowledge(fixture.env, { uid: fixture.uid, email: "", authType: "dev", scopes: ["knowledge:write"] }, {
   requestId: "browser-seed", title: "UI/APIの合意", content: "saveDraft API を使い、保存中は二重送信を防ぐ。", kind: "constraint", scope: "global", epistemic: "human_statement", reason: "Human chose this behavior",
   sources: [{ reference: "fixture:requirements#1", version: "1", excerpt: "saveDraft", availability: "reported" }],
@@ -36,7 +41,7 @@ try {
     await knowledge.getByRole("heading", { name: "Relay Memory", exact: true }).waitFor();
     await knowledge.getByRole("heading", { name: original.title }).waitFor();
     await knowledge.getByRole("checkbox", { name: "選択したAgentと知識全体を共有する" }).check();
-    await knowledge.getByRole("checkbox", { name: "My Review Agent" }).check();
+    await knowledge.getByRole("checkbox", { name: "My Review Agent · Local Relay Memory" }).check();
     await knowledge.getByRole("button", { name: "保存", exact: true }).click();
     await knowledge.getByText("保存を確認しました。", { exact: true }).waitFor();
     const item = knowledge.locator("article").filter({ has: page.getByRole("heading", { name: original.title }) });
@@ -59,6 +64,29 @@ try {
     assert.equal(await page.evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
     await page.screenshot({ path: `${output}/knowledge-${width}.png`, fullPage: true, timeout: 10000, animations: "disabled" });
     results.push(`${width}: real local REST save, readback, history, undo, keyboard and no horizontal overflow`);
+    if (width === 1440) {
+      await item.getByRole("button", { name: "編集", exact: true }).click();
+      const draftText = "残してほしいローカル下書き";
+      await knowledge.getByLabel("内容", { exact: true }).fill(draftText);
+      await knowledge.getByLabel("変更理由", { exact: true }).fill("Keep the local draft");
+      await page.route("**/v1/knowledge/capture", route => route.abort("connectionreset"), { times: 1 });
+      await knowledge.locator("form").filter({ has: page.getByLabel("変更理由", { exact: true }) }).getByRole("button", { name: "保存", exact: true }).click();
+      const reconcile = knowledge.getByRole("button", { name: "保存状況を確認・同じ内容で再試行", exact: true });
+      await reconcile.waitFor();
+      const identity = { uid: fixture.uid, email: "", authType: "dev" as const, scopes: ["knowledge:read", "knowledge:write"] };
+      const current = await readKnowledge(fixture.env, fixture.uid, original.id);
+      await captureKnowledge(fixture.env, identity, {
+        requestId: "concurrent-browser-fixture", knowledgeId: current.id, expectedRevision: current.revision,
+        title: current.title, content: "別のセッションで保存した版", reason: "Separate owner session",
+        kind: current.kind, scope: current.scope, epistemic: current.epistemic, sources: current.sources, change: "explicit",
+      });
+      await reconcile.click();
+      await knowledge.getByRole("button", { name: "最新版を確認", exact: true }).click();
+      await knowledge.getByRole("button", { name: "最新版に対する編集として続ける", exact: true }).click();
+      assert.equal(await knowledge.getByLabel("内容", { exact: true }).inputValue(), draftText);
+      await knowledge.getByRole("button", { name: "キャンセル", exact: true }).click();
+      results.push("1440: outcome reconciliation handles confirmed conflicts without losing the draft");
+    }
     await page.close();
   }
   assert.deepEqual(errors, []);

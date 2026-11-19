@@ -3,21 +3,23 @@ import assert from "node:assert/strict";
 import { SqliteD1Database, hasErrorCode } from "./test-helpers.ts";
 import { captureKnowledge, searchKnowledge, getKnowledgeSettings, setKnowledgeSettings, knowledgeHistory, restoreKnowledge, deleteKnowledge, readKnowledge, resolveKnowledgeConflict } from "../worker/src/knowledge-store.ts";
 import type { WorkerEnv } from "../worker/src/worker-types.ts";
-import type { AuthIdentity } from "../worker/src/security.ts";
+import { sha256, type AuthIdentity } from "../worker/src/security.ts";
+import { getOAuthRecordStore } from "../worker/src/oauth-record-store.ts";
 import worker, { MCP_TOOLS, callMcpTool } from "../worker/src/index.ts";
 import { readState, writeState } from "../worker/src/appwrite-store.ts";
 import { migrateState } from "../server/questforge-domain.ts";
+import { createAgent, linkAgentConnection, unlinkAgentConnection, relinkAgentConnection } from "../worker/src/agent-store.ts";
 import type { QuestForgeState } from "../types/questforge.ts";
 
 const human: AuthIdentity = { uid: "owner", email: "", authType: "dev", scopes: ["knowledge:read", "knowledge:write"] };
-function setup() { const db = new SqliteD1Database(); const env: WorkerEnv = { QUESTFORGE_DB: db, KNOWLEDGE_ENABLED: "true" }; return { db, env }; }
+function setup() { const db = new SqliteD1Database(); const env: WorkerEnv = { QUESTFORGE_DB: db, KNOWLEDGE_ENABLED: "true", KNOWLEDGE_OWNER_UID: human.uid }; return { db, env }; }
 const input = (extra: Record<string, unknown> = {}) => ({ requestId: crypto.randomUUID(), title: "保存 API", content: "API名は saveDraft。日本語の短語 検索 も対象。", kind: "constraint", scope: "global", epistemic: "human_statement", reason: "User selected this API", sources: [{ reference: "conversation:example#message-2", version: "2", excerpt: "saveDraft を使う", availability: "reported" }], ...extra });
 const conflict = (error: unknown) => hasErrorCode(error, "knowledge_conflict");
 
 test("knowledge is feature-gated; sharing settings use CAS without granting old Agents or OAuth tokens scopes", async () => {
   const { env } = setup();
   await assert.rejects(captureKnowledge({}, human, input()), e => hasErrorCode(e, "knowledge_disabled"));
-  assert.deepEqual(await getKnowledgeSettings(env, human.uid), { revision: 0, enabled: false, agentIds: [] });
+  assert.deepEqual(await getKnowledgeSettings(env, human.uid), { revision: 0, enabled: false, agentIds: [], grants: [] });
   assert.equal((await setKnowledgeSettings(env, human.uid, { expectedRevision: 0, enabled: true, agentIds: ["claude"] })).revision, 1);
   await assert.rejects(setKnowledgeSettings(env, human.uid, { expectedRevision: 0, enabled: false, agentIds: [] }), conflict);
   assert.equal((await setKnowledgeSettings(env, human.uid, { expectedRevision: 1, enabled: false, agentIds: [] })).revision, 2);
@@ -39,7 +41,9 @@ test("workspace advertises Relay Memory only to the selected owner while enabled
     assert.equal(response.status, 200);
     return await response.json() as { knowledgeAvailable?: boolean };
   }
+  delete env.KNOWLEDGE_OWNER_UID;
   assert.equal((await bootstrap()).knowledgeAvailable, undefined);
+  await assert.rejects(searchKnowledge(env, human, {}), error => hasErrorCode(error, "knowledge_disabled"));
   env.KNOWLEDGE_OWNER_UID = human.uid;
   assert.equal((await bootstrap()).knowledgeAvailable, true);
   env.DEV_USER_ID = "other-owner";
@@ -85,15 +89,22 @@ test("Agent sharing checks selected Agent, feature consent and effective scope; 
   const { env } = setup();
   const agent = { ...human, authType: "oauth" as const, clientId: "client", agent: { agentId: "claude", status: "active" }, agentConnection: { revokedAt: null } };
   await assert.rejects(captureKnowledge(env, agent, input()), e => hasErrorCode(e, "knowledge_not_shared"));
-  await setKnowledgeSettings(env, human.uid, { expectedRevision: 0, enabled: true, agentIds: ["claude"] });
+  await createAgent(env, human.uid, { agentId: "claude", displayName: "Claude", allowedScopes: human.scopes });
+  await linkAgentConnection(env, human.uid, "claude", { clientId: "client", clientName: "Claude Code", scopes: human.scopes });
+  await setKnowledgeSettings(env, human.uid, { expectedRevision: 0, enabled: true, agentIds: ["claude"], grants: [{ clientId: "client", agentId: "claude" }] });
   const item = (await captureKnowledge(env, agent, input({ sources: [{ reference: "claim", version: "1", excerpt: "approved", availability: "verified" }] }))).knowledge;
   assert.equal(item.actor, "agent:claude"); assert.equal(item.sources[0].availability, "reported");
   await assert.rejects(captureKnowledge(env, agent, input({ epistemic: "system_verified" })), e => hasErrorCode(e, "knowledge_attestation_required"));
   await assert.rejects(searchKnowledge(env, { ...agent, scopes: [] }, {}));
   await assert.rejects(searchKnowledge(env, { ...agent, agent: { agentId: "codex", status: "active" } }, {}));
   await assert.rejects(searchKnowledge(env, { ...agent, agentConnection: { revokedAt: "now" } }, {}));
-  assert.deepEqual((await searchKnowledge(env, { ...human, uid: "other" }, {})).items, []);
+  await assert.rejects(searchKnowledge(env, { ...human, uid: "other" }, {}), error => hasErrorCode(error, "knowledge_owner_beta_only"));
   await assert.rejects(readKnowledge(env, "other", item.id), e => hasErrorCode(e, "knowledge_not_found"));
+  await unlinkAgentConnection(env, human.uid, "client");
+  await relinkAgentConnection(env, human.uid, "claude", { clientId: "client", clientName: "Claude Code", scopes: human.scopes });
+  await assert.rejects(searchKnowledge(env, agent, {}), error => hasErrorCode(error, "knowledge_not_shared"));
+  const stopped = await setKnowledgeSettings(env, human.uid, { expectedRevision: 1, enabled: false, agentIds: ["claude"] });
+  assert.deepEqual(stopped.grants, []);
 });
 test("ambiguous conflicts preserve both and suppress authority until Human resolution", async () => {
   const { env } = setup(), left = (await captureKnowledge(env, human, input())).knowledge;
@@ -113,7 +124,7 @@ test("literal Japanese/API/error search, pagination, project applicability and p
   assert.equal((await searchKnowledge(env, human, { query: "検索" })).items.length, 1);
   const page = await searchKnowledge(env, human, { projectId: "project-a", limit: 1 });
   assert.equal(page.items[0].id, scoped.id); assert.equal(page.nextCursor, 1); assert.equal(page.omitted, true); assert.match(page.trust, /untrusted/);
-  assert.equal((await searchKnowledge(env, human, { projectId: "project-a", cursor: 1, limit: 1 })).items.length, 1);
+  assert.equal((await searchKnowledge(env, human, { projectId: "project-a", cursor: 1, limit: 1, pageVersion: page.pageVersion })).items.length, 1);
   await assert.rejects(captureKnowledge(env, human, input({ scope: "project", projectId: "missing" })), e => hasErrorCode(e, "knowledge_project_not_found"));
 });
 test("REST management remains Human-only, bounded and no-store; MCP adds three tools without changing Quest state", async () => {
@@ -151,4 +162,83 @@ test("deduplication preserves different decision reasons and project-linked Ques
   const scoped = (await captureKnowledge(env, human, input({ scope: "quest", questId: "source-quest" }))).knowledge;
   const context = await searchKnowledge(env, human, { questId: "next-quest" });
   assert.equal(context.items[0].id, scoped.id); assert.equal(context.projectId, "native-project");
+});
+
+test("removing a conflicting alternative preserves the review requirement", async () => {
+  const { env } = setup();
+  const left = (await captureKnowledge(env, human, input())).knowledge;
+  const right = (await captureKnowledge(env, human, input({ conflictWith: left.id, expectedRevision: 1, content: "Alternate choice" }))).knowledge;
+  await deleteKnowledge(env, human.uid, right.id, 1);
+  const remaining = await readKnowledge(env, human.uid, left.id);
+  assert.equal(remaining.authoritative, false);
+  assert.equal(remaining.reviewRequired, true);
+  const confirmed = await captureKnowledge(env, human, input({
+    knowledgeId: left.id, expectedRevision: 1, confirmReview: true, change: "explicit",
+  }));
+  assert.equal(confirmed.knowledge.authoritative, true);
+});
+
+test("work context separates applicability and detects changes across pages", async () => {
+  const { env, db } = setup();
+  await db.prepare("INSERT INTO knowledge_projects VALUES(?,?,?)").bind(human.uid, "other-project", "Other").run();
+  const other = (await captureKnowledge(env, human, input({ scope: "project", projectId: "other-project", title: "Other work" }))).knowledge;
+  await captureKnowledge(env, human, input());
+  await captureKnowledge(env, human, input({ title: "Second constraint" }));
+  const first = await searchKnowledge(env, human, { questId: "quest-a", limit: 1 }, true);
+  assert.equal(first.items[0].applicability, "global");
+  assert.equal(first.nextCursor, 1);
+  const references = await searchKnowledge(env, human, { questId: "quest-a", query: "Other work" });
+  assert.equal(references.items[0].id, other.id);
+  assert.equal(references.items[0].applicability, "reference");
+  await captureKnowledge(env, human, input({ title: "New overlay" }));
+  await assert.rejects(searchKnowledge(env, human, { questId: "quest-a", limit: 1, cursor: 1, pageVersion: first.pageVersion }, true),
+    error => hasErrorCode(error, "knowledge_page_changed"));
+});
+
+test("approved write-only OAuth connection receives a receipt and can be stopped by the owner", async () => {
+  const { env } = setup();
+  const scopes = ["knowledge:write"], clientId = "local-capture", token = "local-test-write-only";
+  const grant = { uid: human.uid, email: "", clientId, clientName: "Local capture", scopes, firstConnectedAt: new Date().toISOString(), lastUsedAt: "", revokedAt: "" };
+  const store = getOAuthRecordStore(env);
+  await store.put("user-client:" + human.uid + ":" + clientId, JSON.stringify(grant));
+  await store.put("access:" + await sha256(token), JSON.stringify({ ...grant, expiresAt: Date.now() + 60000 }));
+  await createAgent(env, human.uid, { agentId: "capture-only", displayName: "Capture", allowedScopes: scopes });
+  await linkAgentConnection(env, human.uid, "capture-only", { clientId, clientName: grant.clientName, scopes });
+  await setKnowledgeSettings(env, human.uid, { expectedRevision: 0, enabled: true, agentIds: ["capture-only"], grants: [{ clientId, agentId: "capture-only" }] });
+  const context = { waitUntil(promise: Promise<unknown>) { void promise.catch(() => {}); } };
+  const data = input();
+  function call(name: string, args: Record<string, unknown>) {
+    return worker.fetch(new Request("http://localhost/mcp", {
+      method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    }), env, context);
+  }
+  const response = await (await call("capture_knowledge", data)).json() as {
+    result: { structuredContent: { knowledgeId: string; savedRevision: number; knowledge?: unknown } };
+  };
+  assert.equal(response.result.structuredContent.savedRevision, 1);
+  assert.equal(response.result.structuredContent.knowledge, undefined);
+  assert.equal((await readKnowledge(env, human.uid, response.result.structuredContent.knowledgeId)).sourceActor, "agent:capture-only");
+  const search = await (await call("get_work_context", {})).json() as { result: { isError?: boolean } };
+  assert.equal(search.result.isError, true);
+  await setKnowledgeSettings(env, human.uid, { expectedRevision: 1, enabled: false, agentIds: [] });
+  const stopped = await (await call("capture_knowledge", input())).json() as { result: { isError?: boolean } };
+  assert.equal(stopped.result.isError, true);
+});
+
+test("conflict resolution preserves the reporter and keeps retired alternatives retired", async () => {
+  const { env } = setup();
+  const oauth = { ...human, authType: "oauth" as const, clientId: "reports", agent: { agentId: "reporter", status: "active" }, agentConnection: { revokedAt: null } };
+  await createAgent(env, human.uid, { agentId: "reporter", displayName: "Reporter", allowedScopes: human.scopes });
+  await linkAgentConnection(env, human.uid, "reporter", { clientId: "reports", clientName: "Fixture", scopes: human.scopes });
+  await setKnowledgeSettings(env, human.uid, { expectedRevision: 0, enabled: true, agentIds: ["reporter"], grants: [{ clientId: "reports", agentId: "reporter" }] });
+  const first = (await captureKnowledge(env, oauth, input())).knowledge;
+  const second = (await captureKnowledge(env, human, input({ conflictWith: first.id, expectedRevision: 1, content: "Second decision" }))).knowledge;
+  const third = (await captureKnowledge(env, human, input({ conflictWith: first.id, expectedRevision: 1, content: "Third decision" }))).knowledge;
+  await resolveKnowledgeConflict(env, human.uid, first.id, second.id, 1, 1, second.id);
+  const retired = await readKnowledge(env, human.uid, first.id);
+  assert.equal(retired.actor, "human");
+  assert.equal(retired.sourceActor, "agent:reporter");
+  await assert.rejects(resolveKnowledgeConflict(env, human.uid, first.id, third.id, retired.revision, 1, first.id),
+    error => hasErrorCode(error, "knowledge_superseded"));
 });

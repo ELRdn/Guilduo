@@ -1064,8 +1064,14 @@ async function workKnowledge(name: string, env: WorkerEnv, identity: WorkerIdent
     assertScope(identity.scopes, "quests:read");
     quest = getQuest(await stateFor(env, identity), String(input.questId)).quest;
   }
-  if (name === "capture_knowledge") return captureKnowledge(env, identity, input);
-  const knowledge = await searchKnowledge(env, identity, input);
+  if (name === "capture_knowledge") {
+    const result = await captureKnowledge(env, identity, input);
+    if (!identity.scopes.includes("knowledge:read")) {
+      return { knowledgeId: result.knowledge.id, replayed: result.replayed, savedRevision: result.savedRevision };
+    }
+    return result;
+  }
+  const knowledge = await searchKnowledge(env, identity, input, name === "get_work_context");
   return name === "get_work_context" ? { ...knowledge, quest: quest ?? null, questStateChanged: false } : knowledge;
 }
 
@@ -1113,9 +1119,32 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const input = method === "GET" ? {} : await knowledgeInput(request);
     const db = knowledgeDb(env);
     let result: unknown;
-    if (path === "/v1/knowledge/settings" && method === "GET") result = await getKnowledgeSettings(env, identity.uid);
+    if (path === "/v1/knowledge/settings" && method === "GET") {
+      const [settings, clients, connections, agents] = await Promise.all([
+        getKnowledgeSettings(env, identity.uid), listAuthorizedClients(env, identity.uid),
+        listAllAgentConnections(env, identity.uid), listAgents(env, identity.uid),
+      ]);
+      const availableConnections = connections.filter(connection => !connection.revokedAt).flatMap(connection => {
+        const client = clients.find(candidate => candidate.clientId === connection.clientId && !candidate.revokedAt);
+        if (!client || !Array.isArray(client.scopes)) return [];
+        const scopes = client.scopes as string[];
+        return (connection.allowedAgentIds ?? [connection.agentId]).flatMap(agentId => {
+          const agent = agents.find(candidate => candidate.agentId === agentId && candidate.status === "active");
+          if (!agent) return [];
+          return [{ agentId, clientId: connection.clientId, clientName: connection.clientName,
+            scopes: agent.allowedScopes.filter(scope => scope.startsWith("knowledge:") && scopes.includes(scope)) }];
+        });
+      });
+      result = { ...settings, availableConnections };
+    }
     else if (path === "/v1/knowledge/settings" && method === "PUT") {
-      if (Array.isArray(input.agentIds)) for (const id of input.agentIds) { const agent = await getAgent(env, identity.uid, String(id)); if (agent.status !== "active") throw new DomainError(400, "agent_inactive", "Sharing requires active registered Agents."); }
+      if (input.enabled === true && Array.isArray(input.agentIds)) for (const id of input.agentIds) { const agent = await getAgent(env, identity.uid, String(id)); if (agent.status !== "active") throw new DomainError(400, "agent_inactive", "Sharing requires active registered Agents."); }
+      if (input.enabled === true && Array.isArray(input.grants)) for (const value of input.grants) {
+        const clientId = asRecord(value).clientId;
+        if (typeof clientId !== "string" || !await getAuthorizedClient(env, identity.uid, clientId)) {
+          throw new DomainError(409, "knowledge_connection_changed", "Select an authorized connection.");
+        }
+      }
       result = await setKnowledgeSettings(env, identity.uid, input);
     } else if (path.startsWith("/v1/knowledge/operations/") && method === "GET") result = await knowledgeOperation(env, identity.uid, path.slice("/v1/knowledge/operations/".length));
     else if (path === "/v1/knowledge/projects" && method === "GET") {
