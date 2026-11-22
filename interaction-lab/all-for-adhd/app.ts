@@ -203,7 +203,7 @@ export function mountAllFor(root: HTMLElement, port: AllForPort): () => void {
   // Relay Forge's own calendar, notes, time and plan modules, so nothing is lost by switching.
   const runtime = port.runtime;
   const workUi = productivityWorkspace({
-    port: runtime?.productivityPort, quests: port.quests, held: () => busy,
+    port: runtime?.productivityPort, knowledgePort: runtime?.knowledgePort, quests: port.quests, held: () => busy,
     refresh: () => render(),
     navigate: (screen, id) => {
       if (screen === "calendar") { planMode = "month"; go("plan"); return; }

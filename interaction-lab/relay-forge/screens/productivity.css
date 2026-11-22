@@ -10,6 +10,9 @@
 .rf-work-note-editor textarea { min-height: 280px; resize: vertical; }
 .rf-work-status { font-size: var(--qf-text-sm); overflow-wrap: anywhere; }
 .rf-work-dialog { width: min(720px,calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: var(--qf-space-5); color: var(--qf-color-fg-default); background: var(--qf-color-surface); border: 1px solid var(--qf-color-border-default); border-radius: var(--qf-radius-md); }
+.rf-work-note-share { display: grid; gap: var(--qf-space-3); overflow-wrap: anywhere; }
+.rf-work-note-share textarea,.rf-work-note-share blockquote { white-space: pre-wrap; }
+.rf-work-note-share .rf-work-field[hidden] { display: none; }
 .rf-work-dialog::backdrop { background: var(--qf-color-scrim); }
 .rf-work-dialog .rf-work-toolbar { margin-top: var(--qf-space-4); }
 .rf-work-calendar { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 1px; background: var(--qf-color-border-subtle); border: 1px solid var(--qf-color-border-subtle); }

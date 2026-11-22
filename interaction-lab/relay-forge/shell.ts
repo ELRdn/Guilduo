@@ -2006,7 +2006,7 @@ export function mountRelayForge(root: HTMLElement, runtime: RelayForgeRuntime | 
   const analyticsUi = createAnalyticsUi({ port: runtime?.analyticsPort ?? null, render, alive: () => !lifecycle.disposed });
   const knowledgeUi = knowledgeWorkspace({ port: runtime?.knowledgePort, agents: screenAgents, quests: screenQuests, refresh: () => render(true), held: baseScreenWriteHeld, alive: () => !lifecycle.disposed });
   const workUi = productivityWorkspace({
-    port: runtime?.productivityPort, quests: screenQuests, held: baseScreenWriteHeld,
+    port: runtime?.productivityPort, knowledgePort: runtime?.knowledgePort, quests: screenQuests, held: baseScreenWriteHeld,
     refresh: () => render(true),
     schedule: (id, date, time, minutes) => {
       const quest = screenQuests().find(q => q.id === id);

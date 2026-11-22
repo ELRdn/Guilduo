@@ -1,12 +1,12 @@
 import { DomainError, assertScope } from "../../server/questforge-domain.ts";
-import { KNOWLEDGE_CAPTURE_SCHEMA, KNOWLEDGE_QUERY_SCHEMA, type KnowledgeItem, type KnowledgeGrant, type KnowledgeSettings, type KnowledgeSource, type KnowledgeSearch } from "../../shared/knowledge.ts";
+import { KNOWLEDGE_CAPTURE_SCHEMA, KNOWLEDGE_QUERY_SCHEMA, NOTE_SHARE_PUBLISH_SCHEMA, NOTE_SHARE_REVOKE_SCHEMA, SHARED_NOTE_SOURCE, type NoteShareState, type KnowledgeItem, type KnowledgeGrant, type KnowledgeSettings, type KnowledgeSource, type KnowledgeSearch } from "../../shared/knowledge.ts";
 import { validateMcpToolInput } from "./mcp-transport.ts";
 import { sha256, type AuthIdentity } from "./security.ts";
 import type { D1DatabaseLike, D1StatementLike, JsonRecord, WorkerEnv } from "./worker-types.ts";
 import { externalKnowledgeEnabled, semanticKnowledgeCandidates } from "./knowledge-index.ts";
 
 export type KnowledgeIdentity = AuthIdentity & { agent?: { agentId: string; status: string }; agentConnection?: { revokedAt: string | null; allowedAgentIds?: string[] } | null };
-type Row = { id: string; revision: number; title: string; content: string; kind: KnowledgeItem["kind"]; scope: KnowledgeItem["scope"]; project_id: string | null; quest_id: string | null; epistemic: KnowledgeItem["epistemic"]; status: KnowledgeItem["status"]; actor: string; source_actor: string | null; review_required: number; reason: string; updated_at: string };
+type Row = { id: string; revision: number; title: string; content: string; kind: KnowledgeItem["kind"]; scope: KnowledgeItem["scope"]; project_id: string | null; quest_id: string | null; epistemic: KnowledgeItem["epistemic"]; status: KnowledgeItem["status"]; actor: string; source_actor: string | null; review_required: number; reason: string; updated_at: string; private_note_id: string | null; private_note_version: string | null };
 function fail(status: number, code: string, message: string): never { throw new DomainError(status, code, message); }
 export function knowledgeDb(env: WorkerEnv): D1DatabaseLike {
   if (env.KNOWLEDGE_ENABLED !== "true" || !env.QUESTFORGE_DB || !env.KNOWLEDGE_OWNER_UID?.trim()) return fail(503, "knowledge_disabled", "Relay Memory is not enabled in this environment.");
@@ -68,9 +68,10 @@ export async function authorizeKnowledge(env: WorkerEnv, identity: KnowledgeIden
 }
 function actor(identity: KnowledgeIdentity): string { return identity.authType === "oauth" ? `agent:${identity.agent!.agentId}` : "human"; }
 function itemFrom(row: Row, sources: KnowledgeSource[], conflicts: string[]): KnowledgeItem {
-  return { id: row.id, revision: row.revision, title: row.title, content: row.content, kind: row.kind, scope: row.scope, projectId: row.project_id, questId: row.quest_id,
+  if (row.private_note_id !== null) sources = [{ reference: SHARED_NOTE_SOURCE, version: row.private_note_version!, excerpt: "", availability: "verified" }];
+  return { ...(row.private_note_id !== null ? { origin: "private_note" as const } : {}), id: row.id, revision: row.revision, title: row.title, content: row.content, kind: row.kind, scope: row.scope, projectId: row.project_id, questId: row.quest_id,
     epistemic: row.epistemic, status: row.status, actor: row.actor, sourceActor: row.source_actor ?? row.actor, reviewRequired: row.review_required === 1, reason: row.reason, updatedAt: row.updated_at, sources, conflicts,
-    authoritative: row.status === "active" && row.review_required !== 1 && conflicts.length === 0 && row.epistemic !== "inference" && row.kind !== "question" };
+    authoritative: row.status === "active" && row.review_required !== 1 && conflicts.length === 0 && row.epistemic !== "inference" && row.kind !== "question" && row.kind !== "note" };
 }
 const attachments = `
     (SELECT json_group_array(json_object('reference',reference,'version',version,'excerpt',excerpt,'availability',availability)) FROM
@@ -99,6 +100,100 @@ function guard(db: D1DatabaseLike, uid: string, token: string, sql: string, valu
   return db.prepare(sql).bind(...values, uid, token);
 }
 const GATE = "EXISTS(SELECT 1 FROM knowledge_operations WHERE uid=? AND token=?)";
+
+async function noteShareRow(db: D1DatabaseLike, uid: string, noteId: string) {
+  return db.prepare(`SELECT i.*, ${attachments} FROM knowledge_items i WHERE uid=? AND private_note_id=?`)
+    .bind(uid, noteId).first<PopulatedRow>();
+}
+
+export async function getNoteShare(env: WorkerEnv, uid: string, noteId: string): Promise<NoteShareState> {
+  const row = await noteShareRow(knowledgeDb(env), uid, noteId);
+  return {
+    revision: row?.revision ?? 0,
+    sourceVersion: row?.private_note_version ?? null,
+    knowledge: row?.status === "active" ? populatedItem(row) : null,
+  };
+}
+
+export async function changeNoteShare(env: WorkerEnv, uid: string, noteId: string, input: JsonRecord, revoke: boolean, checkQuest: (id: string) => Promise<void>): Promise<NoteShareState> {
+  if (!validateMcpToolInput(revoke ? NOTE_SHARE_REVOKE_SCHEMA : NOTE_SHARE_PUBLISH_SCHEMA, input).valid) {
+    fail(400, "invalid_note_share", "Provide a valid operation ID, version and share selection.");
+  }
+  const db = knowledgeDb(env), requestId = String(input.requestId), revision = Number(input.expectedRevision) + 1;
+  const requestHash = await sha256(canonical({ noteId, revoke, input }));
+  const replay = async () => {
+    const saved = await receipt(db, uid, requestId);
+    if (!saved) return null;
+    if (saved.request_hash !== requestHash) fail(409, "knowledge_request_reused", "requestId was used for different content.");
+    return getNoteShare(env, uid, noteId);
+  };
+  const saved = await replay();
+  if (saved) return saved;
+
+  const prior = await noteShareRow(db, uid, noteId);
+  const active = prior?.status === "active";
+  if ((prior?.revision ?? 0) !== input.expectedRevision || (revoke && !active)) {
+    const raced = await replay();
+    if (raced) return raced;
+    fail(409, "knowledge_conflict", "The share changed. Reload the note before retrying.");
+  }
+  const token = crypto.randomUUID(), id = active ? prior!.id : crypto.randomUUID(), now = new Date().toISOString();
+  let workspaceRevision: number | undefined;
+  let write: D1StatementLike;
+  if (revoke) {
+    write = guard(db, uid, token, `UPDATE knowledge_items
+      SET revision=?,status='deleted',title='',content='',kind='',scope='',project_id=NULL,quest_id=NULL,epistemic='',reason='',
+          private_note_version=NULL,updated_at=? WHERE uid=? AND private_note_id=? AND ${GATE}`, [revision, now, uid, noteId]);
+  } else {
+    const scope = String(input.scope), project = input.projectId ?? null, quest = input.questId ?? null;
+    if ((scope === "project") !== Boolean(project) || (scope === "quest") !== Boolean(quest)) {
+      fail(400, "knowledge_scope_invalid", "Choose one applicability scope.");
+    }
+    const title = String(input.title).trim(), content = String(input.content);
+    if (!title || !content.trim()) fail(400, "invalid_note_share", "Provide a title and excerpt.");
+    if (quest) await checkQuest(String(quest));
+    if (project && !await db.prepare("SELECT 1 FROM knowledge_projects WHERE uid=? AND id=?").bind(uid, project).first()) {
+      fail(404, "knowledge_project_not_found", "Select an existing project.");
+    }
+    const source = await db.prepare(`SELECT p.revision, json_extract(n.value,'$.body') body, json_extract(n.value,'$.updatedAt') version
+      FROM productivity_workspaces p, json_each(p.value_json,'$.notes') n
+      WHERE p.uid=? AND json_extract(n.value,'$.id')=? AND json_extract(n.value,'$.archived')=0`)
+      .bind(uid, noteId).first<{ revision: number; body: string; version: string }>();
+    if (!source || source.version !== input.sourceVersion) {
+      const raced = await replay();
+      if (raced) return raced;
+      fail(409, "note_source_changed", "The saved note changed or is unavailable.");
+    }
+    if (!source.body.replace(/\r\n?/g, "\n").includes(content)) fail(400, "invalid_note_excerpt", "Select an exact excerpt of the saved note.");
+    workspaceRevision = source.revision;
+    write = guard(db, uid, token, `INSERT INTO knowledge_items
+      (uid,id,revision,title,content,kind,scope,project_id,quest_id,epistemic,status,actor,source_actor,reason,updated_at,private_note_id,private_note_version)
+      SELECT ?,?,?,?,?,?,?,?,?,'human_statement','active','human','human','',?,?,? WHERE ${GATE}
+      ON CONFLICT(uid,private_note_id) WHERE private_note_id IS NOT NULL DO UPDATE SET
+        id=excluded.id,revision=excluded.revision,title=excluded.title,content=excluded.content,kind=excluded.kind,scope=excluded.scope,
+        project_id=excluded.project_id,quest_id=excluded.quest_id,epistemic=excluded.epistemic,status=excluded.status,
+        updated_at=excluded.updated_at,private_note_version=excluded.private_note_version`,
+      [uid, id, revision, title, content, input.kind, scope, project, quest, now, noteId, source.version]);
+  }
+  // The receipt and published version must describe the same committed Notes snapshot.
+  const claim = db.prepare(`INSERT INTO knowledge_operations(uid,request_id,request_hash,knowledge_id,result_revision,token)
+    SELECT ?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM knowledge_operations WHERE uid=? AND request_id=?)
+    AND COALESCE((SELECT revision FROM knowledge_items WHERE uid=? AND private_note_id=?),0)=?
+    ${revoke ? "" : "AND EXISTS(SELECT 1 FROM productivity_workspaces WHERE uid=? AND revision=?)"}`)
+    .bind(uid, requestId, requestHash, id, revision, token, uid, requestId, uid, noteId, input.expectedRevision,
+      ...(revoke ? [] : [uid, workspaceRevision]));
+  const results = await db.batch([claim, write]);
+  if (!results[0]?.meta?.changes) {
+    const raced = await replay();
+    if (raced) return raced;
+    fail(409, "knowledge_conflict", "The note or share changed. Reload before retrying.");
+  }
+  return getNoteShare(env, uid, noteId);
+}
+
+function requireOrdinaryKnowledge(item: KnowledgeItem | null): void {
+  if (item?.origin === "private_note") fail(403, "note_share_managed_in_notes", "The owner manages shared excerpts in Notes.");
+}
 export async function captureKnowledge(env: WorkerEnv, identity: KnowledgeIdentity, input: JsonRecord, restored?: KnowledgeItem): Promise<{ knowledge: KnowledgeItem; replayed: boolean; savedRevision: number }> {
   await authorizeKnowledge(env, identity, true);
   if (!validateMcpToolInput(KNOWLEDGE_CAPTURE_SCHEMA, input).valid) fail(400, "invalid_knowledge", "Invalid structured knowledge; do not submit transcripts or secrets.");
@@ -123,6 +218,11 @@ export async function captureKnowledge(env: WorkerEnv, identity: KnowledgeIdenti
   // An Agent's reported human statement remains attributed to that Agent, never formal approval.
   const sources = (input.sources as KnowledgeSource[]).map(source => ({ ...source, availability: source.availability === "verified" ? "reported" as const : source.availability }));
   const previous = updating ? await readKnowledge(env, uid, String(input.knowledgeId)) : null;
+  requireOrdinaryKnowledge(previous);
+  if (conflictId) requireOrdinaryKnowledge(await readKnowledge(env, uid, conflictId));
+  if (sources.some(source => source.reference === SHARED_NOTE_SOURCE)) {
+    fail(400, "note_share_use_origin", "Refer to the shared note in place; do not capture a copy.");
+  }
   if (input.confirmReview && (!previous?.reviewRequired || identity.authType === "oauth")) fail(400, "invalid_knowledge_review", "Only the owner can confirm a remaining decision.");
   if (previous?.status === "superseded" && input.status === "active" && (identity.authType === "oauth" || input.change !== "explicit")) {
     fail(409, "knowledge_superseded", "The owner must explicitly reinstate a superseded decision.");
@@ -190,8 +290,8 @@ export async function searchKnowledge(env: WorkerEnv, identity: KnowledgeIdentit
     try { candidates = await semanticKnowledgeCandidates(env, identity.uid, query); semantic = "available"; }
     catch { semantic = "unavailable"; }
   }
-  const semanticSql = candidates.length ? ` OR ${candidates.map(() => "(i.id=? AND i.revision=?)").join(" OR ")}` : "";
-  const semanticOrder = candidates.length ? `CASE ${candidates.map((_, index) => `WHEN i.id=? AND i.revision=? THEN ${index}`).join(" ")} ELSE 999 END` : "999";
+  const semanticSql = candidates.length ? ` OR (i.private_note_id IS NULL AND (${candidates.map(() => "(i.id=? AND i.revision=?)").join(" OR ")}))` : "";
+  const semanticOrder = candidates.length ? `CASE ${candidates.map((_, index) => `WHEN i.private_note_id IS NULL AND i.id=? AND i.revision=? THEN ${index}`).join(" ")} ELSE 999 END` : "999";
   const rows = await db.prepare(`WITH input(quest,project,uid) AS (VALUES(?,?,?)),
     criteria AS (SELECT x.uid, x.quest, COALESCE(NULLIF(x.project,''),(SELECT project_id FROM knowledge_quest_projects WHERE uid=x.uid AND quest_id=x.quest),'') project,
       COALESCE((SELECT revision FROM knowledge_search_versions WHERE uid=x.uid),0) search_version FROM input x),
@@ -258,7 +358,8 @@ export async function restoreKnowledge(env: WorkerEnv, identity: KnowledgeIdenti
 export async function deleteKnowledge(env: WorkerEnv, uid: string, id: string, expectedRevision: unknown) {
   if (!Number.isSafeInteger(expectedRevision)) fail(400, "knowledge_revision_required", "Expected revision is required.");
   const db = knowledgeDb(env), token = crypto.randomUUID();
-  const deleted = await db.prepare("SELECT status FROM knowledge_items WHERE uid=? AND id=?").bind(uid, id).first<{ status: string }>();
+  const deleted = await db.prepare("SELECT status,private_note_id FROM knowledge_items WHERE uid=? AND id=?").bind(uid, id).first<{ status: string; private_note_id: string | null }>();
+  if (deleted?.private_note_id) fail(403, "note_share_managed_in_notes", "The owner manages shared excerpts in Notes.");
   if (deleted?.status === "deleted") return { deleted: true };
   const gate = "EXISTS(SELECT 1 FROM knowledge_items WHERE uid=? AND id=? AND status='deleted' AND actor=?)";
   const results = await db.batch([
@@ -286,6 +387,8 @@ export async function resolveKnowledgeConflict(env: WorkerEnv, uid: string, left
   }
   const token = crypto.randomUUID();
   const a = await readKnowledge(env, uid, left), b = await readKnowledge(env, uid, right);
+  requireOrdinaryKnowledge(a);
+  requireOrdinaryKnowledge(b);
   if ((winner === a.id ? a : b).status !== "active") fail(409, "knowledge_superseded", "Review the earlier decision before reinstating a superseded alternative.");
   if (a.revision !== expectedLeft || b.revision !== expectedRight) fail(409, "knowledge_conflict", "Conflict changed; reload first.");
   const now = new Date().toISOString();

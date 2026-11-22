@@ -6,7 +6,7 @@ import { screenRegion } from "./runtime.ts";
 
 const copy = {
   title: ["Relay Memory", "Relay Memory"], open: ["知識を読み込む", "Load knowledge"], reload: ["再読込", "Reload"],
-  description: ["決定・理由・制約・出典を、許可したAIと共有します。会話全文とPrivate Notesは収集しません。", "Share decisions, reasons, constraints and sources with permitted AI Agents. Full chats and Private Notes are excluded."],
+  description: ["決定・理由・制約・出典を、許可したAIと共有します。メモは本人が選んだ一節だけ共有します。", "Share decisions, reasons, constraints and sources with permitted AI Agents. Notes share only the excerpt selected by the owner."],
   enabled: ["選択したAgentと知識全体を共有する", "Share all knowledge with selected Agents"], save: ["保存", "Save"],
   agents: ["共有する接続とAgent", "Connections and Agents to share with"],
   missingScope: ["知識の権限が必要です。接続を再認可し、Agentの権限を確認してください。", "Authorize knowledge scopes on the connection and check the Agent permissions."],
@@ -25,6 +25,7 @@ const copy = {
   confirmDelete: ["本文・出典・履歴を永久削除します。取り消せません。", "Permanently delete content, sources and history? This cannot be undone."],
   name: ["タイトル", "Title"], content: ["内容", "Content"], reason: ["変更理由", "Reason for change"],
   scope: ["適用範囲", "Applicability"], global: ["全体共通", "Global"], project: ["プロジェクト", "Project"], quest: ["Quest", "Quest"],
+  sharedNote: ["本人の共有メモ", "Owner-shared note"], manageNote: ["元のメモで共有を管理できます。", "Manage sharing in the original note."],
   sources: ["出典（参照先の閲覧確認とは別）", "Sources (listing a reference does not verify access)"],
   conflict: ["矛盾あり・確定事項として使用しない", "Unresolved conflict — do not treat as authoritative"],
   selectWinner: ["この内容を採用する", "Choose this version"], compare: ["矛盾の内容を比較", "Compare conflicting versions"],
@@ -146,16 +147,21 @@ export function knowledgeWorkspace(options: {
     const attribution = sourceActor === "human" ? w("human") : options.agents().find(a => `agent:${a.agentId}` === sourceActor)?.displayName ?? sourceActor;
     const epistemic = item.epistemic === "human_statement" ? w(sourceActor === "human" ? "humanStatement" : "reportedStatement") : w(item.epistemic === "inference" ? "inference" : item.epistemic === "system_verified" ? "verified" : "observation");
     const node = el("article", { class: "rf-knowledge-item" }, el("h4", {}, item.title), el("p", {}, item.content),
+      item.origin === "private_note" ? el("p", {}, w("sharedNote")) : null,
       el("p", {}, `${w(item.status === "superseded" ? "superseded" : "active")} · ${w(item.scope)} · ${projects.find(p => p.id === item.projectId)?.name ?? options.quests().find(q => q.id === item.questId)?.title ?? ""} · v${item.revision} · ${attribution} · ${epistemic}`), el("p", {}, item.reason));
     const sources = el("details", {}, el("summary", {}, w("sources")));
-    for (const source of item.sources) sources.append(el("p", {}, `${source.reference} · ${source.version} · ${w(source.availability === "unavailable" ? "unavailableSource" : source.availability === "verified" ? "verified" : "reported")}`), el("blockquote", {}, source.excerpt));
+    for (const source of item.sources) {
+      if (item.origin === "private_note") sources.append(el("p", {}, `${w("sharedNote")} · ${source.version}`));
+      else sources.append(el("p", {}, `${source.reference} · ${source.version} · ${w(source.availability === "unavailable" ? "unavailableSource" : source.availability === "verified" ? "verified" : "reported")}`), el("blockquote", {}, source.excerpt));
+    }
     node.append(sources);
     if (item.applicability === "reference" && !controls) node.append(el("p", {}, w("referenceOnly")));
     if (item.conflicts.length || item.reviewRequired) {
       node.append(el("p", { role: "status" }, w("conflict")));
       if (controls) for (const peer of item.conflicts) node.append(button("compare", () => { void compare(item.id, peer); }));
     }
-    if (controls) {
+    if (controls && item.origin === "private_note") node.append(el("p", {}, w("manageNote")));
+    if (controls && item.origin !== "private_note") {
       const startEdit = (confirmReview = false) => {
         draft = { item, title: item.title, content: item.content, reason: "", scope: item.scope,
           projectId: item.projectId ?? "", questId: item.questId ?? "", confirmReview };

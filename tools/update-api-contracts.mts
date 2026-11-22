@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { MCP_TOOLS } from "../worker/src/index.ts";
 import { IMAGE_IDS_SCHEMA, PRACTICAL_TOOLS } from "../worker/src/practical-tools.ts";
-import { KNOWLEDGE_CAPTURE_SCHEMA, KNOWLEDGE_QUERY_SCHEMA } from "../shared/knowledge.ts";
+import { KNOWLEDGE_CAPTURE_SCHEMA, KNOWLEDGE_QUERY_SCHEMA, NOTE_SHARE_PUBLISH_SCHEMA, NOTE_SHARE_REVOKE_SCHEMA } from "../shared/knowledge.ts";
 
 interface OpenApiSchema {
   type?: string | string[];
@@ -492,6 +492,11 @@ const knowledgeSettingsSchema = { type: "object", additionalProperties: false, r
 openapi.paths["/v1/knowledge/settings"] = {
   get: { operationId: "getKnowledgeSettings", summary: "Human-only read of sharing settings; disabled by default", responses: { ...ok("Sharing settings"), ...knowledgeErrors } },
   put: knowledgePost("setKnowledgeSettings", "Human-only revision-guarded sharing of the owner's knowledge with selected connection/Agent pairs; does not grant scopes", knowledgeSettingsSchema),
+};
+openapi.paths["/v1/knowledge/note-shares/{noteId}"] = {
+  get: { operationId: "getNoteShare", summary: "Human-only current shared excerpt and revision, including a revoked share's revision", parameters: [parameter("noteId")], responses: { ...ok("Shared excerpt state"), ...knowledgeErrors } },
+  put: { ...knowledgePost("publishNoteShare", "Human-only publish or update an exact excerpt of a saved note against both versions", NOTE_SHARE_PUBLISH_SCHEMA), parameters: [parameter("noteId")] },
+  delete: { ...knowledgePost("revokeNoteShare", "Human-only removal of a published excerpt at its current revision", NOTE_SHARE_REVOKE_SCHEMA), parameters: [parameter("noteId")] },
 };
 openapi.paths["/v1/knowledge/projects"] = {
   get: { operationId: "listKnowledgeProjects", summary: "Human-only native knowledge projects", responses: { ...ok("Projects"), ...knowledgeErrors } },

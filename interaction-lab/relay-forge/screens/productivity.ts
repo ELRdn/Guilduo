@@ -1,3 +1,4 @@
+import type { KnowledgeConnection, KnowledgeSettings, NoteShareState } from "../../../shared/knowledge.ts";
 import type { Quest } from "../../../types/questforge.ts";
 import { addDays, calendarItems, clockTime, entrySeconds, localDate, splitEntryDays, timeTotals, wallClockInstant, type NoteRecord, type ProductivityData, type RecordPage, type TimeEntry, type TimeSource } from "../../../shared/productivity.ts";
 import { getLocale } from "../../../i18n.ts";
@@ -14,13 +15,14 @@ function validNote(value: unknown): value is NoteRecord { return record(value) &
 function validEntry(value: unknown): value is TimeEntry { return record(value) && ["id", "questId", "note", "startAt", "stopAt", "updatedAt"].every(k => typeof value[k] === "string") && Boolean(value.id) && Boolean(value.questId) && Number.isFinite(Date.parse(value.updatedAt as string)) && typeof value.archived === "boolean" && Number.isFinite(Date.parse(value.startAt as string)) && (!value.stopAt || Number.isFinite(Date.parse(value.stopAt as string))); }
 
 export function productivityWorkspace(options: {
-  port: RelayForgeRuntime["productivityPort"]; quests: () => readonly Quest[]; held: () => boolean;
+  port: RelayForgeRuntime["productivityPort"]; knowledgePort?: RelayForgeRuntime["knowledgePort"]; quests: () => readonly Quest[]; held: () => boolean;
   refresh: () => void; navigate: (screen: "calendar" | "notes" | "quests", id?: string) => void;
   schedule: (questId: string, date: string, time: string, minutes: number) => void;
 }) {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   let data: ProductivityData = { revision: 0, notes: [], entries: [], preferences: { timeSource: "native", timezone: zone, updatedAt: "" } };
   let disposed = false, loading = false, loaded = false, busy = false, failed = false, message = () => "", pending: Pending | null = null;
+  let shareStatus: { key: string; state?: NoteShareState; failed?: boolean; indicator?: HTMLElement } | null = null;
   let draft: NoteRecord | null = null, original: NoteRecord | null = null, mobileEditor = false, includeArchived = false;
   let calendarMode = "month", calendarDate = localDate(), calendarSelected = "", query = "", historyOpen = false;
   let selecting = false;
@@ -46,13 +48,14 @@ export function productivityWorkspace(options: {
     if (code === "productivity_capacity") return w("capacity");
     return `${w("error")}${code ? ` (${code})` : ""}`;
   }
-  function openModal(title: string, content: HTMLElement, actions: HTMLElement[]): void {
+  function openModal(title: string, content: HTMLElement, actions: HTMLElement[]): HTMLDialogElement | undefined {
     if (modal?.open) return;
     const active = document.activeElement;
     const dialog = el("dialog", { class: "rf-work-dialog", "aria-labelledby": "rf-work-dialog-title" }, el("h2", { id: "rf-work-dialog-title" }, title), content, el("div", { class: "rf-work-toolbar" }, ...actions));
     modal = dialog;
     dialog.addEventListener("close", () => { dialog.remove(); if (modal === dialog) { modal = null; if (active instanceof HTMLElement && active.isConnected) active.focus(); } });
     document.body.append(dialog); dialog.showModal();
+    return dialog;
   }
   function guard(action: () => void): void {
     if (!dirty()) { action(); return; }
@@ -62,8 +65,8 @@ export function productivityWorkspace(options: {
       button(w("cancel"), () => modal?.close()),
     ]);
   }
-  function confirmAction(title: string, action: () => void): void {
-    openModal(title, el("p", {}, title), [button(w("confirm"), () => { modal?.close(); action(); }, held()), button(w("cancel"), () => modal?.close())]);
+  function confirmAction(title: string, action: () => void, detail = title): void {
+    openModal(title, el("p", {}, detail), [button(w("confirm"), () => { modal?.close(); action(); }, held()), button(w("cancel"), () => modal?.close())]);
   }
   async function pages<T>(path: string, validator: (value: unknown) => value is T): Promise<{ items: T[]; revision: number }> {
     const items: T[] = []; let cursor: string | null = null, revision: number | null = null;
@@ -90,6 +93,7 @@ export function productivityWorkspace(options: {
       if (disposed) return;
       if (calendarDate === localDate(new Date(), timezone())) calendarDate = localDate(new Date(), snapshot.preferences.timezone || zone);
       data = snapshot; loaded = true; failed = false;
+      if (!modal?.open) shareStatus = null;
       if (original && !dirty()) { original = data.notes.find(n => n.id === original?.id) ?? null; draft = original ? { ...original } : null; }
     } catch (error) { if (!disposed) { failed = true; message = () => errorText(error); } }
     finally { loading = false; refresh(); flushTrack(); }
@@ -141,14 +145,164 @@ export function productivityWorkspace(options: {
     guard(() => { original = note; draft = note ? { ...note } : { id: "", title: "", body: "", questId: "", archived: false, updatedAt: "" }; mobileEditor = true; refresh();
       window.requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-work-focus="note-title"]')?.focus()); });
   }
+  const shareText = (ja: string, en: string) => getLocale() === "ja" ? ja : en;
+  const shareLabel = () => shareText("Relay Memoryに共有", "Share to Relay Memory");
+  const sharePath = (note: NoteRecord) => `/note-shares/${encodeURIComponent(note.id)}`;
+  const shareKey = (note: NoteRecord) => `${note.id}:${note.updatedAt}`;
+  function shareSummary(note: NoteRecord): string {
+    const state = shareStatus?.state;
+    if (shareStatus?.failed) return shareText("共有状態を確認できません", "Share status unavailable");
+    if (!state) return shareText("共有状態を読込中…", "Loading share status…");
+    if (!state.knowledge) return shareText("未共有", "Not shared");
+    return state.sourceVersion === note.updatedAt ? shareText("共有中", "Shared") : shareText("共有中・原本に変更あり", "Shared · Original changed");
+  }
+  function noteShareControls(note: NoteRecord, body: HTMLTextAreaElement): HTMLElement {
+    const port = options.knowledgePort!;
+    const key = shareKey(note);
+    if (shareStatus?.key !== key) {
+      const pendingStatus: NonNullable<typeof shareStatus> = { key };
+      shareStatus = pendingStatus;
+      void port.knowledge<NoteShareState>(sharePath(note)).then(state => { pendingStatus.state = state; }, () => { pendingStatus.failed = true; })
+        .finally(() => {
+          if (shareStatus === pendingStatus && pendingStatus.indicator) pendingStatus.indicator.textContent = shareSummary(note);
+        });
+    }
+    const trigger = button(shareLabel(), () => {
+      const excerpt = dirty() ? "" : body.value.slice(body.selectionStart, body.selectionEnd);
+      void openShare(note, excerpt);
+    }, held());
+    trigger.dataset.noteShareTrigger = "";
+    const indicator = el("span", { role: "status" }, shareSummary(note));
+    shareStatus.indicator = indicator;
+    return el("div", { class: "rf-work-toolbar" }, trigger, indicator);
+  }
+  async function openShare(note: NoteRecord, excerpt: string): Promise<void> {
+    const port = options.knowledgePort!;
+    const path = sharePath(note);
+    const content = el("div", { class: "rf-work-note-share" });
+    const feedback = el("p", { role: "status" }, shareText("読込中…", "Loading…"));
+    const close = button(w("cancel"), () => modal?.close());
+    content.append(feedback);
+    const opened = openModal(shareLabel(), content, [close]);
+    if (!opened) return;
+    const dialog: HTMLDialogElement = opened;
+    try {
+      const [current, settings, { projects }] = await Promise.all([
+        port.knowledge<NoteShareState>(path),
+        port.knowledge<KnowledgeSettings & { availableConnections: KnowledgeConnection[] }>("/settings"),
+        port.knowledge<{ projects: { id: string; name: string }[] }>("/projects"),
+      ]);
+      if (!dialog.open || disposed) return;
+      shareStatus = { key: shareKey(note), state: current };
+      const previous = current.knowledge;
+      const savedBody = note.body.replace(/\r\n?/g, "\n");
+      const title = el("input", { value: previous?.title ?? note.title, maxlength: 160, required: true });
+      const excerptLabel = shareText("共有する一節", "Excerpt to share");
+      const text = el("textarea", { rows: 5, maxlength: 6000, required: true, "aria-label": excerptLabel }, excerpt || (savedBody.includes(previous?.content ?? "") ? previous?.content ?? "" : ""));
+      const selectable = (label: string, rows: readonly (readonly [string, string])[], selected: string) => {
+        const select = el("select", { "aria-label": label }, ...rows.map(([value, label]) => el("option", { value }, label)));
+        select.value = selected;
+        return select;
+      };
+      const kindLabel = shareText("種別", "Type");
+      const kind = selectable(kindLabel, [["note", shareText("参考メモ", "Reference note")], ["decision", shareText("決定", "Decision")], ["constraint", shareText("制約", "Constraint")]], previous?.kind ?? "note");
+      const scopeLabel = shareText("適用範囲", "Applicability");
+      const scope = selectable(scopeLabel, [["", shareText("選択してください", "Choose applicability")], ["quest", "Quest"], ["project", shareText("プロジェクト", "Project")], ["global", shareText("全体共通", "Global")]], previous?.scope ?? (note.questId ? "quest" : ""));
+      const quest = questSelect(previous?.questId ?? note.questId, () => {});
+      const projectLabel = shareText("プロジェクト", "Project");
+      const project = selectable(projectLabel, [["", "—"], ...projects.map(p => [p.id, p.name] as const)], previous?.projectId ?? "");
+      const questField = field(w("quest"), quest), projectField = field(projectLabel, project);
+      const recipients = settings.enabled ? settings.availableConnections.filter(connection => connection.scopes.includes("knowledge:read")
+        && settings.grants.some(grant => grant.clientId === connection.clientId && grant.agentId === connection.agentId)) : [];
+      const publish = button(previous ? shareText("共有版を更新", "Update shared version") : shareText("共有する", "Share"), () => {
+        const input: RecordInput = { requestId: crypto.randomUUID(), expectedRevision: current.revision, sourceVersion: note.updatedAt,
+          title: title.value, content: text.value, kind: kind.value, scope: scope.value };
+        if (scope.value === "quest") input.questId = quest.value;
+        if (scope.value === "project") input.projectId = project.value;
+        void send(input, "PUT");
+      });
+      const revoke = button(shareText("共有を停止", "Stop sharing"), () => {
+        void send({ requestId: crypto.randomUUID(), expectedRevision: current.revision }, "DELETE");
+      });
+      const fields = el("div", { class: "rf-work-note-share" }, field(w("title"), title), field(excerptLabel, text),
+        field(kindLabel, kind), field(scopeLabel, scope), questField, projectField);
+      const editCopy = shareText("先にメモを保存してください。", "Save the note before sharing edits.");
+      const excerptCopy = shareText("保存済み本文の一節をそのまま選んでください。", "Use an exact excerpt from the saved note.");
+      let sending = false, stale = false;
+      const retry = button(shareText("同じ操作を再試行", "Retry the same action"), () => { if (uncertain) void send(uncertain.input, uncertain.method); });
+      retry.hidden = true;
+      let uncertain: { input: RecordInput; method: "PUT" | "DELETE" } | null = null;
+      function updateControls(): void {
+        questField.hidden = scope.value !== "quest"; projectField.hidden = scope.value !== "project";
+        const valid = Boolean(title.value.trim() && text.value.trim() && text.value.length <= text.maxLength && savedBody.includes(text.value) && scope.value
+          && (scope.value !== "quest" || quest.value) && (scope.value !== "project" || project.value));
+        publish.disabled = !valid || dirty() || sending || stale || Boolean(uncertain);
+        revoke.disabled = sending || stale || Boolean(uncertain);
+        close.disabled = sending;
+        retry.disabled = sending;
+        for (const input of [title, text, kind, scope, quest, project]) input.disabled = sending || Boolean(uncertain);
+      }
+      async function send(input: RecordInput, method: "PUT" | "DELETE"): Promise<void> {
+        if (sending) return;
+        sending = true; updateControls();
+        feedback.textContent = shareText("保存中…", "Saving…");
+        try {
+          const result = await port.knowledge<NoteShareState>(path, input, method);
+          uncertain = null; retry.hidden = true;
+          if (disposed || !dialog.open) return;
+          shareStatus = { key: shareKey(note), state: result };
+          const item = result.knowledge;
+          const saved = method === "DELETE" ? !item : item && item.content === input.content
+            && result.sourceVersion === note.updatedAt && item.title === title.value.trim()
+            && item.kind === input.kind && item.scope === input.scope
+            && (item.questId ?? undefined) === input.questId && (item.projectId ?? undefined) === input.projectId;
+          if (!saved || result.revision !== current.revision + 1) {
+            stale = true;
+            feedback.textContent = shareText("共有状態が変わりました。閉じて最新版を確認してください。", "The share changed. Close and review the current version.");
+            return;
+          }
+          message = () => w("saved");
+          dialog.close();
+        } catch (error) {
+          const status = (error as { status?: number }).status;
+          uncertain = !status || status === 408 || status >= 500 ? { input, method } : null;
+          retry.hidden = !uncertain;
+          stale = status === 409;
+          feedback.textContent = uncertain ? shareText("結果が不明です。同じ操作を再試行できます。", "Result unknown. You can retry the same action.")
+            : stale ? shareText("原本か共有版が変更されました。閉じて最新版を確認してください。", "The note or share changed. Close and review the current version.") : errorText(error);
+        } finally {
+          sending = false; updateControls();
+        }
+      }
+      dialog.addEventListener("cancel", event => { if (sending) event.preventDefault(); });
+      dialog.addEventListener("close", () => {
+        if (stale || uncertain) { shareStatus = null; void load(); }
+        refresh();
+        document.querySelector<HTMLElement>("[data-note-share-trigger]")?.focus();
+      });
+      fields.addEventListener("input", updateControls);
+      fields.addEventListener("change", updateControls);
+      feedback.textContent = dirty() ? editCopy : excerptCopy;
+      content.prepend(el("p", {}, shareSummary(note)),
+        el("p", {}, shareText("現在と今後のRelay Memory閲覧承認済みAIが読めます。適用範囲で共有先は制限されません。", "Current and future approved Relay Memory readers can read this. Applicability does not restrict access.")),
+        recipients.length ? el("ul", {}, ...recipients.map(connection => el("li", {}, `${connection.clientName} · ${connection.agentId}`)))
+          : el("p", {}, shareText("現在、閲覧を承認したAIはありません。", "There are no approved readers right now.")));
+      if (previous) content.append(el("details", { open: current.sourceVersion !== note.updatedAt }, el("summary", {}, shareText("前回共有した内容", "Previously shared")), el("p", {}, previous.title), el("blockquote", {}, previous.content)));
+      content.append(fields, el("div", { class: "rf-work-toolbar" }, publish, ...(previous ? [revoke] : []), retry));
+      updateControls();
+    } catch (error) {
+      if (dialog.open && !disposed) feedback.textContent = errorText(error);
+    }
+  }
   function notesScreen(): HTMLElement {
     const list = el("div", { class: "rf-work-note-list" }, button(`${w("add")} ${w("notes")}`, () => chooseNote(null), held()), ...data.notes.filter(n => includeArchived || !n.archived).map(n => button(`${n.archived ? `[${w("archive")}] ` : ""}${n.title}`, () => chooseNote(n))));
     const checkbox = el("input", { type: "checkbox", checked: includeArchived }); checkbox.addEventListener("change", () => { includeArchived = checkbox.checked; refresh(); }); list.prepend(field(w("archived"), checkbox));
     const editor = el("div", { class: "rf-work-note-editor" });
     if (draft) {
       const title = el("input", { value: draft.title, maxlength: 120, required: true, "data-work-focus": "note-title" }); title.addEventListener("input", () => { draft!.title = title.value; });
-      const body = el("textarea", { rows: 18, maxlength: 50000, "data-work-focus": "note-body" }, draft.body); body.addEventListener("input", () => { draft!.body = body.value; });
+      const body = el("textarea", { rows: 18, maxlength: 50000, "aria-label": w("body"), "data-work-focus": "note-body" }, draft.body); body.addEventListener("input", () => { draft!.body = body.value; });
       editor.append(button(w("list"), () => guard(() => { mobileEditor = false; refresh(); })), field(w("title"), title), field(w("body"), body), field(w("quest"), questSelect(draft.questId, value => { draft!.questId = value; })), el("div", { class: "rf-work-toolbar" }, button(w("save"), () => { void saveNote(); }, held()), button(w("discard"), () => { draft = original ? { ...original } : null; refresh(); }, busy || pending !== null), ...(original ? [button(w(original.archived ? "restore" : "archive"), () => guard(() => { void write(`/notes/${original!.id}`, { archived: !original!.archived, expectedUpdatedAt: original!.updatedAt }, "PATCH", result => { original = result.note as NoteRecord; draft = { ...original }; }); }), held())] : [])));
+      if (original && !original.archived && options.knowledgePort) editor.append(noteShareControls(original, body));
     } else editor.append(el("p", {}, w("empty")));
     return el("section", { class: "rf-screen rf-work-screen" }, screenHeader({ title: w("notes"), question: "" }), status(), el("div", { class: "rf-work-notes", "data-editor": String(mobileEditor) }, list, editor));
   }
@@ -272,7 +426,7 @@ export function productivityWorkspace(options: {
     restore.addEventListener("change", () => {
       const file = restore.files?.[0]; if (!file) return;
       if (file.size > 1100000) { message = () => w("capacity"); refresh(); return; }
-      void file.text().then(content => { const backup: unknown = JSON.parse(content); restore.value = ""; confirmAction(w("import"), () => { void write("/import", { expectedRevision: data.revision, backup }); }); }).catch(error => { message = () => errorText(error); refresh(); });
+      void file.text().then(content => { const backup: unknown = JSON.parse(content); restore.value = ""; confirmAction(w("import"), () => { void write("/import", { expectedRevision: data.revision, backup }); }, shareText("復元するとメモの共有は解除されます。", "Restoring a backup stops note sharing.")); }).catch(error => { message = () => errorText(error); refresh(); });
     });
     return el("section", { class: "rf-screen-region rf-work-settings", "aria-label": w("time") }, el("h2", {}, w("time")), status(), field(w("source"), source), field(w("timezone"), tz), button(w("save"), () => { void write("/preferences", { timeSource: source.value, timezone: tz.value, expectedUpdatedAt: preference.expectedUpdatedAt }, "PUT", () => { preferenceDraft = null; }); }, held()),
       button(w("export"), () => { void options.port?.productivity<RecordInput>("/export").then(backup => { if (disposed || !backup || backup.format !== "guilduo-productivity") return; const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" })); const link = el("a", { href: url, download: `guilduo-work-${localDate()}.json` }); link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch(error => { message = () => errorText(error); refresh(); }); }, !loaded || busy), field(w("import"), restore),
