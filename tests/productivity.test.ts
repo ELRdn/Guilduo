@@ -1,3 +1,4 @@
+import { changeNoteShare, getNoteShare, searchKnowledge } from "../worker/src/knowledge-store.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { productivityRoute } from "../worker/src/productivity.ts";
@@ -225,5 +226,54 @@ test("same-origin productivity routes share records and timer receipts with dire
     assert.equal((await (await call("/timer", undefined, "GET", true)).json() as { current: TimeEntry | null }).current, null);
     env.WEB_API_ENABLED = "false";
     assert.equal((await call("/notes")).status, 404, "disabled Web transport still refuses aliases");
+  } finally { db.close(); }
+});
+
+test("note sharing is revoked with archive, import and workspace deletion, even while Relay Memory is disabled", async () => {
+  const { db, env, call } = setup();
+  const owner = { uid: "owner", email: "", authType: "dev" as const, scopes: ["knowledge:read"] };
+  env.KNOWLEDGE_ENABLED = "true";
+  env.KNOWLEDGE_OWNER_UID = owner.uid;
+  const publish = (note: NoteRecord, expectedRevision: number) => changeNoteShare(env, owner.uid, note.id, {
+    expectedRevision, requestId: crypto.randomUUID(), sourceVersion: note.updatedAt, title: note.title, content: note.body,
+    kind: "note", scope: "global",
+  }, false, async () => {});
+  try {
+    const a = (await call<{ note: NoteRecord }>("/notes", { operationId: "a", title: "First", body: "First shared excerpt" })).note;
+    const b = (await call<{ note: NoteRecord }>("/notes", { operationId: "b", title: "Second", body: "Second shared excerpt" })).note;
+    const first = await publish(a, 0);
+    await publish(b, 0);
+    const page = await searchKnowledge(env, owner, { limit: 1 });
+    assert.equal(page.nextCursor, 1);
+    const race = await Promise.allSettled([
+      publish(a, 1),
+      call<{ note: NoteRecord }>(`/notes/${a.id}`, { operationId: "archive-shared", expectedUpdatedAt: a.updatedAt, archived: true }, "PATCH"),
+    ] as const);
+    assert.equal(race[1].status, "fulfilled");
+    assert.equal((await getNoteShare(env, owner.uid, a.id)).knowledge, null);
+    assert.equal((await searchKnowledge(env, owner, {})).items.length, 1);
+    await assert.rejects(searchKnowledge(env, owner, { knowledgeId: first.knowledge?.id }), { code: "knowledge_not_found" });
+    await assert.rejects(searchKnowledge(env, owner, { limit: 1, cursor: page.nextCursor, pageVersion: page.pageVersion }), { code: "knowledge_page_changed" });
+    assert.equal((await getNoteShare(env, owner.uid, b.id)).revision, 1);
+    assert.equal(race[1].status === "fulfilled" && race[1].value.note.archived, true);
+
+    const backup = await call("/export");
+    const { revision } = await call<{ revision: number }>("/preferences");
+    env.KNOWLEDGE_ENABLED = "false";
+    await call("/import", { operationId: "restore-with-share", expectedRevision: revision, backup });
+    env.KNOWLEDGE_ENABLED = "true";
+    const revoked = await getNoteShare(env, owner.uid, b.id);
+    assert.equal(revoked.knowledge, null);
+    assert.equal(revoked.revision, 2);
+    const restored = (await call<{ items: NoteRecord[] }>("/notes")).items[0]!;
+    assert.equal(restored.id, b.id);
+    assert.equal((await searchKnowledge(env, owner, {})).items.length, 0);
+
+    await publish(restored, revoked.revision);
+    const workspace = await call<{ revision: number }>("/preferences");
+    await call("", { operationId: "delete-with-share", expectedRevision: workspace.revision, confirm: "delete-productivity" }, "DELETE");
+    assert.equal((await getNoteShare(env, owner.uid, b.id)).knowledge, null);
+    assert.equal((await searchKnowledge(env, owner, {})).items.length, 0);
+    assert.equal((await db.prepare("SELECT COUNT(*) AS count FROM knowledge_items WHERE status='deleted' AND content!=''").first<{ count: number }>())?.count, 0);
   } finally { db.close(); }
 });

@@ -43,7 +43,7 @@ export async function processKnowledgeIndex(env: WorkerEnv, hint: { uid: string;
   try {
     const current = await db.prepare(`SELECT i.revision,i.status,i.title,i.content,j.action
       FROM knowledge_items i LEFT JOIN knowledge_index_jobs j ON j.uid=i.uid AND j.knowledge_id=i.id AND j.revision=i.revision
-      WHERE i.uid=? AND i.id=?`).bind(uid, id).first<{ revision: number; status: string; title: string; content: string; action: string | null }>();
+      WHERE i.uid=? AND i.id=? AND i.private_note_id IS NULL`).bind(uid, id).first<{ revision: number; status: string; title: string; content: string; action: string | null }>();
     if (!current) return;
     const entries = await db.prepare(`SELECT vector_id FROM knowledge_index_entries
       WHERE uid=? AND knowledge_id=? AND (revision!=? OR ?!='active')`)

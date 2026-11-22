@@ -9,6 +9,8 @@ import worker, { MCP_TOOLS, callMcpTool } from "../worker/src/index.ts";
 import { readState, writeState } from "../worker/src/appwrite-store.ts";
 import { migrateState } from "../server/questforge-domain.ts";
 import { createAgent, linkAgentConnection, unlinkAgentConnection, relinkAgentConnection } from "../worker/src/agent-store.ts";
+import type { NoteShareState, KnowledgeSearch } from "../shared/knowledge.ts";
+import type { NoteRecord } from "../shared/productivity.ts";
 import type { QuestForgeState } from "../types/questforge.ts";
 
 const human: AuthIdentity = { uid: "owner", email: "", authType: "dev", scopes: ["knowledge:read", "knowledge:write"] };
@@ -241,4 +243,74 @@ test("conflict resolution preserves the reporter and keeps retired alternatives 
   assert.equal(retired.sourceActor, "agent:reporter");
   await assert.rejects(resolveKnowledgeConflict(env, human.uid, first.id, third.id, retired.revision, 1, first.id),
     error => hasErrorCode(error, "knowledge_superseded"));
+});
+
+test("owner publishes an exact versioned excerpt for approved MCP readers without exposing or indexing the original", async () => {
+  const { db, env } = setup();
+  env.DEV_USER_ID = human.uid;
+  env.DEV_BEARER_TOKEN = "note-share-test-human";
+  const context = { waitUntil() {} };
+  const rest = (path: string, method = "GET", data?: unknown, token = env.DEV_BEARER_TOKEN) => worker.fetch(new Request("http://localhost/v1" + path, {
+    method, headers: { authorization: "Bearer " + token, "content-type": "application/json" }, ...(data ? { body: JSON.stringify(data) } : {}),
+  }), env, context);
+  const create = await rest("/productivity/notes", "POST", { operationId: "create-note", title: "Local memo", body: "Keep Save visible. Private remainder." });
+  assert.equal(create.status, 200);
+  const { note } = await create.json() as { note: NoteRecord };
+  const path = "/knowledge/note-shares/" + note.id;
+  const publish = { requestId: "share-note", expectedRevision: 0, sourceVersion: note.updatedAt, title: "Save control", content: "Keep Save visible.", kind: "note", scope: "global" };
+  assert.equal((await rest(path, "PUT", { ...publish, content: "Unrelated text" })).status, 400);
+  const saved = await rest(path, "PUT", publish);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.headers.get("cache-control"), "no-store");
+  const first = await saved.json() as NoteShareState;
+  assert.equal(first.revision, 1);
+  assert.equal(first.knowledge?.authoritative, false);
+  assert.equal(first.knowledge?.sources[0]?.version, note.updatedAt);
+  assert.equal(first.knowledge?.origin, "private_note");
+  const knowledgeId = first.knowledge!.id;
+  assert.doesNotMatch(JSON.stringify(first), /Private remainder|Local memo/);
+
+  const clientId = "note-share-reader", token = "note-share-reader-token", agentId = "note-reader";
+  const scopes = ["knowledge:read", "knowledge:write"];
+  const grant = { uid: human.uid, email: "", clientId, clientName: "Local Notes reader", scopes, firstConnectedAt: new Date().toISOString(), lastUsedAt: "", revokedAt: "" };
+  const store = getOAuthRecordStore(env);
+  await store.put(`user-client:${human.uid}:${clientId}`, JSON.stringify(grant));
+  await store.put(`access:${await sha256(token)}`, JSON.stringify({ ...grant, expiresAt: Date.now() + 60000 }));
+  await createAgent(env, human.uid, { agentId, displayName: "Notes reader", allowedScopes: scopes });
+  await linkAgentConnection(env, human.uid, agentId, { clientId, clientName: grant.clientName, scopes });
+  const mcp = async (name: string, args: Record<string, unknown>) => {
+    const response = await worker.fetch(new Request("http://localhost/mcp", {
+      method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    }), env, context);
+    return (await response.json() as { result: { isError?: boolean; structuredContent?: KnowledgeSearch } }).result;
+  };
+  assert.equal((await mcp("get_work_context", {})).isError, true);
+  await setKnowledgeSettings(env, human.uid, { expectedRevision: 0, enabled: true, agentIds: [agentId], grants: [{ clientId, agentId }] });
+  assert.equal((await mcp("get_work_context", {})).structuredContent?.items[0]?.content, publish.content);
+  assert.equal((await mcp("search_knowledge", { query: "Private remainder" })).structuredContent?.items.length, 0);
+  assert.equal((await rest(path, "GET", undefined, token)).status, 403);
+  assert.equal((await rest(path, "DELETE", { requestId: "agent-stop", expectedRevision: 1 }, token)).status, 403);
+  assert.equal((await mcp("capture_knowledge", input({ knowledgeId, expectedRevision: 1, change: "explicit" }))).isError, true);
+  await assert.rejects(searchKnowledge(env, { ...human, uid: "another-owner" }, { knowledgeId }), e => hasErrorCode(e, "knowledge_owner_beta_only"));
+  assert.deepEqual((await db.prepare("SELECT * FROM knowledge_index_jobs WHERE knowledge_id=?").bind(knowledgeId).all()).results, []);
+  assert.deepEqual((await knowledgeHistory(env, human.uid, knowledgeId)).revisions, []);
+
+  const edited = await rest("/productivity/notes/" + note.id, "PATCH", { operationId: "edit-note", expectedUpdatedAt: note.updatedAt, body: "Keep both Save and Cancel visible. Private remainder." });
+  const { note: latest } = await edited.json() as { note: NoteRecord };
+  assert.equal((await mcp("search_knowledge", { knowledgeId })).structuredContent?.items[0]?.content, publish.content);
+  const update = { ...publish, requestId: "update-share", content: "Keep both Save and Cancel visible.", expectedRevision: 1, sourceVersion: latest.updatedAt, kind: "constraint" };
+  const outcomes = await Promise.all([rest(path, "PUT", update), rest(path, "PUT", update)]);
+  for (const result of outcomes) {
+    assert.equal(result.status, 200);
+    assert.equal((await result.json() as NoteShareState).revision, 2);
+  }
+  assert.equal((await mcp("get_work_context", {})).structuredContent?.items[0]?.content, update.content);
+  const stopped = await rest(path, "DELETE", { requestId: "stop-note-share", expectedRevision: 2 });
+  assert.equal(stopped.status, 200);
+  assert.equal((await stopped.json() as NoteShareState).knowledge, null);
+  assert.equal((await mcp("search_knowledge", { knowledgeId })).isError, true);
+  assert.equal((await mcp("get_work_context", {})).structuredContent?.items.length, 0);
+  assert.equal((await (await rest(path, "PUT", update)).json() as NoteShareState).knowledge, null);
+  assert.equal((await rest(path, "PUT", { ...publish, requestId: "stale-first-publish", sourceVersion: latest.updatedAt })).status, 409);
 });

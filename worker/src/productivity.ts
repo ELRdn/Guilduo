@@ -4,7 +4,7 @@ import type { Quest } from "../../types/questforge.ts";
 import type { WorkerEnv, JsonRecord } from "./worker-types.ts";
 import { sha256 } from "./security.ts";
 
-type Stored = Omit<ProductivityData, "revision"> & { receipts: Record<string, { fingerprint: string; result: unknown }> };
+type Stored = Omit<ProductivityData, "revision"> & { noteShareReset?: string; receipts: Record<string, { fingerprint: string; result: unknown }> };
 // shortcut: owner JSON is bounded to 1 MB; normalize storage before high-volume rollout.
 const MAX_BYTES = 1000000;
 const fail = (code: string, message: string, status = 400): never => { throw new DomainError(status, code, message); };
@@ -160,6 +160,7 @@ export async function productivityRoute(request: Request, env: WorkerEnv, uid: s
       if (current.entries.filter(e => !e.stopAt).length > 1) return fail("invalid_productivity_input", "A backup may contain only one running timer.");
       const preferences = backup.preferences as JsonRecord;
       current.preferences = { timeSource: source(preferences?.timeSource), timezone: preferences?.timezone === "" ? "" : timezone(preferences?.timezone), updatedAt: stamp(current.preferences.updatedAt) };
+      current.noteShareReset = crypto.randomUUID();
       return { restored: true };
     }
     if (path === "" && method === "DELETE") {

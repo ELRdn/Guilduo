@@ -3,7 +3,7 @@ import { PUBLIC_EVENT_NAMES, validPublicEvent } from "../../shared/public-measur
 import { productivityRoute } from "./productivity.ts";
 import { KNOWLEDGE_TOOLS } from "../../shared/knowledge.ts";
 import { dispatchKnowledgeIndex, processKnowledgeIndex } from "./knowledge-index.ts";
-import { authorizeKnowledge, captureKnowledge, searchKnowledge, knowledgeDb, getKnowledgeSettings, setKnowledgeSettings, knowledgeHistory, restoreKnowledge, deleteKnowledge, resolveKnowledgeConflict, knowledgeOperation } from "./knowledge-store.ts";
+import { authorizeKnowledge, captureKnowledge, searchKnowledge, knowledgeDb, getKnowledgeSettings, setKnowledgeSettings, knowledgeHistory, restoreKnowledge, deleteKnowledge, resolveKnowledgeConflict, knowledgeOperation, getNoteShare, changeNoteShare } from "./knowledge-store.ts";
 import {
   DomainError,
   archiveQuests,
@@ -1119,7 +1119,15 @@ async function routeApi(request: Request, env: WorkerEnv, context: WorkerContext
     const input = method === "GET" ? {} : await knowledgeInput(request);
     const db = knowledgeDb(env);
     let result: unknown;
-    if (path === "/v1/knowledge/settings" && method === "GET") {
+    const noteShare = path.match(/^\/v1\/knowledge\/note-shares\/([a-zA-Z0-9_-]{1,120})$/);
+    if (noteShare && method === "GET") {
+      result = await getNoteShare(env, identity.uid, noteShare[1]!);
+    } else if (noteShare && (method === "PUT" || method === "DELETE")) {
+      result = await changeNoteShare(env, identity.uid, noteShare[1]!, input, method === "DELETE", async questId => {
+        assertScope(identity.scopes, "quests:read");
+        getQuest(await stateFor(env, identity), questId);
+      });
+    } else if (path === "/v1/knowledge/settings" && method === "GET") {
       const [settings, clients, connections, agents] = await Promise.all([
         getKnowledgeSettings(env, identity.uid), listAuthorizedClients(env, identity.uid),
         listAllAgentConnections(env, identity.uid), listAgents(env, identity.uid),

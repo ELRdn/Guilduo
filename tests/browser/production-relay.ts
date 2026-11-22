@@ -42,5 +42,22 @@ window.addEventListener("test:connection-preview-failure", event => {
     : previewSync;
 });
 const root = document.querySelector<HTMLElement>("#relay-forge-root")!;
-const unmount = mountRelayForge(root, runtime);
+let unmount: () => void;
+if (params.get("surface") === "afa") {
+  await import("../../interaction-lab/all-for-adhd/styles.css");
+  await import("../../interaction-lab/all-for-adhd/polish.css");
+  await import("../../interaction-lab/all-for-adhd/forge-skin.css");
+  const { mountAllFor } = await import("../../interaction-lab/all-for-adhd/app.ts");
+  const unavailable = async (): Promise<never> => { throw new Error("Outside the Notes fixture."); };
+  unmount = mountAllFor(root, {
+    runtime, demo: false, self: () => ({ id: params.get("uid")!, label: "Fixture owner" }),
+    agents: () => [], members: () => [], today: () => "2026-11-22", quests: () => runtime.quests,
+    answer: unavailable, review: unavailable, activity: async () => [], registerAgent: unavailable, removeAgent: unavailable,
+    mcp: { url: baseUrl + "/mcp", connections: async () => [], link: unavailable, revoke: unavailable },
+    notifications: { load: unavailable, save: unavailable, device: async () => false, enable: unavailable, disable: unavailable, test: unavailable },
+    create: unavailable, update: unavailable, complete: unavailable,
+  });
+} else {
+  unmount = mountRelayForge(root, runtime);
+}
 window.addEventListener("test:unmount", () => { unmount(); root.replaceChildren("Signed out"); });

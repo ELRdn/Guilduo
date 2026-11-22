@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
+import type { KnowledgeSearch } from "../shared/knowledge.ts";
+import { sha256 } from "../worker/src/security.ts";
 import { chromium, type Page } from "playwright-core";
 import { createServer } from "vite";
 import { startRelayWorkerFixture } from "../tests/browser/worker-fixture.ts";
@@ -18,7 +20,10 @@ fixture.env.QUESTFORGE_DB = new SqliteD1Database(); fixture.env.KNOWLEDGE_ENABLE
 await createAgent(fixture.env, fixture.uid, { agentId: "review-agent", displayName: "My Review Agent", allowedScopes: ["quests:read", "knowledge:read", "knowledge:write"] });
 const clientId = "relay-memory-browser-client", scopes = ["quests:read", "knowledge:read", "knowledge:write"];
 const grant = { uid: fixture.uid, email: "browser@example.test", clientId, clientName: "Local Relay Memory", scopes, firstConnectedAt: new Date().toISOString(), lastUsedAt: "", revokedAt: "" };
-await getOAuthRecordStore(fixture.env).put(`user-client:${fixture.uid}:${clientId}`, JSON.stringify(grant));
+const oauth = getOAuthRecordStore(fixture.env);
+const agentToken = "isolated-local-note-share-reader";
+await oauth.put(`user-client:${fixture.uid}:${clientId}`, JSON.stringify(grant));
+await oauth.put(`access:${await sha256(agentToken)}`, JSON.stringify({ ...grant, expiresAt: Date.now() + 3600000 }));
 await linkAgentConnection(fixture.env, fixture.uid, "review-agent", { clientId, clientName: grant.clientName, scopes });
 const original = (await captureKnowledge(fixture.env, { uid: fixture.uid, email: "", authType: "dev", scopes: ["knowledge:write"] }, {
   requestId: "browser-seed", title: "UI/APIの合意", content: "saveDraft API を使い、保存中は二重送信を防ぐ。", kind: "constraint", scope: "global", epistemic: "human_statement", reason: "Human chose this behavior",
@@ -87,6 +92,73 @@ try {
       await knowledge.getByRole("button", { name: "キャンセル", exact: true }).click();
       results.push("1440: outcome reconciliation handles confirmed conflicts without losing the draft");
     }
+    await page.close();
+  }
+  async function contextForNote(questId: string): Promise<KnowledgeSearch> {
+    const response = await fetch(fixture.baseUrl + "/mcp", { method: "POST", headers: { authorization: "Bearer " + agentToken, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_work_context", arguments: { questId } } }) });
+    const packet = await response.json() as { result: { isError?: boolean; structuredContent: KnowledgeSearch } };
+    assert(!packet.result.isError, JSON.stringify(packet));
+    return packet.result.structuredContent;
+  }
+  for (const surface of ["forge", "afa"]) for (const width of [1440, 390]) {
+    const page = activePage = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => ["localhost", "127.0.0.1"].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+    await page.goto(`${base}/tests/browser/production-relay.html?api=${encodeURIComponent(fixture.baseUrl)}&uid=${fixture.uid}&lang=ja&surface=${surface}`);
+    if (surface === "afa") {
+      await page.getByRole("link", { name: "タスク", exact: true }).filter({ visible: true }).click();
+      await page.getByRole("button", { name: "メモ", exact: true }).click();
+    } else {
+      await page.getByRole("button", { name: "ノート", exact: true }).filter({ visible: true }).click();
+    }
+    const notes = page.locator(".rf-work-notes");
+    await notes.locator(".rf-work-note-list button").first().click();
+    const title = notes.getByLabel("タイトル", { exact: true });
+    const body = notes.getByLabel("本文", { exact: true });
+    const excerpt = `保存ボタンはフォーカスを失わない ${surface}-${width}`;
+    const noteTitle = `共有の検証 ${surface}-${width}`;
+    await title.fill(noteTitle);
+    await body.fill(excerpt + "\n非公開の本文");
+    await notes.getByLabel("Quest", { exact: true }).selectOption(fixture.first.source.id);
+    await notes.getByRole("button", { name: "保存", exact: true }).click();
+    const trigger = notes.getByRole("button", { name: "Relay Memoryに共有" });
+    await notes.getByText("未共有", { exact: true }).waitFor();
+    await body.focus();
+    await body.evaluate((node, end) => {
+      const textarea = node as unknown as { setSelectionRange(start: number, end: number): void };
+      textarea.setSelectionRange(0, end);
+    }, excerpt.length);
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Relay Memoryに共有" });
+    await dialog.getByText("Local Relay Memory · review-agent").waitFor();
+    assert.equal(await dialog.getByLabel("共有する一節").inputValue(), excerpt);
+    assert.equal(await dialog.getByLabel("適用範囲").inputValue(), "quest");
+    await dialog.getByLabel("種別").selectOption("constraint");
+    await dialog.getByRole("button", { name: "共有する", exact: true }).click();
+    await notes.getByText("共有中", { exact: true }).waitFor();
+    const originalContext = await contextForNote(fixture.first.source.id);
+    assert.equal(originalContext.items.find(item => item.title === noteTitle)?.content, excerpt);
+    assert.doesNotMatch(JSON.stringify(originalContext), /非公開の本文/);
+    await body.fill(excerpt + "\n編集後も非公開");
+    await notes.getByRole("button", { name: "保存", exact: true }).click();
+    await notes.getByText("共有中・原本に変更あり", { exact: true }).waitFor();
+    await trigger.click();
+    await dialog.getByText("前回共有した内容").waitFor();
+    assert.equal(await dialog.getByRole("blockquote").textContent(), excerpt);
+    const newSourceVersion = (await (await fetch(fixture.baseUrl + "/v1/productivity/notes", { headers: { authorization: "Bearer " + fixture.humanToken, origin: new URL(base).origin } })).json() as { items: { title: string; updatedAt: string }[] }).items.find(item => item.title === noteTitle)?.updatedAt;
+    assert(newSourceVersion);
+    assert.notEqual(originalContext.items.find(item => item.title === noteTitle)?.sources[0]?.version, newSourceVersion);
+    await dialog.getByRole("button", { name: "共有版を更新" }).click();
+    await notes.getByText("共有中", { exact: true }).waitFor();
+    const updated = (await contextForNote(fixture.first.source.id)).items.find(item => item.title === noteTitle);
+    assert.equal(updated?.sources[0]?.version, newSourceVersion);
+    await trigger.click();
+    await dialog.getByRole("button", { name: "共有を停止" }).click();
+    await notes.getByText("未共有", { exact: true }).waitFor();
+    assert.equal((await contextForNote(fixture.first.source.id)).items.find(item => item.title === noteTitle), undefined);
+    assert.equal(await page.evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
+    results.push(`${surface} ${width}: exact excerpt publish, MCP readback, source revision refresh, revoke, no horizontal overflow`);
     await page.close();
   }
   assert.deepEqual(errors, []);
